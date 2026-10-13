@@ -1,0 +1,19 @@
+import { render } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { AppProviders } from '../app/providers.jsx'
+import { makeQueryClient } from '../app/queryClient.js'
+
+export function renderWithProviders(ui, { route = '/', queryClient } = {}) {
+  const client = queryClient ?? makeQueryClient({ test: true })
+  return render(
+    <AppProviders queryClient={client}>
+      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+    </AppProviders>,
+  )
+}
+
+export const users = {
+  admin: { id: 'u-admin', username: 'admin.demo', first_name: 'Avery', last_name: 'Admin', role: 'admin' },
+  manager: { id: 'u-mgr', username: 'manager.demo', first_name: 'Morgan', last_name: 'Manager', role: 'manager' },
+  employee: { id: 'u-emp', username: 'employee.demo', first_name: 'Eli', last_name: 'Employee', role: 'employee' },
+}
