@@ -81,3 +81,26 @@ export const useApproveRequest = () => useApiMutation((id) => api.post(`/project
   { invalidate: [['requests'], ['projects'], ['dashboard']], success: (d) => `Approved — ${d.project.name} created` })
 export const useRejectRequest = () => useApiMutation(({ id, comment }) => api.post(`/project-requests/${id}/reject`, { comment }),
   { invalidate: [['requests']], success: 'Request rejected' })
+
+// ---------- milestones ----------
+export const useMilestones = (projectId) =>
+  useQuery({ queryKey: ['milestones', projectId], queryFn: () => api.get(`/projects/${projectId}/milestones`) })
+const milestoneKeys = (projectId) => [['milestones', projectId], ['project', projectId], ['project-summary', projectId],
+  ['projects'], ['dashboard']]
+export const useSaveMilestone = (projectId) => useApiMutation(async ({ id, fields, predecessorIds, assigneeIds }) => {
+  const saved = id ? (Object.keys(fields).length ? await api.put(`/milestones/${id}`, fields) : { id })
+    : await api.post(`/projects/${projectId}/milestones`, fields)
+  let warnings = []
+  if (predecessorIds) warnings = (await api.put(`/milestones/${saved.id}/dependencies`, { predecessor_ids: predecessorIds })).warnings ?? []
+  if (assigneeIds) await api.put(`/milestones/${saved.id}/assignees`, { user_ids: assigneeIds })
+  return { ...saved, warnings }
+}, { invalidate: milestoneKeys(projectId), success: (_, v) => (v.id ? 'Milestone saved' : 'Milestone added') })
+export const useMilestoneStatus = (projectId) => useApiMutation(
+  ({ id, status }) => api.post(`/milestones/${id}/status`, { status }),
+  { invalidate: milestoneKeys(projectId), success: 'Status updated' })
+export const useArchiveMilestone = (projectId) => useApiMutation((id) => api.del(`/milestones/${id}`),
+  { invalidate: milestoneKeys(projectId), success: 'Milestone archived' })
+export const useNotes = (milestoneId, enabled = true) =>
+  useQuery({ queryKey: ['notes', milestoneId], enabled, queryFn: () => api.get(`/milestones/${milestoneId}/notes`) })
+export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/milestones/${milestoneId}/notes`, { body }),
+  { invalidate: [['notes', milestoneId]], success: 'Note added' })
