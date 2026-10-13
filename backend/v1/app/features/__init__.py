@@ -6,3 +6,5 @@ from app.features.projects import routes as _projects  # noqa: F401
 from app.features.requests import routes as _requests  # noqa: F401
 from app.features.members import routes as _members  # noqa: F401
 from app.features.milestones import routes as _milestones  # noqa: F401
+from app.features.time import routes as _time  # noqa: F401
+from app.features.insights import routes as _insights  # noqa: F401

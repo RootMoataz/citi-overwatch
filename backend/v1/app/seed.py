@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.db import query_one, transaction
+from app.rules.overtime import hourly_rate
 from app.security import hash_password
 
 DEMO_PASSWORD = "Demo123!"
@@ -32,10 +33,6 @@ PEOPLE = [
     ("kira.sato", "Kira", "Sato", "employee", "Compliance Analyst", 90000, "manager.demo"),
     ("leo.martin", "Leo", "Martin", "employee", "Risk Analyst", 92000, "manager.demo"),
 ]
-
-
-def _rate(salary) -> Decimal:
-    return (Decimal(salary) / 2080).quantize(Decimal("0.01"))
 
 
 def seed(conn) -> dict:
@@ -106,7 +103,7 @@ def _load(conn) -> None:
             VALUES (:u, :m, :p, :d, :h, CAST(:st AS entry_status), :o, :rate, :by,
                     CASE WHEN :st <> 'pending' THEN now() END, :reason)""",
                  u=user["id"], m=ms["id"], p=proj["id"], d=day, h=Decimal(hours), st=status, o=over_40,
-                 rate=_rate(user["salary"]) if status == "approved" else None,
+                 rate=hourly_rate(user["salary"]) if status == "approved" else None,
                  by=approver["id"] if approver else None, reason=reason)
 
     # 1. Healthy active project with a three-step dependency chain.

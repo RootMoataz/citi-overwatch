@@ -40,3 +40,11 @@ def approval_breakdown(*, hours: Decimal, hourly_rate: Decimal, milestone_cost: 
         "forecast": forecast.quantize(CENTS),
         "forecast_over_budget": budget > 0 and forecast > budget,
     }
+
+
+HOURS_PER_YEAR = Decimal(2080)  # 52 weeks x 40 hours
+
+
+def hourly_rate(salary) -> Decimal:
+    """Annual salary → hourly rate, to the cent (spec §3.7)."""
+    return (Decimal(salary) / HOURS_PER_YEAR).quantize(CENTS)

@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from app.ctx import jwt_secret
+from app.rules.overtime import hourly_rate
 from app.db import query_one
 from app.security import create_access_token, hash_password
 
@@ -64,7 +65,7 @@ def log_entry(conn, user: dict, milestone: dict, day: date, hours, *, status="ap
               rate=None, over_40=False) -> dict:
     """Insert a time entry directly (bypassing the API)."""
     if rate is None and status == "approved":
-        rate = (Decimal(user["salary"]) / 2080).quantize(Decimal("0.01"))
+        rate = hourly_rate(user["salary"])
     return query_one(conn, """
         INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, status, hourly_rate,
                                   over_40, rejection_reason)

@@ -50,3 +50,10 @@ def test_breakdown_zero_budget_never_over():
                            budget=D(0), consumed=D(0), forecast=D(50))
     assert b["forecast_over_budget"] is False
     assert b["pct_of_remaining"] is None
+
+
+def test_hourly_rate_is_salary_over_2080_to_the_cent():
+    from app.rules.overtime import hourly_rate
+    assert hourly_rate(D("104000")) == D("50.00")
+    assert hourly_rate(D("100000")) == D("48.08")
+    assert hourly_rate(D("0")) == D("0.00")
