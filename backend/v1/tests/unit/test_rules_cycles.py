@@ -36,6 +36,13 @@ def test_dependency_order_ties_are_stable_and_include_isolated():
     assert dependency_order(edges) == ["Y", "Z", "X"]
 
 
+def test_dependency_order_ties_use_key():
+    # X and Y are both free; the key (e.g. start date) decides, not the id.
+    edges = {"X": set(), "Y": set(), "Z": {"X"}}
+    starts = {"X": 2, "Y": 1, "Z": 3}
+    assert dependency_order(edges, key=lambda n: starts[n]) == ["Y", "X", "Z"]
+
+
 def test_dependency_order_tolerates_a_cycle():
     order = dependency_order({"A": {"B"}, "B": {"A"}})
     assert sorted(order) == ["A", "B"]
