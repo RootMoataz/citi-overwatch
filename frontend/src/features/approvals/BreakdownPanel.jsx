@@ -12,7 +12,8 @@ export default function BreakdownPanel({ entryId }) {
   if (breakdown.error) return <ErrorAlert error={breakdown.error} onRetry={() => breakdown.refetch()} />
   const b = breakdown.data
   const rows = [
-    ['This request', exact(b.request_cost), `${b.hours}h × ${exact(b.hourly_rate)}/h`],
+    // Managers get the cost only; an hourly rate would reveal the person's salary (admins see it).
+    ['This request', exact(b.request_cost), b.hourly_rate == null ? `${b.hours}h logged` : `${b.hours}h × ${exact(b.hourly_rate)}/h`],
     ['Milestone cost so far', `${exact(b.milestone_cost)} → ${exact(b.milestone_cost_after)}`],
     ['Project budget remaining', `${exact(b.remaining_before)} → ${exact(b.remaining_after)}`, `of ${exact(b.budget)}`],
     ['Share of remaining budget', b.pct_of_remaining == null ? 'No budget left' : formatPct(b.pct_of_remaining)],

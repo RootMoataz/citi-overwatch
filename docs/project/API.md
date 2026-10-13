@@ -35,9 +35,10 @@ Every error has the same envelope:
 | 400 | `REQUEST_CLOSED`, `SELF_ARCHIVE`, `SELF_DEMOTION` | Deciding a request twice; archiving or demoting yourself |
 | 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED` | No token, or an expired access token (the client refreshes and retries once) |
 | 401 | `INVALID_CREDENTIALS`, `TEMP_PASSWORD_EXPIRED`, `REFRESH_INVALID` | Sign-in and refresh |
-| 403 | `FORBIDDEN`, `NOT_ASSIGNED`, `SELF_APPROVAL`, `PASSWORD_CHANGE_REQUIRED` | Not allowed for your role or this record; approving your own hours; a temporary password is still in use |
+| 403 | `FORBIDDEN`, `NOT_ASSIGNED`, `SELF_APPROVAL`, `PASSWORD_CHANGE_REQUIRED`, `DEMO_ACCOUNT` | Not allowed for your role or this record; approving your own hours; a temporary password is still in use; changing a published demo account's password |
 | 404 | `NOT_FOUND` | It doesn't exist, **or you aren't allowed to see it** (so its existence isn't revealed) |
 | 405 | `METHOD_NOT_ALLOWED` | The path exists, but not with this method |
+| 409 | `STALE_ENTRY` | The time entry changed (edited or decided by someone else) since you loaded it |
 | 409 | `CONFLICT`, `ALREADY_MEMBER`, `HAS_DEPENDENTS` | A duplicate username, email or project name; already on the team; archiving someone who still manages projects or has reports (`details` lists them) |
 | 423 | `ACCOUNT_LOCKED`, `CODE_LOCKED` | 5 failed sign-ins (15-minute lock), or 5 wrong reset codes |
 | 500 | `INTERNAL_ERROR` | An unexpected error. It's logged with a stack trace, under the same `request_id` |
@@ -183,11 +184,11 @@ A missing field:
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones), entries and totals. `user` lets a manager or admin view someone else |
-| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours: 0` clears a pending cell. Every saved entry becomes `pending` |
+| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it |
 | GET | `/approvals?user=&project=&milestone=` | Pending entries you can decide (never your own) |
-| GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry |
-| POST | `/time-entries/{id}/approve` | Copies the hourly rate onto the entry; counts toward the budget |
-| POST | `/time-entries/{id}/reject` | `{reason}` (required) |
+| GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry. `hourly_rate` is included for admins only, because a rate reveals a salary; managers get the cost |
+| POST | `/time-entries/{id}/approve` | `{expected_hours?}`: the hours you saw. Copies the hourly rate onto the entry, which then counts toward the budget. Returns `409 STALE_ENTRY` if the entry changed since you loaded it |
+| POST | `/time-entries/{id}/reject` | `{reason, expected_hours?}`. Same `409 STALE_ENTRY` guard |
 
 ```http
 GET /api/v1/time-entries          (as employee.demo, this week)
@@ -206,6 +207,7 @@ The entry that takes the week past 40 hours carries `"over_40": true` and `"labe
 ```http
 GET /api/v1/time-entries/d273b5fc-02a1-41a8-8388-5d2c33698ee5/breakdown
 ```
+As an admin (managers get the same without `hourly_rate`):
 ```json
 {"entry_id": "d273b5fc-02a1-41a8-8388-5d2c33698ee5", "hours": 9.0, "hourly_rate": 50.0, "request_cost": 450.0,
  "milestone_cost": 13465.92, "milestone_cost_after": 13915.92,
@@ -250,4 +252,5 @@ These run only through an IAM-authorized `aws lambda invoke`, never through the 
 | Payload | Result |
 |---|---|
 | `{"op": "migrate"}` | `{"applied": ["001_init.sql"]}`, or `[]` when nothing is new |
+| `{"op": "rotate_demo"}` | `{"rotated": 13}`: gives every seeded account except `admin.demo`, `manager.demo` and `employee.demo` a random password (run once on the public site) |
 | `{"op": "seed"}` | `{"seeded": true, "demo_users": ["admin.demo", "manager.demo", "employee.demo"]}`. Does nothing once the demo data exists |

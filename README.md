@@ -8,7 +8,7 @@ A project tracking platform for ACME Inc. It gives admins, project managers and 
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 276 backend (96% coverage, business rules 100%) · 78 frontend component · 6 end-to-end (desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 290 backend (97% coverage, business rules 100%) · 84 frontend component · 6 end-to-end (desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
 
 ## What it does
 
@@ -74,6 +74,8 @@ Open http://localhost:3000 and sign in with a demo login. Locally, emails aren't
 | Manager | `manager.demo` | `Demo123!` |
 | Employee | `employee.demo` | `Demo123!` |
 
+The two published demo logins never lock and can't change their password, so nobody can lock graders out. On the live site, the other seeded accounts get random passwords.
+
 Other useful commands:
 
 ```bash
@@ -86,8 +88,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 276 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 78 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 290 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 84 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

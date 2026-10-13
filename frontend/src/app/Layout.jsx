@@ -8,6 +8,7 @@ import {
 import { useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { can } from '../lib/permissions.js'
@@ -97,7 +98,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
 
       <Box component="main" key={location.pathname}
         sx={{ flexGrow: 1, minWidth: 0, px: { xs: 2, md: 4 }, pt: { xs: 10, md: 11 }, pb: 6, maxWidth: 1440 }}>
-        <Outlet />
+        <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
       </Box>
     </Box>
   )

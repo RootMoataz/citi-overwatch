@@ -77,6 +77,25 @@ describe('TimesheetPage', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Wrong milestone')
   })
 
+  test('a rejected cell can be resubmitted with the same hours', async () => {
+    let body = null
+    server.use(weekHandler([entry({ id: 'e3', work_date: '2026-10-14', hours: 6, status: 'rejected', label: 'Rejected',
+      rejection_reason: 'Check with me' })]),
+    http.put(`${API}/time-entries`, async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ week_start: WEEK, rows, entries: [], totals: { logged: 6, approved: 0 },
+        user: { id: users.employee.id, name: 'Eli Employee' } })
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    const save = await screen.findByRole('button', { name: /save week/i })
+    expect(save).toBeDisabled()
+    await user.click(await screen.findByRole('button', { name: /resubmit schema mapping, wed oct 14/i }))
+    expect(save).toBeEnabled()
+    await user.click(save)
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 6 }] }))
+  })
+
   test('changing week updates the URL', async () => {
     server.use(weekHandler())
     renderSheet()
@@ -106,7 +125,7 @@ describe('ApprovalsPage', () => {
     expect(await within(dialog).findByText('Tell the employee why')).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText(/reason/i), 'Wrong milestone')
     await user.click(within(dialog).getByRole('button', { name: /^reject$/i }))
-    await waitFor(() => expect(body).toEqual({ reason: 'Wrong milestone' }))
+    await waitFor(() => expect(body).toEqual({ reason: 'Wrong milestone', expected_hours: 9 }))
   })
 
   test('approve removes the row', async () => {
@@ -116,6 +135,28 @@ describe('ApprovalsPage', () => {
     renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
     await userEvent.click(await screen.findByRole('button', { name: /^approve/i }))
     expect(await screen.findByText(/nothing waiting/i)).toBeInTheDocument()
+  })
+})
+
+describe('ApprovalsPage decisions', () => {
+  test('approve sends the hours the manager saw', async () => {
+    let body = null
+    server.use(http.get(`${API}/approvals`, () => HttpResponse.json([pending])),
+      http.post(`${API}/time-entries/e9/approve`, async ({ request }) => { body = await request.json(); return HttpResponse.json({}) }))
+    renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
+    await userEvent.click(await screen.findByRole('button', { name: /^approve/i }))
+    await waitFor(() => expect(body).toEqual({ expected_hours: 9 }))
+  })
+
+  test('a stale entry shows why and reloads the queue', async () => {
+    let gets = 0
+    server.use(http.get(`${API}/approvals`, () => { gets += 1; return HttpResponse.json([pending]) }),
+      http.post(`${API}/time-entries/e9/approve`, () => HttpResponse.json({ error: { code: 'STALE_ENTRY',
+        message: 'These hours changed since you loaded them. Refresh and check again.', request_id: 'r1' } }, { status: 409 })))
+    renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
+    await userEvent.click(await screen.findByRole('button', { name: /^approve/i }))
+    expect(await screen.findByText(/hours changed since you loaded them/i)).toBeInTheDocument()
+    await waitFor(() => expect(gets).toBeGreaterThan(1))
   })
 })
 
@@ -131,6 +172,19 @@ describe('BreakdownPanel', () => {
     expect(screen.getByText('225%')).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(/projected to go over budget/i)
     expect(screen.getByText(/\$12,500\.00/)).toBeInTheDocument()
+  })
+})
+
+describe('BreakdownPanel for a manager', () => {
+  test('without an hourly rate it shows the cost and the hours only', async () => {
+    server.use(http.get(`${API}/time-entries/e9/breakdown`, () => HttpResponse.json({
+      entry_id: 'e9', hours: 9, request_cost: 450, milestone_cost: 1600, milestone_cost_after: 2050,
+      budget: 10000, consumed: 1600, remaining: 8400, remaining_before: 8400, remaining_after: 7950, pct_of_remaining: 5.4,
+      forecast: 5000, forecast_over_budget: false, weeks_remaining: 6 })))
+    renderWithProviders(<BreakdownPanel entryId="e9" />)
+    expect(await screen.findByText('$450.00')).toBeInTheDocument()
+    expect(screen.getByText('9h logged')).toBeInTheDocument()
+    expect(screen.queryByText(/\/h/)).not.toBeInTheDocument()
   })
 })
 

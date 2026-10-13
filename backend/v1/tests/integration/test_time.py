@@ -200,7 +200,8 @@ def test_breakdown_numbers_and_forecast(client, conn):
     entry_id = save(client, conn, emp, [cell(ms, 0, 4)])[1]["entries"][0]["id"]
     status, body, _, _ = client.request("GET", f"/time-entries/{entry_id}/breakdown", token=token_for(conn, mgr))
     assert status == 200
-    assert (body["hours"], body["hourly_rate"], body["request_cost"]) == (4.0, 50.0, 200.0)
+    assert (body["hours"], body["request_cost"]) == (4.0, 200.0)
+    assert "hourly_rate" not in body  # a manager sees the cost, not the rate (final review #5)
     assert (body["consumed"], body["remaining_before"], body["remaining_after"]) == (1600.0, 8400.0, 8200.0)
     assert body["milestone_cost"] == 1600.0 and body["milestone_cost_after"] == 1800.0
     assert body["pct_of_remaining"] == 2.4

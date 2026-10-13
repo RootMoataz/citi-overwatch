@@ -10,6 +10,7 @@ from app.ctx import Ctx, jwt_secret
 from app.db import query_one, transaction
 from app.features.common import conflict_from, user_public
 from app.http import ApiError
+from app.seed import PUBLISHED_DEMO
 from app.security import (create_access_token, hash_password, hash_token, new_refresh_token,
                           password_policy_errors, verify_password)
 from app.validation import as_email, as_str, require
@@ -80,6 +81,8 @@ def login(conn, body: dict, request_id: str) -> tuple[dict, list[str]]:
         raise ApiError(423, "ACCOUNT_LOCKED", "Too many failed attempts. Try again later.",
                        {"until": user["locked_until"].isoformat()})
     if not verify_password(str(body["password"]), user["password_hash"]):
+        if user["username"] in PUBLISHED_DEMO:
+            raise invalid  # a public password: lockout would only let visitors spoil the demo
         # One atomic statement, so parallel wrong guesses can't share a stale count.
         conn.run("""UPDATE users SET
                       failed_login_count = CASE WHEN failed_login_count + 1 >= :max THEN 0
@@ -132,6 +135,8 @@ def revoke_all_sessions(conn, user_id: str) -> None:
 def change_password(conn, ctx: Ctx, body: dict) -> tuple[dict, list[str]]:
     require(body, "current_password", "new_password")
     user = query_one(conn, "SELECT * FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
+    if user["username"] in PUBLISHED_DEMO:
+        raise ApiError(403, "DEMO_ACCOUNT", "The shared demo accounts keep their published password")
     current, new = str(body["current_password"]), str(body["new_password"])
     if not verify_password(current, user["password_hash"]):
         raise ApiError(400, "VALIDATION_ERROR", "Current password is incorrect",

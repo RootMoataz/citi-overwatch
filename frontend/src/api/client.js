@@ -54,6 +54,12 @@ async function send(method, path, { body, query, signal } = {}) {
   const text = await res.text()
   let data
   try { data = text ? JSON.parse(text) : null } catch { data = null }
+  if (text && !(res.headers.get('content-type') ?? '').includes('json')) {
+    // CloudFront answers unknown paths with the app's index.html (status 200). For an API call that means
+    // the API said 404, so treat it as one instead of handing a page of HTML to the screen as data.
+    throw new ApiError({ status: 404, code: 'NOT_FOUND', message: "This doesn't exist, or you don't have access to it.",
+      requestId: res.headers.get('x-request-id') })
+  }
   if (!res.ok) {
     const e = data?.error ?? {}
     throw new ApiError({

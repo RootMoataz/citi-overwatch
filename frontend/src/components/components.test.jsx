@@ -7,6 +7,7 @@ import { setViewport } from '../test/setup.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import EmptyState from './EmptyState.jsx'
 import ErrorAlert from './ErrorAlert.jsx'
+import ErrorBoundary from './ErrorBoundary.jsx'
 import PageHeader from './PageHeader.jsx'
 import ResponsiveTable from './ResponsiveTable.jsx'
 import RiskBadges from './RiskBadges.jsx'
@@ -84,5 +85,16 @@ describe('shared components', () => {
     renderWithProviders(<ResponsiveTable rows={[]} columns={[]} renderCard={() => null}
       emptyState={<EmptyState title="Nothing here" />} />)
     expect(screen.getByText('Nothing here')).toBeInTheDocument()
+  })
+})
+
+describe('ErrorBoundary', () => {
+  test('a crashing screen shows a recoverable message instead of a blank page', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    function Boom() { throw new Error('kaboom') }
+    renderWithProviders(<ErrorBoundary><Boom /></ErrorBoundary>)
+    expect(screen.getByRole('alert')).toHaveTextContent(/something went wrong/i)
+    expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument()
+    spy.mockRestore()
   })
 })

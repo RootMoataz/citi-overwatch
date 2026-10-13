@@ -245,6 +245,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
     - "Approved"
     - "Rejected", with the reason in a tooltip
   - Editing an entry that was already decided sends it back for approval and tags it "Edited".
+  - A rejected cell has a **Resubmit** button, so the same hours can go back for approval after a conversation with the manager.
 - **Failure:**
   - More than 24 hours in a day is blocked before saving.
   - A day outside the project's dates, or on a milestone I'm no longer assigned to, is refused with the server's message.
@@ -279,6 +280,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - **Failure:**
   - Approving your own hours is refused (`SELF_APPROVAL`). A manager's own hours go to an admin.
   - An entry someone else already decided returns `NOT_PENDING`.
+  - If the hours changed since the queue loaded, the decision is refused (`STALE_ENTRY`), the message says so, and the queue reloads.
+  - Managers see each request's cost but not the person's hourly rate, which would reveal their salary.
 - **Empty:** "Nothing waiting for approval."
 
 ---

@@ -3,17 +3,24 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useToast } from '../app/toast.js'
 import { api } from './client.js'
 
+// Errors that mean "what you're looking at is out of date": refetch so the screen shows the current state.
+const STALE_CODES = new Set(['STALE_ENTRY', 'NOT_PENDING'])
+
 function useApiMutation(mutationFn, { invalidate = [], success } = {}) {
   const queryClient = useQueryClient()
   const toast = useToast()
+  const refresh = (data, variables) => {
+    const keys = typeof invalidate === 'function' ? invalidate(data, variables) : invalidate
+    return Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+  }
   return useMutation({
     mutationFn,
     onSuccess: async (data, variables) => {
-      const keys = typeof invalidate === 'function' ? invalidate(data, variables) : invalidate
-      await Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })))
+      await refresh(data, variables)
       const message = typeof success === 'function' ? success(data, variables) : success
       if (message) toast.success(message)
     },
+    onError: (err, variables) => { if (STALE_CODES.has(err?.code)) refresh(undefined, variables) },
   })
 }
 
@@ -117,9 +124,12 @@ export const useApprovals = (filters = {}, enabled = true) =>
   useQuery({ queryKey: ['approvals', filters], enabled, queryFn: () => api.get('/approvals', filters) })
 export const useBreakdown = (entryId, enabled = true) =>
   useQuery({ queryKey: ['breakdown', entryId], enabled, queryFn: () => api.get(`/time-entries/${entryId}/breakdown`) })
-export const useApproveEntry = () => useApiMutation((id) => api.post(`/time-entries/${id}/approve`),
-  { invalidate: timeKeys, success: 'Hours approved' })
-export const useRejectEntry = () => useApiMutation(({ id, reason }) => api.post(`/time-entries/${id}/reject`, { reason }),
+// expected_hours: the hours the manager saw; the server refuses (409 STALE_ENTRY) if the entry changed since.
+export const useApproveEntry = () => useApiMutation(({ id, expectedHours }) =>
+  api.post(`/time-entries/${id}/approve`, { expected_hours: expectedHours }),
+{ invalidate: timeKeys, success: 'Hours approved' })
+export const useRejectEntry = () => useApiMutation(({ id, reason, expectedHours }) =>
+  api.post(`/time-entries/${id}/reject`, { reason, expected_hours: expectedHours }),
   { invalidate: timeKeys, success: 'Hours rejected' })
 export const useNotifications = () =>
   useQuery({ queryKey: ['notifications'], queryFn: () => api.get('/notifications', { unread: 'true' }) })

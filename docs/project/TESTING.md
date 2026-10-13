@@ -11,8 +11,8 @@ The tests are built for **debugging**, not only for a green tick:
 |---|---|---|---|
 | Rules (unit) | pytest | part of 102 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 102 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
-| API (integration) | pytest + real PostgreSQL 17 | 174 | An endpoint is wrong: permissions (401/403/404), validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 78 | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| API (integration) | pytest + real PostgreSQL 17 | 188 | An endpoint is wrong: permissions (401/403/404), validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
+| Frontend (component) | Vitest + React Testing Library + MSW | 84 | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
 Development was test-first: each rule and endpoint started as a failing test.
@@ -66,7 +66,7 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 2. **Milestones:** a manager adds a milestone that depends on *Discovery* and assigns Eli. Eli starts it and moves it to *ready for review*; Eli can't complete it. The manager then completes it.
 3. **Overtime:** an employee logs 9 h Monday to Friday. Only Friday shows "Pending (Overtime requested from …)". The manager gets exactly one notification and opens it in Approvals. The manager then views the budget impact and approves, and the project's consumed budget goes up.
 
-## Results (2026-10-13, Windows 11, PostgreSQL 17.11, Node 24, Python 3.12)
+## Results (2026-10-13, after the final review's fixes; Windows 11, PostgreSQL 17.11, Node 24, Python 3.12)
 
 ### Backend: `python -m pytest --cov=app --cov-report=term`
 
@@ -78,11 +78,11 @@ app\rules\cycles.py                      32      0   100%
 app\rules\milestone_status.py             7      0   100%
 app\rules\overtime.py                    25      0   100%
 app\rules\usernames.py                   37      0   100%
-TOTAL                                  2085     73    96%
-276 passed in 15.22s
+TOTAL                                  2109     72    97%
+290 passed in 15.23s
 ```
 
-The targets were ≥ 80% for `app/` and 100% for `app/rules/`. **Both are met**: 96% overall and 100% on the rules.
+The targets were ≥ 80% for `app/` and 100% for `app/rules/`. **Both are met**: 97% overall and 100% on the rules.
 
 Selected modules from the same run:
 
@@ -97,7 +97,7 @@ Selected modules from the same run:
 
 ```
  Test Files  12 passed (12)
-      Tests  78 passed (78)
+      Tests  84 passed (84)
 File               | % Stmts | % Branch | % Funcs | % Lines |
 All files          |   80.18 |    75.77 |   75.12 |   83.71 |
  api               |    87.5 |    78.16 |   81.45 |   93.79 |

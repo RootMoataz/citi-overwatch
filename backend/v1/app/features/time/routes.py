@@ -25,7 +25,7 @@ def breakdown(req, ctx, conn):
 
 @router.route("POST", "/time-entries/{id}/approve")
 def approve(req, ctx, conn):
-    return json_response(200, service.approve(conn, ctx, req.path_params["id"]))
+    return json_response(200, service.approve(conn, ctx, req.path_params["id"], req.json()))
 
 
 @router.route("POST", "/time-entries/{id}/reject")

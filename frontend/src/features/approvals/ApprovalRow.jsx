@@ -14,7 +14,7 @@ function RejectDialog({ item, onClose }) {
   const [failure, setFailure] = useState(null)
   const confirm = async () => {
     if (!reason.trim()) { setError('Tell the employee why'); return }
-    try { await reject.mutateAsync({ id: item.entry.id, reason: reason.trim() }); onClose() } catch (err) { setFailure(err) }
+    try { await reject.mutateAsync({ id: item.entry.id, reason: reason.trim(), expectedHours: item.entry.hours }); onClose() } catch (err) { setFailure(err) }
   }
   return (
     <Dialog open onClose={reject.isPending ? undefined : onClose} aria-labelledby={titleId} maxWidth="xs" fullWidth>
@@ -58,7 +58,7 @@ export default function ApprovalRow({ item, showContext = true }) {
           <Button size="small" onClick={() => setOpen((o) => !o)} aria-expanded={open}>Budget impact</Button>
           <Button size="small" color="error" onClick={() => setRejecting(true)}>Reject</Button>
           <Button size="small" variant="contained" disabled={approve.isPending}
-            onClick={async () => { setFailure(null); try { await approve.mutateAsync(item.entry.id) } catch (err) { setFailure(err) } }}>
+            onClick={async () => { setFailure(null); try { await approve.mutateAsync({ id: item.entry.id, expectedHours: item.entry.hours }) } catch (err) { setFailure(err) } }}>
             Approve
           </Button>
         </Stack>

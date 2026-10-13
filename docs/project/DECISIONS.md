@@ -31,6 +31,10 @@ Why Citi Overwatch is built the way it is. Each entry says what was decided, why
 | Removing someone from a project also removes their milestone assignments there | "Assigned" always implies "on the project"; their logged hours stay on record | The manager has to reassign if they add the person back |
 | The local dev server handles one request at a time | Mirrors a single Lambda container and avoids sharing one database connection between threads | Slower than a real server; fine for one developer |
 | The e2e suite always starts the API on a fresh `overwatch_e2e` database | Every run sees the same demo data | Each run pays for about 5 s of migrating and seeding |
+| Managers see an entry's **cost**, never the person's hourly rate; admins and the person themselves see the rate | A rate × 2,080 is the salary, and only admins may see other people's salaries | Spec §3.7 shows hours and cost, so the rate can still be worked out from cost ÷ hours. Hiding it removes the direct leak, not the arithmetic |
+| Approve and reject carry the hours the manager saw, and the `UPDATE` only matches a still-pending entry with those hours (`409 STALE_ENTRY` otherwise) | A manager never approves hours they haven't seen, and two decisions can't both win | The manager reloads and decides again |
+| Re-saving a rejected cell unchanged resubmits it (the timesheet's **Resubmit** button) | A wrongly rejected entry can go back for approval without inventing a change | None noted |
+| `manager.demo` and `employee.demo` never lock and can't change their password; every other seeded account gets a random password on the live site (`rotate_demo` op) | Their password is published for graders. Lockout or a password change would let one visitor break the demo for everyone, and the other demo accounts shared the same known password | Anyone can sign in as those two demo accounts, as intended. Real accounts keep the normal lockout |
 | Status changes go through a dedicated `POST /milestones/{id}/status` | One place enforces who may make which transition | One more endpoint than a generic `PUT` |
 
 ## Findings from the first cloud deploy (2026-10-13)

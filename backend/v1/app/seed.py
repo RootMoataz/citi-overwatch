@@ -12,6 +12,9 @@ from app.rules.overtime import hourly_rate
 from app.security import hash_password
 
 DEMO_PASSWORD = "Demo123!"
+# Logins published in the README for graders. Their password is public, so locking them out or changing it
+# would only let one visitor spoil the demo for everyone else.
+PUBLISHED_DEMO = frozenset({"manager.demo", "employee.demo"})
 WEEKDAYS = range(5)
 
 PEOPLE = [
@@ -43,6 +46,21 @@ def seed(conn) -> dict:
     with transaction(conn):
         _load(conn)
     return creds
+
+
+def rotate_unpublished(conn) -> int:
+    """Give every seeded account that isn't a published demo login (or admin.demo) a random password.
+
+    Run once on the public site: the demo data shares one known password, and team lists show usernames.
+    """
+    import secrets
+
+    names = [u for u, *_ in PEOPLE if u not in PUBLISHED_DEMO and u != "admin.demo"]
+    with transaction(conn):
+        for username in names:
+            conn.run("UPDATE users SET password_hash = :h WHERE username = :u",
+                     h=hash_password(secrets.token_urlsafe(24)), u=username)
+    return len(names)
 
 
 def _load(conn) -> None:

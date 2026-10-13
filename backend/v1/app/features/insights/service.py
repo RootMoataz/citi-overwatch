@@ -57,9 +57,11 @@ def dashboard(conn, ctx: Ctx) -> dict:
 
     start = week_start(today)
     people = {str(p["id"]): p for p in _people_scope(conn, ctx)}
-    totals = query(conn, """SELECT user_id, sum(hours) AS h FROM time_entries
-                            WHERE work_date BETWEEN :a AND :b AND status IN ('pending', 'approved')
-                            GROUP BY user_id HAVING sum(hours) > :cap""",
+    totals = query(conn, """SELECT t.user_id, sum(t.hours) AS h FROM time_entries t
+                            JOIN milestones lm ON lm.id = t.milestone_id AND NOT lm.is_archived
+                            JOIN projects lp ON lp.id = t.project_id AND NOT lp.is_archived
+                            WHERE t.work_date BETWEEN :a AND :b AND t.status IN ('pending', 'approved')
+                            GROUP BY t.user_id HAVING sum(t.hours) > :cap""",
                    a=start, b=start + timedelta(days=6), cap=WEEKLY_CAP)
     over = [{"user": {"id": people[str(t["user_id"])]["id"],
                       "name": f"{people[str(t['user_id'])]['first_name']} {people[str(t['user_id'])]['last_name']}"},
@@ -104,11 +106,14 @@ def allocations(conn, ctx: Ctx, params: dict) -> list[dict]:
                                    AND NOT p.is_archived AND p.status <> 'completed'
                                    AND p.start_date <= :b AND p.predicted_end_date >= :a
                                  ORDER BY lower(p.name)""", ids=ids, a=start, b=end)
-    logged = query(conn, """SELECT user_id, project_id,
-                                   sum(hours) FILTER (WHERE status IN ('pending', 'approved')) AS logged,
-                                   sum(hours) FILTER (WHERE status = 'approved') AS approved
-                            FROM time_entries WHERE user_id = ANY(CAST(:ids AS uuid[]))
-                              AND work_date BETWEEN :a AND :b GROUP BY user_id, project_id""",
+    logged = query(conn, """SELECT t.user_id, t.project_id,
+                                   sum(t.hours) FILTER (WHERE t.status IN ('pending', 'approved')) AS logged,
+                                   sum(t.hours) FILTER (WHERE t.status = 'approved') AS approved
+                            FROM time_entries t
+                            JOIN milestones lm ON lm.id = t.milestone_id AND NOT lm.is_archived
+                            JOIN projects lp ON lp.id = t.project_id AND NOT lp.is_archived
+                            WHERE t.user_id = ANY(CAST(:ids AS uuid[]))
+                              AND t.work_date BETWEEN :a AND :b GROUP BY t.user_id, t.project_id""",
                     ids=ids, a=start, b=end)
     hours = {(str(r["user_id"]), str(r["project_id"])): r for r in logged}
     out = []

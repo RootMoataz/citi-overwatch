@@ -20,7 +20,7 @@ const CAP = 40
 const key = (milestoneId, date) => `${milestoneId}|${date}`
 const num = (v) => (v === '' || v == null ? 0 : Number(v))
 
-function CellStatus({ entry }) {
+function CellStatus({ entry, cellLabel, onResubmit, resubmitting }) {
   if (!entry) return null
   const meta = STATUS[entry.status] ?? STATUS.pending
   const label = (
@@ -31,6 +31,11 @@ function CellStatus({ entry }) {
       {entry.status === 'rejected' && entry.rejection_reason
         ? <Tooltip title={`Rejected: ${entry.rejection_reason}`}><span>{label}</span></Tooltip> : label}
       {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ mt: 0.5, height: 18 }} /> : null}
+      {entry.status === 'rejected' && !resubmitting ? (
+        <Button size="small" onClick={onResubmit} aria-label={`Resubmit ${cellLabel}`} sx={{ mt: 0.25, minWidth: 0, px: 0.5 }}>
+          Resubmit
+        </Button>
+      ) : null}
     </>
   )
 }
@@ -55,7 +60,8 @@ export default function TimesheetPage() {
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
   const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
   const tooMany = cellKeys.some((k) => num(valueOf(k)) > 24) || allDays.some((d) => rows.reduce((s, r) => s + num(valueOf(key(r.milestone.id, d))), 0) > 24)
-  const changed = Object.entries(drafts).filter(([k, v]) => num(v) !== num(entries[k]?.hours ?? 0) || (!entries[k] && v !== ''))
+  const changed = Object.entries(drafts).filter(([k, v]) => num(v) !== num(entries[k]?.hours ?? 0) || (!entries[k] && v !== '')
+    || (entries[k]?.status === 'rejected' && num(v) > 0))
 
   const goTo = (target) => { setDrafts({}); setFailure(null); setParams({ week: target }, { replace: true }) }
 
@@ -118,7 +124,7 @@ export default function TimesheetPage() {
             </TableHead>
             <TableBody>
               {groups.map((g) => (
-                <GroupRows key={g.project.id} group={g} days={days} allDays={allDays} valueOf={valueOf} entries={entries}
+                <GroupRows key={g.project.id} group={g} days={days} allDays={allDays} valueOf={valueOf} entries={entries} isDraft={(k) => k in drafts}
                   onChange={(k, v) => setDrafts((d) => ({ ...d, [k]: v }))} />
               ))}
               <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
@@ -137,7 +143,7 @@ export default function TimesheetPage() {
   )
 }
 
-function GroupRows({ group, days, allDays, valueOf, entries, onChange }) {
+function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft }) {
   return (
     <>
       <TableRow>
@@ -160,7 +166,8 @@ function GroupRows({ group, days, allDays, valueOf, entries, onChange }) {
                     slotProps={{ htmlInput: { min: 0, max: 24, step: 0.25, 'aria-label': `${r.milestone.name}, ${formatDayLabel(d)}`,
                       style: { textAlign: 'center' } } }}
                     sx={{ width: 76 }} />
-                  <CellStatus entry={entries[k]} />
+                  <CellStatus entry={entries[k]} cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`}
+                    resubmitting={isDraft(k)} onResubmit={() => onChange(k, String(entries[k].hours))} />
                 </TableCell>
               )
             })}

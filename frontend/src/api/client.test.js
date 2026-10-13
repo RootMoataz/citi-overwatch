@@ -75,6 +75,14 @@ describe('api client', () => {
     await expect(api.request('DELETE', '/projects/p1')).resolves.toBeNull()
   })
 
+  test('an HTML page instead of JSON (a CDN fallback) is a 404, not data', async () => {
+    server.use(http.get(`${API}/projects/gone`, () =>
+      new HttpResponse('<!doctype html><html></html>', { status: 200, headers: { 'content-type': 'text/html' } })))
+    const err = await api.request('GET', '/projects/gone').catch((e) => e)
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({ status: 404, code: 'NOT_FOUND' })
+  })
+
   test('network failures become a friendly ApiError', async () => {
     server.use(http.get(`${API}/me`, () => HttpResponse.error()))
     const err = await api.request('GET', '/me').catch((e) => e)

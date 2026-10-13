@@ -41,16 +41,20 @@ def label(entry: dict, full_name: str) -> str:
     return f"Pending (Overtime requested from {full_name})" if entry["over_40"] else "Pending approval"
 
 
-def _entry_view(e: dict, full_name: str) -> dict:
-    return {k: e[k] for k in ("id", "user_id", "milestone_id", "project_id", "work_date", "hours", "status",
-                              "over_40", "edited_after_decision", "rejection_reason", "note", "hourly_rate",
-                              "decided_at")} | {"label": label(e, full_name)}
+def _entry_view(e: dict, full_name: str, *, show_rate: bool) -> dict:
+    """show_rate: an hourly rate reveals a salary, so only admins and the entry's owner get it."""
+    fields = ["id", "user_id", "milestone_id", "project_id", "work_date", "hours", "status", "over_40",
+              "edited_after_decision", "rejection_reason", "note", "decided_at"] + (["hourly_rate"] if show_rate else [])
+    return {k: e[k] for k in fields} | {"label": label(e, full_name)}
 
 
 def _week_logged(conn, user_id: str, start: date) -> Decimal:
-    row = query_one(conn, """SELECT coalesce(sum(hours), 0) AS h FROM time_entries
-                             WHERE user_id = CAST(:u AS uuid) AND work_date BETWEEN :a AND :b
-                               AND status IN ('pending', 'approved')""",
+    # Archived projects and milestones are out of every calculation (spec §3.1).
+    row = query_one(conn, """SELECT coalesce(sum(t.hours), 0) AS h FROM time_entries t
+                             JOIN milestones lm ON lm.id = t.milestone_id AND NOT lm.is_archived
+                             JOIN projects lp ON lp.id = t.project_id AND NOT lp.is_archived
+                             WHERE t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b
+                               AND t.status IN ('pending', 'approved')""",
                     u=str(user_id), a=start, b=start + timedelta(days=6))
     return Decimal(row["h"])
 
@@ -78,7 +82,8 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
           AND m.start_date <= :b AND m.end_date >= :a{project_filter}
         ORDER BY lower(p.name), m.start_date, lower(m.name)""", u=user_id, a=start, b=end, **args)
     entries = query(conn, f"""
-        SELECT t.* FROM time_entries t JOIN projects p ON p.id = t.project_id
+        SELECT t.* FROM time_entries t JOIN projects p ON p.id = t.project_id AND NOT p.is_archived
+        JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
         WHERE t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b{project_filter}
         ORDER BY t.work_date, t.milestone_id""", u=user_id, a=start, b=end, **args)
     name = _name(user)
@@ -87,7 +92,7 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         "user": {"id": user["id"], "name": name},
         "rows": [{"milestone": {"id": r["milestone_id"], "name": r["milestone_name"]},
                   "project": {"id": r["project_id"], "name": r["project_name"]}} for r in rows],
-        "entries": [_entry_view(e, name) for e in entries],
+        "entries": [_entry_view(e, name, show_rate=ctx.is_admin or str(user_id) == ctx.user_id) for e in entries],
         "totals": {"logged": sum((e["hours"] for e in entries if e["status"] in COUNTED), Decimal(0)),
                    "approved": sum((e["hours"] for e in entries if e["status"] == "approved"), Decimal(0))},
     }
@@ -149,8 +154,9 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
                 conn.run("DELETE FROM time_entries WHERE id = :i", i=existing["id"])
                 record(conn, ctx, "delete_draft", "time_entry", str(existing["id"]))
                 continue
-            if existing and existing["hours"] == c["hours"] and existing["note"] == note:
+            if existing and existing["hours"] == c["hours"] and existing["note"] == note                     and existing["status"] != "rejected":
                 continue  # unchanged cell: keep its status (re-saving the grid mustn't reset approvals)
+            # An unchanged re-save of a rejected cell is a resubmission: it goes back for approval.
             before = _week_logged(conn, ctx.user_id, start)
             counted_before = existing["hours"] if existing and existing["status"] in COUNTED else Decimal(0)
             after = before - counted_before + c["hours"]
@@ -221,7 +227,7 @@ def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
         if key not in totals:
             totals[key] = _week_logged(conn, key[0], key[1])
         name = _name(r)
-        out.append({"entry": _entry_view(r, name), "label": label(r, name),
+        out.append({"entry": _entry_view(r, name, show_rate=ctx.is_admin), "label": label(r, name),
                     "user": {"id": r["user_id"], "name": name},
                     "milestone": {"id": r["milestone_id"], "name": r["milestone_name"]},
                     "project": {"id": r["project_id"], "name": r["project_name"]},
@@ -259,40 +265,57 @@ def breakdown(conn, ctx: Ctx, entry_id: str) -> dict:
                               weeks_remaining=weeks_remaining)
     numbers = approval_breakdown(hours=entry["hours"], hourly_rate=rate, milestone_cost=milestone_cost,
                                  budget=project["budget"], consumed=consumed, forecast=forecast)
-    return {**numbers, "hours": entry["hours"], "hourly_rate": rate, "milestone_cost": milestone_cost,
-            "budget": project["budget"], "consumed": consumed, "remaining": numbers["remaining_before"],
-            "weeks_remaining": weeks_remaining, "entry_id": entry["id"]}
+    out = {**numbers, "hours": entry["hours"], "milestone_cost": milestone_cost,
+           "budget": project["budget"], "consumed": consumed, "remaining": numbers["remaining_before"],
+           "weeks_remaining": weeks_remaining, "entry_id": entry["id"]}
+    if ctx.is_admin:  # managers see the cost, not a rate that reveals the person's salary
+        out["hourly_rate"] = rate
+    return out
 
 
-def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None) -> dict:
+STALE = ApiError(409, "STALE_ENTRY", "These hours changed since you loaded them. Refresh and check again.")
+
+
+def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None, expected_hours=None) -> dict:
     entry, project = _load_entry(conn, ctx, entry_id)
     if str(entry["user_id"]) == ctx.user_id:
         raise ApiError(403, "SELF_APPROVAL", "You can't approve or reject your own hours")
     if entry["status"] != "pending":
         raise ApiError(400, "NOT_PENDING", f"This entry is already {entry['status']}")
+    expected = None if expected_hours is None else as_decimal(expected_hours, "expected_hours")
+    if expected is not None and expected != entry["hours"]:
+        raise STALE
+    # The guard lives in the UPDATE itself: a decision that lost a race (or an entry edited since it was
+    # read) matches no row, so it can never overwrite someone else's decision or approve unseen hours.
+    guard = "WHERE id = :i AND status = 'pending' AND hours = :h RETURNING id"
     with transaction(conn):
         if approve:
-            conn.run("""UPDATE time_entries SET status = 'approved', hourly_rate = :r, decided_by = CAST(:me AS uuid),
-                        decided_at = now(), rejection_reason = NULL, updated_at = now() WHERE id = :i""",
-                     r=hourly_rate(entry["salary"]), me=ctx.user_id, i=entry["id"])
+            done = query_one(conn, f"""UPDATE time_entries SET status = 'approved', hourly_rate = :r,
+                        decided_by = CAST(:me AS uuid), decided_at = now(), rejection_reason = NULL,
+                        updated_at = now() {guard}""",
+                     r=hourly_rate(entry["salary"]), me=ctx.user_id, i=entry["id"], h=entry["hours"])
         else:
-            conn.run("""UPDATE time_entries SET status = 'rejected', rejection_reason = :reason, hourly_rate = NULL,
-                        decided_by = CAST(:me AS uuid), decided_at = now(), updated_at = now() WHERE id = :i""",
-                     reason=reason, me=ctx.user_id, i=entry["id"])
+            done = query_one(conn, f"""UPDATE time_entries SET status = 'rejected', rejection_reason = :reason,
+                        hourly_rate = NULL, decided_by = CAST(:me AS uuid), decided_at = now(),
+                        updated_at = now() {guard}""",
+                     reason=reason, me=ctx.user_id, i=entry["id"], h=entry["hours"])
+        if not done:
+            raise STALE
         record(conn, ctx, "approve" if approve else "reject", "time_entry", entry_id,
                before={"status": "pending"}, after={"status": "approved" if approve else "rejected",
                                                     "reason": reason})
     row = query_one(conn, "SELECT * FROM time_entries WHERE id = :i", i=entry["id"])
-    return _entry_view(row, _name(entry))
+    return _entry_view(row, _name(entry), show_rate=ctx.is_admin)
 
 
-def approve(conn, ctx: Ctx, entry_id: str) -> dict:
-    return _decide(conn, ctx, entry_id, approve=True, reason=None)
+def approve(conn, ctx: Ctx, entry_id: str, body: dict | None = None) -> dict:
+    return _decide(conn, ctx, entry_id, approve=True, reason=None, expected_hours=(body or {}).get("expected_hours"))
 
 
 def reject(conn, ctx: Ctx, entry_id: str, body: dict) -> dict:
     require(body, "reason")
-    return _decide(conn, ctx, entry_id, approve=False, reason=as_str(body["reason"], "reason", max_len=1000))
+    return _decide(conn, ctx, entry_id, approve=False, reason=as_str(body["reason"], "reason", max_len=1000),
+                   expected_hours=body.get("expected_hours"))
 
 
 # ---------- notifications ----------
