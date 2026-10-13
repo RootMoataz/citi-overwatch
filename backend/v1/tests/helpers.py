@@ -51,6 +51,29 @@ def cookie_value(set_cookie: str) -> str:
     return set_cookie.split(";", 1)[0].split("=", 1)[1]
 
 
+def make_milestone(conn, project: dict, *, name=None, start=None, end=None, status="not_started",
+                   archived=False) -> dict:
+    return query_one(conn, """
+        INSERT INTO milestones (project_id, name, start_date, end_date, status, is_archived, archived_at)
+        VALUES (CAST(:p AS uuid), :n, :s, :e, CAST(:st AS milestone_status), :a, CASE WHEN :a THEN now() END)
+        RETURNING *""", p=str(project["id"]), n=name or f"M {uuid.uuid4().hex[:4]}",
+        s=start or project["start_date"], e=end or project["predicted_end_date"], st=status, a=archived)
+
+
+def log_entry(conn, user: dict, milestone: dict, day: date, hours, *, status="approved",
+              rate=None, over_40=False) -> dict:
+    """Insert a time entry directly (bypassing the API)."""
+    if rate is None and status == "approved":
+        rate = (Decimal(user["salary"]) / 2080).quantize(Decimal("0.01"))
+    return query_one(conn, """
+        INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, status, hourly_rate,
+                                  over_40, rejection_reason)
+        VALUES (CAST(:u AS uuid), CAST(:m AS uuid), CAST(:p AS uuid), :d, :h, CAST(:st AS entry_status),
+                :r, :o, CASE WHEN :st = 'rejected' THEN 'test' END)
+        RETURNING *""", u=str(user["id"]), m=str(milestone["id"]), p=str(milestone["project_id"]), d=day,
+        h=Decimal(str(hours)), st=status, r=rate, o=over_40)
+
+
 def add_member(conn, project: dict, user: dict, hours=Decimal("10")) -> dict:
     return query_one(conn, """
         INSERT INTO project_members (project_id, user_id, planned_hours_per_week)

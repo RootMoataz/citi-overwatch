@@ -1,0 +1,209 @@
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+
+from app.db import query, query_one
+from tests.helpers import add_member, log_entry, make_milestone, make_project, make_user, token_for
+
+TODAY = datetime.now(timezone.utc).date()
+
+
+def project_body(manager, **overrides):
+    body = {"name": "Apollo", "description": "Move data", "start_date": "2026-01-01",
+            "predicted_end_date": "2026-12-31", "budget": 50000, "manager_id": str(manager["id"])}
+    body.update(overrides)
+    return body
+
+
+def test_admin_creates_project_manager_required(client, conn):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    token = token_for(conn, admin)
+    status, body, _, _ = client.request("POST", "/projects", token=token, json=project_body(mgr))
+    assert status == 201
+    assert (body["name"], body["status"], body["manager"]["id"]) == ("Apollo", "planned", str(mgr["id"]))
+    no_mgr = project_body(mgr, name="B")
+    del no_mgr["manager_id"]
+    status, body, _, _ = client.request("POST", "/projects", token=token, json=no_mgr)
+    assert (status, body["error"]["details"]) == (400, {"manager_id": "required"})
+    emp = make_user(conn)
+    status, body, _, _ = client.request("POST", "/projects", token=token,
+                                        json=project_body(emp, name="C"))
+    assert (status, body["error"]["details"]) == (400, {"manager_id": "invalid"})
+    assert {"action": "create"} in query(conn, "SELECT action FROM audit_log WHERE entity_type = 'project'")
+
+
+def test_manager_cannot_create_project(client, conn):
+    mgr = make_user(conn, role="manager")
+    assert client.request("POST", "/projects", token=token_for(conn, mgr), json=project_body(mgr))[0] == 403
+
+
+def test_end_before_start_400(client, conn):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    status, body, _, _ = client.request("POST", "/projects", token=token_for(conn, admin),
+                                        json=project_body(mgr, predicted_end_date="2025-06-01"))
+    assert (status, body["error"]["details"]) == (400, {"predicted_end_date": "before_start"})
+    status, body, _, _ = client.request("POST", "/projects", token=token_for(conn, admin),
+                                        json=project_body(mgr, budget=-1))
+    assert body["error"]["details"] == {"budget": "min:0"}
+
+
+def test_duplicate_active_name_409_but_archived_name_reusable(client, conn):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    token = token_for(conn, admin)
+    first = client.request("POST", "/projects", token=token, json=project_body(mgr))[1]
+    status, body, _, _ = client.request("POST", "/projects", token=token, json=project_body(mgr, name="APOLLO"))
+    assert (status, body["error"]["details"]) == (409, {"name": "taken"})
+    assert client.request("DELETE", f"/projects/{first['id']}", token=token)[0] == 204
+    assert client.request("POST", "/projects", token=token, json=project_body(mgr, name="apollo"))[0] == 201
+    status, body, _, _ = client.request("POST", f"/projects/{first['id']}/restore", token=token)
+    assert (status, body["error"]["details"]) == (409, {"name": "taken"})
+
+
+def test_visibility_by_role(client, conn):
+    admin = make_user(conn, role="admin")
+    mgr, other_mgr = make_user(conn, role="manager"), make_user(conn, role="manager")
+    emp, outsider = make_user(conn), make_user(conn)
+    mine = make_project(conn, mgr, name="Mine")
+    theirs = make_project(conn, other_mgr, name="Theirs")
+    staffed = make_project(conn, other_mgr, name="Staffed")
+    add_member(conn, mine, emp)
+    add_member(conn, staffed, mgr)
+
+    def names(user):
+        return sorted(p["name"] for p in client.request("GET", "/projects", token=token_for(conn, user))[1]["items"])
+
+    assert names(admin) == ["Mine", "Staffed", "Theirs"]
+    assert names(mgr) == ["Mine", "Staffed"]
+    assert names(emp) == ["Mine"]
+    assert names(outsider) == []
+    assert client.request("GET", f"/projects/{theirs['id']}", token=token_for(conn, emp))[0] == 404
+    assert client.request("GET", f"/projects/{mine['id']}", token=token_for(conn, emp))[0] == 200
+
+
+def test_archived_project_hidden_from_non_admin(client, conn):
+    admin, mgr, emp = make_user(conn, role="admin"), make_user(conn, role="manager"), make_user(conn)
+    project = make_project(conn, mgr)
+    add_member(conn, project, emp)
+    assert client.request("DELETE", f"/projects/{project['id']}", token=token_for(conn, mgr))[0] == 403
+    assert client.request("DELETE", f"/projects/{project['id']}", token=token_for(conn, admin))[0] == 204
+    for user in (mgr, emp):
+        assert client.request("GET", f"/projects/{project['id']}", token=token_for(conn, user))[0] == 404
+        assert client.request("GET", "/projects", token=token_for(conn, user))[1]["items"] == []
+    admin_token = token_for(conn, admin)
+    assert client.request("GET", "/projects", token=admin_token)[1]["items"] == []
+    archived = client.request("GET", "/projects?archived=true", token=admin_token)[1]["items"]
+    assert [p["id"] for p in archived] == [str(project["id"])]
+    assert client.request("GET", f"/projects/{project['id']}", token=admin_token)[1]["is_archived"] is True
+    status, body, _, _ = client.request("POST", f"/projects/{project['id']}/restore", token=admin_token)
+    assert status == 200 and body["is_archived"] is False
+
+
+def test_manager_edits_own_project(client, conn):
+    mgr = make_user(conn, role="manager")
+    project = make_project(conn, mgr, budget=Decimal("1000"))
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token_for(conn, mgr),
+                                        json={"budget": 2500, "description": "New scope"})
+    assert status == 200 and (body["budget"], body["description"]) == (2500.0, "New scope")
+    other = make_user(conn, role="manager")
+    assert client.request("PUT", f"/projects/{project['id']}", token=token_for(conn, other),
+                          json={"budget": 1})[0] == 404
+
+
+def test_member_employee_cannot_edit(client, conn):
+    mgr, emp = make_user(conn, role="manager"), make_user(conn)
+    project = make_project(conn, mgr)
+    add_member(conn, project, emp)
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token_for(conn, emp),
+                                        json={"budget": 1})
+    assert (status, body["error"]["code"]) == (403, "FORBIDDEN")
+
+
+def test_manager_cannot_reassign_manager(client, conn):
+    admin, mgr, other = make_user(conn, role="admin"), make_user(conn, role="manager"), make_user(conn, role="manager")
+    project = make_project(conn, mgr)
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token_for(conn, mgr),
+                                        json={"manager_id": str(other["id"])})
+    assert (status, body["error"]["code"]) == (403, "FORBIDDEN")
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token_for(conn, admin),
+                                        json={"manager_id": str(other["id"])})
+    assert status == 200 and body["manager"]["id"] == str(other["id"])
+
+
+def test_complete_requires_all_milestones(client, conn):
+    mgr = make_user(conn, role="manager")
+    project = make_project(conn, mgr, status="active")
+    make_milestone(conn, project, status="completed")
+    open_one = make_milestone(conn, project, status="in_progress")
+    make_milestone(conn, project, status="not_started", archived=True)      # archived ones don't count
+    token = token_for(conn, mgr)
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token, json={"status": "completed"})
+    assert (status, body["error"]["code"]) == (400, "MILESTONES_INCOMPLETE")
+    conn.run("UPDATE milestones SET status = 'completed' WHERE id = :i", i=open_one["id"])
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token, json={"status": "completed"})
+    assert status == 200 and body["status"] == "completed" and body["completed_at"]
+
+
+def test_invalid_status_transition(client, conn):
+    mgr = make_user(conn, role="manager")
+    token = token_for(conn, mgr)
+    planned = make_project(conn, mgr, status="planned")
+    status, body, _, _ = client.request("PUT", f"/projects/{planned['id']}", token=token, json={"status": "on_hold"})
+    assert (status, body["error"]["code"]) == (400, "INVALID_TRANSITION")
+    for target in ("active", "on_hold", "active"):
+        assert client.request("PUT", f"/projects/{planned['id']}", token=token, json={"status": target})[0] == 200
+    done = make_project(conn, mgr, status="completed")
+    status, body, _, _ = client.request("PUT", f"/projects/{done['id']}", token=token, json={"status": "active"})
+    assert body["error"]["code"] == "INVALID_TRANSITION"
+
+
+def test_dates_cannot_shrink_past_milestones(client, conn):
+    mgr = make_user(conn, role="manager")
+    project = make_project(conn, mgr, start=date(2026, 1, 1), end=date(2026, 12, 31))
+    make_milestone(conn, project, start=date(2026, 3, 1), end=date(2026, 11, 30))
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token_for(conn, mgr),
+                                        json={"predicted_end_date": "2026-10-31"})
+    assert (status, body["error"]["code"]) == (400, "MILESTONES_OUT_OF_RANGE")
+
+
+def test_summary_numbers(client, conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, salary=Decimal("104000"))                         # rate 50.00
+    project = make_project(conn, mgr, budget=Decimal("2080"), start=TODAY - timedelta(days=30),
+                           end=TODAY + timedelta(days=30))
+    add_member(conn, project, emp)
+    ms = make_milestone(conn, project, status="completed")
+    make_milestone(conn, project, status="in_progress")
+    gone = make_milestone(conn, project, status="in_progress", archived=True)
+    log_entry(conn, emp, ms, TODAY, 8)                                       # approved: 400
+    log_entry(conn, emp, ms, TODAY - timedelta(days=1), 5, status="pending")  # not counted
+    log_entry(conn, emp, gone, TODAY, 3)                                     # archived milestone: not counted
+    status, body, _, _ = client.request("GET", f"/projects/{project['id']}/summary", token=token_for(conn, mgr))
+    assert status == 200
+    assert (body["budget"], body["consumed"], body["remaining"]) == (2080.0, 400.0, 1680.0)
+    assert (body["budget_pct"], body["progress_pct"], body["member_count"]) == (19.2, 50.0, 1)
+    assert body["at_risk_reasons"] == []
+    assert body["project"]["id"] == str(project["id"])
+
+
+def test_list_filters_q_status_at_risk(client, conn):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    make_project(conn, mgr, name="Apollo", status="active")
+    make_project(conn, mgr, name="Beacon", status="planned")
+    late = make_project(conn, mgr, name="Atlas", status="active", start=TODAY - timedelta(days=60),
+                        end=TODAY - timedelta(days=1))
+    token = token_for(conn, admin)
+
+    def names(query_string):
+        body = client.request("GET", f"/projects{query_string}", token=token)[1]
+        return [p["name"] for p in body["items"]]
+
+    assert names("?q=pol") == ["Apollo"]
+    assert names("?status=planned") == ["Beacon"]
+    assert names("?at_risk=true") == ["Atlas"]
+    assert names(f"?manager={mgr['id']}") == ["Apollo", "Atlas", "Beacon"]
+    body = client.request("GET", "/projects?page=2&page_size=2", token=token)[1]
+    assert body["total"] == 3 and [p["name"] for p in body["items"]] == ["Beacon"]
+    item = client.request("GET", "/projects?q=Atlas", token=token)[1]["items"][0]
+    assert item["at_risk_reasons"] == ["PAST_DUE"]
+    assert set(item) >= {"id", "name", "status", "start_date", "predicted_end_date", "budget", "consumed",
+                         "budget_pct", "progress_pct", "at_risk_reasons", "manager"}
+    assert late["id"]
