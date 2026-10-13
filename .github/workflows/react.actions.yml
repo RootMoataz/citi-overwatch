@@ -1,0 +1,27 @@
+name: Security Check - React
+
+on: [pull_request, push]
+
+jobs:
+  npm:
+    runs-on: ubuntu-latest
+
+    permissions:
+      actions: read
+      contents: read
+      # security-events: write
+
+    steps:
+      - name: Setup GitHub Actions
+        uses: actions/checkout@master
+
+      - name: Setup Node.js
+        uses: actions/setup-node@master
+        with:
+          node-version: '24'
+
+      - name: Install npm dependencies
+        run: npm install --prefix ./frontend
+
+      - name: Run npm audit
+        run: npm audit --prefix ./frontend --audit-level=high

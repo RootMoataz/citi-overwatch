@@ -1,0 +1,19 @@
+pythonJob:
+  enabled: false
+  name: "python-job"
+  scriptContent: ""
+  requirementsContent: ""
+  backoffLimit: 4
+  ttlSecondsAfterFinished: 100
+  restartPolicy: Never
+  image:
+    repository: jupyter/all-spark-notebook
+    pullPolicy: IfNotPresent
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 1.0
+      memory: 2Gi
+    requests:
+      cpu: 0.5
+      memory: 1Gi

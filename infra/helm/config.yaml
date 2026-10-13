@@ -1,0 +1,47 @@
+proxy:
+  service:
+    type: ClusterIP
+
+hub:
+  config:
+    JupyterHub:
+      authenticator_class: ldapauthenticator.LDAPAuthenticator
+    LDAPAuthenticator:
+      server_address: "corp.codingworkshop.net"
+      server_port: 389
+      server_args:
+        get_info: "ALL"
+      tls_strategy: "insecure"
+      user_attribute: "sAMAccountName"
+      bind_dn_template:
+        - "CN={username},OU=Users,OU=CORP,DC=corp,DC=codingworkshop,DC=net"
+  db:
+    type: sqlite-memory
+
+singleuser:
+  image:
+    name: jupyter/all-spark-notebook
+    tag: latest
+  cpu:
+    limit: 2
+    guarantee: 1
+  memory:
+    limit: 2Gi
+    guarantee: 1Gi
+  storage:
+    type: "none"
+    extraVolumes:
+      - name: scratch-volume
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: scratch-volume
+        mountPath: /var/run/jupyter
+
+scheduling:
+  userScheduler:
+    enabled: true
+  podPriority:
+    enabled: true
+  userPlaceholder:
+    enabled: true
+    replicas: 1
