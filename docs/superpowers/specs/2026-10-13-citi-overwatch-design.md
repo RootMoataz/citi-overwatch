@@ -29,7 +29,13 @@ Other groups' designs (the "Object Structure V2" doc and the DBML schema) were r
 
 ## 2. Roles and permissions
 
-There are three roles: `admin`, `manager` and `employee`. The backend enforces every permission in one central place. The UI hides actions a role can never perform, and disables actions that aren't possible right now, with a tooltip saying why.
+There are three roles: `admin`, `manager` and `employee`.
+
+- **Admins have every manager privilege on every project**, plus the admin-only actions below.
+- Each project has **exactly one manager**, and can have many employees.
+- Each employee has one reporting manager, and a manager can have many employees reporting to them.
+
+The backend enforces every permission in one central place. The UI hides actions a role can never perform, and disables actions that aren't possible right now, with a tooltip saying why.
 
 | Action | Admin | Manager | Employee |
 |---|---|---|---|
@@ -44,7 +50,9 @@ There are three roles: `admin`, `manager` and `employee`. The backend enforces e
 | Submit a project request | — | ✅ | ❌ |
 | Edit project description, dates, budget and status | ✅ all | ✅ own projects | ❌ |
 | Assign employees to a project and set their planned weekly hours | ✅ all | ✅ own projects | ❌ |
-| Create, edit and complete milestones; set dependencies | ✅ all | ✅ own projects | ❌ |
+| See all milestones in a project | ✅ all | ✅ own projects | ✅ projects they're assigned to |
+| Create and edit milestones (name, description, dates); set dependencies; assign employees to milestones; mark completed | ✅ all | ✅ own projects | ❌ |
+| Move a milestone to `in_progress` or `ready_for_review`; add progress notes | ✅ all | ✅ own projects | ✅ only milestones they're assigned to |
 | Log own hours | ✅ | ✅ | ✅ on assigned projects |
 | Approve or reject overtime | ✅ all | ✅ own projects | ❌ |
 | See projects | All, including archived | Projects they manage or are assigned to | Assigned, non-archived projects |
@@ -123,7 +131,7 @@ A user can never raise their own role, edit their own salary, or act on a projec
 - `start_date`: required
 - `predicted_end_date`: required, on or after the start date
 - budget: zero or more
-- manager: required, and must be a user with role `manager` or `admin`
+- manager: required, exactly one per project, and must be a user with role `manager` or `admin`
 - status
 
 **Statuses:** `planned → active ⇄ on_hold → completed`. Only the project's manager or an admin changes the status.
@@ -133,8 +141,13 @@ A user can never raise their own role, edit their own salary, or act on a projec
 ### 3.5 Milestones and dependencies
 
 - A milestone belongs to one project. It has a name, description, start date and end date. Both dates must fall within the project's dates, and the end date must be on or after the start date.
-- **Stored statuses:** `not_started`, `in_progress`, `completed`. Only the project's manager or an admin completes a milestone.
-- **Shown status `blocked`** is calculated, not stored. It applies while any predecessor isn't `completed`. A blocked milestone can't move to `in_progress` or `completed`.
+- **Stored statuses:** `not_started → in_progress → ready_for_review → completed`.
+  - Assigned employees can move a milestone forward as far as `ready_for_review`.
+  - Only the project's manager or an admin marks it `completed`, or sends it back to `in_progress`.
+- **Assignees:** the project's manager or an admin assigns one or more employees to a milestone. An assignee must already be a member of the project.
+- **Visibility:** everyone on a project sees all of its milestones. An employee who isn't assigned to a milestone gets `403` on any attempt to change it.
+- **Progress notes:** assignees, the project's manager and admins can add notes to a milestone. Notes are append-only and show the author and time.
+- **Shown status `blocked`** is calculated, not stored. It applies while any predecessor isn't `completed`. A blocked milestone can't move forward from `not_started`.
 - **Dependencies:**
   - A milestone can have many predecessors, all from the same project.
   - No self-dependencies and no loops. The backend searches the project's dependency graph for loops and rejects any that would form, with `400 DEPENDENCY_CYCLE`.
@@ -145,7 +158,7 @@ A user can never raise their own role, edit their own salary, or act on a projec
 
 - **Assignments:** a manager or admin assigns a person to a project with `planned_hours_per_week`, which must be more than 0 and at most 40.
 - **Planned cap:** a person's planned hours across all their active, non-archived projects that overlap in dates can't exceed **40 per week**. Going over is rejected with `400 PLANNED_HOURS_EXCEEDED`, and the message shows the person's current total.
-- **Reporting manager:** every employee has exactly one reporting manager (`users.manager_id`). This is separate from project staffing, so an employee can work on projects run by other managers.
+- **Reporting manager:** every employee has exactly one reporting manager (`users.manager_id`), and a manager can have many direct reports. This is separate from project staffing, so an employee can work on projects run by other managers.
 
 ### 3.7 Time entries and overtime
 
@@ -271,6 +284,9 @@ erDiagram
   projects ||--o{ project_members : has
   projects ||--o{ milestones : has
   milestones ||--o{ milestone_dependencies : "depends on"
+  milestones ||--o{ milestone_assignees : "assigned to"
+  users ||--o{ milestone_assignees : "works on"
+  milestones ||--o{ milestone_notes : has
   users ||--o{ time_entries : logs
   projects ||--o{ time_entries : "charged to"
   users ||--o{ project_requests : submits
@@ -290,6 +306,8 @@ erDiagram
 | `project_members` | `project_id`, `user_id` (unique pair), `planned_hours_per_week` numeric(4,1) |
 | `milestones` | `project_id`, `name`, `description`, `start_date`, `end_date`, `status`, `completed_at` |
 | `milestone_dependencies` | `milestone_id`, `depends_on_id` (unique pair; same project; no self-dependency) |
+| `milestone_assignees` | `milestone_id`, `user_id` (unique pair; the user must be a project member) |
+| `milestone_notes` | `milestone_id`, `author_id`, `body`, `created_at` (append only) |
 | `time_entries` | `user_id`, `project_id`, `work_date` (unique triple), `hours` numeric(5,2) counted, `hourly_rate` snapshot, `pending_hours`, `pending_status` (`pending_overtime`/null), `decided_by`, `decided_at`, `note` |
 | `audit_log` | `actor_id`, `action`, `entity_type`, `entity_id`, `changes` jsonb (before/after), `request_id`, `created_at` (append only) |
 
@@ -314,7 +332,7 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
 | Requests | `GET project-requests?status=`, `POST project-requests`, `POST project-requests/{id}/approve`, `POST project-requests/{id}/reject` |
 | Projects | `GET projects?q=&status=&manager=&at_risk=&archived=`, `POST projects`, `GET/PUT/DELETE projects/{id}`, `POST projects/{id}/restore`, `GET projects/{id}/summary` |
 | Members | `GET/POST projects/{id}/members`, `PUT/DELETE projects/{id}/members/{userId}` |
-| Milestones | `GET/POST projects/{id}/milestones`, `GET/PUT/DELETE milestones/{id}`, `POST milestones/{id}/restore`, `PUT milestones/{id}/dependencies` |
+| Milestones | `GET/POST projects/{id}/milestones`, `GET/PUT/DELETE milestones/{id}`, `POST milestones/{id}/restore`, `PUT milestones/{id}/dependencies`, `PUT milestones/{id}/assignees`, `POST milestones/{id}/status`, `GET/POST milestones/{id}/notes` |
 | Time | `GET time-entries?user=&week=`, `PUT time-entries` (saves a week grid), `GET approvals`, `POST time-entries/{id}/approve`, `POST time-entries/{id}/reject` |
 | Insights | `GET dashboard`, `GET allocations?week=` |
 | Audit | `GET audit-log?actor=&entity_type=&from=&to=` |
@@ -370,7 +388,7 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
 | Layer | Tool | What it covers |
 |---|---|---|
 | Rules (unit) | pytest | At-risk, overtime holding, loop detection, capacity cap, password policy, username suggestions, permission checks: exhaustive edge cases |
-| API (integration) | pytest + local Postgres `overwatch_test` | Every endpoint, including success, validation, 401/403/404 and archive behavior. The schema is rebuilt every run, and each test runs in a transaction that's rolled back |
+| API (integration) | pytest + local Postgres `overwatch_test` | Every endpoint, including success, validation, 401/403/404, archive behavior, and milestone edit rights by assignment. The schema is rebuilt every run, and each test runs in a transaction that's rolled back |
 | Frontend (component) | Vitest + React Testing Library | Form stepper gating, policy checklist, forced-change dialog, data states (loading, empty, error), role-based hiding |
 | End-to-end | Playwright (desktop and mobile viewports) | Admin creates a user → first login → forced change → dashboard; manager milestone with a dependency; employee logs overtime → manager approves → budget updates |
 
