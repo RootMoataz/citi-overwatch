@@ -104,3 +104,26 @@ export const useNotes = (milestoneId, enabled = true) =>
   useQuery({ queryKey: ['notes', milestoneId], enabled, queryFn: () => api.get(`/milestones/${milestoneId}/notes`) })
 export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/milestones/${milestoneId}/notes`, { body }),
   { invalidate: [['notes', milestoneId]], success: 'Note added' })
+
+// ---------- time, approvals, notifications ----------
+const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['projects'], ['allocations'], ['notifications']]
+export const useWeek = (week, userId) => useQuery({
+  queryKey: ['time', week, userId ?? 'me'], queryFn: () => api.get('/time-entries', { week, user: userId }),
+  placeholderData: keepPreviousData,
+})
+export const useSaveWeek = () => useApiMutation((body) => api.put('/time-entries', body),
+  { invalidate: timeKeys, success: 'Hours saved and sent for approval' })
+export const useApprovals = (filters = {}, enabled = true) =>
+  useQuery({ queryKey: ['approvals', filters], enabled, queryFn: () => api.get('/approvals', filters) })
+export const useBreakdown = (entryId, enabled = true) =>
+  useQuery({ queryKey: ['breakdown', entryId], enabled, queryFn: () => api.get(`/time-entries/${entryId}/breakdown`) })
+export const useApproveEntry = () => useApiMutation((id) => api.post(`/time-entries/${id}/approve`),
+  { invalidate: timeKeys, success: 'Hours approved' })
+export const useRejectEntry = () => useApiMutation(({ id, reason }) => api.post(`/time-entries/${id}/reject`, { reason }),
+  { invalidate: timeKeys, success: 'Hours rejected' })
+export const useNotifications = () =>
+  useQuery({ queryKey: ['notifications'], queryFn: () => api.get('/notifications', { unread: 'true' }) })
+export const useMarkRead = () => useApiMutation((id) => api.post(`/notifications/${id}/read`), { invalidate: [['notifications']] })
+export const useMarkAllRead = () => useApiMutation(() => api.post('/notifications/read-all'), { invalidate: [['notifications']] })
+export const useAllocations = (week, enabled = true) =>
+  useQuery({ queryKey: ['allocations', week], enabled, queryFn: () => api.get('/allocations', { week }) })
