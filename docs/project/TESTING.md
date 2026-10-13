@@ -11,7 +11,7 @@ The tests are built for **debugging**, not only for a green tick:
 |---|---|---|---|
 | Rules (unit) | pytest | part of 102 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 102 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
-| API (integration) | pytest + real PostgreSQL 17 | 188 | An endpoint is wrong: permissions (401/403/404), validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
+| API (integration) | pytest + real PostgreSQL 17 | 189 | An endpoint is wrong: permissions (401/403/404), validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
 | Frontend (component) | Vitest + React Testing Library + MSW | 84 | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
@@ -78,8 +78,8 @@ app\rules\cycles.py                      32      0   100%
 app\rules\milestone_status.py             7      0   100%
 app\rules\overtime.py                    25      0   100%
 app\rules\usernames.py                   37      0   100%
-TOTAL                                  2109     72    97%
-290 passed in 15.23s
+TOTAL                                  2110     72    97%
+291 passed in 17.98s
 ```
 
 The targets were ≥ 80% for `app/` and 100% for `app/rules/`. **Both are met**: 97% overall and 100% on the rules.
@@ -121,6 +121,27 @@ The suite was run twice in a row, with no flaky results.
 ### Lint: `npm run lint`
 
 No problems reported.
+
+## Live verification (2026-10-13, https://d3ucnz03j0sngl.cloudfront.net)
+
+These checks were run after the final deploy, scripted in Playwright against the real site. They ran on desktop Chrome (1280×800) and on WebKit with an iPhone 13 profile.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | Sign in as each demo role (admin, manager, employee), on desktop and mobile | ✅ Pass |
+| 2 | Dashboard shows all seven question sections, on desktop and mobile | ✅ Pass |
+| 3 | Admin creates a user in the wizard. SES isn't reachable from the VPC, so the "Share these sign-in details" dialog shows the credentials once | ✅ Pass |
+| 4 | The new user signs in with the temporary password, is forced to change it, then lands on the dashboard | ✅ Pass |
+| 5 | Manager adds a milestone depending on *Discovery* and assigns Eli. Eli starts it and marks it ready for review, with no Complete button; the manager completes it | ✅ Pass |
+| 6 | Manager opens the over-40h notification for Eli, then Approvals and the budget impact (cost shown, no hourly rate), and approves. Consumed budget on the Budget tab rises | ✅ Pass |
+| 7 | Admin archives an account, restores it and archives it again from the People page. Archived milestones disappear from the project | ✅ Pass |
+| 8 | Forgotten password: generic response, the code step appears, and the page points to an admin, since email can't be sent from the live site | ✅ Pass |
+| 9 | As an employee, People, Audit log, Approvals and Allocation are absent from the navigation. Direct `POST /projects` and `GET /users` return `403`, and an unknown project shows an error, not a blank screen | ✅ Pass |
+| — | Mobile: the drawer navigation works, the timesheet and approvals render, and the page doesn't scroll sideways | ✅ Pass |
+
+**Found during these checks, and fixed before the results above:**
+- **Opening any page other than `/` returned S3's `403` XML.** The bucket is private, so S3 answers unknown keys with 403, not the 404 that CloudFront maps to `index.html`. Fixed with a CloudFront Function on the S3 behaviour only (`infra/cloudfront.tf`), which serves `index.html` for app routes. `/api/*` is untouched.
+- **The live check accounts and the milestone created by these checks were archived afterwards**, so the demo data looks as seeded.
 
 ## Known gaps
 

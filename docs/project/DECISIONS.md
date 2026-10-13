@@ -37,6 +37,15 @@ Why Citi Overwatch is built the way it is. Each entry says what was decided, why
 | `manager.demo` and `employee.demo` never lock and can't change their password; every other seeded account gets a random password on the live site (`rotate_demo` op) | Their password is published for graders. Lockout or a password change would let one visitor break the demo for everyone, and the other demo accounts shared the same known password | Anyone can sign in as those two demo accounts, as intended. Real accounts keep the normal lockout |
 | Status changes go through a dedicated `POST /milestones/{id}/status` | One place enforces who may make which transition | One more endpoint than a generic `PUT` |
 
+## Findings from the final deploy (2026-10-13)
+
+### Deep links returned 403
+
+- **What happened:** after the frontend went live, opening `/login` or refreshing any page returned S3's XML `AccessDenied`.
+- **Cause:** the bucket is private, behind CloudFront Origin Access Control, so S3 answers a missing key with `403`. The distribution only maps `404` to `index.html`.
+- **What we did:** added a CloudFront Function (`spa_routes`) on the default S3 behaviour. It rewrites any path without a file extension to `/index.html`. The owner chose this over mapping `403` (which would also have rewritten real API `403`s into HTML) and over hash URLs.
+- **Related:** CloudFront's `404 → index.html` mapping also applies to API 404s. The API client therefore treats a non-JSON response as `404 NOT_FOUND`, and a top-level error boundary catches any screen that still crashes.
+
 ## Findings from the first cloud deploy (2026-10-13)
 
 ### SES email isn't reachable from the Lambda

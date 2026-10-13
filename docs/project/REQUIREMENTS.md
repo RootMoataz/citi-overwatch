@@ -96,9 +96,9 @@ The app must answer every one of these questions in the UI.
 
 ### Delivery (E, R)
 
-- [ ] Deployed to AWS and reachable in a browser (E, R)
+- [x] Deployed to AWS and reachable in a browser (E, R)
 - [x] Runs locally from documented commands (R)
-- [ ] Deploy steps can be repeated and produce verifiable output (R)
+- [x] Deploy steps can be repeated and produce verifiable output (R)
 
 ### API quality (G)
 

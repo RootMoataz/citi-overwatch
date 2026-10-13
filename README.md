@@ -8,7 +8,7 @@ A project tracking platform for ACME Inc. It gives admins, project managers and 
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 290 backend (97% coverage, business rules 100%) · 84 frontend component · 6 end-to-end (desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 291 backend (97% coverage, business rules 100%) · 84 frontend component · 6 end-to-end (desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
 
 ## What it does
 
@@ -88,7 +88,7 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 290 unit + integration tests against local Postgres
+cd backend/v1 && python -m pytest --cov=app              # 291 unit + integration tests against local Postgres
 cd frontend && npm test                                  # 84 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
