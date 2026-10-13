@@ -1,6 +1,27 @@
-from app.features.auth import service
+from app.features.auth import reset, service
 from app.http import json_response
 from app.router import router
+
+
+@router.route("POST", "/auth/forgot-password", auth=False)
+def forgot_password(req, ctx, conn):
+    return json_response(200, reset.forgot_password(conn, req.json()))
+
+
+@router.route("POST", "/auth/verify-reset-code", auth=False)
+def verify_reset_code(req, ctx, conn):
+    return json_response(200, reset.verify_reset_code(conn, req.json()))
+
+
+@router.route("POST", "/auth/reset-password", auth=False)
+def reset_password(req, ctx, conn):
+    reset.reset_password(conn, req.json(), req.request_id)
+    return json_response(204)
+
+
+@router.route("POST", "/users/{id}/reset-password", roles={"admin"})
+def admin_reset_password(req, ctx, conn):
+    return json_response(200, reset.admin_reset(conn, ctx, req.path_params["id"], req.json()))
 
 
 @router.route("POST", "/auth/login", auth=False)

@@ -1,6 +1,6 @@
 """Login, sessions (refresh tokens), password changes and the caller's own profile."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from pg8000.exceptions import DatabaseError
 
