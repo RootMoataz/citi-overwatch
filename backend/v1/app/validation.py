@@ -1,0 +1,64 @@
+"""Field validators. Each failure raises 400 VALIDATION_ERROR with {field: reason}."""
+
+from datetime import date
+from decimal import Decimal, InvalidOperation
+
+from app.authz import is_uuid
+from app.http import ApiError
+
+
+def _fail(field: str, reason: str):
+    raise ApiError(400, "VALIDATION_ERROR", f"{field}: {reason}", {field: reason})
+
+
+def require(body: dict, *fields: str) -> None:
+    missing = {f: "required" for f in fields
+               if body.get(f) is None or (isinstance(body.get(f), str) and not body[f].strip())}
+    if missing:
+        raise ApiError(400, "VALIDATION_ERROR", "Missing required fields", missing)
+
+
+def as_str(value, field: str, *, min_len: int = 1, max_len: int = 200) -> str:
+    if not isinstance(value, str):
+        _fail(field, "must be text")
+    value = value.strip()
+    if len(value) < min_len:
+        _fail(field, "required" if min_len == 1 else f"min_length:{min_len}")
+    if len(value) > max_len:
+        _fail(field, f"max_length:{max_len}")
+    return value
+
+
+def as_date(value, field: str) -> date:
+    try:
+        return date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        _fail(field, "invalid_date")
+
+
+def as_decimal(value, field: str, *, min: Decimal | None = None, max: Decimal | None = None) -> Decimal:
+    if isinstance(value, bool):
+        _fail(field, "invalid_number")
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        _fail(field, "invalid_number")
+    if not number.is_finite():
+        _fail(field, "invalid_number")
+    if min is not None and number < min:
+        _fail(field, f"min:{min}")
+    if max is not None and number > max:
+        _fail(field, f"max:{max}")
+    return number
+
+
+def as_enum(value, field: str, allowed) -> str:
+    if value not in allowed:
+        _fail(field, "invalid_choice")
+    return value
+
+
+def as_uuid(value, field: str) -> str:
+    if not is_uuid(value):
+        _fail(field, "invalid_id")
+    return str(value)

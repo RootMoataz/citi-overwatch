@@ -36,3 +36,48 @@ def conn(db):
     targets = ", ".join(t for t in tables if t not in KEEP)
     if targets:
         db.run(f"TRUNCATE {targets} RESTART IDENTITY CASCADE")
+
+
+class Client:
+    """Calls function.handler with a Function URL event, like CloudFront would."""
+
+    def request(self, method, path, json=None, token=None, cookies=None, headers=None):
+        import json as _json
+
+        import function
+
+        raw_path, _, query = path.partition("?")
+        hdrs = {"content-type": "application/json", **(headers or {})}
+        if token:
+            hdrs["authorization"] = f"Bearer {token}"
+        event = {
+            "version": "2.0",
+            "rawPath": f"/api/v1{raw_path}",
+            "rawQueryString": query,
+            "headers": hdrs,
+            "cookies": [f"{k}={v}" for k, v in (cookies or {}).items()],
+            "body": None if json is None else _json.dumps(json, default=str),
+            "isBase64Encoded": False,
+            "requestContext": {"http": {"method": method.upper()}},
+        }
+        resp = function.handler(event, None)
+        body = _json.loads(resp["body"]) if resp.get("body") else None
+        return resp["statusCode"], body, resp.get("headers", {}), resp.get("cookies", [])
+
+
+@pytest.fixture
+def client(conn):
+    return Client()
+
+
+@pytest.fixture
+def outbox(tmp_path, monkeypatch):
+    """Point the local email outbox at a temp folder; returns a reader for the newest message."""
+    monkeypatch.setenv("OUTBOX_DIR", str(tmp_path))
+
+    def newest() -> str:
+        files = sorted(tmp_path.glob("*.txt"))
+        return files[-1].read_text(encoding="utf-8") if files else ""
+
+    newest.count = lambda: len(list(tmp_path.glob("*.txt")))
+    return newest

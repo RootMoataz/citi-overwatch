@@ -4,9 +4,11 @@ Requests through the Function URL always carry requestContext.http and go to the
 Anything else is an internal operation, reachable only by an IAM-authorized direct invoke.
 """
 
-from app import db
+from app import ctx, db
 from app.migrate import apply_migrations
 from app.router import router
+
+ctx.install(router)
 
 
 def _internal(event: dict) -> dict:
