@@ -27,6 +27,13 @@ window.matchMedia = (query) => ({
   dispatchEvent() { return false },
 })
 
+// Charts measure their container; jsdom has no ResizeObserver.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 // Relative fetch URLs need an origin under Node.
 const realFetch = globalThis.fetch
 globalThis.fetch = (input, init) =>

@@ -5,6 +5,9 @@ import { useSession } from '../auth/sessionContext.js'
 import EmptyState from '../components/EmptyState.jsx'
 import ForgotPasswordPage from '../features/login/ForgotPasswordPage.jsx'
 import LoginPage from '../features/login/LoginPage.jsx'
+import ProjectDetailPage from '../features/projects/ProjectDetailPage.jsx'
+import ProjectsPage from '../features/projects/ProjectsPage.jsx'
+import RequestsPage from '../features/requests/RequestsPage.jsx'
 import Layout from './Layout.jsx'
 import NotFound from './NotFound.jsx'
 
@@ -26,6 +29,9 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route element={<RequireAuth><Shell /></RequireAuth>}>
           <Route index element={<Welcome />} />
+          <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:id" element={<ProjectDetailPage />} />
+          <Route path="requests" element={<RequireAuth roles={['admin', 'manager']}><RequestsPage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

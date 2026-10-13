@@ -15,7 +15,8 @@ export default function ResponsiveTable({ rows, columns, renderCard, loading = f
     return (
       <Box sx={{ width: '100%' }}>
         <DataGrid rows={rows} columns={columns} loading={loading} getRowId={getRowId} autoHeight
-          disableRowSelectionOnClick density="compact" aria-label={ariaLabel}
+          disableRowSelectionOnClick density="compact" aria-label={ariaLabel} getRowHeight={() => "auto"}
+          disableVirtualization={import.meta.env.MODE === "test"}
           initialState={{ pagination: { paginationModel: { pageSize } } }} pageSizeOptions={[10, 25, 50]}
           onRowClick={onRowClick ? (params) => onRowClick(params.row) : undefined}
           sx={{ bgcolor: 'background.paper', '& .MuiDataGrid-row': { cursor: onRowClick ? 'pointer' : 'default' } }} />
