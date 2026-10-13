@@ -13,7 +13,7 @@ from app.features.users.welcome import TEMP_PASSWORD_HOURS, send_welcome
 from app.http import ApiError
 from app.rules.usernames import is_valid_username, normalize_username, suggest_usernames
 from app.security import generate_temp_password, hash_password, password_policy_errors
-from app.validation import as_decimal, as_email, as_enum, as_str, as_uuid, require
+from app.validation import as_decimal, as_email, as_enum, as_str, as_uuid, page_params, require
 
 ROLES = ("admin", "manager", "employee")
 EDITABLE = {"first_name", "last_name", "email", "job_title", "role", "salary", "manager_id", "username"}
@@ -42,10 +42,11 @@ def _valid_username(raw) -> str:
 
 
 def _check_manager(conn, role: str, manager_id, user_id: str | None = None) -> str | None:
-    if role != "employee":
-        return str(manager_id) if manager_id else None
+    """Validate the reporting manager for every role; employees must have one."""
     if not manager_id:
-        raise ApiError(400, "VALIDATION_ERROR", "Employees need a reporting manager", {"manager_id": "required"})
+        if role == "employee":
+            raise ApiError(400, "VALIDATION_ERROR", "Employees need a reporting manager", {"manager_id": "required"})
+        return None
     manager_id = as_uuid(manager_id, "manager_id")
     manager = query_one(conn, """SELECT 1 AS ok FROM users WHERE id = CAST(:i AS uuid)
                                  AND role IN ('manager', 'admin') AND NOT is_archived""", i=manager_id)
@@ -74,9 +75,25 @@ def _fields(body: dict, *, partial: bool) -> dict:
     return out
 
 
+def _dependents(conn, user_id: str) -> dict:
+    """Active projects a user manages and their active direct reports."""
+    projects = query(conn, """SELECT id, name FROM projects WHERE manager_id = CAST(:u AS uuid)
+                              AND NOT is_archived ORDER BY lower(name)""", u=user_id)
+    reports = query(conn, """SELECT id, first_name, last_name FROM users WHERE manager_id = CAST(:u AS uuid)
+                             AND NOT is_archived ORDER BY lower(last_name), lower(first_name)""", u=user_id)
+    return {"projects": [{"id": p["id"], "name": p["name"]} for p in projects],
+            "direct_reports": [{"id": r["id"], "name": f"{r['first_name']} {r['last_name']}"} for r in reports]}
+
+
+def _require_no_dependents(conn, user_id: str, action: str) -> None:
+    deps = _dependents(conn, user_id)
+    if deps["projects"] or deps["direct_reports"]:
+        raise ApiError(409, "HAS_DEPENDENTS",
+                       f"Reassign their projects and direct reports before you {action} this person", deps)
+
+
 def list_users(conn, ctx: Ctx, params: dict) -> dict:
-    page = max(int(params.get("page") or 1), 1)
-    size = min(max(int(params.get("page_size") or 25), 1), 100)
+    page, size = page_params(params)
     archived = ctx.is_admin and params.get("archived") == "true"
     where = ["is_archived = :archived"]
     args = {"archived": archived}
@@ -145,7 +162,11 @@ def update_user(conn, ctx: Ctx, user_id: str, body: dict) -> dict:
     changes = _fields(body, partial=True)
     if user_id == ctx.user_id and changes.get("role", "admin") != "admin":
         raise ApiError(400, "SELF_DEMOTION", "You can't remove your own admin role")
+    if user_id == ctx.user_id and "salary" in changes:
+        raise ApiError(403, "FORBIDDEN", "You can't change your own salary")
     role = changes.get("role", before["role"])
+    if before["role"] in ("manager", "admin") and role == "employee":
+        _require_no_dependents(conn, user_id, "demote")
     if "manager_id" in body or "role" in changes:
         changes["manager_id"] = _check_manager(conn, role, body.get("manager_id", before["manager_id"]), user_id)
     if not changes:
@@ -170,6 +191,7 @@ def archive_user(conn, ctx: Ctx, user_id: str) -> None:
     user = _get(conn, user_id)
     if user["is_archived"]:
         return
+    _require_no_dependents(conn, user_id, "archive")
     with transaction(conn):
         conn.run("UPDATE users SET is_archived = true, archived_at = now(), updated_at = now() WHERE id = :i",
                  i=user["id"])

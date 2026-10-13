@@ -19,6 +19,15 @@ REFRESH_DAYS = 7
 MAX_FAILED_LOGINS = 5
 LOCK_MINUTES = 15
 SELF_EDITABLE = {"first_name", "last_name", "email"}
+_dummy_hash: dict[int, str] = {}
+
+
+def _dummy() -> str:
+    """A real hash to verify against when the username doesn't exist, so timing is identical."""
+    iterations = config.pbkdf2_iterations()
+    if iterations not in _dummy_hash:
+        _dummy_hash[iterations] = hash_password("not-a-real-password")
+    return _dummy_hash[iterations]
 
 
 def _now() -> datetime:
@@ -65,18 +74,19 @@ def login(conn, body: dict, request_id: str) -> tuple[dict, list[str]]:
                      u=str(body["username"]).strip())
     invalid = ApiError(401, "INVALID_CREDENTIALS", "Incorrect username or password")
     if not user:
+        verify_password(str(body["password"]), _dummy())  # same cost as a real check
         raise invalid
     if user["locked_until"] and user["locked_until"] > _now():
         raise ApiError(423, "ACCOUNT_LOCKED", "Too many failed attempts. Try again later.",
                        {"until": user["locked_until"].isoformat()})
     if not verify_password(str(body["password"]), user["password_hash"]):
-        fails = user["failed_login_count"] + 1
-        if fails >= MAX_FAILED_LOGINS:
-            conn.run("""UPDATE users SET failed_login_count = 0,
-                        locked_until = now() + make_interval(mins => :m) WHERE id = :i""",
-                     m=LOCK_MINUTES, i=user["id"])
-        else:
-            conn.run("UPDATE users SET failed_login_count = :f WHERE id = :i", f=fails, i=user["id"])
+        # One atomic statement, so parallel wrong guesses can't share a stale count.
+        conn.run("""UPDATE users SET
+                      failed_login_count = CASE WHEN failed_login_count + 1 >= :max THEN 0
+                                                ELSE failed_login_count + 1 END,
+                      locked_until = CASE WHEN failed_login_count + 1 >= :max
+                                          THEN now() + make_interval(mins => :m) ELSE locked_until END
+                    WHERE id = :i""", max=MAX_FAILED_LOGINS, m=LOCK_MINUTES, i=user["id"])
         raise invalid
     if user["must_change_password"] and user["temp_password_expires_at"] \
             and user["temp_password_expires_at"] < _now():
@@ -94,16 +104,18 @@ def refresh(conn, cookie_token: str | None) -> tuple[dict, list[str]]:
     invalid = ApiError(401, "REFRESH_INVALID", "Your session has ended. Please sign in again.")
     if not cookie_token:
         raise invalid
-    row = query_one(conn, """SELECT rt.id AS token_id, u.* FROM refresh_tokens rt
-                             JOIN users u ON u.id = rt.user_id
-                             WHERE rt.token_hash = :h AND rt.revoked_at IS NULL
-                               AND rt.expires_at > now()""", h=hash_token(cookie_token))
-    if not row or row["is_archived"] or row["must_change_password"]:
+    # Claim the token in one statement: of two parallel refreshes, exactly one wins.
+    claimed = query_one(conn, """UPDATE refresh_tokens SET revoked_at = now()
+                                 WHERE token_hash = :h AND revoked_at IS NULL AND expires_at > now()
+                                 RETURNING user_id""", h=hash_token(cookie_token))
+    if not claimed:
+        raise invalid
+    user = query_one(conn, "SELECT * FROM users WHERE id = :i", i=claimed["user_id"])
+    if not user or user["is_archived"] or user["must_change_password"]:
         raise invalid
     with transaction(conn):
-        conn.run("UPDATE refresh_tokens SET revoked_at = now() WHERE id = :i", i=row["token_id"])
-        access, cookies = _issue(conn, row, restricted=False)
-    return {"access_token": access, "user": session_user(row)}, cookies
+        access, cookies = _issue(conn, user, restricted=False)
+    return {"access_token": access, "user": session_user(user)}, cookies
 
 
 def logout(conn, cookie_token: str | None) -> None:

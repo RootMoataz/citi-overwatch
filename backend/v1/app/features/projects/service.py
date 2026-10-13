@@ -12,7 +12,7 @@ from app.db import query, query_one, transaction
 from app.features.common import conflict_from
 from app.http import ApiError
 from app.rules.at_risk import at_risk_reasons
-from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, require
+from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
 
 STATUSES = ("planned", "active", "on_hold", "completed")
 CREATE_STATUSES = ("planned", "active", "on_hold")
@@ -262,8 +262,7 @@ def decorated(conn, rows: list[dict]) -> list[dict]:
 
 
 def list_projects(conn, ctx: Ctx, params: dict) -> dict:
-    page = max(int(params.get("page") or 1), 1)
-    size = min(max(int(params.get("page_size") or 25), 1), 100)
+    page, size = page_params(params)
     rows = visible_projects(conn, ctx, archived=ctx.is_admin and params.get("archived") == "true")
     if params.get("q"):
         needle = params["q"].strip().lower()

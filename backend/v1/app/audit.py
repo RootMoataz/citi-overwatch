@@ -4,7 +4,7 @@ import json
 
 from app.http import _default
 
-SECRET_KEYS = {"password_hash", "token_hash", "code_hash", "password", "temp_password", "value"}
+SECRET_KEYS = {"password_hash", "token_hash", "code_hash", "password", "temp_password"}
 
 
 def _clean(values: dict | None) -> dict | None:

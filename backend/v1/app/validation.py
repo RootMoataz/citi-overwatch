@@ -73,3 +73,17 @@ def as_uuid(value, field: str) -> str:
     if not is_uuid(value):
         _fail(field, "invalid_id")
     return str(value)
+
+
+def page_params(params: dict, *, default_size: int = 25, max_size: int = 100) -> tuple[int, int]:
+    """(page, page_size) from query params; bad values are a 400, not a crash."""
+    out = []
+    for field, default, top in (("page", 1, None), ("page_size", default_size, max_size)):
+        raw = params.get(field)
+        if raw in (None, ""):
+            out.append(default)
+            continue
+        if not str(raw).isdigit() or int(raw) < 1:
+            _fail(field, "invalid_number")
+        out.append(min(int(raw), top) if top else int(raw))
+    return out[0], out[1]

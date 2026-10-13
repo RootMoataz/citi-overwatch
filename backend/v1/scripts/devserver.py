@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -29,7 +30,19 @@ def build_event(method: str, path: str, headers, body: bytes) -> dict:
     }
 
 
+def serialized(fn):
+    """One request at a time: the app keeps a single database connection, which isn't thread-safe."""
+    lock = threading.Lock()
+
+    def run(event, context):
+        with lock:
+            return fn(event, context)
+    return run
+
+
 def make_handler(lambda_handler):
+    lambda_handler = serialized(lambda_handler)
+
     class Handler(BaseHTTPRequestHandler):
         def _serve(self):
             length = int(self.headers.get("Content-Length") or 0)

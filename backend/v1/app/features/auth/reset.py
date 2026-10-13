@@ -66,12 +66,16 @@ def verify_reset_code(conn, body: dict) -> dict:
                              ORDER BY created_at DESC LIMIT 1""", u=user["id"])
     if not row:
         raise invalid
-    if row["attempts"] >= MAX_CODE_ATTEMPTS:
+    submitted = hash_token(str(body["code"]).strip())
+    # Count this attempt atomically before comparing, so parallel guesses can't exceed the limit.
+    counted = query_one(conn, """UPDATE password_reset_codes SET attempts = attempts + 1
+                                  WHERE id = :i AND attempts < :max RETURNING attempts""",
+                        i=row["id"], max=MAX_CODE_ATTEMPTS)
+    if not counted:
         raise ApiError(423, "CODE_LOCKED", "Too many wrong codes. Request a new one.")
     if row["expires_at"] <= _now():
         raise ApiError(400, "CODE_EXPIRED", "That code has expired. Request a new one.")
-    if hash_token(str(body["code"]).strip()) != row["code_hash"]:
-        conn.run("UPDATE password_reset_codes SET attempts = attempts + 1 WHERE id = :i", i=row["id"])
+    if submitted != row["code_hash"]:
         raise invalid
     # The reset token names the code, so it stops working once the code is used.
     token = create_purpose_token(user_id=str(row["id"]), purpose="reset",
@@ -83,7 +87,8 @@ def reset_password(conn, body: dict, request_id: str) -> None:
     require(body, "reset_token", "new_password")
     code_id = decode_purpose_token(str(body["reset_token"]), "reset", jwt_secret(conn), _now())
     row = query_one(conn, """SELECT c.*, u.role FROM password_reset_codes c JOIN users u ON u.id = c.user_id
-                             WHERE c.id = CAST(:i AS uuid) AND c.used_at IS NULL AND NOT u.is_archived""",
+                             WHERE c.id = CAST(:i AS uuid) AND c.used_at IS NULL AND c.expires_at > now()
+                               AND NOT u.is_archived""",
                     i=code_id)
     if not row:
         raise ApiError(400, "TOKEN_INVALID", "This reset link has already been used or is invalid")
@@ -101,7 +106,7 @@ def reset_password(conn, body: dict, request_id: str) -> None:
 
 def admin_reset(conn, ctx: Ctx, user_id: str, body: dict) -> dict:
     as_uuid(user_id, "id")
-    user = query_one(conn, "SELECT * FROM users WHERE id = CAST(:i AS uuid)", i=user_id)
+    user = query_one(conn, "SELECT * FROM users WHERE id = CAST(:i AS uuid) AND NOT is_archived", i=user_id)
     if not user:
         raise ApiError(404, "NOT_FOUND", "Not found")
     temp = body.get("password")

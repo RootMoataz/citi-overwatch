@@ -2,12 +2,14 @@
 
 import base64
 import json
+import re
 import uuid
 from decimal import Decimal
 from datetime import date, datetime
 from urllib.parse import parse_qsl
 
 API_PREFIX = "/api/v1"
+REQUEST_ID_RE = re.compile(r"[A-Za-z0-9-]{1,64}")
 
 
 class ApiError(Exception):
@@ -59,7 +61,8 @@ class Request:
         for cookie in event.get("cookies") or []:
             name, _, value = cookie.partition("=")
             self.cookies[name.strip()] = value.strip()
-        self.request_id = self.headers.get("x-request-id") or str(uuid.uuid4())
+        given = self.headers.get("x-request-id") or ""
+        self.request_id = given if REQUEST_ID_RE.fullmatch(given) else str(uuid.uuid4())
         body = event.get("body")
         if body and event.get("isBase64Encoded"):
             body = base64.b64decode(body).decode("utf-8")

@@ -4,6 +4,9 @@ import re
 import time
 import traceback
 
+from pg8000.exceptions import DatabaseError
+
+from app.dberrors import api_error_from
 from app.http import ApiError, Request, error_body, json_response
 from app.log import log
 
@@ -72,6 +75,14 @@ class Router:
         except ApiError as err:
             code = err.code
             resp = json_response(err.status, error_body(err, req.request_id))
+        except DatabaseError as exc:
+            mapped = api_error_from(exc)
+            if mapped is None:
+                log("error", "database error", request_id=req.request_id, path=req.path,
+                    trace=traceback.format_exc())
+                mapped = ApiError(500, "INTERNAL_ERROR", "Internal server error")
+            code = mapped.code
+            resp = json_response(mapped.status, error_body(mapped, req.request_id))
         except Exception:
             code = "INTERNAL_ERROR"
             log("error", "unhandled exception", request_id=req.request_id,
