@@ -127,3 +127,30 @@ export const useMarkRead = () => useApiMutation((id) => api.post(`/notifications
 export const useMarkAllRead = () => useApiMutation(() => api.post('/notifications/read-all'), { invalidate: [['notifications']] })
 export const useAllocations = (week, enabled = true) =>
   useQuery({ queryKey: ['allocations', week], enabled, queryFn: () => api.get('/allocations', { week }) })
+
+// ---------- dashboard, people, profile, audit ----------
+export const useDashboard = () => useQuery({ queryKey: ['dashboard'], queryFn: () => api.get('/dashboard') })
+export const useUsers = (filters) => useQuery({
+  queryKey: ['users', 'list', filters], queryFn: () => api.get('/users', { page_size: 100, ...filters }),
+  placeholderData: keepPreviousData,
+})
+export const useUser = (id) => useQuery({ queryKey: ['user', id], queryFn: () => api.get(`/users/${id}`) })
+export const useUsernameCheck = (params, enabled = true) => useQuery({
+  queryKey: ['username-check', params], enabled, queryFn: () => api.get('/users/username-availability', params),
+  placeholderData: keepPreviousData, refetchInterval: false,
+})
+export const useCreateUser = () => useApiMutation((body) => api.post('/users', body),
+  { invalidate: [['users']], success: (d) => (d.email_sent ? `Account created — sign-in details emailed to ${d.user.email}` : null) })
+export const useUpdateUser = (id) => useApiMutation((body) => api.put(`/users/${id}`, body),
+  { invalidate: [['users'], ['user', id]], success: 'Person saved' })
+export const useArchiveUser = (id) => useApiMutation(() => api.del(`/users/${id}`),
+  { invalidate: [['users'], ['user', id]], success: 'Account archived' })
+export const useRestoreUser = (id) => useApiMutation(() => api.post(`/users/${id}/restore`),
+  { invalidate: [['users'], ['user', id]], success: 'Account restored' })
+export const useResetUserPassword = (id) => useApiMutation((body) => api.post(`/users/${id}/reset-password`, body ?? {}),
+  { invalidate: [['user', id]], success: (d) => (d.email_sent ? 'New temporary password emailed' : null) })
+export const useMe = () => useQuery({ queryKey: ['me'], queryFn: () => api.get('/me') })
+export const useUpdateMe = () => useApiMutation((body) => api.put('/me', body), { invalidate: [['me']], success: 'Profile saved' })
+export const useAuditLog = (filters) => useQuery({
+  queryKey: ['audit', filters], queryFn: () => api.get('/audit-log', filters), placeholderData: keepPreviousData,
+})

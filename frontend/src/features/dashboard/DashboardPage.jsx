@@ -1,0 +1,185 @@
+import {
+  Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, Skeleton, Stack, Table, TableBody, TableCell,
+  TableHead, TableRow, Typography,
+} from '@mui/material'
+import { BarChart } from '@mui/x-charts/BarChart'
+import { Link as RouterLink } from 'react-router-dom'
+import { useAllocations, useDashboard } from '../../api/queries.js'
+import { useSession } from '../../auth/sessionContext.js'
+import { STATUS } from '../../app/theme.js'
+import EmptyState from '../../components/EmptyState.jsx'
+import ErrorAlert from '../../components/ErrorAlert.jsx'
+import PageHeader from '../../components/PageHeader.jsx'
+import RiskBadges from '../../components/RiskBadges.jsx'
+import StatusChip from '../../components/StatusChip.jsx'
+import { formatDate, formatHours, formatMoney, formatPct, mondayOf } from '../../lib/format.js'
+import { can } from '../../lib/permissions.js'
+import StatTile from '../projects/StatTile.jsx'
+import Section from './Section.jsx'
+
+const projectLink = (p, tab) => (
+  <Link component={RouterLink} to={`/projects/${p.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{p.name}</Link>
+)
+
+function Milestones({ title, items, tone }) {
+  return (
+    <>
+      <Typography variant="subtitle2" component="h3" sx={{ color: tone }}>{title} ({items.length})</Typography>
+      {items.length ? (
+        <List dense disablePadding>
+          {items.slice(0, 6).map((m) => (
+            <ListItem key={m.id} disableGutters>
+              <ListItemText primary={m.name} secondary={<>{projectLink(m.project, 'milestones')} · due {formatDate(m.end_date)}</>} />
+              <StatusChip status={m.status} />
+            </ListItem>
+          ))}
+        </List>
+      ) : <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>None</Typography>}
+    </>
+  )
+}
+
+export default function DashboardPage() {
+  const { user } = useSession()
+  const approver = can(user, 'approvals.view')
+  const dashboard = useDashboard()
+  const allocations = useAllocations(mondayOf(new Date()), approver)
+
+  if (dashboard.isLoading) {
+    return <Grid container spacing={2}>{[0, 1, 2, 3].map((i) => <Grid key={i} size={{ xs: 12, md: 6 }}><Skeleton variant="rounded" height={220} /></Grid>)}</Grid>
+  }
+  if (dashboard.error) return <ErrorAlert error={dashboard.error} onRetry={() => dashboard.refetch()} />
+  const d = dashboard.data
+  const active = d.projects.filter((p) => p.status === 'active')
+  const busiest = [...(allocations.data ?? [])].sort((a, b) => b.utilization_pct - a.utilization_pct).slice(0, 6)
+
+  return (
+    <>
+      <PageHeader title={`Hello, ${user.first_name}`} subtitle="Live view of delivery health. Refreshes every 30 seconds."
+        actions={approver && d.pending_approvals ? (
+          <Button component={RouterLink} to="/approvals" variant="contained" color="warning">
+            {d.pending_approvals} waiting for your approval
+          </Button>) : null} />
+      <Grid container spacing={2}>
+        <Grid size={12}>
+          <Section question="What is the status of each active project?">
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              {Object.entries(d.status_counts).map(([status, count]) => (
+                <Grid key={status} size={{ xs: 6, md: 3 }}><StatTile label={STATUS[status].label} value={count} /></Grid>
+              ))}
+            </Grid>
+            {active.length ? (
+              <Table size="small" aria-label="Active projects">
+                <TableHead><TableRow><TableCell>Project</TableCell><TableCell>Milestones done</TableCell>
+                  <TableCell>Budget used</TableCell><TableCell>Due</TableCell></TableRow></TableHead>
+                <TableBody>
+                  {active.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell>{projectLink(p)}</TableCell>
+                      <TableCell sx={{ minWidth: 140 }}>
+                        <LinearProgress variant="determinate" value={Math.min(p.progress_pct, 100)} sx={{ height: 6, borderRadius: 3 }}
+                          aria-label={`${p.name} milestones done`} />
+                        <Typography variant="caption">{formatPct(p.progress_pct)}</Typography>
+                      </TableCell>
+                      <TableCell>{formatPct(p.budget_pct)}</TableCell>
+                      <TableCell>{formatDate(p.predicted_end_date)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No active projects right now.</Typography>}
+          </Section>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Section question="Which projects are at risk of missing their deadlines?">
+            {d.at_risk.length ? (
+              <List disablePadding>
+                {d.at_risk.map((p) => (
+                  <ListItem key={p.id} disableGutters sx={{ display: 'block' }}>
+                    <Typography variant="subtitle2">{projectLink(p)}</Typography>
+                    <RiskBadges reasons={p.reasons} />
+                  </ListItem>
+                ))}
+              </List>
+            ) : <EmptyState title="Nothing at risk" description="Every visible project is on track." />}
+          </Section>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Section question="Which team members are over-allocated across multiple projects?" hint="More than 40 logged hours this week">
+            {d.over_allocated.length ? (
+              <List dense disablePadding>
+                {d.over_allocated.map((o) => (
+                  <ListItem key={o.user.id} disableGutters
+                    secondaryAction={<Chip color="warning" size="small" label={formatHours(o.week_logged_total)} />}>
+                    <ListItemText primary={o.user.name} />
+                  </ListItem>
+                ))}
+              </List>
+            ) : <EmptyState title="Nobody is over 40 hours" />}
+          </Section>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Section question="How are resources allocated across projects?"
+            action={approver ? <Link component={RouterLink} to="/allocation">Full view</Link> : null}>
+            {approver ? (busiest.length ? (
+              <Table size="small" aria-label="Busiest people this week">
+                <TableHead><TableRow><TableCell>Person</TableCell><TableCell align="right">Planned</TableCell>
+                  <TableCell align="right">Logged</TableCell><TableCell align="right">Utilization</TableCell></TableRow></TableHead>
+                <TableBody>
+                  {busiest.map((r) => (
+                    <TableRow key={r.user.id}>
+                      <TableCell>{r.user.name}</TableCell><TableCell align="right">{formatHours(r.planned_total)}</TableCell>
+                      <TableCell align="right">{formatHours(r.logged_total)}</TableCell>
+                      <TableCell align="right" sx={{ color: r.utilization_pct > 100 ? 'warning.main' : undefined }}>{formatPct(r.utilization_pct)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No allocations yet.</Typography>) : (
+              <Typography variant="body2">Your own planned and logged hours are on <Link component={RouterLink} to="/timesheet">My timesheet</Link>.</Typography>
+            )}
+          </Section>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 6 }}>
+          <Section question="What are the key deliverables and their completion status?">
+            <Milestones title="Overdue" items={d.milestones.overdue} tone="error.main" />
+            <Milestones title="Due in the next 14 days" items={d.milestones.due_soon} />
+          </Section>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 5 }}>
+          <Section question="What is the dependency chain between deliverables?" hint="Each project's timeline shows what waits on what.">
+            <Stack sx={{ gap: 1 }}>
+              {d.projects.filter((p) => p.status !== 'completed').map((p) => (
+                <Stack key={p.id} direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
+                  <Typography variant="body2">{p.name}</Typography>
+                  <Link component={RouterLink} to={`/projects/${p.id}?tab=milestones`} aria-label={`${p.name} timeline`}>Timeline</Link>
+                </Stack>
+              ))}
+            </Stack>
+          </Section>
+        </Grid>
+
+        <Grid size={{ xs: 12, md: 7 }}>
+          <Section question="How much budget has been consumed versus planned for each project?"
+            hint="Consumed counts approved hours; the forecast projects the last 4 weeks' pace to the end date.">
+            {d.budgets.length ? (
+              <BarChart height={280}
+                xAxis={[{ scaleType: 'band', data: d.budgets.map((b) => b.name) }]}
+                series={[
+                  { data: d.budgets.map((b) => Number(b.budget)), label: 'Planned', color: '#9DB6D3', valueFormatter: (v) => formatMoney(v) },
+                  { data: d.budgets.map((b) => Number(b.consumed)), label: 'Consumed', color: '#0B5CAD', valueFormatter: (v) => formatMoney(v) },
+                  { data: d.budgets.map((b) => Number(b.forecast)), label: 'Forecast', color: '#B26A00', valueFormatter: (v) => formatMoney(v) },
+                ]}
+                yAxis={[{ valueFormatter: (v) => formatMoney(v) }]} margin={{ left: 80 }} />
+            ) : <EmptyState title="No budgets yet" />}
+          </Section>
+        </Grid>
+      </Grid>
+    </>
+  )
+}
