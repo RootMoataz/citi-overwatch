@@ -6,6 +6,27 @@ resource "aws_cloudfront_origin_access_control" "this" {
   signing_protocol                  = "sigv4"
 }
 
+# Single-page app routing: the bucket is private, so S3 answers unknown keys with 403 (not 404) and the
+# 404 → index.html error mapping never fires. This rewrites app routes (no file extension) to /index.html on
+# the S3 behavior only, so /api/* responses are never touched.
+resource "aws_cloudfront_function" "spa_routes" {
+  count   = data.aws_caller_identity.this.id != "000000000000" ? 1 : 0
+  name    = "${local.origin_id}-spa-routes"
+  runtime = "cloudfront-js-2.0"
+  comment = "Serve index.html for client-side routes"
+  publish = true
+  code    = <<-EOT
+    function handler(event) {
+      var request = event.request;
+      var last = request.uri.split('/').pop();
+      if (request.uri.indexOf('/api/') !== 0 && last.indexOf('.') === -1) {
+        request.uri = '/index.html';
+      }
+      return request;
+    }
+  EOT
+}
+
 resource "aws_cloudfront_distribution" "this" {
   count               = data.aws_caller_identity.this.id != "000000000000" ? 1 : 0
   enabled             = true
@@ -96,6 +117,11 @@ resource "aws_cloudfront_distribution" "this" {
 
     target_origin_id       = local.origin_id
     viewer_protocol_policy = "redirect-to-https"
+
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = element(aws_cloudfront_function.spa_routes.*.arn, count.index)
+    }
 
     forwarded_values {
       query_string = false

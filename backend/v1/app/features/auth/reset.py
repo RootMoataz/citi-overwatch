@@ -9,6 +9,7 @@ from app.email import send_email
 from app.features.auth.service import revoke_all_sessions
 from app.features.users.welcome import TEMP_PASSWORD_HOURS, send_welcome
 from app.http import ApiError
+from app.seed import PUBLISHED_DEMO
 from app.security import (create_purpose_token, decode_purpose_token, generate_reset_code,
                           generate_temp_password, hash_password, hash_token,
                           password_policy_errors)
@@ -39,7 +40,7 @@ def _check_policy(password: str) -> None:
 def forgot_password(conn, body: dict) -> dict:
     require(body, "username")
     user = _active_user(conn, body["username"])
-    if not user:
+    if not user or user["username"] in PUBLISHED_DEMO:  # demo logins keep their published password
         return GENERIC
     recent = query_one(conn, """SELECT 1 AS ok FROM password_reset_codes WHERE user_id = :u
                                 AND created_at > now() - make_interval(secs => :s)""",

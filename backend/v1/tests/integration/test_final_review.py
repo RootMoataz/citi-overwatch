@@ -181,3 +181,10 @@ def test_rotate_demo_op_locks_out_unpublished_seed_accounts(conn):
     assert verify_password("Demo123!", rows["manager.demo"])
     assert verify_password("Demo123!", rows["employee.demo"])
     assert not verify_password("Demo123!", rows["riley.chen"])
+
+
+def test_published_demo_account_gets_no_reset_code(client, conn):
+    _demo(conn, "manager.demo")
+    status, body, _, _ = client.request("POST", "/auth/forgot-password", json={"username": "manager.demo"})
+    assert status == 200 and "code has been sent" in body["message"]  # same answer as for anyone else
+    assert query_one(conn, "SELECT count(*) AS n FROM password_reset_codes")["n"] == 0
