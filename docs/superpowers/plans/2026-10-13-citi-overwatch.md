@@ -56,7 +56,7 @@
 - TanStack Query defaults: `refetchInterval: 30000`, `refetchOnWindowFocus: true`.
 
 ### Process
-- Commits carry **no Claude / Co-Authored-By attribution**. This is the owner's standing rule.
+- Commits carry **no Co-Authored-By trailers**. This is the owner's standing rule.
 - Work on feature branches. Never push until the owner says "push". The target is the new public repo `citi-overwatch` under RootMoataz.
 - Run all commands in **Git Bash** from the repo root unless a step says otherwise.
 
