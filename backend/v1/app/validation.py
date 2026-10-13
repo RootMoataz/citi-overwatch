@@ -1,5 +1,6 @@
 """Field validators. Each failure raises 400 VALIDATION_ERROR with {field: reason}."""
 
+import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -55,6 +56,16 @@ def as_decimal(value, field: str, *, min: Decimal | None = None, max: Decimal | 
 def as_enum(value, field: str, allowed) -> str:
     if value not in allowed:
         _fail(field, "invalid_choice")
+    return value
+
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def as_email(value, field: str = "email") -> str:
+    value = as_str(value, field, max_len=254)
+    if not EMAIL_RE.fullmatch(value):
+        _fail(field, "invalid_email")
     return value
 
 

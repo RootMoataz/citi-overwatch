@@ -40,6 +40,17 @@ def make_project(conn, manager: dict, *, name=None, start=date(2026, 1, 1), end=
         budget=budget, status=status, mid=str(manager["id"]), arch=archived)
 
 
+def login(client, username: str, password: str) -> str:
+    status, body, _, _ = client.request("POST", "/auth/login",
+                                        json={"username": username, "password": password})
+    assert status == 200, body
+    return body["access_token"]
+
+
+def cookie_value(set_cookie: str) -> str:
+    return set_cookie.split(";", 1)[0].split("=", 1)[1]
+
+
 def add_member(conn, project: dict, user: dict, hours=Decimal("10")) -> dict:
     return query_one(conn, """
         INSERT INTO project_members (project_id, user_id, planned_hours_per_week)

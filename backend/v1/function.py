@@ -4,6 +4,7 @@ Requests through the Function URL always carry requestContext.http and go to the
 Anything else is an internal operation, reachable only by an IAM-authorized direct invoke.
 """
 
+import app.features  # noqa: F401  (registers routes)
 from app import ctx, db
 from app.migrate import apply_migrations
 from app.router import router
