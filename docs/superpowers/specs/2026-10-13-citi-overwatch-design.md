@@ -53,8 +53,8 @@ The backend enforces every permission in one central place. The UI hides actions
 | See all milestones in a project | ✅ all | ✅ own projects | ✅ projects they're assigned to |
 | Create and edit milestones (name, description, dates); set dependencies; assign employees to milestones; mark completed | ✅ all | ✅ own projects | ❌ |
 | Move a milestone to `in_progress` or `ready_for_review`; add progress notes | ✅ all | ✅ own projects | ✅ only milestones they're assigned to |
-| Log own hours | ✅ | ✅ | ✅ on assigned projects |
-| Approve or reject overtime | ✅ all | ✅ own projects | ❌ |
+| Log own hours, on milestones you're assigned to | ✅ | ✅ | ✅ |
+| Approve or reject time entries (never your own) | ✅ all | ✅ own projects | ❌ |
 | See projects | All, including archived | Projects they manage or are assigned to | Assigned, non-archived projects |
 | See the audit log | ✅ | ❌ | ❌ |
 
@@ -160,22 +160,40 @@ A user can never raise their own role, edit their own salary, or act on a projec
 - **Planned cap:** a person's planned hours across all their active, non-archived projects that overlap in dates can't exceed **40 per week**. Going over is rejected with `400 PLANNED_HOURS_EXCEEDED`, and the message shows the person's current total.
 - **Reporting manager:** every employee has exactly one reporting manager (`users.manager_id`), and a manager can have many direct reports. This is separate from project staffing, so an employee can work on projects run by other managers.
 
-### 3.7 Time entries and overtime
+### 3.7 Time entries and approval
 
-- **Who logs:** each user logs their own hours, per day and per assigned project, in a weekly grid (Monday–Friday shown; weekends allowed).
-- **Limits:** 0.25–24 hours per entry. The user must be assigned to the project, and the date must fall within the project's dates. There's one entry per user, project and day.
+- **Who logs:** each user logs their own hours, per day, against **milestones they're assigned to**, in a weekly grid. Each row is one milestone; Monday–Friday are shown and weekends are allowed.
+- **Limits:**
+  - 0.25–24 hours per entry.
+  - The milestone must be non-archived, and the date must fall within its project's dates.
+  - There's one entry per user, milestone and day.
 - **Week:** an ISO week, Monday to Sunday.
-- **Overtime rule:** if saving an entry would push the user's total counted hours for that week, across all projects, above **40**:
-  - The entry's counted `hours` keep their previous value: 0 for a new entry, or the old value for an edit.
-  - The requested value is stored in `pending_hours`, with `pending_status = pending_overtime`.
-  - The UI shows the entry as **"Pending approval (overtime over 40h)"**, and the person is flagged as over-allocated for that week.
-- **Approval:** the project's manager, or an admin, approves (`hours = pending_hours`) or rejects (the pending value is cleared). Each decision is audited.
-- **Cost:** an hourly rate of `salary ÷ 2,080` is copied onto the entry when its hours are counted. That way, a later salary change doesn't rewrite past costs.
+- **Every entry needs approval.**
+  - A new entry, or an edit to any entry, starts as `pending`.
+  - Only `approved` entries count toward the budget.
+  - Editing an approved or rejected entry sets it back to `pending`, removes it from the budget until it's approved again, and tags it **Edited**.
+  - The project's manager or an admin approves or rejects. Nobody can approve their own entries; a manager's own entries are approved by an admin.
+  - A rejection needs a reason, which the employee sees on the entry.
+  - Every decision is audited.
+- **The 40-hour mark** is a budget warning, not a limit.
+  - The weekly total is the person's logged hours (pending and approved) across all projects.
+  - Any entry saved while that total is above 40 gets an `over_40` flag. Flags keep the value they had when the entry was saved, so lowering hours later needs no special handling.
+  - The first time a person's week goes from 40 or under to over 40, the manager of the project for the entry that crossed gets **one in-app notification** for that person-week. Later entries that week don't trigger another one, even on other projects.
+- **Labels:**
+  - Normal pending entries: **"Pending approval"**.
+  - Pending entries flagged `over_40`: **"Pending (Overtime requested from {First} {Last})"**.
+- **Approval breakdown:** inside the milestone, and from the approvals queue, the manager sees:
+  - the request's hours and cost (hours × the person's current hourly rate)
+  - the milestone's approved cost so far
+  - the project's budget, consumed and remaining, before and after approval
+  - the share of the remaining budget this approval would use
+  - a **forecast**: consumed + (average approved weekly cost over the last 4 complete weeks × weeks left until the predicted end date), shown as "Projected total" against the budget
+- **Cost:** an hourly rate of `salary ÷ 2,080` is copied onto the entry when it's approved. That way, a later salary change doesn't rewrite past costs.
 
 ### 3.8 Budget
 
 - **Planned:** `projects.budget`. The admin sets it at creation, and the project's manager can adjust it. Every change is audited.
-- **Consumed:** the sum of `hours × hourly_rate` for the project's counted time entries. Pending overtime isn't included until it's approved.
+- **Consumed:** the sum of `hours × hourly_rate` for the project's approved time entries. Pending and rejected entries aren't included.
 - Shown as the amount consumed, the amount remaining and the percentage used.
 
 ### 3.9 At-risk rule
@@ -198,7 +216,7 @@ There's **one shared dashboard**, filtered to what the viewer is allowed to see.
 | Q2 Projects at risk | At-risk list with the reasons as badges |
 | Q3 Resource allocation across projects | Allocation view: people × projects, planned hours per week, utilization % |
 | Q4 Key deliverables and their status | Milestones table, plus each project's Milestones tab |
-| Q5 Over-allocated team members | "Over 40h this week" list: people with pending or approved overtime |
+| Q5 Over-allocated team members | "Over 40h this week" list: people whose logged hours this week are over 40 |
 | Q6 Dependency chain | Each project's timeline and dependency list |
 | Q7 Budget consumed vs. planned | A bar chart per project and the Budget tab |
 
@@ -287,6 +305,8 @@ erDiagram
   milestones ||--o{ milestone_assignees : "assigned to"
   users ||--o{ milestone_assignees : "works on"
   milestones ||--o{ milestone_notes : has
+  milestones ||--o{ time_entries : "logged to"
+  users ||--o{ notifications : receives
   users ||--o{ time_entries : logs
   projects ||--o{ time_entries : "charged to"
   users ||--o{ project_requests : submits
@@ -308,7 +328,8 @@ erDiagram
 | `milestone_dependencies` | `milestone_id`, `depends_on_id` (unique pair; same project; no self-dependency) |
 | `milestone_assignees` | `milestone_id`, `user_id` (unique pair; the user must be a project member) |
 | `milestone_notes` | `milestone_id`, `author_id`, `body`, `created_at` (append only) |
-| `time_entries` | `user_id`, `project_id`, `work_date` (unique triple), `hours` numeric(5,2) counted, `hourly_rate` snapshot, `pending_hours`, `pending_status` (`pending_overtime`/null), `decided_by`, `decided_at`, `note` |
+| `time_entries` | `user_id`, `milestone_id`, `project_id` (copied from the milestone), `work_date` (unique with user and milestone), `hours` numeric(5,2), `status` (`pending`/`approved`/`rejected`), `over_40`, `edited_after_decision`, `hourly_rate` (snapshot on approval), `decided_by`, `decided_at`, `rejection_reason`, `note` |
+| `notifications` | `recipient_id`, `type` (`OVER_40H`), `subject_user_id`, `week_start`, `payload` jsonb, `read_at`, `created_at` (unique on type, subject user and week) |
 | `audit_log` | `actor_id`, `action`, `entity_type`, `entity_id`, `changes` jsonb (before/after), `request_id`, `created_at` (append only) |
 
 Database `CHECK` constraints mirror the validation rules (dates in order, hours in range, budget ≥ 0) as a second line of defense.
@@ -333,7 +354,8 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
 | Projects | `GET projects?q=&status=&manager=&at_risk=&archived=`, `POST projects`, `GET/PUT/DELETE projects/{id}`, `POST projects/{id}/restore`, `GET projects/{id}/summary` |
 | Members | `GET/POST projects/{id}/members`, `PUT/DELETE projects/{id}/members/{userId}` |
 | Milestones | `GET/POST projects/{id}/milestones`, `GET/PUT/DELETE milestones/{id}`, `POST milestones/{id}/restore`, `PUT milestones/{id}/dependencies`, `PUT milestones/{id}/assignees`, `POST milestones/{id}/status`, `GET/POST milestones/{id}/notes` |
-| Time | `GET time-entries?user=&week=`, `PUT time-entries` (saves a week grid), `GET approvals`, `POST time-entries/{id}/approve`, `POST time-entries/{id}/reject` |
+| Time | `GET time-entries?user=&week=`, `PUT time-entries` (saves a week grid), `GET approvals?project=&milestone=`, `GET time-entries/{id}/breakdown`, `POST time-entries/{id}/approve`, `POST time-entries/{id}/reject` (reason required) |
+| Notifications | `GET notifications?unread=`, `POST notifications/{id}/read`, `POST notifications/read-all` |
 | Insights | `GET dashboard`, `GET allocations?week=` |
 | Audit | `GET audit-log?actor=&entity_type=&from=&to=` |
 
@@ -347,8 +369,9 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
 - Projects (list and detail)
 - Project requests
 - People (admin: list, create wizard, detail)
-- My timesheet
-- Approvals
+- My timesheet (one row per assigned milestone)
+- Approvals, with the budget breakdown
+- Notifications (bell in the top bar)
 - Allocation
 - Audit log (admin)
 - Profile
@@ -387,10 +410,10 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
 
 | Layer | Tool | What it covers |
 |---|---|---|
-| Rules (unit) | pytest | At-risk, overtime holding, loop detection, capacity cap, password policy, username suggestions, permission checks: exhaustive edge cases |
+| Rules (unit) | pytest | At-risk, the over-40 flag and one-time alert, forecast, loop detection, capacity cap, password policy, username suggestions, permission checks: exhaustive edge cases |
 | API (integration) | pytest + local Postgres `overwatch_test` | Every endpoint, including success, validation, 401/403/404, archive behavior, and milestone edit rights by assignment. The schema is rebuilt every run, and each test runs in a transaction that's rolled back |
 | Frontend (component) | Vitest + React Testing Library | Form stepper gating, policy checklist, forced-change dialog, data states (loading, empty, error), role-based hiding |
-| End-to-end | Playwright (desktop and mobile viewports) | Admin creates a user → first login → forced change → dashboard; manager milestone with a dependency; employee logs overtime → manager approves → budget updates |
+| End-to-end | Playwright (desktop and mobile viewports) | Admin creates a user → first login → forced change → dashboard; manager milestone with a dependency; employee logs 42h → the manager gets one alert → reviews the breakdown → approves → budget updates |
 
 - **Targets:** at least 80% coverage on `backend/v1/app`, and 100% on `rules/`.
 - Commands, results and known gaps are recorded in `docs/project/TESTING.md`.
@@ -408,7 +431,7 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
   - Lambda invoke for migrations and seed data.
   - `./bin/deploy-frontend.sh` (S3 and CloudFront).
   - The repo's Windows workarounds (`~/bin` shims) are documented.
-- **Demo data:** about 5 projects, about 15 people, milestones with dependencies, logged hours including one overtime case and one at-risk project, plus a demo login for each role.
+- **Demo data:** about 5 projects, about 15 people, milestones with dependencies, pending, approved and rejected time entries, one person over 40h this week and one at-risk project, plus a demo login for each role.
 
 ## 12. Documentation deliverables
 
@@ -419,7 +442,7 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
   - `ARCHITECTURE.md`
   - `DATA_MODEL.md`
   - `API.md`
-  - `LOGIC_WALKTHROUGH.md`: Mermaid sequence and flow diagrams for login, the forced password change, the reset, overtime approval, the at-risk rule and dependency loop checks
+  - `LOGIC_WALKTHROUGH.md`: Mermaid sequence and flow diagrams for login, the forced password change, the reset, time approval and the over-40h alert, the at-risk rule and dependency loop checks
   - `TESTING.md`
   - `DECISIONS.md`
 
@@ -435,6 +458,7 @@ Database `CHECK` constraints mirror the validation rules (dates in order, hours 
 | Password policy: 6+ characters with a digit and a special character, temporary passwords that expire, a forced change | The owner's rule, hardened against guessing |
 | Hourly rate = salary ÷ 2,080, copied onto each time entry | A documented assumption. Salary changes don't rewrite past costs |
 | JWT secret stored in `app_secrets` | Avoids changing the Lambda's environment in Terraform |
+| Every time entry needs manager approval; 40h is a warning with one alert | The owner's rule: managers control what reaches the budget |
 
 ## 14. Risks and open questions
 

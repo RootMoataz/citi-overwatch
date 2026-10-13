@@ -44,8 +44,10 @@
 
 ### Business values
 - Weekly cap: `40` hours, on an ISO week (Monday–Sunday).
-- Overtime label, exact text: `Pending approval (overtime over 40h)`.
-- Hourly rate: `salary / 2080`, rounded to 2 decimal places and copied onto the time entry.
+- Pending labels, exact text: `Pending approval`, and for entries flagged over 40h: `Pending (Overtime requested from {first_name} {last_name})`.
+- Every time entry needs approval. Only approved entries count toward the budget. Nobody approves their own entries.
+- The over-40h alert is one in-app notification per person-week, sent to the manager of the project whose entry crossed 40.
+- Hourly rate: `salary / 2080`, rounded to 2 decimal places and copied onto the time entry when it's approved.
 - At-risk budget rule: `budget > 0` and `budget_pct − milestone_done_pct ≥ 20`.
 
 ### Frontend
@@ -62,8 +64,8 @@
 
 These are inputs the spec doesn't spell out, but a real user will hit them. The test that pins each one lives in the task named.
 
-1. **Lowering hours while already over 40 must not become "pending".** An employee with approved overtime who reduces an entry gets the new, lower value counted immediately. (Task 4, `test_decrease_never_held`)
-2. **A week-grid save that crosses 40 partway through** counts entries in date order: earlier days are counted, and the entry that crosses the cap and everything after it are held. The result is the same every time. (Task 13, `test_batch_crossing_cap_is_deterministic`)
+1. **A manager approving their own hours.** Managers log time on milestones too. Approving your own entry must return 403, and those entries go to an admin. (Task 13, `test_cannot_approve_own_entry`)
+2. **A week-grid save that crosses 40 partway through** processes entries in date order. The entry that crosses 40 and every entry after it are flagged `over_40`, and exactly one notification is created, even when the person's hours span several projects or the grid is saved again. (Task 13, `test_batch_crossing_flags_and_single_alert`)
 3. **Archived records never leak.** An archived project's members, hours and milestones don't count toward the planned cap, budget, risk or dashboard. A non-admin requesting an archived project gets 404. (Task 10 `test_archived_project_hidden_from_non_admin`; Task 11 `test_archived_project_excluded_from_cap`)
 4. **Case-only duplicates are rejected.** `JSmith` vs. `jsmith`, or `A@x.com` vs. `a@x.com`, returns 409 with field details. (Task 8, `test_case_insensitive_duplicates`)
 5. **An access token expiring mid-session** with several requests in flight triggers exactly one refresh, and then the requests are retried. If the refresh fails, the user goes to `/login` once, with no loop. (Task 14, `api client refreshes once for concurrent 401s`)
@@ -207,7 +209,7 @@ docs/project/     README-linked docs (Task 25)
     - This truncation approach replaces the spec's "rollback per test" wording. Same isolation, simpler with pg8000.
 
 - [ ] **Step 1: Write `001_init.sql`.** It contains every table, column and constraint in spec §6:
-  - Enums: `user_role`, `project_status` (planned, active, on_hold, completed), `milestone_status` (not_started, in_progress, ready_for_review, completed), `request_status`, `pending_status` (pending_overtime).
+  - Enums: `user_role`, `project_status` (planned, active, on_hold, completed), `milestone_status` (not_started, in_progress, ready_for_review, completed), `request_status`, `entry_status` (pending, approved, rejected).
   - `uuid` primary keys `DEFAULT gen_random_uuid()`.
   - Unique indexes on `lower(username)` and `lower(email)`.
   - A partial unique index on `lower(projects.name) WHERE NOT is_archived`.
@@ -216,15 +218,16 @@ docs/project/     README-linked docs (Task 25)
     - milestone `end_date >= start_date`
     - `budget >= 0`
     - `planned_hours_per_week > 0 AND <= 40`
-    - `hours >= 0 AND hours <= 24`
-    - `pending_hours IS NULL OR pending_hours BETWEEN 0.25 AND 24`
+    - `hours BETWEEN 0.25 AND 24`
+    - `status <> 'rejected' OR rejection_reason IS NOT NULL`
     - `milestone_id <> depends_on_id`
-  - Unique `(user_id, project_id, work_date)` on `time_entries`.
+  - Unique `(user_id, milestone_id, work_date)` on `time_entries`.
+  - Unique `(type, subject_user_id, week_start)` on `notifications`.
   - `audit_log` with no update path in the app.
 
 - [ ] **Step 2: Write failing tests.**
   ```python
-  def test_migrations_create_all_tables(db):     # set ⊇ {"users","refresh_tokens","password_reset_codes","app_secrets","projects","project_requests","project_members","milestones","milestone_dependencies","milestone_assignees","milestone_notes","time_entries","audit_log"}
+  def test_migrations_create_all_tables(db):     # set ⊇ {"users","refresh_tokens","password_reset_codes","app_secrets","projects","project_requests","project_members","milestones","milestone_dependencies","milestone_assignees","milestone_notes","time_entries","notifications","audit_log"}
   def test_migrations_idempotent(db):            # second apply_migrations(conn) == []
   def test_jwt_secret_created_once(db):          # one row, len(value) >= 48
   def test_internal_migrate_op(db):              # handler({"op":"migrate"}, None) == {"applied": []}
@@ -291,12 +294,10 @@ docs/project/     README-linked docs (Task 25)
     - `creates_cycle(edges:dict[str,set[str]], milestone_id:str, predecessors:set[str]) -> bool`. `edges` maps a milestone to its predecessors. Uses depth-first search from each new predecessor looking for `milestone_id`.
     - `dependency_order(edges) -> list[str]` returns a topological order, used for the chain view.
   - **Capacity:** `fits_weekly_plan(other_hours:Decimal, requested:Decimal, cap:Decimal=Decimal(40)) -> bool`.
-  - **Overtime:** `classify_hours(*, week_total_other:Decimal, previous:Decimal, requested:Decimal, cap=Decimal(40)) -> tuple[Decimal, Decimal|None]`, returning `(counted, pending)`.
-    ```python
-    if requested <= previous or week_total_other + requested <= cap:
-        return requested, None
-    return previous, requested
-    ```
+  - **Over-40, forecast and breakdown** (`overtime.py`):
+    - `week_flags(*, before_total:Decimal, after_total:Decimal, cap=Decimal(40)) -> tuple[bool, bool]` returns `(over_40, crossed)`, where `over_40 = after_total > cap` and `crossed = before_total <= cap < after_total`.
+    - `forecast_total(*, consumed:Decimal, weekly_costs:list[Decimal], weeks_remaining:int) -> Decimal` = consumed + (average of up to the last 4 values) × `max(weeks_remaining, 0)`. An empty list forecasts `consumed`.
+    - `approval_breakdown(*, hours:Decimal, hourly_rate:Decimal, milestone_cost:Decimal, budget:Decimal, consumed:Decimal, forecast:Decimal) -> dict` returns `request_cost`, `milestone_cost_after`, `remaining_before`, `remaining_after`, `pct_of_remaining` (None when remaining ≤ 0), `forecast` and `forecast_over_budget`.
   - **At-risk:** `at_risk_reasons(*, status:str, is_archived:bool, predicted_end:date, budget:Decimal, consumed:Decimal, milestones:list[dict], today:date) -> list[str]`.
     - Each milestone dict has `end_date` and `status`.
     - Possible codes, in this order: `OVERDUE_MILESTONE`, `PAST_DUE`, `BUDGET_BURN`.
@@ -313,9 +314,11 @@ docs/project/     README-linked docs (Task 25)
   def test_cycle_direct_and_indirect():               # A←B, B←C; making A depend on C → True; D depends on A → False
   def test_self_dependency_is_cycle():
   def test_fits_plan_boundary():                      # 30 + 10 → True; 30 + 10.5 → False
-  def test_within_cap_counted():                      # other 30, prev 0, req 8 → (8, None)
-  def test_crossing_cap_held():                       # other 36, prev 2, req 6 → (2, 6)
-  def test_decrease_never_held():                     # other 45, prev 6, req 4 → (4, None)   # Review Focus 1
+  def test_week_flags():                              # (36, 40) → (False, False); (36, 42) → (True, True); (42, 45) → (True, False)
+  def test_forecast_uses_last_four_weeks():           # consumed 1000, costs [100,200,300,400,500], 4 weeks → 1000 + 350*4 = 2400
+  def test_forecast_empty_history():                  # → consumed
+  def test_breakdown_numbers():                       # 8h × 50 = 400; budget 2000, consumed 1200 → remaining 800 → 400, pct 50.0
+  def test_breakdown_no_remaining_pct_none():
   def test_at_risk_each_rule_and_combined():          # overdue milestone; today > predicted_end; budget 1000, consumed 500, 1/4 done (50 − 25 = 25 ≥ 20)
   def test_at_risk_budget_zero_skips_burn_rule():
   def test_at_risk_no_milestones_counts_zero_done():
@@ -526,7 +529,7 @@ docs/project/     README-linked docs (Task 25)
     - Demo users: `admin.demo`, `manager.demo`, `employee.demo`, all with password `Demo123!`, `must_change_password=false`.
     - About 15 people and 5 projects.
     - At least one project with a dependency chain of 3 milestones.
-    - One employee with pending overtime this week.
+    - Pending, approved and rejected time entries, and one employee over 40h this week, with the manager's unread `OVER_40H` notification.
     - One project that meets the at-risk rule.
   - Seeding again is a no-op when `admin.demo` already exists.
 
@@ -573,7 +576,7 @@ docs/project/     README-linked docs (Task 25)
 - Consumes:
   - Task 5 `load_project`, `audit.record`.
   - Task 4 `at_risk_reasons`.
-  - `project_consumed(conn, project_id) -> Decimal`, defined here and reused by Task 13: the sum of `hours * hourly_rate` over non-archived counted entries.
+  - `project_consumed(conn, project_id) -> Decimal`, defined here and reused by Task 13: the sum of `hours * hourly_rate` over approved entries on non-archived milestones.
 - Produces:
   - `GET /projects?q=&status=&manager=&at_risk=&archived=&page=&page_size=` returns only projects the user can see.
     - Each item: `{id,name,status,start_date,predicted_end_date,budget,consumed,budget_pct,progress_pct,at_risk_reasons,manager:{id,name}}`.
@@ -698,50 +701,61 @@ docs/project/     README-linked docs (Task 25)
 
 - [ ] **Step 5: Commit.** `git commit -m "Add milestones with dependencies, assignees, status rules and notes"`
 
-### Task 13: Time entries, overtime approval, dashboard, allocations, audit log
+### Task 13: Time entries, approvals, notifications, dashboard, allocations, audit log
 
 **Files:**
 - Create: `app/features/time/{routes,service}.py`, `app/features/insights/{routes,service}.py`, `tests/integration/test_time.py`, `tests/integration/test_insights.py`
 
 **Interfaces:**
-- Consumes: Task 4 `classify_hours`; Task 10 `project_consumed`, `at_risk_reasons`; Task 11 membership.
+- Consumes: Task 4 `week_flags`, `forecast_total`, `approval_breakdown`; Task 5 `is_assignee`; Task 10 `project_consumed`, `at_risk_reasons`.
 - Produces:
   - `GET /time-entries?user=&week=YYYY-MM-DD` (any date in the week; defaults to the current week).
     - Users see their own entries. Admins can see anyone's. A manager can see entries on their own projects.
-    - Returns `{week_start, entries:[{id,project_id,work_date,hours,pending_hours,pending_status,note}], totals:{counted, pending}}`.
-  - `PUT /time-entries` (self only) with body `{week:"YYYY-MM-DD", entries:[{project_id, work_date, hours, note?}]}`.
-    - Processes entries in `(work_date, project_id)` order. For each one, `week_total_other` = the user's counted hours this week from every **other** entry, including entries already processed in this request.
-    - Entries are created or updated. `hours: 0` on an existing entry sets it to 0.
-    - Errors: 400 `NOT_A_MEMBER`, 400 `OUT_OF_PROJECT_RANGE`, 400 `OUTSIDE_WEEK`.
-    - Sets `hourly_rate = round(salary/2080, 2)` whenever the counted hours change.
-    - Returns the same shape as GET, plus `held:[entry_id]`.
-  - `GET /approvals`: pending overtime on projects the user manages (all projects for admins). Returns `[{entry, user:{id,name}, project:{id,name}, week_total}]`.
-  - `POST /time-entries/{id}/approve` and `POST /time-entries/{id}/reject` (manage on the entry's project).
-    - Approve: `hours = pending_hours`, recalculate `hourly_rate`, clear pending.
-    - Reject: clear pending.
-    - Both are audited. A non-pending entry → 400 `NOT_PENDING`.
-  - `GET /dashboard`, using visible projects only. Returns:
+    - Returns `{week_start, rows:[{milestone:{id,name}, project:{id,name}}], entries:[{id,milestone_id,project_id,work_date,hours,status,over_40,edited_after_decision,rejection_reason,note,label}], totals:{logged, approved}}`.
+    - `label` is `"Pending approval"`, `"Pending (Overtime requested from {first} {last})"`, `"Approved"` or `"Rejected"`.
+    - `rows` lists every non-archived milestone the user is assigned to that overlaps the week.
+  - `PUT /time-entries` (self only) with body `{week, entries:[{milestone_id, work_date, hours, note?}]}`.
+    - Processes entries in `(work_date, milestone_id)` order.
+    - `hours: 0` on an existing pending entry deletes it. That's allowed because a pending entry isn't a budget record. On an approved or rejected entry → 400 `CANNOT_CLEAR_DECIDED`.
+    - Every created or changed entry becomes `pending`, with `edited_after_decision = true` if it was approved or rejected before.
+    - `over_40` and the alert come from `week_flags`, using the person's logged total across all projects before and after that entry. When `crossed` is true, insert the `OVER_40H` notification for the manager of the entry's project with `ON CONFLICT DO NOTHING`. The unique key makes it once per person-week.
+    - Errors: 400 `NOT_ASSIGNED`, 400 `OUT_OF_PROJECT_RANGE`, 400 `OUTSIDE_WEEK`.
+    - Returns the same shape as GET.
+  - `GET /approvals?project=&milestone=`: pending entries on projects the user manages (all projects for admins), excluding the user's own entries. Returns `[{entry, label, user:{id,name}, milestone:{id,name}, project:{id,name}, week_logged_total}]`.
+  - `GET /time-entries/{id}/breakdown` (manage on the entry's project) → the `approval_breakdown` dict plus `{hours, hourly_rate, milestone_cost, budget, consumed, remaining, weeks_remaining}`.
+  - `POST /time-entries/{id}/approve` and `POST /time-entries/{id}/reject` with body `{reason}`.
+    - Both need manage on the entry's project. Your own entry → 403 `SELF_APPROVAL`.
+    - Approve sets `hourly_rate = round(salary/2080, 2)`.
+    - Reject without a reason → 400 `VALIDATION_ERROR`.
+    - A non-pending entry → 400 `NOT_PENDING`. Both are audited.
+  - `GET /notifications?unread=`, `POST /notifications/{id}/read`, `POST /notifications/read-all`. Users only see their own.
+  - `GET /dashboard` (visible projects only) returns:
     - `status_counts:{planned,active,on_hold,completed}`
     - `projects:[list item from Task 10]`
     - `at_risk:[{id,name,reasons}]`
     - `milestones:{overdue:[…], due_soon:[…]}` (next 14 days)
-    - `over_allocated:[{user:{id,name}, week_total, pending}]` (current week; counted + pending > 40)
-    - `budgets:[{project_id,name,budget,consumed}]`
-  - `GET /allocations?week=` (managers and admins) returns `[{user:{id,name,job_title}, projects:[{id,name,planned,logged}], planned_total, logged_total, utilization_pct}]`.
+    - `over_allocated:[{user:{id,name}, week_logged_total}]` (current week, logged total > 40)
+    - `budgets:[{project_id,name,budget,consumed,forecast}]`
+    - `pending_approvals` (a count, for managers and admins)
+  - `GET /allocations?week=` (managers and admins) returns `[{user:{id,name,job_title}, projects:[{id,name,planned,logged,approved}], planned_total, logged_total, utilization_pct}]`.
     - `utilization_pct = logged_total / 40 × 100`.
     - Managers see people on their projects plus their direct reports.
   - `GET /audit-log?actor=&entity_type=&from=&to=&page=` (admin).
 
 - [ ] **Step 1: Write failing tests.**
   ```python
-  def test_log_within_cap_counted(client, conn):
-  def test_crossing_cap_held_with_label_fields(client, conn):         # pending_status "pending_overtime"; counted keeps previous
-  def test_batch_crossing_cap_is_deterministic(client, conn):         # Review Focus 2: Mon–Fri 9h each → Mon–Thu counted (36), Fri held
-  def test_hours_outside_week_or_project_range_400(client, conn):
-  def test_non_member_cannot_log(client, conn):
-  def test_manager_approves_overtime_updates_budget(client, conn):
-  def test_other_manager_cannot_approve(client, conn):                # 404 or 403
-  def test_dashboard_answers_all_seven_questions(client, conn):       # keys present and populated from fixture data
+  def test_new_entry_is_pending_and_not_in_budget(client, conn):
+  def test_only_assigned_milestones_loggable(client, conn):        # 400 NOT_ASSIGNED
+  def test_batch_crossing_flags_and_single_alert(client, conn):    # Review Focus 2: Mon–Fri 9h → Fri over_40; one notification; save again → still one
+  def test_alert_once_across_projects(client, conn):               # 38h on project A, then 4h on B → B's manager alerted; 2h more on A → no new alert
+  def test_overtime_label_names_employee(client, conn):            # label == "Pending (Overtime requested from Ada Lovelace)"
+  def test_edit_approved_entry_returns_to_pending(client, conn):   # leaves the budget; edited_after_decision True
+  def test_reject_requires_reason_visible_to_employee(client, conn):
+  def test_cannot_approve_own_entry(client, conn):                 # Review Focus 1 → 403 SELF_APPROVAL
+  def test_breakdown_numbers_and_forecast(client, conn):
+  def test_approve_snapshots_rate_and_updates_budget(client, conn):
+  def test_other_manager_cannot_approve(client, conn):             # 404
+  def test_dashboard_answers_all_seven_questions(client, conn):
   def test_dashboard_filtered_for_employee(client, conn):
   def test_allocations_utilization(client, conn):
   def test_audit_log_admin_only(client, conn):
@@ -761,9 +775,9 @@ docs/project/     README-linked docs (Task 25)
   ```bash
   curl -s https://<cloudfront>/api/v1/dashboard -H "Authorization: Bearer <admin token>"
   ```
-  Expected: JSON with all six dashboard keys.
+  Expected: JSON with all seven dashboard keys.
 
-- [ ] **Step 6: Commit.** `git commit -m "Add timesheets, overtime approvals, dashboard, allocations and audit log"`
+- [ ] **Step 6: Commit.** `git commit -m "Add time approval, over-40h alerts, budget breakdown, dashboard, allocations and audit log"`
 
 ### Task 14: Frontend foundation (theme, layout, API client, test setup)
 
@@ -938,37 +952,44 @@ docs/project/     README-linked docs (Task 25)
 
 - [ ] **Step 5: Commit.** `git commit -m "Add milestones tab with timeline, dependencies, status actions and notes"`
 
-### Task 18: Timesheet, approvals and project hours tab
+### Task 18: Timesheet, approvals with budget breakdown, and notifications
 
 **Files:**
-- Create: `src/features/timesheet/TimesheetPage.jsx`, `src/features/approvals/ApprovalsPage.jsx`, `src/features/projects/HoursTab.jsx`, and their tests
+- Create: `src/features/timesheet/TimesheetPage.jsx`, `src/features/approvals/{ApprovalsPage,BreakdownPanel}.jsx`, `src/features/projects/HoursTab.jsx`, `src/components/NotificationBell.jsx`, and their tests
+- Modify: `src/app/Layout.jsx` (bell in the top bar); `src/features/milestones/MilestonesTab.jsx` (pending hours and breakdown inside the milestone)
 
 **Interfaces:**
-- Consumes: Task 13 time endpoints.
+- Consumes: Task 13 time and notification endpoints.
 - Produces:
   - **TimesheetPage:**
-    - A week picker (previous / next / this week) and a grid with one row per assigned project and columns Monday–Sunday. Weekends are collapsed by default on mobile.
-    - Inputs are numbers from 0 to 24 in steps of 0.25. Row and column totals, plus a weekly total with a "/ 40h" indicator.
+    - A week picker (previous / next / this week) and a grid with **one row per assigned milestone**, grouped by project, and columns Monday–Sunday. Weekends are collapsed by default on mobile.
+    - Inputs are numbers from 0 to 24 in steps of 0.25. Row, column and weekly totals, with a "/ 40h" indicator that switches to the warning color above 40.
     - **Save** sends one `PUT /time-entries`.
-    - Held cells show the exact chip text `Pending approval (overtime over 40h)`, with the requested value in a tooltip.
-  - **ApprovalsPage** (managers and admins): pending entries, each showing the person's week total, with Approve and Reject buttons. A badge in the sidebar shows the count.
-  - **HoursTab:** logged hours per person for the selected week, on that project.
+    - Each cell shows the backend `label` as a chip (`Pending approval`, `Pending (Overtime requested from …)`, `Approved`, `Rejected`), an "Edited" tag when relevant, and the rejection reason in a tooltip.
+  - **ApprovalsPage** (managers and admins): pending entries grouped by milestone, showing the label and the person's week total, with Approve and Reject buttons. Rejecting requires a reason. Selecting a row opens the **BreakdownPanel**.
+  - **BreakdownPanel:** request cost, milestone cost so far, remaining budget before and after, share of the remaining budget, and projected total vs. budget. A forecast over budget is shown in the warning color.
+  - **Milestone detail** (inside MilestonesTab): the milestone's pending entries with the same BreakdownPanel, for its manager.
+  - **NotificationBell:** an unread-count badge and a menu ("{First Last} passed 40h for the week of {date}"). Clicking a notification marks it read and opens Approvals filtered to that person. Polls with the 30-second default.
+  - **HoursTab:** approved and pending hours per person for the selected week, on that project.
 
 - [ ] **Step 1: Write failing tests.**
   ```js
-  test('timesheet totals update as you type and save sends one PUT')
-  test('held entries show the exact pending label')
+  test("timesheet rows are the employee's assigned milestones")
+  test('totals update as you type and save sends one PUT')
+  test('cells show backend labels, Edited tag and rejection reason')
+  test('reject requires a reason')
+  test('breakdown panel shows before/after remaining and forecast warning')
+  test('notification bell shows unread count and marks read on click')
   test('employee does not see Approvals in navigation')
-  test('approve removes the row and refreshes budget queries')
   ```
 
-- [ ] **Step 2:** Run `npm test -- timesheet approvals`. Expected: FAIL.
+- [ ] **Step 2:** Run `npm test -- timesheet approvals notification`. Expected: FAIL.
 
 - [ ] **Step 3: Implement.**
 
 - [ ] **Step 4:** Run the tests. Expected: PASS.
 
-- [ ] **Step 5: Commit.** `git commit -m "Add weekly timesheet, overtime approvals and project hours"`
+- [ ] **Step 5: Commit.** `git commit -m "Add timesheet, approvals with budget breakdown, and notifications"`
 
 ### Task 19: Dashboard, allocation, people, profile and audit UI
 
@@ -1038,7 +1059,7 @@ docs/project/     README-linked docs (Task 25)
   ```js
   test('admin creates user → user logs in with emailed temp password → forced change → dashboard')  // reads newest file in backend/v1/.outbox
   test('manager adds a dependent milestone; assignee moves it to ready for review; manager completes')
-  test('employee logs 9h Mon–Fri → Friday shows pending label → manager approves → budget consumed rises')
+  test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager gets one notification → opens the breakdown → approves → budget consumed rises')
   ```
 
 - [ ] **Step 2:** Run `cd frontend && npx playwright install chromium webkit && npm run e2e`. Expected: 3 tests × 2 projects all pass.
@@ -1076,7 +1097,7 @@ docs/project/     README-linked docs (Task 25)
   - first login and forced change
   - forgotten password
   - token refresh
-  - overtime holding and approval
+  - time approval and the over-40h alert
   - the at-risk rule
   - dependency loop detection
   - the planned 40-hour cap
@@ -1111,7 +1132,7 @@ docs/project/     README-linked docs (Task 25)
   3. Create a user, and check the email or the show-once fallback.
   4. Forced change.
   5. Milestone dependency and status flow.
-  6. Overtime hold and approval.
+  6. Time approval, the over-40h notification and the budget breakdown.
   7. Archive and restore.
   8. Forgotten password.
   9. Unauthorized actions are hidden, and direct API calls return 403.
