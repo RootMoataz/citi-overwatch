@@ -69,71 +69,71 @@ Each item names its source: **E** = email, **R** = scored rubric, **G** = the fu
 
 The app must answer every one of these questions in the UI.
 
-- [ ] Q1. Current status of each active project
-- [ ] Q2. Projects at risk of missing their deadline
-- [ ] Q3. Resource allocation across projects
-- [ ] Q4. Key deliverables and their completion status
-- [ ] Q5. Team members over-allocated across projects
-- [ ] Q6. Dependency chain between deliverables
-- [ ] Q7. Budget consumed versus planned, per project
+- [x] Q1. Current status of each active project
+- [x] Q2. Projects at risk of missing their deadline
+- [x] Q3. Resource allocation across projects
+- [x] Q4. Key deliverables and their completion status
+- [x] Q5. Team members over-allocated across projects
+- [x] Q6. Dependency chain between deliverables
+- [x] Q7. Budget consumed versus planned, per project
 
 ### Features (E)
 
-- [ ] User authentication (login, hashed passwords, token with expiry) (E, G)
-- [ ] Authorization and role-based access control, enforced on the backend and reflected in the UI (E, G)
-- [ ] Create, read, update and delete (CRUD) for projects
-- [ ] CRUD for deliverables
-- [ ] CRUD for resources
-- [ ] CRUD for budget tracking
-- [ ] Search and filter on list views (E)
-- [ ] Responsive layout for mobile and desktop (E, R)
+- [x] User authentication (login, hashed passwords, token with expiry) (E, G)
+- [x] Authorization and role-based access control, enforced on the backend and reflected in the UI (E, G)
+- [x] Create, read, update and delete (CRUD) for projects
+- [x] CRUD for deliverables
+- [x] CRUD for resources
+- [x] CRUD for budget tracking
+- [x] Search and filter on list views (E)
+- [x] Responsive layout for mobile and desktop (E, R)
 
 ### Technology (E)
 
-- [ ] Frontend: React, React Responsive, Material UI
-- [ ] Backend: Python (AWS Lambda)
-- [ ] Database: PostgreSQL (AWS Aurora)
+- [x] Frontend: React, React Responsive, Material UI
+- [x] Backend: Python (AWS Lambda)
+- [x] Database: PostgreSQL (AWS Aurora)
 
 ### Delivery (E, R)
 
 - [ ] Deployed to AWS and reachable in a browser (E, R)
-- [ ] Runs locally from documented commands (R)
+- [x] Runs locally from documented commands (R)
 - [ ] Deploy steps can be repeated and produce verifiable output (R)
 
 ### API quality (G)
 
-- [ ] REST methods: POST, GET, PUT, DELETE
-- [ ] Status codes: 201 created, 200 OK, 204 deleted, 400 validation, 401 not logged in, 403 not allowed, 404 not found, 500 server error
-- [ ] One consistent JSON error format
-- [ ] Backend validation: required fields, formats, references to other records exist, duplicates rejected
+- [x] REST methods: POST, GET, PUT, DELETE
+- [x] Status codes: 201 created, 200 OK, 204 deleted, 400 validation, 401 not logged in, 403 not allowed, 404 not found, 500 server error
+- [x] One consistent JSON error format
+- [x] Backend validation: required fields, formats, references to other records exist, duplicates rejected
 
 ### UI quality (R, U)
 
-- [ ] Clear loading, success and failure feedback on every action (R)
-- [ ] Frontend form validation: required fields marked, errors shown next to the field, submit blocked until the form is valid, inputs disabled while saving (G)
-- [ ] Consistent typography, spacing, colors and interaction states (R)
-- [ ] Basic accessibility: labels, keyboard navigation, color contrast (R)
-- [ ] Actions the user's role can't perform are hidden or disabled (G)
+- [x] Clear loading, success and failure feedback on every action (R)
+- [x] Frontend form validation: required fields marked, errors shown next to the field, submit blocked until the form is valid, inputs disabled while saving (G)
+- [x] Consistent typography, spacing, colors and interaction states (R)
+- [x] Basic accessibility: labels, keyboard navigation, color contrast (R)
+- [x] Actions the user's role can't perform are hidden or disabled (G)
 
 ### Code (R)
 
-- [ ] Organized by feature, not by giant files
-- [ ] Shared code reused, not copy-pasted
-- [ ] Linting and formatting applied consistently
+- [x] Organized by feature, not by giant files
+- [x] Shared code reused, not copy-pasted
+- [x] Linting and formatting applied consistently
 
 ### Testing, aimed at debugging (R, U)
 
-- [ ] Backend unit tests for business rules (at-risk, over-allocation, dependency loops, permissions)
-- [ ] Backend integration tests for the API against a real Postgres
-- [ ] Frontend component tests for core screens, including error states
-- [ ] At least one end-to-end test of the main user journey
-- [ ] Test commands, results and known gaps written up in `TESTING.md`
+- [x] Backend unit tests for business rules (at-risk, over-allocation, dependency loops, permissions)
+- [x] Backend integration tests for the API against a real Postgres
+- [x] Frontend component tests for core screens, including error states
+- [x] At least one end-to-end test of the main user journey
+- [x] Test commands, results and known gaps written up in `TESTING.md`
 
 ### Documentation, published on GitHub (R, U)
 
-- [ ] Root README: what the app is, architecture, setup, run, deploy, trade-offs and assumptions
-- [ ] Architecture diagram showing how requests and data move through the system
-- [ ] User stories for the UI, with acceptance criteria
-- [ ] Logic walkthrough explaining how the key rules work
-- [ ] API reference
-- [ ] Decision log (why each major choice was made)
+- [x] Root README: what the app is, architecture, setup, run, deploy, trade-offs and assumptions
+- [x] Architecture diagram showing how requests and data move through the system
+- [x] User stories for the UI, with acceptance criteria
+- [x] Logic walkthrough explaining how the key rules work
+- [x] API reference
+- [x] Decision log (why each major choice was made)

@@ -1,0 +1,253 @@
+# API reference
+
+- **Base URL:**
+  - In the cloud: `https://d3ucnz03j0sngl.cloudfront.net/api/v1`
+  - Locally: `http://localhost:3001/api/v1`, or `http://localhost:3000/api/v1` through the Vite proxy
+- **Bodies are JSON.** Dates are `YYYY-MM-DD`, money and hours are numbers, and IDs are UUIDs.
+- **Authentication:**
+  - Send `Authorization: Bearer <access_token>`. Tokens last 15 minutes.
+  - The refresh token is an `HttpOnly; SameSite=Strict` cookie named `ow_refresh` (also `Secure` in the cloud). It's scoped to `/api/v1/auth`, so JavaScript can't read it and it isn't sent to any other endpoint.
+- **Request IDs:**
+  - Send `x-request-id` to choose one (`[A-Za-z0-9-]{1,64}`), or let the server generate a UUID.
+  - It comes back in the `x-request-id` response header and inside every error.
+- **Lists:** paged lists take `page` (default 1) and `page_size` (default 25, max 100), and return `{"items": […], "total": n}`. Short lists (milestones, members, approvals, notifications, allocations) return a plain array.
+
+Every example below is a real response from the local server, loaded with the demo seed. IDs are shortened in the prose only.
+
+## Errors
+
+Every error has the same envelope:
+
+```json
+{"error": {"code": "VALIDATION_ERROR", "message": "planned_hours_per_week: max:40",
+           "details": {"planned_hours_per_week": "max:40"}, "request_id": "93913342-5bb5-4232-b3c9-979bacfd3cc3"}}
+```
+
+`details` maps field names to a short reason (`required`, `taken`, `max:40`, …). The UI uses it to show the error next to the right field.
+
+| Status | Codes | When |
+|---|---|---|
+| 400 | `VALIDATION_ERROR`, `INVALID_JSON`, `FIELD_NOT_EDITABLE` | A missing or invalid field, malformed JSON, or a field your role can't set |
+| 400 | `PASSWORD_POLICY`, `PASSWORD_REUSED`, `CODE_INVALID`, `CODE_EXPIRED`, `TOKEN_INVALID`, `TOKEN_EXPIRED` | Password and reset flow (here `TOKEN_*` refers to the short-lived reset token) |
+| 400 | `PLANNED_HOURS_EXCEEDED` | Staffing would plan someone past 40 h/week across overlapping projects |
+| 400 | `DEPENDENCY_CYCLE`, `CROSS_PROJECT_DEPENDENCY`, `INVALID_TRANSITION`, `MILESTONES_OUT_OF_RANGE`, `MILESTONES_INCOMPLETE` | Milestone and project rules |
+| 400 | `NOT_ASSIGNED`, `NOT_A_MEMBER`, `OUTSIDE_WEEK`, `OUT_OF_PROJECT_RANGE`, `CANNOT_CLEAR_DECIDED`, `NOT_PENDING` | Timesheet and approval rules |
+| 400 | `REQUEST_CLOSED`, `SELF_ARCHIVE`, `SELF_DEMOTION` | Deciding a request twice; archiving or demoting yourself |
+| 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED` | No token, or an expired access token (the client refreshes and retries once) |
+| 401 | `INVALID_CREDENTIALS`, `TEMP_PASSWORD_EXPIRED`, `REFRESH_INVALID` | Sign-in and refresh |
+| 403 | `FORBIDDEN`, `NOT_ASSIGNED`, `SELF_APPROVAL`, `PASSWORD_CHANGE_REQUIRED` | Not allowed for your role or this record; approving your own hours; a temporary password is still in use |
+| 404 | `NOT_FOUND` | It doesn't exist, **or you aren't allowed to see it** (so its existence isn't revealed) |
+| 405 | `METHOD_NOT_ALLOWED` | The path exists, but not with this method |
+| 409 | `CONFLICT`, `ALREADY_MEMBER`, `HAS_DEPENDENTS` | A duplicate username, email or project name; already on the team; archiving someone who still manages projects or has reports (`details` lists them) |
+| 423 | `ACCOUNT_LOCKED`, `CODE_LOCKED` | 5 failed sign-ins (15-minute lock), or 5 wrong reset codes |
+| 500 | `INTERNAL_ERROR` | An unexpected error. It's logged with a stack trace, under the same `request_id` |
+
+Success codes: `200` OK, `201` created, `204` archived or no content.
+
+---
+
+## Auth
+
+| Method | Path | Auth | Body → response |
+|---|---|---|---|
+| POST | `/auth/login` | — | `{username, password}` → `200 {access_token, user}` and sets the `ow_refresh` cookie |
+| POST | `/auth/refresh` | cookie | → `200 {access_token, user}`; rotates the cookie |
+| POST | `/auth/logout` | cookie | → `204`; revokes the refresh token and clears the cookie |
+| POST | `/auth/change-password` | Bearer (a restricted token is allowed) | `{current_password, new_password}` → `200 {access_token, user}` |
+| POST | `/auth/forgot-password` | — | `{username}` → `200 {"message": "If that account exists, a code has been sent."}` (always the same) |
+| POST | `/auth/verify-reset-code` | — | `{username, code}` → `200 {reset_token}` |
+| POST | `/auth/reset-password` | — | `{reset_token, new_password}` → `204`; ends every session |
+| GET | `/me` | Bearer | → your profile, including your own salary |
+| PUT | `/me` | Bearer | `{first_name?, last_name?, email?}` → the updated profile |
+
+```http
+POST /api/v1/auth/login
+{"username": "manager.demo", "password": "Demo123!"}
+```
+```json
+{"access_token": "eyJhbGciOiJIUzI1NiIs…",
+ "user": {"id": "9315bbc9-0e17-4115-b1c3-8331a806ec6b", "username": "manager.demo", "first_name": "Morgan",
+          "last_name": "Manager", "email": "manager.demo@acme.example", "role": "manager", "must_change_password": false}}
+```
+
+A wrong password:
+```json
+{"error": {"code": "INVALID_CREDENTIALS", "message": "Incorrect username or password", "details": null,
+           "request_id": "fdfa307a-f154-4463-bfa4-74b2091890b8"}}
+```
+
+If `user.must_change_password` is `true`, the token is **restricted**: every endpoint except `/auth/change-password` returns `403 PASSWORD_CHANGE_REQUIRED`.
+
+## Users (admin, except where noted)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/users?q=&role=&archived=&page=&page_size=` | Admins and managers. Managers get no salaries |
+| POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent |
+| GET | `/users/{id}` | |
+| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary` and `manager_id`. You can't change your own role or salary |
+| DELETE | `/users/{id}` | Archives the account → `204`. Returns `409 HAS_DEPENDENTS` if they manage projects or have reports |
+| POST | `/users/{id}/restore` | |
+| POST | `/users/{id}/reset-password` | Issues a new temporary password, forces a change at the next sign-in and ends their sessions → `{email_sent, temp_password?}` |
+| GET | `/users/username-availability?username=&first=&last=` | Live check while typing |
+
+```http
+GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
+```
+```json
+{"username": "jsmith", "valid": true, "available": true,
+ "suggestions": ["jsmith", "jane.smith", "smithj", "jane_smith", "janes"]}
+```
+
+## Project requests
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/project-requests?status=` | Admins see all requests; managers see their own |
+| POST | `/project-requests` | Managers only. `{name, description, proposed_start, proposed_end, proposed_budget, reason}` → `201` |
+| POST | `/project-requests/{id}/approve` | Admin. Creates the project, with the requester as its manager |
+| POST | `/project-requests/{id}/reject` | Admin. `{comment}` |
+
+```json
+{"id": "2cb5b5e5-c871-42af-88d7-f7c62061c97a", "name": "Docs Demo", "description": "d",
+ "proposed_start": "2026-11-01", "proposed_end": "2026-12-01", "proposed_budget": 10000.0, "reason": "r",
+ "status": "pending", "requested_by": {"id": "9315bbc9-…", "name": "Morgan Manager"},
+ "decided_at": null, "decision_comment": null, "project_id": null, "created_at": "2026-10-13T18:06:34.468429-04:00"}
+```
+
+## Projects
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects?q=&status=&manager=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see. `archived` is admin only |
+| POST | `/projects` | Admin. `{name, description?, start_date, predicted_end_date, budget, manager_id, status?}` → `201` |
+| GET | `/projects/{id}` | `404` if you can't see it |
+| PUT | `/projects/{id}` | The project's manager or an admin. Only admins can change the manager |
+| DELETE | `/projects/{id}` | Admin. Archives the project → `204` |
+| POST | `/projects/{id}/restore` | Admin |
+| GET | `/projects/{id}/summary` | Budget, consumed, remaining, percentages, risk reasons and team size |
+
+```http
+GET /api/v1/projects?page_size=1
+```
+```json
+{"items": [{"id": "86a8c3a5-ce0c-4f80-8ca3-8ec702661dc8", "name": "Apollo Data Migration",
+            "description": "Move customer records from the legacy warehouse to the new platform.", "status": "active",
+            "start_date": "2026-07-15", "predicted_end_date": "2026-12-27", "budget": 250000.0, "consumed": 13465.92,
+            "budget_pct": 5.4, "progress_pct": 33.3, "at_risk_reasons": [],
+            "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"}, "is_archived": false, "completed_at": null,
+            "created_at": "2026-10-13T18:00:15.020027-04:00"}],
+ "total": 3}
+```
+
+`at_risk_reasons` lists any of `OVERDUE_MILESTONE`, `PAST_DUE` and `BUDGET_BURN` ([rule](LOGIC_WALKTHROUGH.md#6-the-at-risk-rule)).
+
+A missing field:
+```json
+{"error": {"code": "VALIDATION_ERROR", "message": "Missing required fields", "details": {"manager_id": "required"},
+           "request_id": "1b0e4e20-86ad-46eb-b314-045a2dd3b66b"}}
+```
+
+## Members (staffing)
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects/{id}/members` | |
+| POST | `/projects/{id}/members` | `{user_id, planned_hours_per_week}` (more than 0, at most 40) → `201`. Returns `400 PLANNED_HOURS_EXCEEDED` past 40 h/week across overlapping projects, or `409 ALREADY_MEMBER` |
+| PUT | `/projects/{id}/members/{user_id}` | `{planned_hours_per_week}` |
+| DELETE | `/projects/{id}/members/{user_id}` | Removes them from the project and from its milestones → `204` |
+
+## Milestones
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees` and `is_assignee` |
+| POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date}` → `201`. The dates must fall within the project's dates |
+| GET / PUT / DELETE | `/milestones/{id}` | `DELETE` archives |
+| POST | `/milestones/{id}/restore` | Admin |
+| PUT | `/milestones/{id}/dependencies` | `{predecessor_ids: [...]}` → `{…, warnings}`. Returns `400 DEPENDENCY_CYCLE` or `CROSS_PROJECT_DEPENDENCY`. `warnings` flags a start date before a predecessor's end |
+| PUT | `/milestones/{id}/assignees` | `{user_ids: [...]}`. They must be project members (`NOT_A_MEMBER`) |
+| POST | `/milestones/{id}/status` | `{status}`. Assignees can move it to `in_progress` and `ready_for_review`; only the manager or an admin can set `completed` or send it back. Returns `400 INVALID_TRANSITION`, or `403 NOT_ASSIGNED` |
+| GET / POST | `/milestones/{id}/notes` | `{body}` (1–2,000 characters). Append-only |
+
+```json
+{"id": "07ad53b4-fd9d-4947-a584-aed75e47ec08", "project_id": "86a8c3a5-…", "name": "Discovery",
+ "description": "Inventory every legacy table.", "start_date": "2026-07-15", "end_date": "2026-08-14",
+ "status": "completed", "display_status": "completed", "blocked": false, "predecessors": [],
+ "assignees": [{"id": "81c483ea-…", "name": "Eli Employee"}, {"id": "a250afbe-…", "name": "Chloe Park"}],
+ "is_assignee": false, "completed_at": "2026-10-13T18:00:15.020027-04:00", "is_archived": false}
+```
+
+## Time entries and approvals
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones), entries and totals. `user` lets a manager or admin view someone else |
+| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours: 0` clears a pending cell. Every saved entry becomes `pending` |
+| GET | `/approvals?user=&project=&milestone=` | Pending entries you can decide (never your own) |
+| GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry |
+| POST | `/time-entries/{id}/approve` | Copies the hourly rate onto the entry; counts toward the budget |
+| POST | `/time-entries/{id}/reject` | `{reason}` (required) |
+
+```http
+GET /api/v1/time-entries          (as employee.demo, this week)
+```
+```json
+{"week_start": "2026-10-12", "user": {"id": "81c483ea-…", "name": "Eli Employee"},
+ "rows": [{"milestone": {"id": "202d87b5-…", "name": "Schema Mapping"}, "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"}}],
+ "entries": [{"id": "c990c51e-…", "milestone_id": "202d87b5-…", "work_date": "2026-10-12", "hours": 9.0, "status": "pending",
+              "over_40": false, "edited_after_decision": false, "rejection_reason": null, "hourly_rate": null,
+              "label": "Pending approval"}, "…"],
+ "totals": {"logged": 45.0, "approved": 0.0}}
+```
+
+The entry that takes the week past 40 hours carries `"over_40": true` and `"label": "Pending (Overtime requested from …)"`.
+
+```http
+GET /api/v1/time-entries/d273b5fc-02a1-41a8-8388-5d2c33698ee5/breakdown
+```
+```json
+{"entry_id": "d273b5fc-02a1-41a8-8388-5d2c33698ee5", "hours": 9.0, "hourly_rate": 50.0, "request_cost": 450.0,
+ "milestone_cost": 13465.92, "milestone_cost_after": 13915.92,
+ "budget": 250000.0, "consumed": 13465.92, "remaining": 236534.08,
+ "remaining_before": 236534.08, "remaining_after": 236084.08, "pct_of_remaining": 0.2,
+ "forecast": 50497.2, "forecast_over_budget": false, "weeks_remaining": 11}
+```
+
+## Notifications
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/notifications?unread=true` | Your alerts |
+| POST | `/notifications/{id}/read` | |
+| POST | `/notifications/read-all` | |
+
+```json
+[{"id": "f73295ac-a674-485e-a528-21d8231ccf40", "type": "OVER_40H", "week_start": "2026-10-12",
+  "payload": {"name": "Eli Employee", "week_total": 45}, "read_at": null,
+  "created_at": "2026-10-13T18:00:15.020027-04:00", "subject_user": {"id": "81c483ea-…", "name": "Eli Employee"},
+  "message": "Eli Employee passed 40h for the week of 2026-10-12"}]
+```
+
+## Insights and audit
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/dashboard` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals` |
+| GET | `/allocations?week=` | Admins and managers. Per person: projects with planned, logged and approved hours, totals and `utilization_pct` |
+| GET | `/audit-log?actor=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first |
+
+```json
+[{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer"},
+  "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "planned": 30.0, "logged": 45.0, "approved": 0.0}],
+  "planned_total": 30.0, "logged_total": 45.0, "utilization_pct": 112.5}, "…"]
+```
+
+## Internal operations (not HTTP)
+
+These run only through an IAM-authorized `aws lambda invoke`, never through the Function URL:
+
+| Payload | Result |
+|---|---|
+| `{"op": "migrate"}` | `{"applied": ["001_init.sql"]}`, or `[]` when nothing is new |
+| `{"op": "seed"}` | `{"seeded": true, "demo_users": ["admin.demo", "manager.demo", "employee.demo"]}`. Does nothing once the demo data exists |

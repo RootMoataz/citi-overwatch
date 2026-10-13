@@ -16,6 +16,23 @@ Why Citi Overwatch is built the way it is. Each entry says what was decided, why
 | JWT signing secret stored in the `app_secrets` table | Avoids changing the Lambda's environment in Terraform | Read once per cold start |
 | Every time entry needs manager approval; 40 hours is a warning with one alert per person-week | The owner's rule: managers control what reaches the budget | Managers have an approval queue to work through |
 
+## Implementation decisions
+
+| Decision | Why | Trade-off |
+|---|---|---|
+| Records you can't see return `404`, not `403` | Doesn't reveal that a project or person exists | Debugging "why can't I see it" needs the audit log or an admin |
+| Planned hours are a **hard** 40 h/week cap; logged hours over 40 are only a **warning** | Planning is a promise the manager controls; real overtime happens and should be visible, not hidden | Two different rules around the same number, so the UI labels them carefully ("planned" vs "logged") |
+| The over-40 flag is frozen on each entry when it's saved | Later edits don't rewrite history, and nothing has to be recalculated | Lowering Monday's hours afterwards doesn't clear Friday's flag |
+| One alert per person-week, guaranteed by a unique constraint as well as the code | Two saves that race can't produce two alerts | None noted |
+| Race-prone steps are single atomic `UPDATE … RETURNING` statements: the lockout counter, reset-code attempts, the refresh-token claim | Two concurrent requests can't both pass a check | Slightly denser SQL |
+| Unknown usernames are checked against a dummy password hash | Sign-in takes the same time whether or not the account exists | One wasted hash per bad username |
+| The refresh cookie is `HttpOnly`, `SameSite=Strict` and scoped to `Path=/api/v1/auth`; the access token lives in memory | Scripts can't read the cookie, it isn't sent to other endpoints, and cross-site requests can't use it | A page reload makes one refresh call to restore the session |
+| When email can't be sent, the admin sees the temporary password **once** | Lets onboarding work despite the VPC having no route to SES | The admin has to pass it on securely |
+| Removing someone from a project also removes their milestone assignments there | "Assigned" always implies "on the project"; their logged hours stay on record | The manager has to reassign if they add the person back |
+| The local dev server handles one request at a time | Mirrors a single Lambda container and avoids sharing one database connection between threads | Slower than a real server; fine for one developer |
+| The e2e suite always starts the API on a fresh `overwatch_e2e` database | Every run sees the same demo data | Each run pays for about 5 s of migrating and seeding |
+| Status changes go through a dedicated `POST /milestones/{id}/status` | One place enforces who may make which transition | One more endpoint than a generic `PUT` |
+
 ## Findings from the first cloud deploy (2026-10-13)
 
 ### SES email isn't reachable from the Lambda
