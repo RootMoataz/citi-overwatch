@@ -1,11 +1,14 @@
 import os
 
+# Override with OVERWATCH_TEST_DB so two test runs never share (and truncate) one database.
+TEST_DB = os.getenv("OVERWATCH_TEST_DB", "overwatch_test")
+
 os.environ.update({
     "POSTGRES_HOST": "localhost",
     "POSTGRES_PORT": "5432",
     "POSTGRES_USER": "postgres",
     "POSTGRES_PASS": "postgres",
-    "POSTGRES_NAME": "overwatch_test",
+    "POSTGRES_NAME": TEST_DB,
     "IS_LOCAL": "true",
     "PBKDF2_ITERATIONS": "1000",
 })
@@ -20,7 +23,7 @@ KEEP = {"schema_migrations", "app_secrets"}
 
 @pytest.fixture(scope="session")
 def db():
-    dbmod.ensure_database("overwatch_test")
+    dbmod.ensure_database(TEST_DB)
     conn = dbmod.connect()
     conn.run("DROP SCHEMA public CASCADE")
     conn.run("CREATE SCHEMA public")
