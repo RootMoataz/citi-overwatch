@@ -7,6 +7,7 @@ Anything else is an internal operation, reachable only by an IAM-authorized dire
 import app.features  # noqa: F401  (registers routes)
 from app import ctx, db
 from app.migrate import apply_migrations
+from app.seed import seed
 from app.router import router
 
 ctx.install(router)
@@ -16,6 +17,9 @@ def _internal(event: dict) -> dict:
     op = event.get("op")
     if op == "migrate":
         return {"applied": apply_migrations(db.connect())}
+    if op == "seed":
+        creds = seed(db.connect())
+        return {"seeded": True, "demo_users": [username for username, _ in creds.values()]}
     return {"error": f"unknown op: {op}"}
 
 
