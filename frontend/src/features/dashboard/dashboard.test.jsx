@@ -82,4 +82,26 @@ describe('AllocationPage', () => {
     expect(within(row).getByText('112.5%')).toBeInTheDocument()
     expect(within(row).getByText('30h planned · 45h logged')).toBeInTheDocument()
   })
+
+  test('charts flag people over 40h in text and link names to their profiles', async () => {
+    const ada = { user: { id: 'u-ada', name: 'Ada Lovelace', job_title: 'Analyst' }, planned_total: 20, logged_total: 12,
+      utilization_pct: 30, projects: [{ id: 'p2', name: 'Atlas', planned: 20, logged: 8, approved: 8 }] }
+    server.use(http.get(`${API}/allocations`, () => HttpResponse.json([...allocations, ada])))
+    renderAsUser(<AllocationPage />, { user: users.manager, route: '/allocation', path: '/allocation' })
+    const chart = await screen.findByRole('region', { name: /planned vs logged this week/i })
+    const note = within(chart).getByRole('note')
+    expect(note).toHaveTextContent('Over 40h this week: Eli Employee (45h)')
+    expect(note).not.toHaveTextContent('Ada')
+    expect(within(note).getByRole('link', { name: /eli employee/i })).toHaveAttribute('href', '/people/u-emp/profile')
+    expect(screen.getByRole('region', { name: /logged hours by project/i })).toBeInTheDocument()
+    const grid = screen.getByRole('table', { name: /allocation by person and project/i })
+    expect(within(grid).getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
+  })
+
+  test('chart note says when nobody is over 40h', async () => {
+    server.use(http.get(`${API}/allocations`, () => HttpResponse.json([{ ...allocations[0], logged_total: 40, utilization_pct: 100 }])))
+    renderAsUser(<AllocationPage />, { user: users.manager, route: '/allocation', path: '/allocation' })
+    const chart = await screen.findByRole('region', { name: /planned vs logged this week/i })
+    expect(within(chart).getByRole('note')).toHaveTextContent('Nobody is over 40h this week.')
+  })
 })

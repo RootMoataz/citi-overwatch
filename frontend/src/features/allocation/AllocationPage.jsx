@@ -10,8 +10,10 @@ import { useAllocations } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import { addDays, formatDate, formatHours, formatPct, mondayOf } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
+import AllocationCharts from './AllocationCharts.jsx'
 
 function Utilization({ value }) {
   return (
@@ -45,6 +47,7 @@ export default function AllocationPage() {
       </Stack>
       <ErrorAlert error={allocations.error} onRetry={() => allocations.refetch()} sx={{ mb: 2 }} />
       {allocations.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+      {people.length ? <AllocationCharts people={people} /> : null}
       {!allocations.isLoading && !people.length ? <EmptyState title="Nobody to show" description="People appear once they're on a project you manage." /> : null}
       {people.length && desktop ? (
         <TableContainer component={Paper} variant="outlined">
@@ -60,7 +63,7 @@ export default function AllocationPage() {
               {people.map((person) => (
                 <TableRow key={person.user.id}>
                   <TableCell component="th" scope="row">
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{person.user.name}</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}><PersonLink person={person.user} /></Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>{person.user.job_title}</Typography>
                   </TableCell>
                   {projects.map((p) => {
@@ -79,7 +82,7 @@ export default function AllocationPage() {
           {people.map((person) => (
             <Card key={person.user.id}>
               <CardContent>
-                <Typography variant="subtitle1">{person.user.name}</Typography>
+                <Typography variant="subtitle1"><PersonLink person={person.user} /></Typography>
                 <Utilization value={person.utilization_pct} />
                 {person.projects.map((c) => (
                   <Typography key={c.id} variant="body2" sx={{ color: 'text.secondary' }}>
