@@ -204,6 +204,8 @@ app/db
 node_modules/
 npm-debug.log*
 package-lock.json*
+# ...except the app's lockfile, so a fresh clone installs the exact tested versions
+!frontend/package-lock.json
 yarn-debug.log*
 yarn-error.log*
 
