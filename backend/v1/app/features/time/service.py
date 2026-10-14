@@ -276,6 +276,19 @@ def breakdown(conn, ctx: Ctx, entry_id: str) -> dict:
 STALE = ApiError(409, "STALE_ENTRY", "These hours changed since you loaded them. Refresh and check again.")
 
 
+def _alert_rejected(conn, entry: dict, project: dict, reason: str) -> None:
+    """Tell the employee their hours were rejected. week_start stays NULL so every rejection gets its own alert
+    (the unique key is one-per-person-week, meant for OVER_40H); the week travels in the payload instead."""
+    ms = query_one(conn, "SELECT name FROM milestones WHERE id = :m", m=entry["milestone_id"])
+    payload = json.dumps({"entry_id": str(entry["id"]), "work_date": str(entry["work_date"]),
+                          "week_start": str(week_start(entry["work_date"])), "hours": float(entry["hours"]),
+                          "reason": reason, "milestone": {"id": str(entry["milestone_id"]), "name": ms["name"]},
+                          "project": {"id": str(project["id"]), "name": project["name"]}})
+    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
+                VALUES (CAST(:u AS uuid), 'ENTRY_REJECTED', CAST(:u AS uuid), CAST(:p AS jsonb))""",
+             u=str(entry["user_id"]), p=payload)
+
+
 def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None, expected_hours=None) -> dict:
     entry, project = _load_entry(conn, ctx, entry_id)
     if str(entry["user_id"]) == ctx.user_id:
@@ -304,6 +317,8 @@ def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None,
         record(conn, ctx, "approve" if approve else "reject", "time_entry", entry_id,
                before={"status": "pending"}, after={"status": "approved" if approve else "rejected",
                                                     "reason": reason})
+        if not approve:
+            _alert_rejected(conn, entry, project, reason)
     row = query_one(conn, "SELECT * FROM time_entries WHERE id = :i", i=entry["id"])
     return _entry_view(row, _name(entry), show_rate=ctx.is_admin)
 
@@ -320,6 +335,25 @@ def reject(conn, ctx: Ctx, entry_id: str, body: dict) -> dict:
 
 # ---------- notifications ----------
 
+def short_day(value) -> str:
+    """2026-10-12 → "Mon 12 Oct"."""
+    d = date.fromisoformat(str(value))
+    return f"{d:%a} {d.day} {d:%b}"
+
+
+def _message(r: dict, who: str) -> str:
+    p = r["payload"] or {}
+    if r["type"] == "ENTRY_REJECTED":
+        return (f"Your {p['hours']:g}h on {p['milestone']['name']} ({short_day(p['work_date'])}) "
+                f"was rejected: {p['reason']}")
+    if r["type"] == "SUPPORT_ASSIGNED":
+        return (f"You've been added as support on {p['milestone']['name']} ({p['project']['name']}), "
+                f"due {short_day(p['end_date'])}")
+    if r["type"] == "SUPPORT_ROUTED":
+        return f"{who} was auto-routed to support {p['milestone']['name']}"
+    return f"{who} passed 40h for the week of {r['week_start']}"
+
+
 def list_notifications(conn, ctx: Ctx, params: dict) -> list[dict]:
     unread = " AND n.read_at IS NULL" if params.get("unread") == "true" else ""
     rows = query(conn, f"""SELECT n.*, u.first_name, u.last_name FROM notifications n
@@ -329,10 +363,11 @@ def list_notifications(conn, ctx: Ctx, params: dict) -> list[dict]:
     out = []
     for r in rows:
         who = _name(r) if r["first_name"] else "Someone"
-        out.append({"id": r["id"], "type": r["type"], "week_start": r["week_start"], "payload": r["payload"],
-                    "read_at": r["read_at"], "created_at": r["created_at"],
+        out.append({"id": r["id"], "type": r["type"],
+                    "week_start": r["week_start"] or (r["payload"] or {}).get("week_start"),
+                    "payload": r["payload"], "read_at": r["read_at"], "created_at": r["created_at"],
                     "subject_user": {"id": r["subject_user_id"], "name": who},
-                    "message": f"{who} passed 40h for the week of {r['week_start']}"})
+                    "message": _message(r, who)})
     return out
 
 

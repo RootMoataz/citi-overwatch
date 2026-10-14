@@ -258,3 +258,36 @@ def test_notifications_read_flow(client, conn):
     assert client.request("GET", "/notifications?unread=true", token=token)[1] == []
     assert client.request("POST", f"/notifications/{items[0]['id']}/read", token=token_for(conn, emp))[0] == 404
     assert client.request("POST", "/notifications/read-all", token=token)[0] == 200
+
+
+def test_rejection_alerts_the_employee(client, conn):
+    mgr, emp, project, ms = world(conn)
+    entry_id = save(client, conn, emp, [cell(ms, 0, 8)])[1]["entries"][0]["id"]
+    client.request("POST", f"/time-entries/{entry_id}/reject", token=token_for(conn, mgr), json={"reason": "Wrong milestone"})
+    assert client.request("GET", "/notifications", token=token_for(conn, mgr))[1] == []
+    items = client.request("GET", "/notifications?unread=true", token=token_for(conn, emp))[1]
+    assert len(items) == 1 and items[0]["type"] == "ENTRY_REJECTED"
+    assert items[0]["message"] == f"Your 8h on Build ({MONDAY:%a} {MONDAY.day} {MONDAY:%b}) was rejected: Wrong milestone"
+    assert items[0]["week_start"] == str(MONDAY)
+    payload = items[0]["payload"]
+    assert (payload["work_date"], payload["hours"], payload["reason"]) == (str(MONDAY), 8.0, "Wrong milestone")
+    assert payload["milestone"] == {"id": str(ms["id"]), "name": "Build"}
+    assert payload["project"] == {"id": str(project["id"]), "name": project["name"]}
+    assert payload["entry_id"] == entry_id
+
+
+def test_each_rejection_alerts_separately(client, conn):
+    mgr, emp, _, ms = world(conn)
+    ids = [e["id"] for e in save(client, conn, emp, [cell(ms, 0, 7.5), cell(ms, 1, 4)])[1]["entries"]]
+    for entry_id in ids:
+        client.request("POST", f"/time-entries/{entry_id}/reject", token=token_for(conn, mgr), json={"reason": "Split"})
+    items = client.request("GET", "/notifications", token=token_for(conn, emp))[1]
+    assert sorted(i["payload"]["hours"] for i in items) == [4.0, 7.5]
+    assert any(i["message"].startswith("Your 7.5h on Build") for i in items)
+
+
+def test_approval_sends_no_alert(client, conn):
+    mgr, emp, _, ms = world(conn)
+    entry_id = save(client, conn, emp, [cell(ms, 0, 8)])[1]["entries"][0]["id"]
+    client.request("POST", f"/time-entries/{entry_id}/approve", token=token_for(conn, mgr))
+    assert notifications(conn) == []
