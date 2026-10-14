@@ -12,6 +12,8 @@ import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { fullName } from '../../lib/format.js'
 import ShowOnceDialog from './ShowOnceDialog.jsx'
+import { relayCredentials } from '../../lib/emailRelay.js'
+import { useToast } from '../../app/toast.js'
 
 const FIELDS = ['first_name', 'last_name', 'email', 'username', 'role', 'job_title', 'salary', 'manager_id']
 
@@ -38,6 +40,7 @@ export default function UserDetailPage() {
   const archive = useArchiveUser(id)
   const restore = useRestoreUser(id)
   const reset = useResetUserPassword(id)
+  const toast = useToast()
   const [draft, setDraft] = useState(null)
   const [failure, setFailure] = useState(null)
   const [confirm, setConfirm] = useState(null)
@@ -66,7 +69,10 @@ export default function UserDetailPage() {
       if (action === 'restore') await restore.mutateAsync()
       if (action === 'reset') {
         const result = await reset.mutateAsync()
-        if (!result.email_sent) setShown({ username: p.username, password: result.temp_password })
+        const relayed = !result.email_sent && await relayCredentials({ to: p.email, name: fullName(p), username: p.username,
+          password: result.temp_password, kind: 'reset' })
+        if (relayed) toast.success(`New sign-in details emailed to ${p.email}`)
+        else if (!result.email_sent) setShown({ username: p.username, password: result.temp_password })
       }
     } catch (err) { setFailure(err) }
     setConfirm(null)

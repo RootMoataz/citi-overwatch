@@ -11,7 +11,9 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PasswordPolicyChecklist from '../../components/PasswordPolicyChecklist.jsx'
 import { formatMoney, fullName } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
+import { relayCredentials } from '../../lib/emailRelay.js'
 import { EMAIL_RE, generatePassword, passwordRuleErrors } from '../../lib/schemas.js'
+import { useToast } from '../../app/toast.js'
 import ShowOnceDialog from './ShowOnceDialog.jsx'
 
 const STEPS = ['Name', 'Email & role', 'Username', 'Password', 'Review']
@@ -62,6 +64,7 @@ export default function CreateUserWizard({ onClose, onCreated }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const managers = useManagers()
   const create = useCreateUser()
+  const toast = useToast()
   const [step, setStep] = useState(0)
   const [failure, setFailure] = useState(null)
   const [shown, setShown] = useState(null)
@@ -85,8 +88,15 @@ export default function CreateUserWizard({ onClose, onCreated }) {
     if (form.manager_id) body.manager_id = form.manager_id
     try {
       const result = await create.mutateAsync(body)
-      if (!result.email_sent) setShown({ username: result.user.username, password: result.temp_password ?? form.password, user: result.user })
-      else { onCreated?.(result.user); onClose() }
+      const password = result.temp_password ?? form.password
+      // The server couldn't email: try the browser relay, and only show the details on screen if that fails too.
+      const relayed = !result.email_sent && await relayCredentials({ to: body.email, name: `${body.first_name} ${body.last_name}`,
+        username: result.user.username, password, kind: 'welcome' })
+      if (!result.email_sent && !relayed) setShown({ username: result.user.username, password, user: result.user })
+      else {
+        if (relayed) toast.success(`Sign-in details emailed to ${body.email}`)
+        onCreated?.(result.user); onClose()
+      }
     } catch (err) {
       setFailure(err)
       if (err.details?.username) setStep(2)

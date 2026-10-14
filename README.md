@@ -83,6 +83,8 @@ python scripts/migrate.py --db overwatch_dev         # apply migrations without 
 python scripts/devserver.py                          # restart without wiping data
 ```
 
+Optional: to have the live site email sign-in details from the admin's browser (the Lambda has no internet route for email), copy `frontend/.env.example` to `frontend/.env.production.local` and fill in the EmailJS IDs before deploying the frontend. See [DECISIONS.md](docs/project/DECISIONS.md).
+
 Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`, `POSTGRES_PASS` and `POSTGRES_NAME` (defaults: `localhost`, `5432`, `postgres`, `postgres`, `overwatch_dev`).
 
 ## Tests

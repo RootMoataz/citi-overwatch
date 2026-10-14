@@ -1,12 +1,13 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import RequireAuth from '../../auth/RequireAuth.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import AuditPage from '../audit/AuditPage.jsx'
 import ProfilePage from '../profile/ProfilePage.jsx'
 import CreateUserWizard from './CreateUserWizard.jsx'
+import { EMAILJS_URL } from '../../lib/emailRelay.js'
 
 const managers = http.get(`${API}/users`, () => HttpResponse.json({ items: [
   { id: 'u-mgr', username: 'manager.demo', first_name: 'Morgan', last_name: 'Manager', role: 'manager', job_title: 'Lead' }], total: 1 }))
@@ -108,6 +109,52 @@ describe('CreateUserWizard', () => {
     expect(within(once).getByText(posted.username)).toBeInTheDocument()
     expect(within(once).getByText(posted.password)).toBeInTheDocument()
     expect(within(once).getAllByRole('button', { name: /copy/i })).toHaveLength(2)
+  })
+})
+
+describe('CreateUserWizard email relay', () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  async function createAda(user) {
+    const dialog = await screen.findByRole('dialog', { name: /new account/i })
+    await fillName(user, dialog)
+    await user.click(within(dialog).getByRole('button', { name: /next/i }))
+    await user.type(within(dialog).getByLabelText(/email/i), 'ada@acme.example')
+    await user.click(within(dialog).getByRole('combobox', { name: /role/i }))
+    await user.click(await screen.findByRole('option', { name: 'Manager' }))
+    await user.click(within(dialog).getByRole('button', { name: /next/i }))
+    await within(dialog).findByLabelText('Available')
+    await user.click(within(dialog).getByRole('button', { name: /next/i }))
+    await user.click(within(dialog).getByRole('button', { name: /generate password/i }))
+    await user.click(within(dialog).getByRole('button', { name: /next/i }))
+    await user.click(within(dialog).getByRole('button', { name: /create account/i }))
+  }
+
+  const created = http.post(`${API}/users`, async ({ request }) => {
+    const posted = await request.json()
+    return HttpResponse.json({ user: { id: 'u-new', username: posted.username, first_name: 'Ada', last_name: 'Lovelace',
+      email: 'ada@acme.example' }, email_sent: false, temp_password: posted.password }, { status: 201 })
+  })
+
+  test('when the server cannot email, the browser relays the sign-in details instead of showing them', async () => {
+    vi.stubEnv('VITE_EMAILJS_SERVICE_ID', 's'); vi.stubEnv('VITE_EMAILJS_TEMPLATE_ID', 't'); vi.stubEnv('VITE_EMAILJS_PUBLIC_KEY', 'k')
+    let relayed = null
+    let closed = false
+    server.use(managers, availability([]), created,
+      http.post(EMAILJS_URL, async ({ request }) => { relayed = await request.json(); return new HttpResponse('OK') }))
+    renderAsUser(<CreateUserWizard onClose={() => { closed = true }} />, { user: users.admin, route: '/people-under-test' })
+    await createAda(userEvent.setup())
+    await waitFor(() => expect(closed).toBe(true))
+    expect(relayed.template_params).toMatchObject({ to_email: 'ada@acme.example', to_name: 'Ada Lovelace' })
+    expect(screen.queryByRole('dialog', { name: /share these sign-in details/i })).not.toBeInTheDocument()
+  })
+
+  test('if the relay fails too, the details are shown once', async () => {
+    vi.stubEnv('VITE_EMAILJS_SERVICE_ID', 's'); vi.stubEnv('VITE_EMAILJS_TEMPLATE_ID', 't'); vi.stubEnv('VITE_EMAILJS_PUBLIC_KEY', 'k')
+    server.use(managers, availability([]), created, http.post(EMAILJS_URL, () => new HttpResponse('bad', { status: 400 })))
+    renderWizard()
+    await createAda(userEvent.setup())
+    expect(await screen.findByRole('dialog', { name: /share these sign-in details/i })).toBeInTheDocument()
   })
 })
 

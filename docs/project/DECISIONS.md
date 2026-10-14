@@ -37,6 +37,14 @@ Why Citi Overwatch is built the way it is. Each entry says what was decided, why
 | `manager.demo` and `employee.demo` never lock and can't change their password; every other seeded account gets a random password on the live site (`rotate_demo` op) | Their password is published for graders. Lockout or a password change would let one visitor break the demo for everyone, and the other demo accounts shared the same known password | Anyone can sign in as those two demo accounts, as intended. Real accounts keep the normal lockout |
 | Status changes go through a dedicated `POST /milestones/{id}/status` | One place enforces who may make which transition | One more endpoint than a generic `PUT` |
 
+## Email on the live site: a browser relay (2026-10-14)
+
+- **Problem:** the Lambda runs in the VPC's "public" subnets, but AWS never gives a Lambda's network interface a public IP. It has **no internet route at all**, so SES and every third-party email API time out from the server.
+- **Interim fix, no infrastructure change:** when the server reports `email_sent: false` for a new account or an admin password reset, the admin's browser sends the email through one fixed **EmailJS** template ([`frontend/src/lib/emailRelay.js`](../../frontend/src/lib/emailRelay.js)). If that also fails, or isn't configured, the show-once dialog appears as before.
+- **Not relayed:** forgotten-password codes. The code would pass through the requester's own browser, which defeats it, so that flow still says "ask an admin".
+- **Trade-off:** the EmailJS public key ships in the browser. It's limited to this site's origin and one template in the EmailJS dashboard, but someone could still trigger that template to an address of their choosing (within EmailJS's rate limits). That's acceptable for the workshop demo, and documented here.
+- **Proper fix (needs the instructors):** an SES SMTP VPC interface endpoint (`com.amazonaws.us-east-2.email-smtp`), with the backend sending through the standard library's `smtplib`. That also restores forgotten-password emails.
+
 ## Findings from the final deploy (2026-10-13)
 
 ### Deep links returned 403
