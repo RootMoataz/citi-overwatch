@@ -204,6 +204,37 @@ describe('NotificationBell', () => {
     await waitFor(() => expect(read).toBe('n1'))
     expect(screen.getByTestId('location')).toHaveTextContent(`/approvals?user=${users.employee.id}`)
   })
+
+  test('a rejection alert opens the timesheet for that week', async () => {
+    server.use(
+      http.get(`${API}/notifications`, () => HttpResponse.json([{ id: 'n2', type: 'ENTRY_REJECTED', week_start: WEEK,
+        read_at: null, subject_user: { id: users.employee.id, name: 'Eli Employee' },
+        payload: { work_date: WEEK, hours: 8, reason: 'Wrong milestone', milestone: { id: 'm1', name: 'Schema Mapping' },
+          project: { id: 'p1', name: 'Apollo' } },
+        message: 'Your 8h on Schema Mapping (Mon 12 Oct) was rejected: Wrong milestone' }])),
+      http.post(`${API}/notifications/n2/read`, () => HttpResponse.json({ id: 'n2', read: true })),
+    )
+    renderAsUser(<NotificationBell />, { user: users.employee, route: '/', path: '/' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }))
+    const item = await screen.findByRole('menuitem', { name: /your 8h on schema mapping .* was rejected: wrong milestone/i })
+    expect(within(item).getByText(/open your timesheet/i)).toBeInTheDocument()
+    await userEvent.click(item)
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/timesheet?week=${WEEK}`))
+  })
+
+  test('a support alert opens the project milestones', async () => {
+    server.use(
+      http.get(`${API}/notifications`, () => HttpResponse.json([{ id: 'n3', type: 'SUPPORT_ASSIGNED', week_start: null,
+        read_at: null, subject_user: { id: users.employee.id, name: 'Eli Employee' },
+        payload: { milestone: { id: 'm2', name: 'Build' }, project: { id: 'p2', name: 'Atlas' }, end_date: '2026-10-30' },
+        message: "You've been added as support on Build (Atlas), due Fri 30 Oct" }])),
+      http.post(`${API}/notifications/n3/read`, () => HttpResponse.json({ id: 'n3', read: true })),
+    )
+    renderAsUser(<NotificationBell />, { user: users.employee, route: '/', path: '/' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: /added as support on build/i }))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/p2?tab=milestones'))
+  })
 })
 
 test('employee does not see Approvals in navigation', () => {

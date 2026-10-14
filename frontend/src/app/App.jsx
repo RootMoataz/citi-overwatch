@@ -26,7 +26,8 @@ function Shell() {
   const approver = can(user, 'approvals.view')
   const approvals = useApprovals({}, approver)
   const waiting = approvals.data?.length ?? 0
-  return <Layout user={user} onLogout={logout} topBarExtras={approver ? <NotificationBell /> : null}
+  // Everyone gets the bell: managers hear about overtime and routing, employees about rejected hours and support work.
+  return <Layout user={user} onLogout={logout} topBarExtras={<NotificationBell />}
     badges={waiting ? { '/approvals': waiting } : undefined} />
 }
 
