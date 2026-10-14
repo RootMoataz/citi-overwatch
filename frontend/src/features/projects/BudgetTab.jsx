@@ -4,6 +4,7 @@ import { useProjectSummary } from '../../api/queries.js'
 import { BRAND } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatMoney, formatPct } from '../../lib/format.js'
+import MilestoneCostTable from './MilestoneCostTable.jsx'
 import StatTile from './StatTile.jsx'
 
 export default function BudgetTab({ project }) {
@@ -33,6 +34,7 @@ export default function BudgetTab({ project }) {
           Consumed counts approved hours only, at each person's hourly rate (salary ÷ 2,080) when the hours were approved.
         </Typography>
       </Paper>
+      <MilestoneCostTable project={project} />
     </Stack>
   )
 }

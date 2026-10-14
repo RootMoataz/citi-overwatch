@@ -24,8 +24,19 @@ const managersHandler = () => http.get(`${API}/users`, () =>
   HttpResponse.json({ items: [{ id: users.manager.id, username: 'manager.demo', first_name: 'Morgan',
     last_name: 'Manager', job_title: 'Delivery Manager', role: 'manager' }], total: 1 }))
 
-function detailHandlers(p = project()) {
+const milestoneCosts = (hoursVisible = true) => ({
+  hours_visible: hoursVisible,
+  items: [
+    { milestone: { id: 'm1', name: 'Schema Mapping', status: 'completed' }, approved_hours: hoursVisible ? 600 : null,
+      pending_hours: hoursVisible ? 12 : null, approved_cost: 30000, budget_pct: 12 },
+    { milestone: { id: 'm2', name: 'Cutover', status: 'in_progress' }, approved_hours: hoursVisible ? 400 : null,
+      pending_hours: hoursVisible ? 0 : null, approved_cost: 20000, budget_pct: 8 }],
+  total: { approved_hours: hoursVisible ? 1000 : null, pending_hours: hoursVisible ? 12 : null, approved_cost: 50000, budget_pct: 20 },
+})
+
+function detailHandlers(p = project(), costs = milestoneCosts()) {
   return [
+    http.get(`${API}/projects/${p.id}/milestone-costs`, () => HttpResponse.json(costs)),
     http.get(`${API}/projects/${p.id}`, () => HttpResponse.json(p)),
     http.get(`${API}/projects/${p.id}/summary`, () => HttpResponse.json({
       project: p, budget: p.budget, consumed: p.consumed, remaining: p.budget - p.consumed,
@@ -131,6 +142,30 @@ describe('ProjectDetailPage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Team' }))
     expect(screen.getByTestId('location')).toHaveTextContent('tab=team')
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
+  })
+
+  test('budget tab lists cost by milestone with a total that matches consumed', async () => {
+    server.use(...detailHandlers())
+    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=budget', path: '/projects/:id' })
+    const table = await screen.findByRole('table', { name: /cost by milestone/i })
+    expect(within(table).getByRole('columnheader', { name: 'Pending hours' })).toBeInTheDocument()
+    const row = within(table).getByRole('rowheader', { name: /schema mapping/i }).closest('tr')
+    expect(within(row).getByText('600h')).toBeInTheDocument()
+    expect(within(row).getByText('$30,000')).toBeInTheDocument()
+    expect(within(row).getByText('12%')).toBeInTheDocument()
+    const total = within(table).getByRole('rowheader', { name: /total/i }).closest('tr')
+    expect(within(total).getByText('$50,000')).toBeInTheDocument()
+    expect(screen.getAllByText('$50,000')).toHaveLength(2)                 // the Consumed tile and the total row
+    expect(screen.queryByText(/hourly rate:/i)).not.toBeInTheDocument()
+  })
+
+  test('budget tab hides milestone hours from employees but keeps the costs', async () => {
+    server.use(...detailHandlers(project(), milestoneCosts(false)))
+    renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=budget', path: '/projects/:id' })
+    const table = await screen.findByRole('table', { name: /cost by milestone/i })
+    expect(within(table).queryByRole('columnheader', { name: /hours/i })).not.toBeInTheDocument()
+    expect(within(table).getByText('$20,000')).toBeInTheDocument()
+    expect(screen.getByText(/only the project.s manager and admins see the hours/i)).toBeInTheDocument()
   })
 
   test('team tab shows cap error message with current total', async () => {

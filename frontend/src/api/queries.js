@@ -32,6 +32,8 @@ export const useProjects = (filters) => useQuery({
 export const useProject = (id) => useQuery({ queryKey: ['project', id], queryFn: () => api.get(`/projects/${id}`) })
 export const useProjectSummary = (id) =>
   useQuery({ queryKey: ['project-summary', id], queryFn: () => api.get(`/projects/${id}/summary`) })
+export const useMilestoneCosts = (id) =>
+  useQuery({ queryKey: ['milestone-costs', id], queryFn: () => api.get(`/projects/${id}/milestone-costs`) })
 
 export const useCreateProject = () => useApiMutation((body) => api.post('/projects', body),
   { invalidate: [['projects'], ['dashboard']], success: (p) => `Created ${p.name}` })
@@ -93,7 +95,7 @@ export const useRejectRequest = () => useApiMutation(({ id, comment }) => api.po
 export const useMilestones = (projectId) =>
   useQuery({ queryKey: ['milestones', projectId], queryFn: () => api.get(`/projects/${projectId}/milestones`) })
 const milestoneKeys = (projectId) => [['milestones', projectId], ['project', projectId], ['project-summary', projectId],
-  ['projects'], ['dashboard']]
+  ['milestone-costs', projectId], ['projects'], ['dashboard']]
 export const useSaveMilestone = (projectId) => useApiMutation(async ({ id, fields, predecessorIds, assigneeIds }) => {
   const saved = id ? (Object.keys(fields).length ? await api.put(`/milestones/${id}`, fields) : { id })
     : await api.post(`/projects/${projectId}/milestones`, fields)
@@ -117,7 +119,8 @@ export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/m
   { invalidate: [['notes', milestoneId]], success: 'Note added' })
 
 // ---------- time, approvals, notifications ----------
-const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['projects'], ['allocations'], ['notifications']]
+const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['milestone-costs'], ['projects'], ['allocations'],
+  ['notifications'], ['profile']]
 export const useWeek = (week, userId) => useQuery({
   queryKey: ['time', week, userId ?? 'me'], queryFn: () => api.get('/time-entries', { week, user: userId }),
   placeholderData: keepPreviousData,
@@ -149,6 +152,7 @@ export const useUsers = (filters) => useQuery({
   placeholderData: keepPreviousData,
 })
 export const useUser = (id) => useQuery({ queryKey: ['user', id], queryFn: () => api.get(`/users/${id}`) })
+export const useProfile = (id) => useQuery({ queryKey: ['profile', id], queryFn: () => api.get(`/users/${id}/profile`) })
 export const useUsernameCheck = (params, enabled = true) => useQuery({
   queryKey: ['username-check', params], enabled, queryFn: () => api.get('/users/username-availability', params),
   placeholderData: keepPreviousData, refetchInterval: false,
