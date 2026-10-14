@@ -21,6 +21,39 @@ const projectLink = (p, tab) => (
   <Link component={RouterLink} to={`/projects/${p.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{p.name}</Link>
 )
 
+const BUDGET_COLORS = { planned: '#9DB6D3', consumed: '#0B5CAD', forecast: '#B26A00', over: '#C62828' }
+const overBudget = (b) => Number(b.budget) > 0 && Number(b.forecast) > Number(b.budget)
+
+/** Q7: planned vs consumed vs forecast per project. Over-budget forecasts are red, marked ⚠ on the axis,
+ * flagged in the tooltip and named in the note under the chart, so colour is never the only signal. */
+function BudgetChart({ budgets }) {
+  const over = budgets.filter(overBudget)
+  const overNames = new Set(over.map((b) => b.name))
+  const isOver = (i) => overBudget(budgets[i])
+  const money = (v) => formatMoney(v)
+  return (
+    <>
+      <BarChart height={300}
+        xAxis={[{ scaleType: 'band', data: budgets.map((b) => b.name), label: 'Project',
+          valueFormatter: (name, ctx) => (ctx.location === 'tick' && overNames.has(name) ? `⚠ ${name}` : name) }]}
+        yAxis={[{ label: 'US dollars', width: 90, valueFormatter: money }]}
+        series={[
+          { data: budgets.map((b) => Number(b.budget)), label: 'Budget (planned)', color: BUDGET_COLORS.planned, valueFormatter: money },
+          { data: budgets.map((b) => Number(b.consumed)), label: 'Consumed (approved hours)', color: BUDGET_COLORS.consumed,
+            valueFormatter: money },
+          { data: budgets.map((b) => Number(b.forecast)), label: 'Forecast at end date', color: BUDGET_COLORS.forecast,
+            colorGetter: ({ dataIndex }) => (isOver(dataIndex) ? BUDGET_COLORS.over : BUDGET_COLORS.forecast),
+            valueFormatter: (v, { dataIndex }) => `${formatMoney(v)}${isOver(dataIndex) ? ' (over budget)' : ''}` },
+        ]} />
+      <Typography role="note" variant="body2" sx={{ mt: 1, color: over.length ? 'error.main' : 'text.secondary' }}>
+        {over.length
+          ? <>⚠ Forecast over budget: {over.map((b) => `${b.name} (${formatMoney(b.forecast)} forecast vs ${formatMoney(b.budget)} budget)`).join('; ')}. Their forecast bars are red.</>
+          : 'Every forecast is within budget.'}
+      </Typography>
+    </>
+  )
+}
+
 function Milestones({ title, items, tone }) {
   return (
     <>
@@ -167,16 +200,7 @@ export default function DashboardPage() {
         <Grid size={{ xs: 12, md: 7 }}>
           <Section question="How much budget has been consumed versus planned for each project?"
             hint="Consumed counts approved hours; the forecast projects the last 4 weeks' pace to the end date.">
-            {d.budgets.length ? (
-              <BarChart height={280}
-                xAxis={[{ scaleType: 'band', data: d.budgets.map((b) => b.name) }]}
-                series={[
-                  { data: d.budgets.map((b) => Number(b.budget)), label: 'Planned', color: '#9DB6D3', valueFormatter: (v) => formatMoney(v) },
-                  { data: d.budgets.map((b) => Number(b.consumed)), label: 'Consumed', color: '#0B5CAD', valueFormatter: (v) => formatMoney(v) },
-                  { data: d.budgets.map((b) => Number(b.forecast)), label: 'Forecast', color: '#B26A00', valueFormatter: (v) => formatMoney(v) },
-                ]}
-                yAxis={[{ valueFormatter: (v) => formatMoney(v) }]} margin={{ left: 80 }} />
-            ) : <EmptyState title="No budgets yet" />}
+            {d.budgets.length ? <BudgetChart budgets={d.budgets} /> : <EmptyState title="No budgets yet" />}
           </Section>
         </Grid>
       </Grid>

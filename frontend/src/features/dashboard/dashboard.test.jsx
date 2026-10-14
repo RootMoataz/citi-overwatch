@@ -47,6 +47,24 @@ describe('DashboardPage', () => {
     expect(screen.getByText('6 waiting for your approval')).toBeInTheDocument()
   })
 
+  test('budget chart names projects whose forecast is over budget', async () => {
+    server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),
+      http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    renderAsUser(<DashboardPage />, { user: users.admin, route: '/dashboard-under-test' })
+    const section = await screen.findByRole('region', { name: /budget has been consumed versus planned/i })
+    const note = within(section).getByRole('note')
+    expect(note).toHaveTextContent('Forecast over budget: Atlas ($70,000 forecast vs $60,000 budget)')
+    expect(note).not.toHaveTextContent('Apollo')
+  })
+
+  test('budget chart says when every forecast is within budget', async () => {
+    server.use(http.get(`${API}/dashboard`, () => HttpResponse.json({ ...dashboard, budgets: [dashboard.budgets[0]] })),
+      http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    renderAsUser(<DashboardPage />, { user: users.admin, route: '/dashboard-under-test' })
+    const section = await screen.findByRole('region', { name: /budget has been consumed versus planned/i })
+    expect(within(section).getByRole('note')).toHaveTextContent('Every forecast is within budget.')
+  })
+
   test('employee dashboard skips the team allocation table', async () => {
     server.use(http.get(`${API}/dashboard`, () => HttpResponse.json({ ...dashboard, pending_approvals: 0, over_allocated: [] })))
     renderAsUser(<DashboardPage />, { user: users.employee, route: '/dashboard-under-test' })
