@@ -28,6 +28,14 @@ describe('Layout', () => {
     expect(screen.queryByRole('button', { name: /open navigation/i })).not.toBeInTheDocument()
   })
 
+  test('employees get a My history link to their own profile', () => {
+    const { unmount } = renderLayout(users.employee)
+    expect(screen.getByRole('link', { name: /my history/i })).toHaveAttribute('href', `/people/${users.employee.id}/profile`)
+    unmount()
+    renderLayout(users.manager)
+    expect(screen.getByRole('navigation', { name: /main/i })).not.toHaveTextContent('My history')
+  })
+
   test('admins see every section', () => {
     renderLayout(users.admin)
     const nav = screen.getByRole('navigation', { name: /main/i })

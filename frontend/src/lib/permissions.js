@@ -23,6 +23,8 @@ export function can(user, action, resource = {}) {
       return isAdmin(user)
     case 'request.submit':
       return isManager(user)
+    case 'history.own':
+      return user.role === 'employee'
     case 'approvals.view':
     case 'allocation.view':
     case 'requests.view':

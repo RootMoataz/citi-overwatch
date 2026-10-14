@@ -1,5 +1,6 @@
 import { Button, Grid, Paper, Skeleton, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { useMe, useUpdateMe } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -43,7 +44,8 @@ export default function ProfilePage() {
 
   return (
     <>
-      <PageHeader title="My profile" subtitle="You can change your name and email. An admin manages everything else." />
+      <PageHeader title="My profile" subtitle="You can change your name and email. An admin manages everything else."
+        actions={<Button component={RouterLink} to={`/people/${p.id}/profile`}>My history</Button>} />
       <ErrorAlert error={failure} sx={{ mb: 2 }} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>

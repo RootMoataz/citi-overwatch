@@ -82,6 +82,7 @@ export default function UserDetailPage() {
     <>
       <PageHeader breadcrumb={back} title={fullName(p)} subtitle={p.is_archived ? <StatusChip status="blocked" label="Archived" /> : p.email}
         actions={<>
+          <Button component={RouterLink} to={`/people/${p.id}/profile`}>History</Button>
           {!p.is_archived ? <Button onClick={() => setConfirm('reset')}>Reset password</Button> : null}
           {!p.is_archived && !self ? <Button color="error" onClick={() => setConfirm('archive')}>Archive</Button> : null}
           {p.is_archived ? <Button variant="contained" onClick={() => run('restore')}>Restore</Button> : null}

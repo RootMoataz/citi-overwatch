@@ -13,6 +13,7 @@ import DashboardPage from '../features/dashboard/DashboardPage.jsx'
 import AllocationPage from '../features/allocation/AllocationPage.jsx'
 import PeoplePage from '../features/people/PeoplePage.jsx'
 import UserDetailPage from '../features/people/UserDetailPage.jsx'
+import PersonProfilePage from '../features/people/PersonProfilePage.jsx'
 import ProfilePage from '../features/profile/ProfilePage.jsx'
 import AuditPage from '../features/audit/AuditPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
@@ -47,6 +48,8 @@ export default function App() {
           <Route path="allocation" element={<RequireAuth roles={['admin', 'manager']}><AllocationPage /></RequireAuth>} />
           <Route path="people" element={<RequireAuth roles={['admin']}><PeoplePage /></RequireAuth>} />
           <Route path="people/:id" element={<RequireAuth roles={['admin']}><UserDetailPage /></RequireAuth>} />
+          {/* Every role; the server returns 404 for anyone the viewer may not see. */}
+          <Route path="people/:id/profile" element={<PersonProfilePage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="audit" element={<RequireAuth roles={['admin']}><AuditPage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />

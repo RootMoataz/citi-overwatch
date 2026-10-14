@@ -21,7 +21,8 @@ function NavList({ user, onNavigate, badges = {} }) {
     <Box component="nav" aria-label="Main navigation">
       <List sx={{ px: 1 }}>
         {NAV.filter((item) => !item.action || can(user, item.action)).map((item) => (
-          <ListItemButton key={item.to} component={NavLink} to={item.to} end={item.end} onClick={onNavigate}
+          <ListItemButton key={item.label} component={NavLink} to={typeof item.to === 'function' ? item.to(user) : item.to}
+            end={item.end} onClick={onNavigate}
             sx={{ borderRadius: 1, mb: 0.5, '&.active': { bgcolor: 'action.selected', color: 'primary.main',
               '& .MuiListItemIcon-root': { color: 'primary.main' } } }}>
             <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>

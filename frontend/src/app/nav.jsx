@@ -3,6 +3,7 @@ import Dashboard from '@mui/icons-material/DashboardOutlined'
 import Folder from '@mui/icons-material/FolderOutlined'
 import Groups from '@mui/icons-material/GroupsOutlined'
 import History from '@mui/icons-material/HistoryOutlined'
+import ManageHistory from '@mui/icons-material/ManageHistoryOutlined'
 import PostAdd from '@mui/icons-material/PostAddOutlined'
 import Schedule from '@mui/icons-material/ScheduleOutlined'
 import ViewTimeline from '@mui/icons-material/ViewTimelineOutlined'
@@ -13,6 +14,8 @@ export const NAV = [
   { to: '/', label: 'Dashboard', icon: <Dashboard />, end: true },
   { to: '/projects', label: 'Projects', icon: <Folder /> },
   { to: '/timesheet', label: 'My timesheet', icon: <Schedule /> },
+  // `to` can depend on who's signed in.
+  { to: (user) => `/people/${user.id}/profile`, label: 'My history', icon: <ManageHistory />, action: 'history.own' },
   { to: '/approvals', label: 'Approvals', icon: <AssignmentTurnedIn />, action: 'approvals.view' },
   { to: '/allocation', label: 'Allocation', icon: <ViewTimeline />, action: 'allocation.view' },
   { to: '/requests', label: 'Project requests', icon: <PostAdd />, action: 'requests.view' },
