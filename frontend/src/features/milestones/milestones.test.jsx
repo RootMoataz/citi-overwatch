@@ -149,4 +149,14 @@ describe('MilestonesTab', () => {
     await user.click(screen.getByRole('button', { name: /post note/i }))
     await waitFor(() => expect(posted).toEqual({ body: 'Mapped 40 tables' }))
   })
+
+  test('auto-routed support shows a Supporting chip next to the name', async () => {
+    const ada = { id: 'u-ada', name: 'Ada Lovelace' }
+    server.use(...handlers([{ ...cutover, assignees: [ada, me], supporting_ids: [me.id] }]))
+    renderTab(users.manager, true)
+    const cut = await card('Cutover')
+    expect(within(cut).getByText('Supporting')).toBeInTheDocument()
+    expect(within(cut).getByLabelText('Eli Employee is supporting')).toBeInTheDocument()
+    expect(within(cut).queryByLabelText('Ada Lovelace is supporting')).not.toBeInTheDocument()
+  })
 })

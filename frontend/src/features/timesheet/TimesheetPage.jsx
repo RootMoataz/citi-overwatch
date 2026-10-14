@@ -13,6 +13,7 @@ import { STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import SupportingChip from '../../components/SupportingChip.jsx'
 import { addDays, formatDate, formatDayLabel, formatHours, mondayOf } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
@@ -155,7 +156,10 @@ function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft }
         const rowTotal = allDays.reduce((s, d) => s + num(valueOf(key(r.milestone.id, d))), 0)
         return (
           <TableRow key={r.milestone.id}>
-            <TableCell component="th" scope="row">{r.milestone.name}</TableCell>
+            <TableCell component="th" scope="row">
+              {r.milestone.name}
+              {r.role === 'supporting' ? <SupportingChip /> : null}
+            </TableCell>
             {days.map((d) => {
               const k = key(r.milestone.id, d)
               const value = valueOf(k)

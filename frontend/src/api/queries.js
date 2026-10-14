@@ -104,7 +104,11 @@ export const useSaveMilestone = (projectId) => useApiMutation(async ({ id, field
 }, { invalidate: milestoneKeys(projectId), success: (_, v) => (v.id ? 'Milestone saved' : 'Milestone added') })
 export const useMilestoneStatus = (projectId) => useApiMutation(
   ({ id, status }) => api.post(`/milestones/${id}/status`, { status }),
-  { invalidate: milestoneKeys(projectId), success: 'Status updated' })
+  // "Ready for review" may auto-route the person onto another milestone, maybe in another project.
+  { invalidate: [...milestoneKeys(projectId), ['milestones'], ['time'], ['notifications']],
+    success: (data) => (data?.routed_to
+      ? `Status updated. You're now supporting ${data.routed_to.milestone.name} (${data.routed_to.project.name})`
+      : 'Status updated') })
 export const useArchiveMilestone = (projectId) => useApiMutation((id) => api.del(`/milestones/${id}`),
   { invalidate: milestoneKeys(projectId), success: 'Milestone archived' })
 export const useNotes = (milestoneId, enabled = true) =>

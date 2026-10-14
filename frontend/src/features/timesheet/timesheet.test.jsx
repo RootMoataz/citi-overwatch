@@ -96,6 +96,16 @@ describe('TimesheetPage', () => {
     await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 6 }] }))
   })
 
+  test('a supporting row shows a Supporting chip', async () => {
+    server.use(http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: WEEK,
+      user: { id: users.employee.id, name: 'Eli Employee' }, rows: [rows[0], { ...rows[1], role: 'supporting' }], entries: [],
+      totals: { logged: 0, approved: 0 } })))
+    renderSheet()
+    const build = await screen.findByRole('rowheader', { name: /build/i })
+    expect(within(build).getByText('Supporting')).toBeInTheDocument()
+    expect(within(screen.getByRole('rowheader', { name: /schema mapping/i })).queryByText('Supporting')).not.toBeInTheDocument()
+  })
+
   test('changing week updates the URL', async () => {
     server.use(weekHandler())
     renderSheet()

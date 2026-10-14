@@ -5,12 +5,13 @@ import EditIcon from '@mui/icons-material/EditOutlined'
 import {
   Alert, Box, Button, Card, CardContent, Chip, Collapse, IconButton, Skeleton, Stack, Tooltip, Typography,
 } from '@mui/material'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useArchiveMilestone, useMembers, useMilestones, useMilestoneStatus } from '../../api/queries.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import SupportingChip from '../../components/SupportingChip.jsx'
 import Timeline from '../../components/Timeline.jsx'
 import { formatDate } from '../../lib/format.js'
 import { statusActions } from '../../lib/milestoneActions.js'
@@ -22,6 +23,7 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
   const [notesOpen, setNotesOpen] = useState(false)
   const [failure, setFailure] = useState(null)
   const waitingOn = m.predecessors.map((id) => names[String(id)]).filter(Boolean)
+  const supporting = new Set((m.supporting_ids ?? []).map(String))
   const actions = statusActions(m, { manager: manage, assignee: m.is_assignee })
 
   const move = async (target) => {
@@ -39,9 +41,15 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
               <StatusChip status={m.display_status} />
               {m.is_assignee ? <Chip size="small" variant="outlined" label="Assigned to you" /> : null}
             </Stack>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+            <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>
               {formatDate(m.start_date)} – {formatDate(m.end_date)}
-              {m.assignees.length ? ` · ${m.assignees.map((a) => a.name).join(', ')}` : ' · Nobody assigned'}
+              {m.assignees.length ? ' · ' : ' · Nobody assigned'}
+              {m.assignees.map((a, i) => (
+                <Fragment key={a.id}>
+                  {i ? ', ' : ''}{a.name}
+                  {supporting.has(String(a.id)) ? <SupportingChip person={a.name} /> : null}
+                </Fragment>
+              ))}
               {waitingOn.length ? ` · after ${waitingOn.join(', ')}` : ''}
             </Typography>
             {m.description ? <Typography variant="body2" sx={{ mt: 1 }}>{m.description}</Typography> : null}
