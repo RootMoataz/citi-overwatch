@@ -16,6 +16,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# ...but the React app's own helpers live in frontend/src/lib and must be tracked
+!frontend/src/lib/
 lib64/
 parts/
 sdist/
