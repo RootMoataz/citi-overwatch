@@ -15,6 +15,7 @@ import PeoplePage from '../features/people/PeoplePage.jsx'
 import UserDetailPage from '../features/people/UserDetailPage.jsx'
 import PersonProfilePage from '../features/people/PersonProfilePage.jsx'
 import ProfilePage from '../features/profile/ProfilePage.jsx'
+import ArchivePage from '../features/archive/ArchivePage.jsx'
 import AuditPage from '../features/audit/AuditPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
 import { useApprovals } from '../api/queries.js'
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="people/:id/profile" element={<PersonProfilePage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="audit" element={<RequireAuth roles={['admin']}><AuditPage /></RequireAuth>} />
+          <Route path="archive" element={<RequireAuth roles={['admin']}><ArchivePage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

@@ -3,6 +3,7 @@ import Dashboard from '@mui/icons-material/DashboardOutlined'
 import Folder from '@mui/icons-material/FolderOutlined'
 import Groups from '@mui/icons-material/GroupsOutlined'
 import History from '@mui/icons-material/HistoryOutlined'
+import Inventory from '@mui/icons-material/Inventory2Outlined'
 import ManageHistory from '@mui/icons-material/ManageHistoryOutlined'
 import PostAdd from '@mui/icons-material/PostAddOutlined'
 import Schedule from '@mui/icons-material/ScheduleOutlined'
@@ -21,4 +22,5 @@ export const NAV = [
   { to: '/requests', label: 'Project requests', icon: <PostAdd />, action: 'requests.view' },
   { to: '/people', label: 'People', icon: <Groups />, action: 'people.view' },
   { to: '/audit', label: 'Audit log', icon: <History />, action: 'audit.view' },
+  { to: '/archive', label: 'Archive', icon: <Inventory />, action: 'archive.view' },
 ]

@@ -181,3 +181,11 @@ export const useEveryone = () => useQuery({
 export const useAuditLog = (filters) => useQuery({
   queryKey: ['audit', filters], queryFn: () => api.get('/audit-log', filters), placeholderData: keepPreviousData,
 })
+
+// ---------- archive (admin) ----------
+export const useArchive = () => useQuery({ queryKey: ['archive'], queryFn: () => api.get('/archive') })
+// Each archived type goes back through its own existing restore endpoint.
+const RESTORE_PATHS = { project: 'projects', milestone: 'milestones', user: 'users' }
+export const useRestoreArchived = () => useApiMutation((item) => api.post(`/${RESTORE_PATHS[item.type]}/${item.id}/restore`),
+  { invalidate: [['archive'], ['projects'], ['project'], ['milestones'], ['users'], ['user'], ['dashboard']],
+    success: (_, item) => `Restored ${item.name}` })

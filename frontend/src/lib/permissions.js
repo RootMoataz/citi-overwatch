@@ -18,6 +18,7 @@ export function can(user, action, resource = {}) {
     case 'project.archive':
     case 'request.decide':
     case 'audit.view':
+    case 'archive.view':
     case 'people.view':
     case 'milestone.restore':
       return isAdmin(user)

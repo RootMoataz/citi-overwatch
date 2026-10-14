@@ -397,6 +397,16 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - **Empty:** "No entries for these filters."
 - **Failure:** error banner with Retry. Entries can't be edited or deleted through any endpoint.
 
+### L2. Find and restore anything archived (U: never delete)
+**As** an admin, **I want** one page listing everything archived **so that** I can bring something back without hunting for it.
+
+- **Success:**
+  - **Archive** in the menu lists archived projects, milestones (with their project) and people, newest first, with when and by whom (when the audit log knows).
+  - A type filter shows the count per type.
+  - **Restore** asks first, then calls that record's own restore, shows "Restored *name*" and drops the row.
+- **Empty:** "Nothing is archived."
+- **Failure:** a restore the server refuses (such as a project whose name is now taken) shows "Couldn't restore *name*" with the server's message and the request ID. Managers and employees can't open the page (`403`).
+
 ---
 
 ## Layout and accessibility

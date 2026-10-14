@@ -78,7 +78,7 @@ Layers, from outside in:
 | HTTP | [`app/http.py`](../../backend/v1/app/http.py) | Parses the event, builds JSON responses, defines `ApiError` and the error envelope |
 | Router | [`app/router.py`](../../backend/v1/app/router.py) | `route(method, pattern, auth=, roles=, allow_restricted=)` registry, authentication, role gate, request ID, logging |
 | Auth helpers | [`app/authz.py`](../../backend/v1/app/authz.py) | "Can this person see or manage this project/milestone?", in one place |
-| Features | [`app/features/*/`](../../backend/v1/app/features/) | `routes.py` (thin) + `service.py` (logic), per feature: auth, users, requests, projects, members, milestones, time, insights |
+| Features | [`app/features/*/`](../../backend/v1/app/features/) | `routes.py` (thin) + `service.py` (logic), per feature: auth, users, requests, projects, members, milestones, time, insights, archive |
 | Rules | [`app/rules/`](../../backend/v1/app/rules/) | Pure functions: at-risk, overtime, cycles, capacity, usernames, milestone status |
 | Data | [`app/db.py`](../../backend/v1/app/db.py), [`app/dberrors.py`](../../backend/v1/app/dberrors.py) | Connections, transactions, query helpers; unique violations → `409`, constraint failures → `400` |
 | Cross-cutting | [`audit.py`](../../backend/v1/app/audit.py), [`email.py`](../../backend/v1/app/email.py), [`security.py`](../../backend/v1/app/security.py), [`validation.py`](../../backend/v1/app/validation.py) | Audit log, email, hashing and tokens, field validators |
@@ -122,7 +122,7 @@ frontend/src/
   api/         client.js (bearer token, request IDs, single shared refresh, ApiError) · queries.js (every TanStack Query hook)
   auth/        SessionProvider, RequireAuth (role-gated routes), ForcePasswordChange
   components/  ErrorAlert, EmptyState, ConfirmDialog, StatusChip, RiskBadges, ResponsiveTable, Timeline, NotificationBell, …
-  features/    dashboard, projects, milestones, timesheet, approvals, allocation, requests, people, profile, audit, login
+  features/    dashboard, projects, milestones, timesheet, approvals, allocation, requests, people, profile, audit, archive, login
   lib/         permissions, formatters, Zod schemas, labels, responsive breakpoint
 ```
 

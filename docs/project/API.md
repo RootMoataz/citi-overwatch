@@ -270,6 +270,20 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
   "planned_total": 30.0, "logged_total": 45.0, "utilization_pct": 112.5}, "…"]
 ```
 
+## Archive
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/archive?type=` | Admin (`403` otherwise). Every archived project, milestone and person, newest first. `type` is `project`, `milestone` or `user`. Restoring uses each type's own `POST …/{id}/restore` |
+
+```json
+{"items": [{"type": "milestone", "id": "202d87b5-…", "name": "Schema Mapping", "archived_at": "2026-10-13T18:00:15.020027-04:00",
+            "archived_by": {"id": "9315bbc9-…", "name": "Avery Admin"}, "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"}},
+           {"type": "user", "id": "81c483ea-…", "name": "Lee Leaver", "username": "lleaver", "archived_at": "…", "archived_by": null}]}
+```
+
+`archived_by` comes from the latest `archive` entry in the audit log, and is `null` when there isn't one (for example, seeded data).
+
 ## Internal operations (not HTTP)
 
 These run only through an IAM-authorized `aws lambda invoke`, never through the Function URL:
