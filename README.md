@@ -70,11 +70,11 @@ Open http://localhost:3000 and sign in with a demo login. Locally, emails aren't
 
 | Role | Username | Password |
 |---|---|---|
-| Admin | `admin.demo` | `Demo123!` (locally only; changed on the live site) |
+| Admin | `admin.demo2`, `admin.demo3`, `admin.demo4` | Private, held by the owner (live site) |
 | Manager | `manager.demo` | `Demo123!` |
 | Employee | `employee.demo` | `Demo123!` |
 
-The two published demo logins never lock and can't change their password, so nobody can lock graders out. On the live site, the other seeded accounts get random passwords.
+The two published demo logins never lock and can't change their password, so nobody can lock graders out. On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
 
 Other useful commands:
 
@@ -112,6 +112,10 @@ aws lambda invoke --function-name coding-workshop-v1-<suffix> \
   --cli-binary-format raw-in-base64-out --payload '{"op":"migrate"}' out.json && cat out.json
 aws lambda invoke --function-name coding-workshop-v1-<suffix> \
   --cli-binary-format raw-in-base64-out --payload '{"op":"seed"}' out.json && cat out.json
+
+# Extra admin logins for a demo: each gets a random password, returned only in out.json.
+# Usernames that already exist are skipped. Delete out.json once the passwords are saved somewhere safe.
+aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-format raw-in-base64-out   --payload '{"op":"create_admins","users":[{"username":"admin.demo2","first_name":"Jordan","last_name":"Admin"}]}' out.json
 
 ./bin/deploy-frontend.sh                 # builds the React app and syncs it to S3 + invalidates CloudFront
 ```

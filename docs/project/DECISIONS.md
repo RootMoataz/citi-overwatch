@@ -75,6 +75,6 @@ Why Citi Overwatch is built the way it is. Each entry says what was decided, why
 - **Cost:** higher price per millisecond, but each request finishes faster. Negligible at workshop scale.
 - **Cold start:** about 0.45 seconds to initialize the Lambda.
 
-### Demo admin password
+### Demo admin logins
 
-The live database is seeded with demo accounts. The `admin.demo` password was immediately changed to a strong private one held by the owner, so the public site doesn't have a guessable admin login. `manager.demo` and `employee.demo` keep `Demo123!` for graders.
+The live site has no guessable admin login. The admin demo accounts are `admin.demo2`, `admin.demo3` and `admin.demo4`, created with the `create_admins` operation: an IAM-only Lambda invoke (like `migrate` and `seed`) that the public Function URL can't reach. Each gets a random strong password, returned only to the operator and held privately by the owner. `manager.demo` and `employee.demo` keep `Demo123!` for graders.
