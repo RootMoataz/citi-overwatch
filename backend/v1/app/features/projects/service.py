@@ -6,7 +6,7 @@ from decimal import Decimal
 from pg8000.exceptions import DatabaseError
 
 from app.audit import record
-from app.authz import load_project
+from app.authz import load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.common import conflict_from
@@ -240,6 +240,33 @@ def summary(conn, ctx: Ctx, project_id: str) -> dict:
             "remaining": Decimal(view["budget"]) - view["consumed"], "budget_pct": view["budget_pct"],
             "progress_pct": view["progress_pct"], "at_risk_reasons": view["at_risk_reasons"],
             "member_count": members}
+
+
+def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:
+    """Budget tab: approved cost per non-archived milestone. The total is project_consumed itself, so the
+    table always matches the Consumed figure. Hours only for the project's manager and admins (P7)."""
+    project = load_project(conn, ctx, project_id, include_archived=ctx.is_admin)
+    rows = query(conn, """SELECT m.id, m.name, m.status,
+                                 coalesce(sum(t.hours) FILTER (WHERE t.status = 'approved'), 0) AS approved_hours,
+                                 coalesce(sum(t.hours) FILTER (WHERE t.status = 'pending'), 0) AS pending_hours,
+                                 coalesce(sum(t.hours * t.hourly_rate) FILTER (WHERE t.status = 'approved'), 0) AS cost
+                          FROM milestones m LEFT JOIN time_entries t ON t.milestone_id = m.id
+                          WHERE m.project_id = CAST(:p AS uuid) AND NOT m.is_archived
+                          GROUP BY m.id ORDER BY m.start_date, lower(m.name)""", p=project_id)
+    budget = project["budget"]
+    show = manages(ctx, project)
+
+    def hours(value):
+        return value if show else None
+
+    consumed = project_consumed(conn, project_id)
+    return {"hours_visible": show,
+            "items": [{"milestone": {"id": r["id"], "name": r["name"], "status": r["status"]},
+                       "approved_hours": hours(r["approved_hours"]), "pending_hours": hours(r["pending_hours"]),
+                       "approved_cost": r["cost"], "budget_pct": _pct(r["cost"], budget)} for r in rows],
+            "total": {"approved_hours": hours(sum((r["approved_hours"] for r in rows), Decimal(0))),
+                      "pending_hours": hours(sum((r["pending_hours"] for r in rows), Decimal(0))),
+                      "approved_cost": consumed, "budget_pct": _pct(consumed, budget)}}
 
 
 def visible_projects(conn, ctx: Ctx, *, archived: bool = False) -> list[dict]:

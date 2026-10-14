@@ -207,3 +207,51 @@ def test_list_filters_q_status_at_risk(client, conn):
     assert set(item) >= {"id", "name", "status", "start_date", "predicted_end_date", "budget", "consumed",
                          "budget_pct", "progress_pct", "at_risk_reasons", "manager"}
     assert late["id"]
+
+
+def test_milestone_costs_total_equals_consumed(client, conn):
+    mgr = make_user(conn, role="manager")
+    ada = make_user(conn, salary=Decimal("104000"))                         # rate 50.00
+    bo = make_user(conn, salary=Decimal("83200"))                           # rate 40.00
+    project = make_project(conn, mgr, budget=Decimal("2000"), start=TODAY - timedelta(days=30),
+                           end=TODAY + timedelta(days=30))
+    for person in (ada, bo):
+        add_member(conn, project, person)
+    build = make_milestone(conn, project, name="Build")
+    test = make_milestone(conn, project, name="Test")
+    gone = make_milestone(conn, project, name="Gone", archived=True)
+    log_entry(conn, ada, build, TODAY, 8)                                     # 400
+    log_entry(conn, bo, build, TODAY, 2.5)                                    # 100
+    log_entry(conn, bo, build, TODAY - timedelta(days=1), 4, status="pending")
+    log_entry(conn, ada, test, TODAY - timedelta(days=1), 3, status="rejected")
+    log_entry(conn, ada, gone, TODAY, 5)                                      # archived milestone: left out
+    status, body, _, _ = client.request("GET", f"/projects/{project['id']}/milestone-costs",
+                                        token=token_for(conn, mgr))
+    assert status == 200
+    rows = {r["milestone"]["name"]: r for r in body["items"]}
+    assert list(rows) == ["Build", "Test"]
+    assert (rows["Build"]["approved_hours"], rows["Build"]["pending_hours"]) == (10.5, 4.0)
+    assert (rows["Build"]["approved_cost"], rows["Build"]["budget_pct"]) == (500.0, 25.0)
+    assert (rows["Test"]["approved_hours"], rows["Test"]["approved_cost"]) == (0.0, 0.0)
+    summary = client.request("GET", f"/projects/{project['id']}/summary", token=token_for(conn, mgr))[1]
+    assert body["total"]["approved_cost"] == summary["consumed"] == 500.0
+    assert body["total"]["budget_pct"] == summary["budget_pct"]
+    assert (body["total"]["approved_hours"], body["total"]["pending_hours"]) == (10.5, 4.0)
+    assert body["hours_visible"] is True
+    assert "hourly_rate" not in str(body)                                     # managers never see rates
+
+
+def test_milestone_costs_follow_budget_tab_visibility(client, conn):
+    mgr = make_user(conn, role="manager")
+    emp, outsider = make_user(conn), make_user(conn)
+    project = make_project(conn, mgr, start=TODAY - timedelta(days=30), end=TODAY + timedelta(days=30))
+    add_member(conn, project, emp)
+    log_entry(conn, emp, make_milestone(conn, project), TODAY, 8)
+    path = f"/projects/{project['id']}/milestone-costs"
+    status, body, _, _ = client.request("GET", path, token=token_for(conn, emp))
+    assert status == 200 and body["hours_visible"] is False                   # team hours stay private
+    assert body["items"][0]["approved_hours"] is None and body["total"]["pending_hours"] is None
+    assert body["total"]["approved_cost"] == 400.0
+    assert client.request("GET", path, token=token_for(conn, outsider))[0] == 404
+    admin = make_user(conn, role="admin")
+    assert client.request("GET", path, token=token_for(conn, admin))[1]["hours_visible"] is True

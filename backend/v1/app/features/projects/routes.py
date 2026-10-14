@@ -37,3 +37,8 @@ def restore_project(req, ctx, conn):
 @router.route("GET", "/projects/{id}/summary")
 def project_summary(req, ctx, conn):
     return json_response(200, service.summary(conn, ctx, req.path_params["id"]))
+
+
+@router.route("GET", "/projects/{id}/milestone-costs")
+def milestone_costs(req, ctx, conn):
+    return json_response(200, service.milestone_costs(conn, ctx, req.path_params["id"]))
