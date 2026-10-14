@@ -76,7 +76,7 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         project_filter = " AND p.manager_id = CAST(:me AS uuid)"  # managers see their own projects only
         args["me"] = ctx.user_id
     rows = query(conn, f"""
-        SELECT m.id AS milestone_id, m.name AS milestone_name, p.id AS project_id, p.name AS project_name
+        SELECT m.id AS milestone_id, m.name AS milestone_name, p.id AS project_id, p.name AS project_name, a.role
         FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id JOIN projects p ON p.id = m.project_id
         WHERE a.user_id = CAST(:u AS uuid) AND NOT m.is_archived AND NOT p.is_archived
           AND m.start_date <= :b AND m.end_date >= :a{project_filter}
@@ -91,7 +91,7 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         "week_start": start,
         "user": {"id": user["id"], "name": name},
         "rows": [{"milestone": {"id": r["milestone_id"], "name": r["milestone_name"]},
-                  "project": {"id": r["project_id"], "name": r["project_name"]}} for r in rows],
+                  "project": {"id": r["project_id"], "name": r["project_name"]}, "role": r["role"]} for r in rows],
         "entries": [_entry_view(e, name, show_rate=ctx.is_admin or str(user_id) == ctx.user_id) for e in entries],
         "totals": {"logged": sum((e["hours"] for e in entries if e["status"] in COUNTED), Decimal(0)),
                    "approved": sum((e["hours"] for e in entries if e["status"] == "approved"), Decimal(0))},

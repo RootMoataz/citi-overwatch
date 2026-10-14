@@ -1,12 +1,20 @@
-"""Milestones: dates inside the project, dependencies without loops, assignees, status and notes."""
+"""Milestones: dates inside the project, dependencies without loops, assignees, status and notes,
+and auto-routing to support work after "Ready for review"."""
+
+import json
+from datetime import datetime, timezone
+from decimal import Decimal
 
 from app.audit import record
 from app.authz import is_assignee, is_member, load_milestone, load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
+from app.features.members.service import other_planned_hours
 from app.http import ApiError
+from app.rules.capacity import fits_weekly_plan
 from app.rules.cycles import creates_cycle, dependency_order
 from app.rules.milestone_status import can_transition
+from app.rules.routing import pick_support_milestone
 from app.validation import as_date, as_enum, as_str, as_uuid, require
 
 STATUSES = ("not_started", "in_progress", "ready_for_review", "completed")
@@ -30,20 +38,24 @@ def _edges(conn, project_id: str) -> dict[str, set[str]]:
     return edges
 
 
-def _assignees(conn, project_id: str) -> dict[str, list[dict]]:
-    rows = query(conn, """SELECT a.milestone_id, u.id, u.first_name, u.last_name FROM milestone_assignees a
+def _assignees(conn, project_id: str) -> tuple[dict[str, list[dict]], dict[str, list]]:
+    """(assignees per milestone, ids of those who are there as support per milestone)."""
+    rows = query(conn, """SELECT a.milestone_id, a.role, u.id, u.first_name, u.last_name FROM milestone_assignees a
                           JOIN users u ON u.id = a.user_id JOIN milestones m ON m.id = a.milestone_id
                           WHERE m.project_id = CAST(:p AS uuid)
                           ORDER BY lower(u.last_name), lower(u.first_name)""", p=str(project_id))
     out: dict[str, list[dict]] = {}
+    supporting: dict[str, list] = {}
     for r in rows:
         out.setdefault(str(r["milestone_id"]), []).append({"id": r["id"], "name": f"{r['first_name']} {r['last_name']}"})
-    return out
+        if r["role"] == "supporting":
+            supporting.setdefault(str(r["milestone_id"]), []).append(r["id"])
+    return out, supporting
 
 
 def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict]:
     edges = _edges(conn, project_id)
-    assignees = _assignees(conn, project_id)
+    assignees, supporting = _assignees(conn, project_id)
     status_of = {str(m["id"]): m["status"] for m in _project_milestones(conn, project_id)}
     out = []
     for m in milestones:
@@ -55,7 +67,7 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
             "id": m["id"], "project_id": m["project_id"], "name": m["name"], "description": m["description"],
             "start_date": m["start_date"], "end_date": m["end_date"], "status": m["status"],
             "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
-            "blocked": blocked, "predecessors": preds, "assignees": people,
+            "blocked": blocked, "predecessors": preds, "assignees": people, "supporting_ids": supporting.get(mid, []),
             "is_assignee": any(str(a["id"]) == ctx.user_id for a in people),
             "completed_at": m["completed_at"], "is_archived": m["is_archived"],
         })
@@ -185,12 +197,60 @@ def set_assignees(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
         raise ApiError(400, "NOT_A_MEMBER", "Add people to the project before assigning them",
                        {"user_ids": outsiders})
     with transaction(conn):
-        conn.run("DELETE FROM milestone_assignees WHERE milestone_id = CAST(:m AS uuid)", m=milestone_id)
+        # Remove only the people dropped from the list, so the ones kept keep their role (primary or supporting).
+        conn.run("""DELETE FROM milestone_assignees WHERE milestone_id = CAST(:m AS uuid)
+                    AND NOT (user_id = ANY(CAST(:ids AS uuid[])))""", m=milestone_id, ids=sorted(users))
         for user in users:
-            conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (CAST(:m AS uuid), CAST(:u AS uuid))",
-                     m=milestone_id, u=user)
+            conn.run("""INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (CAST(:m AS uuid), CAST(:u AS uuid))
+                        ON CONFLICT (milestone_id, user_id) DO NOTHING""", m=milestone_id, u=user)
         record(conn, ctx, "set_assignees", "milestone", milestone_id, after={"user_ids": sorted(users)})
     return _view(conn, ctx, milestone_id)
+
+
+def _notify(conn, recipient, kind: str, subject, payload: dict) -> None:
+    # week_start stays NULL: the (type, subject, week) unique key is for OVER_40H, and routing can repeat in a week.
+    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
+                VALUES (CAST(:r AS uuid), :t, CAST(:s AS uuid), CAST(:p AS jsonb))""",
+             r=str(recipient), t=kind, s=str(subject), p=json.dumps(payload))
+
+
+def _route_to_support(conn, ctx: Ctx, reviewed: dict) -> dict | None:
+    """Add the person who sent `reviewed` for review as support on the most urgent other milestone
+    (LOGIC_WALKTHROUGH §9). Runs inside the status change's transaction; returns what it picked, or None."""
+    rows = query(conn, """
+        SELECT m.id, m.name, m.end_date, m.status::text AS status, m.is_archived, m.project_id,
+               p.name AS project_name, p.manager_id, p.start_date AS p_start, p.predicted_end_date AS p_end,
+               p.status::text AS project_status, p.is_archived AS project_archived, pm.planned_hours_per_week,
+               EXISTS (SELECT 1 FROM milestone_assignees a
+                       WHERE a.milestone_id = m.id AND a.user_id = CAST(:u AS uuid)) AS assigned
+        FROM milestones m JOIN projects p ON p.id = m.project_id
+        JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = CAST(:u AS uuid) AND NOT pm.is_archived""",
+                 u=ctx.user_id)
+    target = pick_support_milestone(rows, today=datetime.now(timezone.utc).date(), exclude_id=str(reviewed["id"]),
+                                    member_projects={str(r["project_id"]) for r in rows})
+    if not target:
+        return None
+    project = {"id": target["project_id"], "start_date": target["p_start"], "predicted_end_date": target["p_end"]}
+    # Already on the project, so planned hours don't change; still never route someone planned past 40h.
+    if not fits_weekly_plan(other_planned_hours(conn, ctx.user_id, project), Decimal(target["planned_hours_per_week"])):
+        return None
+    conn.run("""INSERT INTO milestone_assignees (milestone_id, user_id, role)
+                VALUES (:m, CAST(:u AS uuid), 'supporting') ON CONFLICT (milestone_id, user_id) DO NOTHING""",
+             m=target["id"], u=ctx.user_id)
+    if not conn.row_count:  # a manager assigned them in the meantime: nothing to route
+        return None
+    record(conn, ctx, "auto_assign_support", "milestone", str(target["id"]),
+           after={"user_id": ctx.user_id, "role": "supporting", "from_milestone_id": str(reviewed["id"])})
+    me = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
+    payload = {"name": f"{me['first_name']} {me['last_name']}", "end_date": str(target["end_date"]),
+               "milestone": {"id": str(target["id"]), "name": target["name"]},
+               "project": {"id": str(target["project_id"]), "name": target["project_name"]},
+               "from_milestone": {"id": str(reviewed["id"]), "name": reviewed["name"]}}
+    _notify(conn, ctx.user_id, "SUPPORT_ASSIGNED", ctx.user_id, payload)
+    if str(target["manager_id"]) != ctx.user_id:
+        _notify(conn, target["manager_id"], "SUPPORT_ROUTED", ctx.user_id, payload)
+    return {"milestone": {"id": target["id"], "name": target["name"], "end_date": target["end_date"]},
+            "project": {"id": target["project_id"], "name": target["project_name"]}}
 
 
 def change_status(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
@@ -204,13 +264,16 @@ def change_status(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
     if not can_transition(current=milestone["status"], target=target, is_manager=is_manager, blocked=view["blocked"]):
         reason = " (waiting on predecessors)" if view["blocked"] and milestone["status"] == "not_started" else ""
         raise ApiError(400, "INVALID_TRANSITION", f"Can't move from {milestone['status']} to {target}{reason}")
+    routed = None
     with transaction(conn):
         conn.run(f"""UPDATE milestones SET status = CAST(:s AS milestone_status), updated_at = now(),
                      completed_at = {'now()' if target == 'completed' else 'NULL'} WHERE id = CAST(:i AS uuid)""",
                  s=target, i=milestone_id)
         record(conn, ctx, "status_change", "milestone", milestone_id,
                before={"status": milestone["status"]}, after={"status": target})
-    return _view(conn, ctx, milestone_id)
+        if target == "ready_for_review" and is_assignee(conn, milestone_id, ctx.user_id):
+            routed = _route_to_support(conn, ctx, milestone)
+    return {**_view(conn, ctx, milestone_id), "routed_to": routed}
 
 
 def list_notes(conn, ctx: Ctx, milestone_id: str) -> list[dict]:
