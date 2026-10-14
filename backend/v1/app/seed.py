@@ -63,6 +63,31 @@ def rotate_unpublished(conn) -> int:
     return len(names)
 
 
+def create_admins(conn, users: list[dict]) -> dict:
+    """Add ready-to-use admin logins with random passwords; usernames that already exist are skipped.
+
+    For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
+    """
+    from app.security import generate_temp_password
+
+    created, skipped = [], []
+    with transaction(conn):
+        for u in users:
+            username = u["username"]
+            if query_one(conn, "SELECT 1 AS ok FROM users WHERE username = :u", u=username):
+                skipped.append(username)
+                continue
+            password = generate_temp_password()
+            conn.run("""
+                INSERT INTO users (username, email, first_name, last_name, job_title, role, salary,
+                                   password_hash, must_change_password)
+                VALUES (:u, :e, :f, :l, 'Demo administrator', 'admin', 0, :h, false)""",
+                     u=username, e=f"{username}@acme.example", f=u["first_name"], l=u["last_name"],
+                     h=hash_password(password))
+            created.append({"username": username, "password": password})
+    return {"created": created, "skipped": skipped}
+
+
 def _load(conn) -> None:
     today = datetime.now(timezone.utc).date()
     monday = today - timedelta(days=today.weekday())

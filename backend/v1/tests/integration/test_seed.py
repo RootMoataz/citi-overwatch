@@ -86,3 +86,18 @@ def test_internal_seed_op(conn):
     assert function.handler({"op": "seed"}, None) == {"seeded": True, "demo_users": ["admin.demo",
                                                                                    "manager.demo",
                                                                                    "employee.demo"]}
+
+
+def test_create_admins_op_makes_ready_admin_logins_and_skips_existing(client, conn):
+    import function
+
+    seed(conn)
+    people = [{"username": "admin.demo2", "first_name": "Jordan", "last_name": "Admin"},
+              {"username": "admin.demo", "first_name": "Dup", "last_name": "Admin"}]
+    result = function.handler({"op": "create_admins", "users": people})
+    assert [c["username"] for c in result["created"]] == ["admin.demo2"]
+    assert result["skipped"] == ["admin.demo"]
+    status, body, _, _ = client.request("POST", "/auth/login", json={
+        "username": "admin.demo2", "password": result["created"][0]["password"]})
+    assert status == 200
+    assert body["user"]["role"] == "admin" and body["user"]["must_change_password"] is False
