@@ -39,9 +39,10 @@ def test_ses_client_uses_short_timeouts_and_no_retries(fake_boto):
     assert email_mod.send_email("a@example.com", "Hi", "Body") is True
     service, config = fake_boto["clients"][0]
     assert service == "ses"
-    assert config.kwargs["connect_timeout"] <= 3
+    assert config.kwargs["connect_timeout"] <= 1  # one quick try: the live VPC has no route to SES
     assert config.kwargs["read_timeout"] <= 5
-    assert config.kwargs["retries"] == {"max_attempts": 1}
+    # botocore's legacy "max_attempts" counts retries (1 = two tries); total_max_attempts 1 = exactly one try
+    assert config.kwargs["retries"] == {"mode": "standard", "total_max_attempts": 1}
 
 
 def test_after_a_failure_ses_is_skipped_for_a_while(fake_boto, monkeypatch):

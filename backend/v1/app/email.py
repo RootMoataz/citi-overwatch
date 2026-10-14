@@ -31,8 +31,9 @@ def _ses_send(to: str, subject: str, body: str) -> None:
     import boto3  # provided by the Lambda runtime; not a packaged dependency
     from botocore.config import Config
 
-    # Fail fast: the Lambda's VPC may have no route to SES, and default retries took ~95s.
-    boto_config = Config(connect_timeout=3, read_timeout=5, retries={"max_attempts": 1})
+    # Fail fast: the live Lambda has no route to SES (default retries took ~95s). Exactly one try, 1s to connect;
+    # the browser relay (frontend/src/lib/emailRelay.js) delivers the email when this fails.
+    boto_config = Config(connect_timeout=1, read_timeout=5, retries={"mode": "standard", "total_max_attempts": 1})
     boto3.client("ses", config=boto_config).send_email(
         Source=config.ses_from(),
         Destination={"ToAddresses": [to]},
