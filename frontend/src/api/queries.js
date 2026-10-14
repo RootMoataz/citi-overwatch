@@ -169,6 +169,15 @@ export const useResetUserPassword = (id) => useApiMutation((body) => api.post(`/
   { invalidate: [['user', id]], success: (d) => (d.email_sent ? 'New temporary password emailed' : null) })
 export const useMe = () => useQuery({ queryKey: ['me'], queryFn: () => api.get('/me') })
 export const useUpdateMe = () => useApiMutation((body) => api.put('/me', body), { invalidate: [['me']], success: 'Profile saved' })
+// Everyone who could appear in the audit log, archived accounts included (admin only).
+export const useEveryone = () => useQuery({
+  queryKey: ['users', 'everyone'],
+  queryFn: async () => {
+    const [active, archived] = await Promise.all([
+      api.get('/users', { page_size: 100 }), api.get('/users', { archived: 'true', page_size: 100 })])
+    return dedupe([...active.items, ...archived.items])
+  },
+})
 export const useAuditLog = (filters) => useQuery({
   queryKey: ['audit', filters], queryFn: () => api.get('/audit-log', filters), placeholderData: keepPreviousData,
 })

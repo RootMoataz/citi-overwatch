@@ -262,7 +262,7 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 |---|---|---|
 | GET | `/dashboard` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals` |
 | GET | `/allocations?week=` | Admins and managers. Per person: projects with planned, logged and approved hours, totals and `utilization_pct` |
-| GET | `/audit-log?actor=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first |
+| GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first. `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
 
 ```json
 [{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer"},

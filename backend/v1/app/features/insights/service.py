@@ -143,6 +143,9 @@ def audit_log(conn, params: dict) -> dict:
     if params.get("entity_type"):
         where.append("a.entity_type = :etype")
         args["etype"] = params["entity_type"]
+    if params.get("action"):
+        where.append("a.action = :action")
+        args["action"] = params["action"]
     if params.get("from"):
         where.append("a.created_at >= :from_d")
         args["from_d"] = as_date(params["from"], "from")

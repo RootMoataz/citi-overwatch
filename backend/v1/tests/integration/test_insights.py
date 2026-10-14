@@ -68,3 +68,25 @@ def test_audit_log_admin_only(client, conn):
     assert body["items"][0]["action"] == "create" and body["items"][0]["actor"]["name"].startswith("Avery")
     assert client.request("GET", "/audit-log", token=token_for(conn, mgr))[0] == 403
     assert client.request("GET", "/audit-log?from=bad", token=token_for(conn, admin))[0] == 400
+
+
+def test_audit_log_filters_by_who_and_action(client, conn):
+    admin = make_user(conn, role="admin", first_name="Avery")
+    other = make_user(conn, role="admin", first_name="Blake")
+    mgr = make_user(conn, role="manager")
+    project = {"start_date": "2026-01-01", "predicted_end_date": "2026-12-31", "manager_id": str(mgr["id"])}
+    created = client.request("POST", "/projects", token=token_for(conn, admin), json={"name": "One", **project})[1]
+    client.request("POST", "/projects", token=token_for(conn, other), json={"name": "Two", **project})
+    client.request("DELETE", f"/projects/{created['id']}", token=token_for(conn, admin))
+
+    def entries(qs):
+        status, body, _, _ = client.request("GET", f"/audit-log?{qs}", token=token_for(conn, admin))
+        assert status == 200
+        return [(i["actor"]["id"], i["action"]) for i in body["items"]], body["total"]
+
+    assert entries(f"actor={admin['id']}") == ([(str(admin["id"]), "archive"), (str(admin["id"]), "create")], 2)
+    assert entries("action=create")[1] == 2
+    assert entries(f"actor={other['id']}&action=create") == ([(str(other["id"]), "create")], 1)
+    assert entries(f"actor={other['id']}&action=archive") == ([], 0)
+    status, body, _, _ = client.request("GET", "/audit-log?actor=nope", token=token_for(conn, admin))
+    assert (status, body["error"]["details"]) == (400, {"actor": "invalid_id"})

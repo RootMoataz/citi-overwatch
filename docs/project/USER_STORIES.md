@@ -392,8 +392,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
 
 - **Success:**
   - Every create, edit, archive, restore, approval and rejection is listed with the time, the person, the action and the record.
-  - I can filter by record type and date range.
-  - **Show changes** reveals the before/after JSON and the request ID.
+  - I can filter by who made the change (a searchable list of people, archived ones included), the action, the record type and a date range.
+  - **Show changes** lists each changed field as "field: old → new" (unchanged fields are skipped) with the request ID. **Show raw JSON** reveals the stored before/after.
 - **Empty:** "No entries for these filters."
 - **Failure:** error banner with Retry. Entries can't be edited or deleted through any endpoint.
 
