@@ -1,4 +1,4 @@
-from app.features.users import service
+from app.features.users import profile, service
 from app.http import json_response
 from app.router import router
 
@@ -22,6 +22,11 @@ def create_user(req, ctx, conn):
 @router.route("GET", "/users/{id}")
 def get_user(req, ctx, conn):
     return json_response(200, service.get_user(conn, ctx, req.path_params["id"]))
+
+
+@router.route("GET", "/users/{id}/profile")
+def get_profile(req, ctx, conn):
+    return json_response(200, profile.get_profile(conn, ctx, req.path_params["id"], req.query))
 
 
 @router.route("PUT", "/users/{id}", roles={"admin"})
