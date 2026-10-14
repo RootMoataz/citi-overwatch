@@ -47,6 +47,32 @@ describe('DashboardPage', () => {
     expect(screen.getByText('6 waiting for your approval')).toBeInTheDocument()
   })
 
+  test('the Risk section comes first, with counts by reason above the at-risk list', async () => {
+    const atRisk = [{ id: 'p2', name: 'Atlas', reasons: ['PAST_DUE', 'OVERDUE_MILESTONE'] },
+      { id: 'p3', name: 'Zephyr', reasons: ['OVERDUE_MILESTONE', 'BUDGET_BURN'] },
+      { id: 'p4', name: 'Orion', reasons: ['OVERDUE_MILESTONE'] }]
+    server.use(http.get(`${API}/dashboard`, () => HttpResponse.json({ ...dashboard, at_risk: atRisk })),
+      http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    renderAsUser(<DashboardPage />, { user: users.admin, route: '/dashboard-under-test' })
+    const risk = await screen.findByRole('region', { name: /^risk$/i })
+    expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent(/^Risk$/)
+    const counts = within(within(risk).getByRole('list', { name: /at-risk projects by reason/i })).getAllByRole('listitem').map((li) => li.textContent)
+    expect(counts).toEqual(['At-risk projects3', 'Overdue milestone3', 'Past due date1', 'Budget burning faster than progress1'])
+    const list = within(risk).getByRole('region', { name: /at risk of missing/i })
+    expect(within(list).getAllByRole('link').map((a) => a.textContent)).toEqual(['Atlas', 'Zephyr', 'Orion'])
+    const order = screen.getAllByRole('region').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')).textContent)
+    expect(order.slice(0, 3)).toEqual(['Risk', 'Which projects are at risk of missing their deadlines?', 'What is the status of each active project?'])
+  })
+
+  test('with nothing at risk the counts are zero and the empty state shows', async () => {
+    server.use(http.get(`${API}/dashboard`, () => HttpResponse.json({ ...dashboard, at_risk: [] })))
+    renderAsUser(<DashboardPage />, { user: users.employee, route: '/dashboard-under-test' })
+    const risk = await screen.findByRole('region', { name: /^risk$/i })
+    expect(within(within(risk).getByRole('list', { name: /at-risk projects by reason/i })).getAllByRole('listitem').map((li) => li.textContent))
+      .toEqual(['At-risk projects0', 'Overdue milestone0', 'Past due date0', 'Budget burning faster than progress0'])
+    expect(within(risk).getByText('Nothing at risk')).toBeInTheDocument()
+  })
+
   test('budget chart names projects whose forecast is over budget', async () => {
     server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),
       http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))

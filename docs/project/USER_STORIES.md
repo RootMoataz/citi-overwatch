@@ -83,7 +83,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - **Loading:** skeleton panels.
 - **Success:**
   - **Q1:** counts per status, plus a table of active projects with milestone progress, budget used and due date.
-  - **Q2:** at-risk projects, each with its reasons as badges: *Overdue milestone*, *Past due date*, *Budget ahead of progress*.
+  - **Q2 comes first, as a Risk section:** a row of counts (at-risk projects, then how many have each reason: *Overdue milestone*, *Past due date*, *Budget burning faster than progress*), then the at-risk projects, each with its reasons as badges. Employees' counts cover only their own projects.
   - **Q3:** planned vs logged hours per person, linking to the full Allocation page.
   - **Q4:** overdue milestones and milestones due in the next 14 days.
   - **Q5:** people over 40 logged hours this week, with their totals.

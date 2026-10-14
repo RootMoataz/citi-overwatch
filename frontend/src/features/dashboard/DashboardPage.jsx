@@ -1,8 +1,9 @@
 import {
-  Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, Skeleton, Stack, Table, TableBody, TableCell,
+  Box, Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, Skeleton, Stack, Table, TableBody, TableCell,
   TableHead, TableRow, Typography,
 } from '@mui/material'
 import { BarChart } from '@mui/x-charts/BarChart'
+import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useAllocations, useDashboard } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
@@ -13,6 +14,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney, formatPct, mondayOf } from '../../lib/format.js'
+import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import StatTile from '../projects/StatTile.jsx'
 import Section from './Section.jsx'
@@ -72,6 +74,36 @@ function Milestones({ title, items, tone }) {
   )
 }
 
+/** Q2 first: how many projects are at risk and why, then the at-risk list with each project's reasons as badges. */
+function Risk({ atRisk }) {
+  const id = useId()
+  const counts = [['At-risk projects', atRisk.length],
+    ...Object.entries(RISK_LABELS).map(([code, label]) => [label, atRisk.filter((p) => p.reasons.includes(code)).length])]
+  return (
+    <Box component="section" aria-labelledby={id}>
+      <Typography id={id} variant="h3" component="h2" sx={{ mb: 1.5 }}>Risk</Typography>
+      <Box component="ul" aria-label="At-risk projects by reason" sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2,
+        listStyle: 'none', p: 0, m: 0, mb: 2 }}>
+        {counts.map(([label, count]) => (
+          <li key={label}><StatTile label={label} value={count} tone={count ? 'warning' : undefined} /></li>
+        ))}
+      </Box>
+      <Section question="Which projects are at risk of missing their deadlines?">
+        {atRisk.length ? (
+          <List disablePadding>
+            {atRisk.map((p) => (
+              <ListItem key={p.id} disableGutters sx={{ display: 'block' }}>
+                <Typography variant="subtitle2">{projectLink(p)}</Typography>
+                <RiskBadges reasons={p.reasons} />
+              </ListItem>
+            ))}
+          </List>
+        ) : <EmptyState title="Nothing at risk" description="Every visible project is on track." />}
+      </Section>
+    </Box>
+  )
+}
+
 export default function DashboardPage() {
   const { user } = useSession()
   const approver = can(user, 'approvals.view')
@@ -94,6 +126,10 @@ export default function DashboardPage() {
             {d.pending_approvals} waiting for your approval
           </Button>) : null} />
       <Grid container spacing={2}>
+        <Grid size={12}>
+          <Risk atRisk={d.at_risk} />
+        </Grid>
+
         <Grid size={12}>
           <Section question="What is the status of each active project?">
             <Grid container spacing={2} sx={{ mb: 2 }}>
@@ -121,21 +157,6 @@ export default function DashboardPage() {
                 </TableBody>
               </Table>
             ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No active projects right now.</Typography>}
-          </Section>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Section question="Which projects are at risk of missing their deadlines?">
-            {d.at_risk.length ? (
-              <List disablePadding>
-                {d.at_risk.map((p) => (
-                  <ListItem key={p.id} disableGutters sx={{ display: 'block' }}>
-                    <Typography variant="subtitle2">{projectLink(p)}</Typography>
-                    <RiskBadges reasons={p.reasons} />
-                  </ListItem>
-                ))}
-              </List>
-            ) : <EmptyState title="Nothing at risk" description="Every visible project is on track." />}
           </Section>
         </Grid>
 
