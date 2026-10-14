@@ -86,11 +86,26 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
 | GET | `/users?q=&role=&archived=&page=&page_size=` | Admins and managers. Managers get no salaries |
 | POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent |
 | GET | `/users/{id}` | |
+| GET | `/users/{id}/profile?week=` | Every role. Admins see anyone; managers see themselves and people on a project they manage; employees see only themselves. Anyone else gets `404`. `salary` is only included for admins and the person themselves |
 | PUT | `/users/{id}` | Any field, including `username`, `role`, `salary` and `manager_id`. You can't change your own role or salary |
 | DELETE | `/users/{id}` | Archives the account → `204`. Returns `409 HAS_DEPENDENTS` if they manage projects or have reports |
 | POST | `/users/{id}/restore` | |
 | POST | `/users/{id}/reset-password` | Issues a new temporary password, forces a change at the next sign-in and ends their sessions → `{email_sent, temp_password?}` |
 | GET | `/users/username-availability?username=&first=&last=` | Live check while typing |
+
+```json
+{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer", "role": "employee",
+          "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"}, "is_archived": false},
+ "this_week": {"week_start": "2026-10-12", "logged": 45.0, "overtime": 5.0, "planned": 30.0},
+ "all_time": {"logged": 212.0, "approved": 160.0},
+ "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "status": "active", "planned_hours_per_week": 30.0,
+               "on_team": true, "logged_hours": 120.0, "approved_hours": 96.0, "can_open": true, "…": "…"}],
+ "milestones": [{"id": "…", "name": "Schema Mapping", "role": "supporting", "status": "in_progress",
+                 "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"}, "logged_hours": 24.0,
+                 "approved_hours": 16.0, "can_open": true, "…": "…"}]}
+```
+
+`logged` counts pending and approved hours; `overtime` is the hours logged this week beyond 40. Totals leave out archived projects and milestones. The history lists every project they've been on (completed ones included, archived ones only for admins) and every milestone they're assigned to or logged time on; `role` is `null` once they're no longer assigned.
 
 ```http
 GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
@@ -127,6 +142,7 @@ GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
 | DELETE | `/projects/{id}` | Admin. Archives the project → `204` |
 | POST | `/projects/{id}/restore` | Admin |
 | GET | `/projects/{id}/summary` | Budget, consumed, remaining, percentages, risk reasons and team size |
+| GET | `/projects/{id}/milestone-costs` | Per non-archived milestone: `approved_hours`, `pending_hours`, `approved_cost` and `budget_pct`, plus a `total` whose `approved_cost` is the project's `consumed`. Hours are `null` (and `hours_visible` is `false`) unless you manage the project. Never includes an hourly rate |
 
 ```http
 GET /api/v1/projects?page_size=1

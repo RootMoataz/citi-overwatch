@@ -30,6 +30,7 @@ Shared behaviour on every page (so it isn't repeated in each story):
 | Move an assigned milestone to *in progress* / *ready for review*, add notes | ✅ | ✅ | milestones assigned to them |
 | Log their own hours | ✅ | ✅ | ✅ |
 | See the audit log | ✅ | — | — |
+| See someone's profile and history | anyone | themselves and people on their projects | themselves |
 
 ---
 
@@ -165,6 +166,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
 
 - **Success:**
   - The Budget tab shows the planned budget, the consumed amount (approved hours only, at each person's hourly rate when approved), the remaining amount and the percentage used, plus a bar chart.
+  - A "Cost by milestone" table lists each milestone's approved cost and share of the budget. Its total row is the Consumed figure, so the two always agree. The project's manager and admins also see approved and pending hours; nobody sees an hourly rate.
   - Admins set the budget, and the project's manager can adjust it. Every change is audited.
 - **Failure:** a negative budget is rejected on the field.
 
@@ -298,6 +300,9 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - Each cell reads "*planned* planned · *logged* logged" for the chosen week.
   - Utilization (logged ÷ 40) is shown per person and highlighted over 100%.
   - Managers see their own projects; admins see all.
+  - Above the grid, a bar chart compares each person's planned and logged hours this week against a 40h line. Anyone over 40 gets an orange bar, a ⚠ on the axis and their name in the note under the chart.
+  - A donut shows this week's logged hours by project.
+  - Every name opens that person's profile.
 - **Empty:** "Nobody to show. People appear once they're added to a project."
 - **Failure:** error banner with Retry.
 
@@ -365,6 +370,16 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - The changes are saved and the top bar updates.
   - Username, role, job title and my own salary are shown read-only. Everyone can see their own salary.
 - **Failure:** an invalid email is flagged on the field, and a duplicate email returns `409`.
+
+### F2. See someone's history (U)
+**As** an employee, **I want to** see everything I've worked on; **as** a manager or admin, **I want to** see the same for my people.
+
+- **Success:**
+  - The profile shows name, job title, role and manager. Admins also see the salary; so does the person themselves.
+  - This week: hours logged, overtime (hours past 40) and planned hours. All time: hours logged and hours approved.
+  - History tables list every project they've been on (including completed ones) and every milestone they've worked on, with their role (primary or supporting), status, dates and hours.
+  - Employees reach it from **My history** in the menu; managers and admins click a name on the Allocation page.
+- **Failure:** anyone outside the rules above gets "Profile not available" (the server returns `404`, so it doesn't reveal who exists).
 
 ---
 
