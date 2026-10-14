@@ -252,6 +252,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - When hours are rejected, my bell shows "Your 8h on *Milestone* (Mon 12 Oct) was rejected: *reason*", and opening it takes me to that week.
   - A milestone I was auto-routed to support shows a "Supporting" chip on its row.
 - **Failure:**
+  - A cell takes plain numbers only: digits and one decimal point, at most 2 digits on each side (7.5 and 7.25, not 7.255). Typed or pasted `-`, `+`, `e`, letters and spaces are dropped. The server refuses more than 2 decimal places too ("Use at most 2 decimal places").
+  - A value under 0.25 is flagged on the cell and blocks saving; 0 or empty clears a pending cell.
   - More than 24 hours in a day is blocked before saving.
   - A day outside the project's dates, or on a milestone I'm no longer assigned to, is refused with the server's message.
   - Going over 40 hours shows a warning but is allowed.

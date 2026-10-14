@@ -63,6 +63,50 @@ describe('TimesheetPage', () => {
     expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: '2026-10-13', hours: 9 }] })
   })
 
+  test.each([
+    ['-', ''], ['+', ''], ['e', ''], ['1e1', '11'], ['7.255', '7.25'], ['7.5.', '7.5'], ['123', '12'], ['7.25', '7.25'],
+  ])('typing %j into an hours cell leaves %j', async (typed, shown) => {
+    server.use(weekHandler())
+    renderSheet()
+    const user = userEvent.setup()
+    const cell = await screen.findByLabelText('Build, Mon Oct 12')
+    await user.type(cell, typed)
+    expect(cell).toHaveValue(shown)
+  })
+
+  test('pasted hours are cleaned the same way', async () => {
+    server.use(weekHandler())
+    renderSheet()
+    const user = userEvent.setup()
+    const cell = await screen.findByLabelText('Build, Mon Oct 12')
+    await user.click(cell)
+    await user.paste('-3')
+    expect(cell).toHaveValue('3')
+  })
+
+  test('a valid two-decimal value saves as a number, and under 0.25 is flagged', async () => {
+    let body = null
+    server.use(weekHandler(), http.put(`${API}/time-entries`, async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ week_start: WEEK, rows, entries: [], totals: { logged: 7.25, approved: 0 },
+        user: { id: users.employee.id, name: 'Eli Employee' } })
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    const tue = await screen.findByLabelText('Build, Tue Oct 13')
+    await user.type(tue, '0.1')
+    expect(tue).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText(/at least 0.25 hours/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save week/i })).toBeDisabled()
+    await user.clear(tue)
+    const cell = screen.getByLabelText('Build, Mon Oct 12')
+    await user.type(cell, '7.25')
+    expect(cell).toHaveAttribute('inputmode', 'decimal')
+    expect(cell).toHaveAttribute('aria-invalid', 'false')
+    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WEEK, hours: 7.25 }] }))
+  })
+
   test('cells show backend labels, Edited tag and rejection reason', async () => {
     server.use(weekHandler([
       entry({ id: 'e1', label: 'Pending (Overtime requested from Eli Employee)', over_40: true }),

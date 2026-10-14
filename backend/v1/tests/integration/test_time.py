@@ -77,6 +77,23 @@ def test_hours_outside_week_or_project_range_400(client, conn):
     assert save(client, conn, emp, [cell(ms, 3, 0.1)])[1]["error"]["details"] == {"hours": "min:0.25"}
 
 
+def test_negative_hours_rejected(client, conn):
+    _, emp, _, ms = world(conn)
+    status, body, _, _ = save(client, conn, emp, [cell(ms, 0, -3)])
+    assert (status, body["error"]["details"]) == (400, {"hours": "min:0"})
+    assert query(conn, "SELECT * FROM time_entries") == []
+
+
+def test_hours_with_more_than_two_decimals_rejected(client, conn):
+    _, emp, _, ms = world(conn)
+    status, body, _, _ = save(client, conn, emp, [cell(ms, 0, 7.255)])
+    assert (status, body["error"]["code"]) == (400, "VALIDATION_ERROR")
+    assert body["error"]["details"] == {"hours": "Use at most 2 decimal places"}
+    assert query(conn, "SELECT * FROM time_entries") == []
+    status, body, _, _ = save(client, conn, emp, [cell(ms, 0, 7.25)])
+    assert (status, body["entries"][0]["hours"]) == (200, 7.25)
+
+
 def test_a_bad_cell_rejects_the_whole_save(client, conn):
     _, emp, project, ms = world(conn)
     other = make_milestone(conn, project, name="Other")

@@ -18,8 +18,16 @@ import { addDays, formatDate, formatDayLabel, formatHours, mondayOf } from '../.
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
 const CAP = 40
+const MIN_HOURS = 0.25
 const key = (milestoneId, date) => `${milestoneId}|${date}`
-const num = (v) => (v === '' || v == null ? 0 : Number(v))
+const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v))
+const tooLow = (v) => num(v) > 0 && num(v) < MIN_HOURS
+// Hours are plain numbers: digits and one point, at most 2 digits either side, so "-", "+" and "e" never get in.
+// Typed and pasted text both arrive through onChange, so both are cleaned here.
+const cleanHours = (raw) => {
+  const [whole, ...rest] = String(raw).replace(/[^\d.]/g, '').split('.')
+  return rest.length ? `${whole.slice(0, 2)}.${rest.join('').slice(0, 2)}` : whole.slice(0, 2)
+}
 
 function CellStatus({ entry, cellLabel, onResubmit, resubmitting }) {
   if (!entry) return null
@@ -61,6 +69,7 @@ export default function TimesheetPage() {
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
   const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
   const tooMany = cellKeys.some((k) => num(valueOf(k)) > 24) || allDays.some((d) => rows.reduce((s, r) => s + num(valueOf(key(r.milestone.id, d))), 0) > 24)
+  const tooFew = cellKeys.some((k) => k in drafts && tooLow(drafts[k]))
   const changed = Object.entries(drafts).filter(([k, v]) => num(v) !== num(entries[k]?.hours ?? 0) || (!entries[k] && v !== '')
     || (entries[k]?.status === 'rejected' && num(v) > 0))
 
@@ -89,7 +98,7 @@ export default function TimesheetPage() {
   return (
     <>
       <PageHeader title="My timesheet" subtitle="Log hours per day on the milestones you're assigned to. Every entry goes to the project manager for approval."
-        actions={<Button variant="contained" onClick={onSave} disabled={!changed.length || tooMany || save.isPending}>
+        actions={<Button variant="contained" onClick={onSave} disabled={!changed.length || tooMany || tooFew || save.isPending}>
           {save.isPending ? 'Saving…' : 'Save week'}</Button>} />
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' }, mb: 2 }}>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
@@ -107,6 +116,7 @@ export default function TimesheetPage() {
       </Stack>
       {total > CAP ? <Alert severity="warning" sx={{ mb: 2 }}>Over 40 hours this week. Your manager is notified once and each entry over the mark shows as overtime.</Alert> : null}
       {tooMany ? <Alert severity="error" sx={{ mb: 2 }}>Hours over 24 in a day can't be saved.</Alert> : null}
+      {tooFew ? <Alert severity="error" sx={{ mb: 2 }}>Log at least {MIN_HOURS} hours, or leave the cell empty.</Alert> : null}
       <ErrorAlert error={failure ?? sheet.error} onRetry={failure ? undefined : () => sheet.refetch()} sx={{ mb: 2 }} />
       {sheet.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
       {!sheet.isLoading && !sheet.error && rows.length === 0 ? (
@@ -165,10 +175,10 @@ function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft }
               const value = valueOf(k)
               return (
                 <TableCell key={d} align="center" sx={{ verticalAlign: 'top' }}>
-                  <TextField value={value} onChange={(e) => onChange(k, e.target.value)} type="number"
-                    error={num(value) > 24}
-                    slotProps={{ htmlInput: { min: 0, max: 24, step: 0.25, 'aria-label': `${r.milestone.name}, ${formatDayLabel(d)}`,
-                      style: { textAlign: 'center' } } }}
+                  <TextField value={value} onChange={(e) => onChange(k, cleanHours(e.target.value))}
+                    error={num(value) > 24 || (isDraft(k) && tooLow(value))}
+                    slotProps={{ htmlInput: { inputMode: 'decimal', pattern: '[0-9]{0,2}([.][0-9]{0,2})?',
+                      'aria-label': `${r.milestone.name}, ${formatDayLabel(d)}`, style: { textAlign: 'center' } } }}
                     sx={{ width: 76 }} />
                   <CellStatus entry={entries[k]} cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`}
                     resubmitting={isDraft(k)} onResubmit={() => onChange(k, String(entries[k].hours))} />

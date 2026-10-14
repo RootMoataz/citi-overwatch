@@ -200,7 +200,7 @@ A missing field:
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones, each with `role`: `primary` or `supporting`), entries and totals. `user` lets a manager or admin view someone else |
-| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it |
+| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours` is 0.25–24 with at most 2 decimal places (more is a `400` with "Use at most 2 decimal places"); `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it |
 | GET | `/approvals?user=&project=&milestone=` | Pending entries you can decide (never your own) |
 | GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry. `hourly_rate` is included for admins only, because a rate reveals a salary; managers get the cost |
 | POST | `/time-entries/{id}/approve` | `{expected_hours?}`: the hours you saw. Copies the hourly rate onto the entry, which then counts toward the budget. Returns `409 STALE_ENTRY` if the entry changed since you loaded it |

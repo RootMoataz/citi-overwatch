@@ -17,6 +17,7 @@ from app.validation import as_date, as_decimal, as_str, as_uuid, require
 
 MIN_HOURS = Decimal("0.25")
 MAX_HOURS = Decimal(24)
+CENT = Decimal("0.01")
 FORECAST_WEEKS = 4
 COUNTED = ("pending", "approved")  # rejected entries don't count toward the 40h mark
 
@@ -107,6 +108,9 @@ def _validate_cell(conn, ctx: Ctx, cell: dict, start: date) -> dict:
     hours = as_decimal(cell["hours"], "hours", min=Decimal(0), max=MAX_HOURS)
     if 0 < hours < MIN_HOURS:
         raise ApiError(400, "VALIDATION_ERROR", f"Log at least {MIN_HOURS} hours", {"hours": f"min:{MIN_HOURS}"})
+    if hours != hours.quantize(CENT):  # the column is numeric(5,2); don't let the database round silently
+        raise ApiError(400, "VALIDATION_ERROR", "Use at most 2 decimal places",
+                       {"hours": "Use at most 2 decimal places"})
     note = as_str(cell.get("note") or "", "note", min_len=0, max_len=1000) if "note" in cell else None
     if not (start <= work_date <= start + timedelta(days=6)):
         raise ApiError(400, "OUTSIDE_WEEK", f"{work_date} isn't in the week of {start}")
