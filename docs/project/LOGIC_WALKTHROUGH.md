@@ -143,7 +143,7 @@ flowchart TD
   Done --> B["GET /time-entries/{id}/breakdown<br/>cost, remaining before/after, 4-week forecast"]
   B --> A{manager decides}
   A -- approve --> AP["status = approved; hourly_rate = salary ÷ 2080 copied on;<br/>consumed budget += hours × rate"]
-  A -- reject --> RJ[status = rejected + reason shown to employee]
+  A -- reject --> RJ[status = rejected + reason shown to employee<br/>+ ENTRY_REJECTED alert in their bell]
   A -- own entry --> SA[403 SELF_APPROVAL]
 ```
 
@@ -208,3 +208,26 @@ flowchart TD
 
 - **Code:** [`app/rules/capacity.py`](../../backend/v1/app/rules/capacity.py) holds the rule, and [`app/features/members/service.py`](../../backend/v1/app/features/members/service.py) runs the overlap query.
 - **The cap is planned vs logged:** planned hours are a hard cap, while *logged* hours over 40 are only a warning (section 5). Allocation answers "who is over-planned?", and the dashboard's Q5 answers "who actually worked over 40?".
+
+## 9. Auto-routing after "Ready for review"
+
+```mermaid
+flowchart TD
+  A["POST /milestones/{id}/status {ready_for_review}"] --> B{sent by one of<br/>its assignees?}
+  B -- no --> Done[status change only]
+  B -- yes --> C[candidates: milestones on projects<br/>where the person is a member]
+  C --> D["pick_support_milestone():<br/>in progress, not archived, active non-archived project,<br/>not already assigned, not this milestone"]
+  D --> E{any left?}
+  E -- no --> Done
+  E -- yes --> F[most urgent: overdue first,<br/>then nearest end date, then name]
+  F --> G{"fits_weekly_plan(other planned, planned here)?"}
+  G -- no --> Done
+  G -- yes --> H["INSERT milestone_assignees role = 'supporting'<br/>audit auto_assign_support (actor = the employee)<br/>SUPPORT_ASSIGNED to them, SUPPORT_ROUTED to that project's manager"]
+```
+
+- **Code:** the choice is a pure function in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py). `_route_to_support()` in [`app/features/milestones/service.py`](../../backend/v1/app/features/milestones/service.py) gathers the candidates and writes the result inside the status change's transaction, so either all of it happens or none of it does.
+- **Planned hours don't change:** the person is already a member of the project, so they're only routed while their existing plan fits under 40 hours ([`app/rules/capacity.py`](../../backend/v1/app/rules/capacity.py), with the same overlap query as section 8).
+- **They stay on the reviewed milestone**, in case the manager sends it back.
+- **A manager moving the milestone** isn't routed anywhere unless they're one of its assignees.
+- **Example:** Ada marks *Discovery* ready for review. The in-progress milestones on her projects that she isn't on are *Build* (ended 3 days ago) and *Cutover* (due in 5 days), so she's added to *Build* as support. She sees "You've been added as support on Build (Apollo), due …", and the project's manager sees "Ada Lovelace was auto-routed to support Build".
+- **UI:** the toast after **Ready for review** names the milestone, and a "Supporting" chip ([`SupportingChip.jsx`](../../frontend/src/components/SupportingChip.jsx)) appears next to the person's name on the milestone card and on their timesheet row.

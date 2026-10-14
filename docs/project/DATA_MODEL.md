@@ -1,6 +1,6 @@
 # Data model
 
-The whole schema lives in one migration, [`backend/v1/migrations/001_init.sql`](../../backend/v1/migrations/001_init.sql). It's applied by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running it again is a no-op.
+The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, and [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
 
 Conventions:
 
@@ -102,7 +102,7 @@ erDiagram
 |---|---|
 | `milestones` | The brief's deliverables. The stored status is one of four values; **blocked is never stored**, it's computed from the predecessors. The service checks that both dates fall within the project's dates. |
 | `milestone_dependencies` | Directed edges: `milestone_id` depends on `depends_on_id`.<br>• The primary key is the pair.<br>• `CHECK` forbids self-dependency.<br>• The service enforces the same-project and no-loop rules (see [LOGIC_WALKTHROUGH §7](LOGIC_WALKTHROUGH.md#7-dependency-loop-detection)). |
-| `milestone_assignees` | Who works on a milestone; the primary key is the pair. The person must be a project member. Removing someone from the team removes these links too. |
+| `milestone_assignees` | Who works on a milestone; the primary key is the pair. The person must be a project member. Removing someone from the team removes these links too.<br>• `role` is `primary` (the default, and every assignment a manager makes) or `supporting` (added by [auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)). Re-saving a milestone's assignees keeps the role of the people who stay. |
 | `milestone_notes` | Append-only progress notes, 1–2,000 characters, with `author_id` and the time. |
 
 ### Time and money
@@ -110,7 +110,7 @@ erDiagram
 | Table | Purpose and notes |
 |---|---|
 | `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget. |
-| `notifications` | In-app alerts, currently `OVER_40H`. `UNIQUE (type, subject_user_id, week_start)` guarantees one alert per person-week, even if two saves race. `read_at` marks it read. |
+| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED` or `SUPPORT_ROUTED`.<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
 
 ### Audit
 

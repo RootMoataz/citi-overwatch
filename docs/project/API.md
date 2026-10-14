@@ -162,13 +162,13 @@ A missing field:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees` and `is_assignee` |
+| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support) and `is_assignee` |
 | POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date}` → `201`. The dates must fall within the project's dates |
 | GET / PUT / DELETE | `/milestones/{id}` | `DELETE` archives |
 | POST | `/milestones/{id}/restore` | Admin |
 | PUT | `/milestones/{id}/dependencies` | `{predecessor_ids: [...]}` → `{…, warnings}`. Returns `400 DEPENDENCY_CYCLE` or `CROSS_PROJECT_DEPENDENCY`. `warnings` flags a start date before a predecessor's end |
 | PUT | `/milestones/{id}/assignees` | `{user_ids: [...]}`. They must be project members (`NOT_A_MEMBER`) |
-| POST | `/milestones/{id}/status` | `{status}`. Assignees can move it to `in_progress` and `ready_for_review`; only the manager or an admin can set `completed` or send it back. Returns `400 INVALID_TRANSITION`, or `403 NOT_ASSIGNED` |
+| POST | `/milestones/{id}/status` | `{status}`. Assignees can move it to `in_progress` and `ready_for_review`; only the manager or an admin can set `completed` or send it back. Returns `400 INVALID_TRANSITION`, or `403 NOT_ASSIGNED`. The response is the milestone plus `routed_to`: when an assignee sends it for review they're added as support elsewhere ([auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)) and `routed_to` is `{milestone: {id, name, end_date}, project: {id, name}}`; otherwise it's `null` |
 | GET / POST | `/milestones/{id}/notes` | `{body}` (1–2,000 characters). Append-only |
 
 ```json
@@ -183,12 +183,12 @@ A missing field:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones), entries and totals. `user` lets a manager or admin view someone else |
+| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones, each with `role`: `primary` or `supporting`), entries and totals. `user` lets a manager or admin view someone else |
 | PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it |
 | GET | `/approvals?user=&project=&milestone=` | Pending entries you can decide (never your own) |
 | GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry. `hourly_rate` is included for admins only, because a rate reveals a salary; managers get the cost |
 | POST | `/time-entries/{id}/approve` | `{expected_hours?}`: the hours you saw. Copies the hourly rate onto the entry, which then counts toward the budget. Returns `409 STALE_ENTRY` if the entry changed since you loaded it |
-| POST | `/time-entries/{id}/reject` | `{reason, expected_hours?}`. Same `409 STALE_ENTRY` guard |
+| POST | `/time-entries/{id}/reject` | `{reason, expected_hours?}`. Same `409 STALE_ENTRY` guard. Sends the employee an `ENTRY_REJECTED` alert |
 
 ```http
 GET /api/v1/time-entries          (as employee.demo, this week)
@@ -220,7 +220,7 @@ As an admin (managers get the same without `hourly_rate`):
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/notifications?unread=true` | Your alerts |
+| GET | `/notifications?unread=true` | Your alerts, newest first. `message` is ready to show; `payload` depends on `type` (below) |
 | POST | `/notifications/{id}/read` | |
 | POST | `/notifications/read-all` | |
 
@@ -230,6 +230,15 @@ As an admin (managers get the same without `hourly_rate`):
   "created_at": "2026-10-13T18:00:15.020027-04:00", "subject_user": {"id": "81c483ea-…", "name": "Eli Employee"},
   "message": "Eli Employee passed 40h for the week of 2026-10-12"}]
 ```
+
+| `type` | Sent to | `message` | `payload` |
+|---|---|---|---|
+| `OVER_40H` | The entry's project manager (an admin for a manager's own hours) | "*Name* passed 40h for the week of *date*" | `name`, `week_total`, `project_id` |
+| `ENTRY_REJECTED` | The employee | "Your 8h on Schema Mapping (Mon 12 Oct) was rejected: *reason*" | `entry_id`, `work_date`, `week_start`, `hours`, `reason`, `milestone {id, name}`, `project {id, name}` |
+| `SUPPORT_ASSIGNED` | The employee who was auto-routed | "You've been added as support on *milestone* (*project*), due *date*" | `name`, `end_date`, `milestone`, `project`, `from_milestone` |
+| `SUPPORT_ROUTED` | That milestone's project manager | "*Name* was auto-routed to support *milestone*" | Same as `SUPPORT_ASSIGNED` |
+
+For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, so the bell can open that week's timesheet.
 
 ## Insights and audit
 

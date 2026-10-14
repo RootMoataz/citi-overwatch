@@ -209,6 +209,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - **Ready for review** moves it on to *ready for review*.
   - I can't mark it completed. That button only appears for the project's manager or an admin.
   - Milestones assigned to me are marked "Assigned to you".
+  - **Ready for review** also adds me as support on the most urgent in-progress milestone of my active projects that I'm not already on ([auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)). The toast names it, the bell tells me and that project's manager, and my name shows a "Supporting" chip on its card. If nothing qualifies, or I'm planned past 40 hours, nothing happens.
 - **Failure:**
   - Milestones I'm not assigned to show no status buttons, and the API returns `403` if I try anyway.
   - A blocked milestone's Start button is disabled, and its tooltip names what it's waiting on.
@@ -246,6 +247,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
     - "Rejected", with the reason in a tooltip
   - Editing an entry that was already decided sends it back for approval and tags it "Edited".
   - A rejected cell has a **Resubmit** button, so the same hours can go back for approval after a conversation with the manager.
+  - When hours are rejected, my bell shows "Your 8h on *Milestone* (Mon 12 Oct) was rejected: *reason*", and opening it takes me to that week.
+  - A milestone I was auto-routed to support shows a "Supporting" chip on its row.
 - **Failure:**
   - More than 24 hours in a day is blocked before saving.
   - A day outside the project's dates, or on a milestone I'm no longer assigned to, is refused with the server's message.
