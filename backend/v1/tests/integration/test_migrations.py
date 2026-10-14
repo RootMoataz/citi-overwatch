@@ -36,3 +36,13 @@ def test_username_unique_case_insensitive(conn):
     conn.run(insert, u="JSmith", e="one@example.com")
     with pytest.raises(DatabaseError):
         conn.run(insert, u="jsmith", e="two@example.com")
+
+
+def test_assignee_role_defaults_to_primary_and_is_checked(conn):
+    from tests.helpers import make_milestone, make_project, make_user
+    mgr = make_user(conn, role="manager")
+    ms = make_milestone(conn, make_project(conn, mgr))
+    conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=ms["id"], u=mgr["id"])
+    assert query(conn, "SELECT role FROM milestone_assignees") == [{"role": "primary"}]
+    with pytest.raises(DatabaseError):
+        conn.run("UPDATE milestone_assignees SET role = 'lead'")
