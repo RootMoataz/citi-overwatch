@@ -439,3 +439,70 @@ flowchart TD
 - **What a delegate gets:** the project's pending hours in their Approvals queue, labelled **Delegated from *manager***, the budget impact (cost, never an hourly rate unless they're an admin), approve and reject. Not other projects of the same manager, not their own hours, not the project's settings.
 - **The manager keeps every right**; delegation adds an approver, it doesn't move the queue.
 - **UI:** the project dialog's **Delegate approver** and **Delegate until** fields ([`ProjectForm.jsx`](../../frontend/src/features/projects/ProjectForm.jsx), sent only when changed), "Approvals delegated to *X* until *date*" on the project's Overview, and the label in [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx). The bell's `DELEGATE_ASSIGNED` alert opens `/approvals?project=…`.
+
+## 18. Live activity and readable audit entries
+
+`app/features/activity/service.py`. `summarize` turns audit rows into sentences: it collects every id the rows mention
+(projects, milestones, time entries, users, requests, departments, and a `user_id` inside `changes`) and looks them up in
+one query per table, then picks a verb per action and record type ("approved 9h for Eli Employee on", "moved … to In
+progress", "marked Apollo completed", "created an account for"). Only hours and statuses are read from `changes`, so a
+salary or rate can never reach a sentence. The audit log adds the summary to every entry; the redesigned Audit log page
+groups entries by day ("Today", "Yesterday", then the date), shows an icon and colour per action, the actor's avatar
+(a gear for System) and each changed field as "Status: In progress → Completed", with raw JSON behind a toggle.
+
+`GET /activity` scopes in SQL, so `LIMIT` returns the newest events the caller may see. A CTE resolves each event's
+project (directly, through its milestone or through its time entry) and whose hours a time-entry event is about, then:
+
+- sign-ins and password events are dropped for everyone;
+- admins and executives see the rest;
+- managers: their own actions and decisions on their own hours; any event on a live project they manage or are the
+  active delegate approver of (delegation not past its end date); milestone events on live projects they are a member
+  of; and their own project requests;
+- employees: their own actions, decisions on their own hours (so "Morgan approved 9h for Eli" reaches Eli), and
+  milestone events on live projects they are on. A teammate's hours stay private.
+
+`department` keeps only events whose project is in that department. The dashboard's Live activity card polls it with
+the app's normal 30-second refresh; new items slide in (framer-motion), and nothing moves under reduced motion.
+
+## 19. The command palette
+
+`frontend/src/features/palette/`. Ctrl+K (Cmd+K on a Mac) anywhere, or "/" when the focus isn't in a field, opens a
+search over pages (filtered by `ROUTE_ROLES` and `can`), the viewer's projects, people whose profile they may open
+(admins and executives: everyone; managers: their allocation list; employees: themselves, checked with
+`canViewProfile`), the milestones of their first 40 projects, and actions. Records are fetched only while the palette
+is open and share the pages' react-query caches.
+
+`phrases.js` is a fixed rule list (no AI, nothing leaves the browser), tried in order; the first match becomes an
+"Interpreted" row shown as a chip such as "Projects · At risk · Technology":
+
+| Phrase (examples) | Goes to | Who |
+|---|---|---|
+| "dark mode", "light", "switch to light mode" | switches the theme | everyone |
+| "sign out", "log out" | signs out | everyone |
+| "new project", "create a project" | `/projects?new=1` (admins) or `/requests?new=1` (managers) | admins, managers |
+| "approvals", "pending approvals" | `/approvals` | admins, managers |
+| "who is over 40", "over-allocated", "overtime" | `/allocation` | admins, managers, executives |
+| "overdue milestones" | dashboard (`/`), palette lists only the overdue milestones; employees `/projects?at_risk=true` | everyone |
+| "budget of Apollo", "Apollo's budget" | `/projects/<id>?tab=budget` (best name match) | anyone who sees the project |
+| "Eli's hours", "hours for Eli", "my hours" | Eli's profile; "my hours" the timesheet | when `canViewProfile` allows |
+| "at-risk projects", "on hold", "active projects in Technology" | `/projects?at_risk=true&status=…&department=…` | everyone (the list is scoped) |
+
+The projects page reads `department` and `new=1` from the URL (a removable "Department: …" chip shows the filter), and
+the requests page opens its form on `new=1`.
+
+## 20. Email this report and celebrations
+
+"Email this report" (dashboard header; managers, admins, executives) builds the report in the browser
+(`features/report/reportHtml.js`) from the dashboard data already on screen, so it follows the department filter:
+headline numbers (at-risk projects, overdue milestones, pending approvals, budget used across projects), at-risk
+projects with reasons, the top five smart insights and a budget table per project (budget, consumed, % used, forecast,
+over-budget flagged). It uses only tables and inline styles, and every name passes through `escapeHtml`, so data can't
+inject markup into the email. `relayReport` (`lib/emailRelay.js`) posts to EmailJS with the report template
+`VITE_EMAILJS_REPORT_TEMPLATE_ID` (plus the existing service id and public key) and the parameters `to_email`,
+`to_name`, `subject`, `from_name`, `report_html`, `app_url`. "Send to me" (on at first) sends to the signed-in
+person's own email from `/me`; another typed address gets its own send, and results are listed per recipient.
+Without the template id the button explains that email isn't set up instead of failing.
+
+Confetti (`lib/celebrate.js`, canvas-confetti loaded on first use, skipped under reduced motion) fires in the browser
+of the person who marks a milestone Completed, who approves the entry that empties every approvals list on screen, or
+who moves a project to Completed (not when re-saving a project that already was).

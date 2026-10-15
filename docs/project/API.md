@@ -354,12 +354,23 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 | GET | `/dashboard?department=` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals`. `department` (an ID) keeps only that department's projects in every project-based number, only its people in `over_allocated`, and only its projects' entries in `pending_approvals` ([department filter](LOGIC_WALKTHROUGH.md#12-the-dashboards-department-filter)) |
 | GET | `/allocations?week=` | Admins, managers and executives. Per person (with their `department_id`): projects with planned, logged and approved hours, totals and `utilization_pct` |
 | GET | `/insights/smart?department=` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. `department` (an ID) narrows them the way it narrows `/dashboard`: only that department's projects and people; `400 VALIDATION_ERROR` (`department: invalid_id`) if it isn't an ID. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
-| GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admins and executives (without any `salary` or `hourly_rate` inside `changes`). Newest first. An approval or rejection made as a delegate has `changes.after.as_delegate_for` (the project manager's ID). `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
+| GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admins and executives (without any `salary` or `hourly_rate` inside `changes`). Newest first. An approval or rejection made as a delegate has `changes.after.as_delegate_for` (the project manager's ID). `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject`. Each item also has `summary` (`actor`, `verb`, `object`, `tail`, `project`, `sentence`), the same readable sentence `/activity` gives, e.g. "Morgan Manager approved 9h for Eli Employee on Schema Mapping" |
+| GET | `/activity?limit=&department=` | Everyone signed in. The newest audit events in the caller's scope as display-ready items, newest first: `limit` 1–50 (default 20; `400` `limit: invalid_number` otherwise), `department` (an ID) keeps only events on that department's projects. Sign-ins and password events never appear, and items carry no `changes`, so no salary or rate can leak. Scope: admins and executives everything; managers their own actions, every event on live projects they manage or are the active delegate approver of, milestone events on live projects they're a member of, decisions on their own hours and their project requests; employees their own actions, decisions on their own hours and milestone events on live projects they're on ([Live activity](LOGIC_WALKTHROUGH.md#18-live-activity-and-readable-audit-entries)) |
 
 ```json
 [{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer", "department_id": "4f1c…"},
   "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "planned": 30.0, "logged": 45.0, "approved": 0.0}],
   "planned_total": 30.0, "logged_total": 45.0, "utilization_pct": 112.5}, "…"]
+```
+
+`GET /activity?limit=1` as `manager.demo`. `object.type` is `project`, `milestone`, `user`, `project_request` or `department` (or `object` is null, e.g. "updated their profile photo"); `tail` finishes the sentence after the object ("to In progress"):
+
+```json
+{"items": [{"id": "0b6c…", "created_at": "2026-10-14T13:02:11Z", "action": "approve", "entity_type": "time_entry",
+  "actor": {"id": "a41f…", "name": "Morgan Manager"}, "verb": "approved 9h for Eli Employee on",
+  "object": {"type": "milestone", "id": "7d2e…", "name": "Schema Mapping"}, "tail": null,
+  "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"},
+  "sentence": "Morgan Manager approved 9h for Eli Employee on Schema Mapping"}]}
 ```
 
 `GET /insights/smart` as `manager.demo`. `link.to` is `project` (with `id`, and `tab` for milestone insights), `person` (`id`) or `approvals`. Salaries and rates are never included:
