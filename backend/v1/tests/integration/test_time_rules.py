@@ -1,10 +1,13 @@
 """Timesheet input rules: clean numbers only, a 24h ceiling per day across every milestone, and no logging on
 projects that are on hold, completed or archived (or on archived milestones)."""
 
+import threading
+import time
 from datetime import timedelta
 
 import pytest
 
+from app import db as dbmod
 from app.db import query
 from tests.helpers import log_entry, make_milestone, make_project, make_user, token_for
 from tests.integration.test_time import MONDAY, cell, day, save, world
@@ -95,6 +98,41 @@ def test_rejected_hours_do_not_count_toward_the_day(client, conn):
 def test_the_day_limit_is_per_day_not_per_week(client, conn):
     _, emp, _, ms, other = two_milestones(conn)
     assert save(client, conn, emp, [cell(ms, n, 12) for n in range(5)] + [cell(other, n, 12) for n in range(5)])[0] == 200
+
+
+def test_concurrent_saves_cannot_together_pass_24h(client, conn):
+    """Another save holds the person's lock and writes 20h; a 10h save waiting on it must then see those 20h."""
+    _, emp, _, ms, other = two_milestones(conn)
+    rival = dbmod._open()
+    try:
+        rival.run("BEGIN")
+        rival.run("SELECT id FROM users WHERE id = :u FOR NO KEY UPDATE", u=emp["id"])
+        rival.run("""INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours)
+                     VALUES (:u, :m, :p, :d, 20)""", u=emp["id"], m=ms["id"], p=ms["project_id"], d=MONDAY)
+        result = {}
+        waiter = threading.Thread(target=lambda: result.update(response=save(client, conn, emp, [cell(other, 0, 10)])))
+        waiter.start()
+        time.sleep(0.5)
+        assert waiter.is_alive(), "the save should wait for the other save's lock"
+        rival.run("COMMIT")
+        waiter.join(timeout=10)
+    finally:
+        rival.close()
+    status, body, _, _ = result["response"]
+    assert (status, body["error"]["code"], body["error"]["details"]["hours"]) == (400, "DAY_OVER_24H", 30.0)
+    assert [float(e["hours"]) for e in entries(conn)] == [20.0]
+
+
+def test_another_persons_save_does_not_wait_on_the_lock(client, conn):
+    mgr, emp, project, ms, other = two_milestones(conn)
+    rival = dbmod._open()
+    try:
+        rival.run("BEGIN")
+        rival.run("SELECT id FROM users WHERE id = :u FOR NO KEY UPDATE", u=mgr["id"])
+        assert save(client, conn, emp, [cell(ms, 0, 8)])[0] == 200
+        rival.run("ROLLBACK")
+    finally:
+        rival.close()
 
 
 # ---------- project status gates logging ----------

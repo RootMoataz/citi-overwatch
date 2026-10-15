@@ -231,10 +231,14 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
         raise ApiError(400, "VALIDATION_ERROR", "entries must be a list", {"entries": "required"})
     cells = [_validate_cell(conn, ctx, c, start) for c in body["entries"]]  # validate everything first
     cells = [c for c in cells if not c["closed"]]  # what's left on a closed project is an unchanged re-send
-    _check_daily_cap(conn, ctx, cells)
     cells.sort(key=lambda c: (c["work_date"], str(c["milestone"]["id"])))
-    me = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
     with transaction(conn):
+        # One save per person at a time: lock their user row so two concurrent saves can't each pass the 24h
+        # day check (or the 40h week total) against hours the other is about to write. NO KEY UPDATE leaves
+        # rows that merely reference the user (entries, notifications) free to be inserted by others.
+        me = query_one(conn, """SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)
+                                FOR NO KEY UPDATE""", i=ctx.user_id)
+        _check_daily_cap(conn, ctx, cells)
         for c in cells:
             ms = c["milestone"]
             existing = query_one(conn, """SELECT * FROM time_entries WHERE user_id = CAST(:u AS uuid)
