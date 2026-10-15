@@ -17,6 +17,7 @@ import BrandLogo from '../components/BrandLogo.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import UserAvatar from '../components/UserAvatar.jsx'
 import AvatarDialog from '../features/avatar/AvatarDialog.jsx'
+import PaletteButton from '../features/palette/PaletteButton.jsx'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { ROLE_LABEL } from '../lib/labels.js'
@@ -148,6 +149,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           ) : null}
           {!desktop ? <BrandLogo size={30} /> : null}
           <Box sx={{ flexGrow: 1 }} />
+          <Box sx={{ mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
           {topBarExtras}
           <IconButton aria-label="Account menu" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
             <UserAvatar userId={user?.id} name={fullName(user)} size={AVATAR_SIZE.header} />

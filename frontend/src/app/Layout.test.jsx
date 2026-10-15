@@ -171,4 +171,11 @@ describe('collapsible sidebar', () => {
     expect(screen.queryByRole('button', { name: /collapse sidebar/i })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /open navigation/i })).toBeInTheDocument()
   })
+
+  test('the header has the search button that opens the command palette', () => {
+    renderLayout(users.manager)
+    const banner = screen.getByRole('banner')
+    expect(within(banner).getByRole('button', { name: /^search/i })).toHaveAttribute('aria-haspopup', 'dialog')
+  })
+
 })
