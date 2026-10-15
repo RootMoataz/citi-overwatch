@@ -41,11 +41,11 @@ def list_notifications(req, ctx, conn):
 
 
 # Registered before /notifications/{id}/read so "read-all" isn't taken as an id.
-@router.route("POST", "/notifications/read-all")
+@router.route("POST", "/notifications/read-all", allow_executive=True)
 def mark_all_read(req, ctx, conn):
     return json_response(200, service.mark_all_read(conn, ctx))
 
 
-@router.route("POST", "/notifications/{id}/read")
+@router.route("POST", "/notifications/{id}/read", allow_executive=True)
 def mark_read(req, ctx, conn):
     return json_response(200, service.mark_read(conn, ctx, req.path_params["id"]))

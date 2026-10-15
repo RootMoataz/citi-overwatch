@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.audit import record
-from app.authz import is_assignee, load_project, manages
+from app.authz import APPROVER_SQL, acts_as_delegate, is_assignee, load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.projects.service import project_consumed
@@ -293,20 +293,28 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
 # ---------- approvals ----------
 
 def _load_entry(conn, ctx: Ctx, entry_id: str) -> tuple[dict, dict]:
+    """The entry and its project, for someone who may decide it: the project's manager, an admin, or the project's
+    active delegate approver. Anyone else gets the same 404/403 as before delegation existed."""
     as_uuid(entry_id, "id")
     entry = query_one(conn, """SELECT t.*, u.first_name, u.last_name, u.salary FROM time_entries t
                                JOIN users u ON u.id = t.user_id WHERE t.id = CAST(:i AS uuid)""", i=entry_id)
     if not entry:
         raise ApiError(404, "NOT_FOUND", "Not found")
+    project = query_one(conn, "SELECT * FROM projects WHERE id = :i", i=entry["project_id"])
+    if acts_as_delegate(ctx, project, _today()):
+        return entry, project
     project = load_project(conn, ctx, str(entry["project_id"]), manage=True)
     return entry, project
 
 
 def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
+    """Pending hours the caller may decide: everything for admins, otherwise the projects they manage and those
+    delegated to them while the delegation runs. Delegated items say whose queue they come from."""
     where = ["t.status = 'pending'", "t.user_id <> CAST(:me AS uuid)", "NOT p.is_archived", "NOT m.is_archived"]
-    args = {"me": ctx.user_id}
+    today = _today()
+    args = {"me": ctx.user_id, "today": today}
     if not ctx.is_admin:
-        where.append("p.manager_id = CAST(:me AS uuid)")
+        where.append(APPROVER_SQL)
     if params.get("project"):
         where.append("p.id = CAST(:pid AS uuid)")
         args["pid"] = as_uuid(params["project"], "project")
@@ -317,9 +325,11 @@ def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
         where.append("t.user_id = CAST(:uid AS uuid)")
         args["uid"] = as_uuid(params["user"], "user")
     rows = query(conn, f"""
-        SELECT t.*, u.first_name, u.last_name, m.name AS milestone_name, p.name AS project_name
+        SELECT t.*, u.first_name, u.last_name, m.name AS milestone_name, p.name AS project_name,
+               p.manager_id AS p_manager_id, p.delegate_approver_id, p.delegate_until, p.is_archived AS p_archived,
+               pm.first_name AS manager_first_name, pm.last_name AS manager_last_name
         FROM time_entries t JOIN users u ON u.id = t.user_id JOIN milestones m ON m.id = t.milestone_id
-        JOIN projects p ON p.id = t.project_id WHERE {' AND '.join(where)}
+        JOIN projects p ON p.id = t.project_id JOIN users pm ON pm.id = p.manager_id WHERE {' AND '.join(where)}
         ORDER BY t.work_date, lower(u.last_name)""", **args)
     totals: dict[tuple, Decimal] = {}
     overtime: dict[tuple, set[str]] = {}
@@ -331,7 +341,11 @@ def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
             overtime[key] = _overtime(conn, key[0], key[1])
         r = _live(r, overtime[key])
         name = _name(r)
+        delegated = str(r["p_manager_id"]) != ctx.user_id and acts_as_delegate(
+            ctx, {"delegate_approver_id": r["delegate_approver_id"], "delegate_until": r["delegate_until"],
+                  "is_archived": r["p_archived"]}, today)
         out.append({"entry": _entry_view(r, name, show_rate=ctx.is_admin), "label": label(r, name),
+                    "delegated_from": {"id": r["p_manager_id"], "name": _name(r, "manager_")} if delegated else None,
                     "user": {"id": r["user_id"], "name": name},
                     "milestone": {"id": r["milestone_id"], "name": r["milestone_name"]},
                     "project": {"id": r["project_id"], "name": r["project_name"]},
@@ -418,9 +432,11 @@ def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None,
                      reason=reason, me=ctx.user_id, i=entry["id"], h=entry["hours"])
         if not done:
             raise STALE
+        after = {"status": "approved" if approve else "rejected", "reason": reason}
+        if not manages(ctx, project):  # decided as the project's delegate approver, on the manager's behalf
+            after["as_delegate_for"] = str(project["manager_id"])
         record(conn, ctx, "approve" if approve else "reject", "time_entry", entry_id,
-               before={"status": "pending"}, after={"status": "approved" if approve else "rejected",
-                                                    "reason": reason})
+               before={"status": "pending"}, after=after)
         if not approve:
             _alert_rejected(conn, entry, project, reason)
             _sync_stored_flags(conn, entry["user_id"], week_start(entry["work_date"]))  # rejected hours stop counting
@@ -459,8 +475,10 @@ def _message(r: dict, who: str) -> str:
         return f"{who} was auto-routed to support {p['milestone']['name']}"
     if r["type"] == "MILESTONE_CLAIMED":
         return f"{who} claimed {p['milestone']['name']} ({p['project']['name']})"
-    if r["type"] == "TIMESHEET_EMPTY":
-        return f"Your timesheet for the week of {short_day(r['week_start'])} is empty"
+    if r["type"] == "DELEGATE_ASSIGNED":
+        until = f"until {short_day(p['until'])}" if p.get("until") else "until further notice"
+        return (f"{who} made you the delegate approver for {p['project']['name']}: you can approve hours "
+                f"for {p['manager']['name']} {until}")
     return f"{who} passed 40h for the week of {r['week_start']}"
 
 

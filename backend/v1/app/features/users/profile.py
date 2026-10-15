@@ -1,12 +1,13 @@
 """A person's profile page: who they are, this week's hours and their project and milestone history.
-Admins see anyone (with salary); managers see themselves, their direct reports, the people on live projects they
-manage and anyone whose hours wait for their approval (never a salary); employees see only themselves. Anyone else
+Admins see anyone (with salary); executives see anyone (never a salary, not even their own); managers see
+themselves, their direct reports, the people on live projects they manage and anyone whose hours wait for their
+approval, delegated ones included (never a salary); employees see only themselves. Anyone else
 gets 404, so the page doesn't reveal who exists."""
 
 from datetime import timedelta
 from decimal import Decimal
 
-from app.authz import is_uuid
+from app.authz import APPROVER_SQL, is_uuid
 from app.ctx import Ctx
 from app.db import query, query_one
 from app.features.projects.service import visible_projects
@@ -21,12 +22,12 @@ HOURS = """coalesce(sum(t.hours) FILTER (WHERE t.status IN ('pending', 'approved
 
 
 def _can_view(conn, ctx: Ctx, user_id: str) -> bool:
-    if ctx.is_admin or user_id == ctx.user_id:
+    if ctx.sees_all or user_id == ctx.user_id:
         return True
     if ctx.role != "manager":
         return False
     # The same people a manager already sees on Allocation, the dashboard and Approvals.
-    return query_one(conn, """SELECT 1 AS ok FROM users u WHERE u.id = CAST(:u AS uuid) AND (
+    return query_one(conn, f"""SELECT 1 AS ok FROM users u WHERE u.id = CAST(:u AS uuid) AND (
                                 u.manager_id = CAST(:me AS uuid)
                                 OR EXISTS (SELECT 1 FROM project_members pm JOIN projects p ON p.id = pm.project_id
                                            WHERE pm.user_id = u.id AND p.manager_id = CAST(:me AS uuid)
@@ -34,9 +35,9 @@ def _can_view(conn, ctx: Ctx, user_id: str) -> bool:
                                 OR EXISTS (SELECT 1 FROM time_entries t JOIN projects p ON p.id = t.project_id
                                            JOIN milestones m ON m.id = t.milestone_id
                                            WHERE t.user_id = u.id AND t.status = 'pending'
-                                             AND p.manager_id = CAST(:me AS uuid)
+                                             AND {APPROVER_SQL}
                                              AND NOT p.is_archived AND NOT m.is_archived))""",
-                     u=user_id, me=ctx.user_id) is not None
+                     u=user_id, me=ctx.user_id, today=_today()) is not None
 
 
 def _header(conn, ctx: Ctx, user: dict) -> dict:
@@ -51,7 +52,8 @@ def _header(conn, ctx: Ctx, user: dict) -> dict:
     out = {"id": user["id"], "name": f"{user['first_name']} {user['last_name']}", "first_name": user["first_name"],
            "last_name": user["last_name"], "job_title": user["job_title"], "role": user["role"],
            "is_archived": user["is_archived"], "manager": manager, "department": department}
-    if ctx.is_admin or str(user["id"]) == ctx.user_id:  # a salary is only ever shown to admins and its owner
+    # A salary is only ever shown to admins and its owner, and never to an executive.
+    if ctx.is_admin or (str(user["id"]) == ctx.user_id and not ctx.is_executive):
         out["salary"] = user["salary"]
     return out
 
@@ -78,7 +80,7 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
     start = week_start(as_date(params["week"], "week") if params.get("week") else _today())
     # Archived projects and milestones are out of every total (spec §3.1). The history still lists them for
     # admins and for the person themselves (their own past work, read-only); managers see live work only.
-    whole_history = ctx.is_admin or uid == ctx.user_id
+    whole_history = ctx.sees_all or uid == ctx.user_id
     live = "" if whole_history else " AND NOT p.is_archived AND NOT m.is_archived"
     totals = query_one(conn, f"""SELECT {HOURS} FROM time_entries t
                                  JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
@@ -104,7 +106,7 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
         LEFT JOIN time_entries t ON t.milestone_id = m.id AND t.user_id = CAST(:u AS uuid)
         WHERE (a.user_id IS NOT NULL OR t.id IS NOT NULL){live}
         GROUP BY m.id, p.id, a.role ORDER BY m.start_date DESC, lower(m.name)""", u=uid)
-    openable = None if ctx.is_admin else {str(p["id"]) for p in visible_projects(conn, ctx)}
+    openable = None if ctx.sees_all else {str(p["id"]) for p in visible_projects(conn, ctx)}
 
     def can_open(project_id) -> bool:
         return openable is None or str(project_id) in openable

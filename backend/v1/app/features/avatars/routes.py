@@ -11,12 +11,12 @@ def avatar_index(req, ctx, conn):
     return json_response(200, service.index(conn))
 
 
-@router.route("PUT", "/me/avatar")
+@router.route("PUT", "/me/avatar", allow_executive=True)
 def set_my_avatar(req, ctx, conn):
     return json_response(200, service.set_own(conn, ctx, req.json()))
 
 
-@router.route("DELETE", "/me/avatar")
+@router.route("DELETE", "/me/avatar", allow_executive=True)
 def remove_my_avatar(req, ctx, conn):
     return json_response(200, service.remove_own(conn, ctx))
 

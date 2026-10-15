@@ -10,7 +10,7 @@ from app.seed import DEMO_PASSWORD, PEOPLE, seed
 def test_seed_idempotent_and_demo_logins_work(client, conn):
     creds = seed(conn)
     assert creds == {"admin": ("admin.demo", DEMO_PASSWORD), "manager": ("manager.demo", DEMO_PASSWORD),
-                     "employee": ("employee.demo", DEMO_PASSWORD)}
+                     "employee": ("employee.demo", DEMO_PASSWORD), "executive": ("executive.demo", DEMO_PASSWORD)}
     users_before = query_one(conn, "SELECT count(*) AS n FROM users")["n"]
     assert seed(conn) == creds
     assert query_one(conn, "SELECT count(*) AS n FROM users")["n"] == users_before
@@ -85,7 +85,8 @@ def test_internal_seed_op(conn):
     import function
     assert function.handler({"op": "seed"}, None) == {"seeded": True, "demo_users": ["admin.demo",
                                                                                    "manager.demo",
-                                                                                   "employee.demo"]}
+                                                                                   "employee.demo",
+                                                                                   "executive.demo"]}
 
 
 def test_create_admins_op_makes_ready_admin_logins_and_skips_existing(client, conn):
@@ -156,6 +157,7 @@ def seed_the_old_way(conn) -> dict:
     conn.run("""DELETE FROM milestone_dependencies
                 WHERE milestone_id IN (SELECT id FROM milestones WHERE name = 'Prototype')""")
     conn.run("DELETE FROM milestones WHERE name = 'Prototype'")
+    conn.run("DELETE FROM users WHERE username = 'executive.demo'")  # the executive came later still
     conn.run("UPDATE users SET department_id = NULL")
     conn.run("UPDATE projects SET department_id = NULL, work_mode = 'push'")
     conn.run("UPDATE milestones SET difficulty = 'medium'")
@@ -186,8 +188,13 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
         "Delta Compliance Audit / Audit Fieldwork"]
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
     assert result["already_set"] == 0
+    assert result["users_created"] == ["executive.demo"]
     after = counts(conn)
-    assert after == {**before, "departments": 3}  # no assignees, hours, people or projects added or removed
+    # No assignees, hours or projects added or removed; the only new person is the executive demo login.
+    assert after == {**before, "departments": 3, "users": before["users"] + 1}
+    exe = query_one(conn, """SELECT u.role::text AS role, u.must_change_password, d.name AS dept FROM users u
+                             LEFT JOIN departments d ON d.id = u.department_id WHERE u.username = 'executive.demo'""")
+    assert exe == {"role": "executive", "must_change_password": False, "dept": "Operations"}
     # Design is claimable by Beacon's team, as in today's seed.
     beacon_ms = query(conn, """SELECT m.name FROM milestones m JOIN projects p ON p.id = m.project_id
                                WHERE p.name = 'Beacon Mobile App'""")
@@ -207,7 +214,8 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
                 "difficulties_updated"):
         assert result[key] == [], key
-    assert result["already_set"] == 16 + 5 + 1 + 6
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1  # ... and the executive login
+    assert result["users_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
 
 
@@ -219,6 +227,7 @@ def test_demo_backfill_on_a_fresh_seed_changes_nothing(conn):
     result = demo_backfill(conn)
     assert demo_state(conn) == state
     assert result["departments_created"] == [] and result["users_updated"] == []
+    assert result["users_created"] == []
 
 
 def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
@@ -265,3 +274,19 @@ def test_demo_backfill_leaves_a_project_already_in_pull_mode(conn):
     seed(conn)
     result = demo_backfill(conn)
     assert result["work_mode_updated"] == [] and result["skipped"] == []
+
+
+def test_executive_demo_login_from_the_seed_and_the_backfill(client, conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    conn.run("DELETE FROM users WHERE username = 'executive.demo'")
+    assert demo_backfill(conn)["users_created"] == ["executive.demo"]
+    status, body, _, _ = client.request("POST", "/auth/login",
+                                        json={"username": "executive.demo", "password": DEMO_PASSWORD})
+    assert status == 200
+    assert body["user"]["role"] == "executive" and body["user"]["must_change_password"] is False
+    # It is a published login: nobody can change its password and lock the demo for everyone else.
+    status, body, _, _ = client.request("POST", "/auth/change-password", token=body["access_token"], json={
+        "current_password": DEMO_PASSWORD, "new_password": "An0ther!Passw0rd"})
+    assert (status, body["error"]["code"]) == (403, "DEMO_ACCOUNT")

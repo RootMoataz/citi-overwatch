@@ -1,5 +1,5 @@
 """Everything archived in one list, with who archived it (from the audit log) when that's known.
-Admins see every archived project, milestone and person. A manager sees only the archived projects they manage
+Admins (and executives, read-only) see every archived project, milestone and person. A manager sees only the archived projects they manage
 and the archived milestones in them, never people; they can restore those milestones but not the projects."""
 
 from app.ctx import Ctx
@@ -39,12 +39,14 @@ def _archived_by(conn, ids: list[str]) -> dict:
 def _can_restore(ctx: Ctx, kind: str, row: dict) -> bool:
     if ctx.is_admin:
         return True
+    if ctx.is_executive:  # read-only: they see the whole archive and restore nothing
+        return False
     # A manager restores milestones of the live projects they manage; projects come back only through an admin.
     return kind == "milestone" and not row["parent_archived"]
 
 
 def list_archive(conn, ctx: Ctx, params: dict) -> dict:
-    allowed = TYPES if ctx.is_admin else MANAGER_TYPES
+    allowed = TYPES if ctx.sees_all else MANAGER_TYPES
     if params.get("type"):
         kind = as_enum(params["type"], "type", TYPES)
         if kind not in allowed:
@@ -52,7 +54,7 @@ def list_archive(conn, ctx: Ctx, params: dict) -> dict:
         types = [kind]
     else:
         types = list(allowed)
-    if ctx.is_admin:
+    if ctx.sees_all:
         rows = [(t, r) for t in types for r in query(conn, QUERIES[t])]
     else:
         rows = [(t, r) for t in types for r in query(conn, QUERIES[t] + MINE[t], me=ctx.user_id)]

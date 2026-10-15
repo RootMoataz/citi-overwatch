@@ -1,6 +1,6 @@
 """Smart insights: gathers the caller's data, scoped like the dashboard, and hands it to app/rules/insights.py.
 
-Admins see everything, managers see their projects and people, and employees only hear about themselves
+Admins and executives see everything, managers see their projects and people, and employees only hear about themselves
 (their own hours and rejections; no project, budget or other people's insights). Salaries and rates are only
 used inside the cost totals, never returned.
 """
@@ -9,6 +9,7 @@ import math
 from datetime import timedelta
 from decimal import Decimal
 
+from app.authz import APPROVER_SQL
 from app.ctx import Ctx
 from app.db import query
 from app.features.insights.service import _people_scope
@@ -81,14 +82,14 @@ def _pending_dates(conn, ctx: Ctx, department: str | None) -> list:
     """Work dates of the entries waiting for this manager (the same set the dashboard counts)."""
     if not ctx.is_manager:
         return []
-    manager_filter = "" if ctx.is_admin else " AND p.manager_id = CAST(:me AS uuid)"
+    manager_filter = "" if ctx.is_admin else f" AND {APPROVER_SQL}"
     if department:
         manager_filter += " AND p.department_id = CAST(:dept AS uuid)"
     rows = query(conn, f"""SELECT t.work_date FROM time_entries t JOIN projects p ON p.id = t.project_id
                            JOIN milestones m ON m.id = t.milestone_id
                            WHERE t.status = 'pending' AND t.user_id <> CAST(:me AS uuid)
                              AND NOT p.is_archived AND NOT m.is_archived{manager_filter}""",
-                 me=ctx.user_id, **({"dept": department} if department else {}))
+                 me=ctx.user_id, today=_today(), **({"dept": department} if department else {}))
     return [r["work_date"] for r in rows]
 
 
@@ -113,7 +114,7 @@ def smart(conn, ctx: Ctx, params: dict | None = None) -> list[dict]:
     today = _today()
     people = _people_scope(conn, ctx, department)
     projects, milestones = [], []
-    if ctx.is_manager:
+    if ctx.is_manager or ctx.is_executive:
         rows = visible_projects(conn, ctx, department=department)
         projects, milestones = _projects(conn, rows, today), _milestones(conn, rows)
     return smart_insights(today=today, projects=projects, milestones=milestones,

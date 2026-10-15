@@ -13,11 +13,11 @@ def smart_insights(req, ctx, conn):
     return json_response(200, smart.smart(conn, ctx, req.query))
 
 
-@router.route("GET", "/allocations", roles={"admin", "manager"})
+@router.route("GET", "/allocations", roles={"admin", "manager", "executive"})
 def allocations(req, ctx, conn):
     return json_response(200, service.allocations(conn, ctx, req.query))
 
 
-@router.route("GET", "/audit-log", roles={"admin"})
+@router.route("GET", "/audit-log", roles={"admin", "executive"})
 def audit_log(req, ctx, conn):
     return json_response(200, service.audit_log(conn, req.query))

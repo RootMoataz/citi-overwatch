@@ -1,12 +1,14 @@
-"""Projects: create (admin), edit (manager/admin), archive/restore (admin), summaries and the list."""
+"""Projects: create (admin), edit (manager/admin) including the delegate approver, archive/restore (admin),
+summaries and the list."""
 
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from pg8000.exceptions import DatabaseError
 
 from app.audit import record
-from app.authz import load_project, manages
+from app.authz import delegation_active, load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.common import conflict_from
@@ -20,7 +22,7 @@ CREATE_STATUSES = ("planned", "active", "on_hold")
 TRANSITIONS = {("planned", "active"), ("active", "on_hold"), ("on_hold", "active"),
                ("active", "completed"), ("on_hold", "completed")}
 EDITABLE = {"name", "description", "start_date", "predicted_end_date", "budget", "status", "manager_id",
-            "department_id", "work_mode"}
+            "department_id", "work_mode", "delegate_approver_id", "delegate_until"}
 WORK_MODES = ("push", "pull")
 MAX_BUDGET = Decimal("1000000000")
 TENTH = Decimal("0.1")
@@ -86,14 +88,26 @@ def decorate(project: dict, milestones: list[dict], consumed: Decimal) -> dict:
         "department": ({"id": project["department_id"], "name": project.get("department_name")}
                        if project.get("department_id") else None),
         "work_mode": project["work_mode"],
+        "delegate": _delegate(project),
         "is_archived": project["is_archived"], "completed_at": project["completed_at"],
         "created_at": project["created_at"],
     }
 
 
-# A project row plus its manager's and department's names.
-WITH_NAMES = """SELECT p.*, u.first_name AS manager_first, u.last_name AS manager_last, d.name AS department_name
+def _delegate(project: dict) -> dict | None:
+    """Who may decide this project's hours besides its manager, until when, and whether that's still running."""
+    if not project.get("delegate_approver_id"):
+        return None
+    return {"id": project["delegate_approver_id"],
+            "name": f"{project.get('delegate_first', '')} {project.get('delegate_last', '')}".strip(),
+            "until": project["delegate_until"], "active": delegation_active(project, today())}
+
+
+# A project row plus its manager's, delegate's and department's names.
+WITH_NAMES = """SELECT p.*, u.first_name AS manager_first, u.last_name AS manager_last, d.name AS department_name,
+                       dl.first_name AS delegate_first, dl.last_name AS delegate_last
                 FROM projects p JOIN users u ON u.id = p.manager_id
+                LEFT JOIN users dl ON dl.id = p.delegate_approver_id
                 LEFT JOIN departments d ON d.id = p.department_id"""
 
 
@@ -116,6 +130,52 @@ def _check_manager(conn, manager_id) -> str:
     if not ok:
         raise ApiError(400, "VALIDATION_ERROR", "Pick an active manager or admin", {"manager_id": "invalid"})
     return manager_id
+
+
+def _check_delegate(conn, value, manager_id) -> str | None:
+    """The delegate approver: an active manager or admin other than the project's manager, or None to remove."""
+    if value in (None, ""):
+        return None
+    delegate_id = as_uuid(value, "delegate_approver_id")
+    ok = query_one(conn, """SELECT 1 AS ok FROM users WHERE id = CAST(:i AS uuid)
+                            AND role IN ('manager', 'admin') AND NOT is_archived""", i=delegate_id)
+    if not ok or delegate_id == str(manager_id):
+        raise ApiError(400, "VALIDATION_ERROR", "Pick an active manager or admin other than the project's manager",
+                       {"delegate_approver_id": "invalid"})
+    return delegate_id
+
+
+def _delegate_changes(conn, body: dict, before: dict, manager_id) -> dict:
+    """delegate_approver_id / delegate_until from an edit. Removing the delegate clears the end date; an end date
+    needs a delegate and can't be in the past. A new manager who was the delegate stops being one."""
+    out = {}
+    if "delegate_approver_id" in body:
+        out["delegate_approver_id"] = _check_delegate(conn, body["delegate_approver_id"], manager_id)
+        if out["delegate_approver_id"] is None:
+            out["delegate_until"] = None
+    elif before["delegate_approver_id"] is not None and str(before["delegate_approver_id"]) == str(manager_id):
+        out["delegate_approver_id"], out["delegate_until"] = None, None
+    delegate = out.get("delegate_approver_id", before["delegate_approver_id"])
+    if "delegate_until" in body and delegate is not None:
+        until = None if body["delegate_until"] in (None, "") else as_date(body["delegate_until"], "delegate_until")
+        if until is not None and until < today():
+            raise ApiError(400, "VALIDATION_ERROR", "The delegation can't end in the past", {"delegate_until": "past"})
+        out["delegate_until"] = until
+    elif body.get("delegate_until") not in (None, ""):
+        raise ApiError(400, "VALIDATION_ERROR", "Pick a delegate approver first", {"delegate_until": "no_delegate"})
+    return out
+
+
+def _notify_delegate(conn, ctx: Ctx, project: dict, delegate_id: str, until) -> None:
+    """Tell the new delegate approver which project's hours they now decide, for whom and until when."""
+    manager = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = :i", i=project["manager_id"])
+    payload = json.dumps({"project": {"id": str(project["id"]), "name": project["name"]},
+                          "manager": {"id": str(project["manager_id"]),
+                                      "name": f"{manager['first_name']} {manager['last_name']}"},
+                          "until": str(until) if until else None})
+    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
+                VALUES (CAST(:r AS uuid), 'DELEGATE_ASSIGNED', CAST(:s AS uuid), CAST(:p AS jsonb))""",
+             r=delegate_id, s=ctx.user_id, p=payload)
 
 
 def _check_dates(start, end, end_field="predicted_end_date") -> None:
@@ -169,7 +229,7 @@ def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") 
 
 
 def get_project(conn, ctx: Ctx, project_id: str) -> dict:
-    load_project(conn, ctx, project_id, include_archived=ctx.is_admin)
+    load_project(conn, ctx, project_id, include_archived=ctx.sees_all)
     return project_view(conn, project_id)
 
 
@@ -186,6 +246,7 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
         changes["manager_id"] = _check_manager(conn, body["manager_id"])
     if "department_id" in body:
         changes["department_id"] = check_department(conn, body["department_id"], current=before["department_id"])
+    changes.update(_delegate_changes(conn, body, before, changes.get("manager_id", before["manager_id"])))
     start = changes.get("start_date", before["start_date"])
     end = changes.get("predicted_end_date", before["predicted_end_date"])
     _check_dates(start, end)
@@ -215,7 +276,10 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
     if not changes:
         return project_view(conn, project_id)
     casts = {"status": "CAST(:status AS project_status)", "manager_id": "CAST(:manager_id AS uuid)",
-             "department_id": "CAST(:department_id AS uuid)"}
+             "department_id": "CAST(:department_id AS uuid)",
+             "delegate_approver_id": "CAST(:delegate_approver_id AS uuid)"}
+    new_delegate = changes.get("delegate_approver_id")
+    notify = new_delegate is not None and str(new_delegate) != str(before["delegate_approver_id"])
     sets = ", ".join(f"{k} = {casts.get(k, ':' + k)}" for k in changes)
     try:
         with transaction(conn):
@@ -224,6 +288,8 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
                      pid=project_id, **changes)
             record(conn, ctx, "complete" if completing else "update", "project", project_id,
                    before={k: before[k] for k in changes}, after=changes)
+            if notify:
+                _notify_delegate(conn, ctx, {**before, **changes}, new_delegate, changes.get("delegate_until"))
     except DatabaseError as exc:
         raise conflict_from(exc) or exc
     return project_view(conn, project_id)
@@ -252,7 +318,7 @@ def restore_project(conn, ctx: Ctx, project_id: str) -> dict:
 
 
 def summary(conn, ctx: Ctx, project_id: str) -> dict:
-    load_project(conn, ctx, project_id, include_archived=ctx.is_admin)
+    load_project(conn, ctx, project_id, include_archived=ctx.sees_all)
     view = project_view(conn, project_id)
     members = query_one(conn, """SELECT count(*) AS n FROM project_members
                                  WHERE project_id = CAST(:p AS uuid) AND NOT is_archived""", p=project_id)["n"]
@@ -264,8 +330,8 @@ def summary(conn, ctx: Ctx, project_id: str) -> dict:
 
 def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:
     """Budget tab: approved cost per non-archived milestone. The total is project_consumed itself, so the
-    table always matches the Consumed figure. Hours only for the project's manager and admins (P7)."""
-    project = load_project(conn, ctx, project_id, include_archived=ctx.is_admin)
+    table always matches the Consumed figure. Hours only for the project's manager, admins and executives (P7)."""
+    project = load_project(conn, ctx, project_id, include_archived=ctx.sees_all)
     rows = query(conn, """SELECT m.id, m.name, m.status,
                                  coalesce(sum(t.hours) FILTER (WHERE t.status = 'approved'), 0) AS approved_hours,
                                  coalesce(sum(t.hours) FILTER (WHERE t.status = 'pending'), 0) AS pending_hours,
@@ -274,7 +340,7 @@ def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:
                           WHERE m.project_id = CAST(:p AS uuid) AND NOT m.is_archived
                           GROUP BY m.id ORDER BY m.start_date, lower(m.name)""", p=project_id)
     budget = project["budget"]
-    show = manages(ctx, project)
+    show = manages(ctx, project) or ctx.is_executive
 
     def hours(value):
         return value if show else None
@@ -293,11 +359,11 @@ def visible_projects(conn, ctx: Ctx, *, archived: bool = False, department: str 
     """Every project row the caller may see, with the manager's and department's names;
     `department` (an id) keeps only that department's projects."""
     base = WITH_NAMES + " WHERE p.is_archived = :archived"
-    args = {"archived": archived if ctx.is_admin else False}
+    args = {"archived": archived if ctx.sees_all else False}
     if department:
         base += " AND p.department_id = CAST(:dept AS uuid)"
         args["dept"] = as_uuid(department, "department")
-    if ctx.is_admin:
+    if ctx.sees_all:
         return query(conn, base + " ORDER BY lower(p.name)", **args)
     return query(conn, base + """ AND (p.manager_id = CAST(:me AS uuid) OR EXISTS (
                 SELECT 1 FROM project_members pm WHERE pm.project_id = p.id
@@ -314,7 +380,7 @@ def decorated(conn, rows: list[dict]) -> list[dict]:
 
 def list_projects(conn, ctx: Ctx, params: dict) -> dict:
     page, size = page_params(params)
-    rows = visible_projects(conn, ctx, archived=ctx.is_admin and params.get("archived") == "true",
+    rows = visible_projects(conn, ctx, archived=ctx.sees_all and params.get("archived") == "true",
                             department=params.get("department") or None)
     if params.get("q"):
         needle = params["q"].strip().lower()

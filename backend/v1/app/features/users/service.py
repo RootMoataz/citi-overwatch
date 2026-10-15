@@ -16,7 +16,9 @@ from app.rules.usernames import is_valid_username, normalize_username, suggest_u
 from app.security import generate_temp_password, hash_password, password_policy_errors
 from app.validation import as_decimal, as_email, as_enum, as_str, as_uuid, page_params, require
 
-ROLES = ("admin", "manager", "employee")
+ROLES = ("admin", "manager", "employee", "executive")
+# Roles that can't own projects or have direct reports, so nobody may be moved into them while they do.
+NOT_MANAGING = ("employee", "executive")
 EDITABLE = {"first_name", "last_name", "email", "job_title", "role", "salary", "manager_id", "username",
             "department_id"}
 PICKER_FIELDS = ("id", "username", "first_name", "last_name", "job_title")
@@ -170,7 +172,7 @@ def update_user(conn, ctx: Ctx, user_id: str, body: dict) -> dict:
     if user_id == ctx.user_id and "salary" in changes:
         raise ApiError(403, "FORBIDDEN", "You can't change your own salary")
     role = changes.get("role", before["role"])
-    if before["role"] in ("manager", "admin") and role == "employee":
+    if before["role"] in ("manager", "admin") and role in NOT_MANAGING:
         _require_no_dependents(conn, user_id, "demote")
     if "manager_id" in body or "role" in changes:
         changes["manager_id"] = _check_manager(conn, role, body.get("manager_id", before["manager_id"]), user_id)

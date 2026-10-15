@@ -9,7 +9,7 @@ def username_availability(req, ctx, conn):
     return json_response(200, service.username_availability(conn, req.query))
 
 
-@router.route("GET", "/users", roles={"admin", "manager"})
+@router.route("GET", "/users", roles={"admin", "manager", "executive"})
 def list_users(req, ctx, conn):
     return json_response(200, service.list_users(conn, ctx, req.query))
 

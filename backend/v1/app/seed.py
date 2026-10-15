@@ -14,7 +14,7 @@ from app.security import hash_password
 DEMO_PASSWORD = "Demo123!"
 # Logins published in the README for graders. Their password is public, so locking them out or changing it
 # would only let one visitor spoil the demo for everyone else.
-PUBLISHED_DEMO = frozenset({"manager.demo", "employee.demo"})
+PUBLISHED_DEMO = frozenset({"manager.demo", "employee.demo", "executive.demo"})
 WEEKDAYS = range(5)
 
 PEOPLE = [
@@ -37,6 +37,9 @@ PEOPLE = [
     ("leo.martin", "Leo", "Martin", "employee", "Risk Analyst", 92000, "manager.demo"),
 ]
 
+# The read-only leadership login. Kept out of PEOPLE: it was added after the live demo was seeded, so
+# demo_backfill creates it there, and it has no reporting line or project work.
+EXECUTIVE = ("executive.demo", "Eve", "Executive", "Chief Delivery Officer", 180000, "Operations")
 
 # Department -> the demo people in it.
 DEPARTMENTS = {
@@ -69,7 +72,7 @@ DIFFICULTIES = {
 
 def seed(conn) -> dict:
     creds = {"admin": ("admin.demo", DEMO_PASSWORD), "manager": ("manager.demo", DEMO_PASSWORD),
-             "employee": ("employee.demo", DEMO_PASSWORD)}
+             "employee": ("employee.demo", DEMO_PASSWORD), "executive": (EXECUTIVE[0], DEMO_PASSWORD)}
     if query_one(conn, "SELECT 1 AS ok FROM users WHERE username = 'admin.demo'"):
         return creds
     with transaction(conn):
@@ -117,16 +120,28 @@ def create_admins(conn, users: list[dict]) -> dict:
     return {"created": created, "skipped": skipped}
 
 
+def _insert_executive(conn, password_hash: str, department_id) -> dict:
+    username, first, last, title, salary, _ = EXECUTIVE
+    return query_one(conn, """
+        INSERT INTO users (username, email, first_name, last_name, job_title, role, salary, password_hash,
+                           must_change_password, department_id)
+        VALUES (:u, :e, :f, :l, :t, 'executive', :s, :h, false, CAST(:d AS uuid)) RETURNING *""",
+        u=username, e=f"{username}@acme.example", f=first, l=last, t=title, s=salary, h=password_hash,
+        d=str(department_id) if department_id else None)
+
+
 def demo_backfill(conn) -> dict:
-    """Bring demo data seeded before departments, pull mode and difficulty up to today's seed, filling blanks only.
+    """Bring demo data seeded before departments, pull mode, difficulty and the executive role up to today's seed,
+    filling blanks only.
 
     Departments are reused (any case) or created; a demo person or project gets the seed's department only while
     it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
-    seed's difficulty only while it's still 'medium'. Assignees and hours are never touched. Safe to run again.
+    seed's difficulty only while it's still 'medium'; executive.demo is created (published demo password) only
+    if that username doesn't exist yet. Assignees and hours are never touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
-    out = {"departments_created": [], "users_updated": [], "projects_updated": [], "work_mode_updated": [],
-           "difficulties_updated": [], "already_set": 0, "skipped": []}
+    out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
+           "work_mode_updated": [], "difficulties_updated": [], "already_set": 0, "skipped": []}
 
     def skip(item: str, reason: str) -> None:
         """Values already there are only counted; anything the operator may want to look at is listed."""
@@ -166,6 +181,12 @@ def demo_backfill(conn) -> dict:
                 fill_department("users", "username", username, f"user {username}", department, out["users_updated"])
         for name, department in PROJECT_DEPARTMENTS.items():
             fill_department("projects", "name", name, f"project {name}", department, out["projects_updated"])
+
+        if query_one(conn, "SELECT 1 AS ok FROM users WHERE lower(username) = lower(:u)", u=EXECUTIVE[0]):
+            skip(f"user {EXECUTIVE[0]}", "already_set")  # whatever its role or password now, it stays as it is
+        else:
+            _insert_executive(conn, hash_password(DEMO_PASSWORD), departments.get(EXECUTIVE[5]))
+            out["users_created"].append(EXECUTIVE[0])
 
         beacon = query_one(conn, "SELECT id, work_mode FROM projects WHERE name = :n AND NOT is_archived",
                            n=PULL_PROJECT)
@@ -225,6 +246,7 @@ def _load(conn) -> None:
             RETURNING *""", u=username, e=f"{username}@acme.example", f=first, l=last, t=title, r=role,
             s=salary, m=str(people[reports_to]["id"]) if reports_to else None, h=pw_hash,
             dept=department_of[username])
+    people[EXECUTIVE[0]] = _insert_executive(conn, pw_hash, departments[EXECUTIVE[5]])
 
     def d(days: int) -> date:
         return today + timedelta(days=days)

@@ -4,6 +4,7 @@ import math
 from datetime import timedelta
 from decimal import Decimal
 
+from app.authz import APPROVER_SQL
 from app.ctx import Ctx
 from app.db import query, query_one
 from app.features.projects.service import decorated, visible_projects
@@ -16,7 +17,7 @@ TENTH = Decimal("0.1")
 
 
 def _people_scope(conn, ctx: Ctx, department: str | None = None) -> list[dict]:
-    """Who the caller may see workload for: admins everyone; managers their projects' people and reports.
+    """Who the caller may see workload for: admins and executives everyone; managers their projects' people and reports.
     `department` (an id) keeps only that department's people."""
     people = _people_in_reach(conn, ctx)
     if department:
@@ -27,7 +28,7 @@ def _people_scope(conn, ctx: Ctx, department: str | None = None) -> list[dict]:
 
 
 def _people_in_reach(conn, ctx: Ctx) -> list[dict]:
-    if ctx.is_admin:
+    if ctx.sees_all:
         return query(conn, """SELECT id, first_name, last_name, job_title, department_id FROM users
                               WHERE NOT is_archived AND role IN ('employee', 'manager')
                               ORDER BY lower(last_name), lower(first_name)""")
@@ -92,14 +93,15 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
 
     pending = 0
     if ctx.is_manager:
-        manager_filter = "" if ctx.is_admin else " AND p.manager_id = CAST(:me AS uuid)"
+        # The same entries as the Approvals queue: a manager's projects and those delegated to them.
+        manager_filter = "" if ctx.is_admin else f" AND {APPROVER_SQL}"
         if department:
             manager_filter += " AND p.department_id = CAST(:dept AS uuid)"
         pending = query_one(conn, f"""SELECT count(*) AS n FROM time_entries t JOIN projects p ON p.id = t.project_id
                                       JOIN milestones m ON m.id = t.milestone_id
                                       WHERE t.status = 'pending' AND t.user_id <> CAST(:me AS uuid)
                                         AND NOT p.is_archived AND NOT m.is_archived{manager_filter}""",
-                            me=ctx.user_id, **({"dept": department} if department else {}))["n"]
+                            me=ctx.user_id, today=today, **({"dept": department} if department else {}))["n"]
 
     return {"status_counts": counts, "projects": items,
             "at_risk": [{"id": i["id"], "name": i["name"], "reasons": i["at_risk_reasons"]}

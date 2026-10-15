@@ -1,4 +1,5 @@
-"""Project and milestone visibility, and who may manage them (spec §2)."""
+"""Project and milestone visibility, who may manage them and decide their hours (spec §2), and the pay fields an
+executive never receives."""
 
 import uuid
 
@@ -18,8 +19,42 @@ def is_uuid(value) -> bool:
         return False
 
 
+# Fields that reveal what someone is paid. Admins see them; a person sees their own unless they're an executive.
+PAY_FIELDS = frozenset({"salary", "hourly_rate"})
+
+
+def redact_pay(value):
+    """A JSON value with every salary and hourly-rate field removed, at any depth (audit-log changes included)."""
+    if isinstance(value, dict):
+        return {k: redact_pay(v) for k, v in value.items() if k not in PAY_FIELDS}
+    if isinstance(value, list):
+        return [redact_pay(v) for v in value]
+    return value
+
+
 def manages(ctx, project: dict) -> bool:
     return ctx.is_admin or str(project["manager_id"]) == ctx.user_id
+
+
+# ---------- delegate approver ----------
+
+# SQL for "the caller may decide this project's hours": its manager, or its delegate while the delegation runs.
+# Needs :me (the caller's id) and :today. Admins decide everything and don't use it.
+APPROVER_SQL = """(p.manager_id = CAST(:me AS uuid) OR (p.delegate_approver_id = CAST(:me AS uuid)
+                   AND (p.delegate_until IS NULL OR p.delegate_until >= :today)))"""
+
+
+def delegation_active(project: dict, today) -> bool:
+    """A delegate is set and today is on or before its end date (no end date: until removed)."""
+    if project.get("delegate_approver_id") is None:
+        return False
+    return project.get("delegate_until") is None or today <= project["delegate_until"]
+
+
+def acts_as_delegate(ctx, project: dict, today) -> bool:
+    """The caller is this live project's active delegate and still a manager or admin."""
+    return (ctx.role in ("manager", "admin") and not project["is_archived"]
+            and str(project.get("delegate_approver_id")) == ctx.user_id and delegation_active(project, today))
 
 
 def is_member(conn, project_id: str, user_id: str) -> bool:
@@ -36,9 +71,9 @@ def load_project(conn, ctx, project_id, *, manage: bool = False,
     if not project:
         raise _not_found()
     if project["is_archived"]:
-        if not (ctx.is_admin and include_archived):
+        if not (ctx.sees_all and include_archived):
             raise _not_found()
-    elif not (ctx.is_admin or manages(ctx, project) or is_member(conn, str(project_id), ctx.user_id)):
+    elif not (ctx.sees_all or manages(ctx, project) or is_member(conn, str(project_id), ctx.user_id)):
         raise _not_found()
     if manage and not manages(ctx, project):
         raise ApiError(403, "FORBIDDEN", "You don't have permission to do this")

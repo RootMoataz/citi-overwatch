@@ -42,7 +42,7 @@ def logout(req, ctx, conn):
     return json_response(204, cookies=[service.clear_cookie()])
 
 
-@router.route("POST", "/auth/change-password", allow_restricted=True)
+@router.route("POST", "/auth/change-password", allow_restricted=True, allow_executive=True)
 def change_password(req, ctx, conn):
     body, cookies = service.change_password(conn, ctx, req.json())
     return json_response(200, body, cookies=cookies)
@@ -53,6 +53,6 @@ def get_me(req, ctx, conn):
     return json_response(200, service.get_me(conn, ctx))
 
 
-@router.route("PUT", "/me")
+@router.route("PUT", "/me", allow_executive=True)
 def update_me(req, ctx, conn):
     return json_response(200, service.update_me(conn, ctx, req.json()))

@@ -25,6 +25,16 @@ class Ctx:
     def is_manager(self) -> bool:
         return self.role in ("manager", "admin")
 
+    @property
+    def is_executive(self) -> bool:
+        """Read-only leadership: sees what an admin sees for delivery oversight, never a salary, changes nothing."""
+        return self.role == "executive"
+
+    @property
+    def sees_all(self) -> bool:
+        """Organisation-wide read access: admins and executives."""
+        return self.role in ("admin", "executive")
+
 
 def jwt_secret(conn) -> str:
     global _secret
