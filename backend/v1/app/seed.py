@@ -485,6 +485,113 @@ def _demo_time_tracking(conn, out: dict, skip) -> None:
         f"{w['project']} / {w['milestone']} (SAME_HOURS_DAILY)")
 
 
+# ---------- the timer workflow (LOGIC_WALKTHROUGH §28): a change request waiting for the manager ----------
+
+CHANGE_PERSON = "employee.demo"  # Eli asks to change hours a timer tracked
+CHANGE_HOURS = Decimal(2)
+CHANGE_TO = Decimal("1.5")
+CHANGE_NOTE = "Mapped the remaining address fields for the reconciliation report"
+CHANGE_REASON = "I forgot to stop the timer when I took a phone call, so it ran 30 minutes too long."
+
+
+def _change_request_slot(conn, person_id):
+    """(work item, day) for a small timer-tracked entry of the person: a milestone they're assigned to on an open
+    project inside its dates and the milestone's, today or an earlier day of this week or last week (weekdays
+    first), with nothing on it that day and the day staying within 24h. None when nothing fits."""
+    today = datetime.now(timezone.utc).date()
+    this_week = today - timedelta(days=today.weekday())
+    work = query(conn, """
+        SELECT m.id AS milestone_id, m.name AS milestone, m.start_date, m.end_date, p.id AS project_id,
+               p.start_date AS p_start, p.predicted_end_date AS p_end
+        FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id JOIN projects p ON p.id = m.project_id
+        WHERE a.user_id = :u AND NOT m.is_archived AND m.status <> 'completed' AND p.status IN ('planned', 'active')
+          AND NOT p.is_archived
+        ORDER BY lower(p.name), lower(m.name)""", u=person_id)
+    last_week = this_week - timedelta(days=7)
+    # Latest weekday first (this week up to today, then last week), then a weekend day (Saturday before Sunday).
+    days = [d for d in (this_week + timedelta(days=n) for n in reversed(WEEKDAYS)) if d <= today] + \
+        [last_week + timedelta(days=n) for n in reversed(WEEKDAYS)] + \
+        [d for d in (this_week + timedelta(days=n) for n in (5, 6)) if d <= today] + \
+        [last_week + timedelta(days=n) for n in (5, 6)]
+    for w in work:
+        for d in days:
+            if not (max(w["start_date"], w["p_start"]) <= d <= min(w["end_date"], w["p_end"])):
+                continue
+            taken = query_one(conn, """SELECT 1 AS ok FROM time_entries WHERE user_id = :u AND milestone_id = :m
+                                       AND work_date = :d""", u=person_id, m=w["milestone_id"], d=d)
+            day_total = query_one(conn, """SELECT coalesce(sum(hours), 0) AS h FROM time_entries
+                                           WHERE user_id = :u AND work_date = :d AND status IN ('pending', 'approved')""",
+                                  u=person_id, d=d)["h"]
+            if not taken and day_total + CHANGE_HOURS <= 24:
+                return w, d
+    return None
+
+
+def _demo_change_request(conn, out: dict, skip) -> None:
+    """Fill blanks only: while nobody has asked to change timer hours, Eli asks to change a timer-tracked pending
+    cell of his (CHANGE_HOURS -> CHANGE_TO), so the manager can show approve or reject. When Eli has no such cell, a
+    small one is created first, within the timesheet rules (assigned, open project, inside its dates, the 24h day),
+    with the stopped timer it came from. Running timers are never seeded: they would tick from the seed's time."""
+    from app.features.time.service import week_start
+
+    person = query_one(conn, "SELECT id, first_name, last_name FROM users WHERE username = :u AND NOT is_archived",
+                       u=CHANGE_PERSON)
+    if not person:
+        skip("change request", "missing")
+        return
+    if query_one(conn, "SELECT 1 AS ok FROM time_edit_requests LIMIT 1"):
+        skip("change request", "already_set")
+        return
+    cell = query_one(conn, """
+        SELECT t.id, t.milestone_id, t.project_id, t.work_date, t.hours, m.name AS milestone, p.name AS project,
+               p.manager_id FROM time_entries t
+        JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
+        JOIN projects p ON p.id = t.project_id AND NOT p.is_archived AND p.status IN ('planned', 'active')
+        WHERE t.user_id = :u AND t.status = 'pending' AND t.tracked_hours > 0 AND t.hr_submission_id IS NULL
+          AND t.hours > :min ORDER BY t.work_date DESC LIMIT 1""", u=person["id"], min=Decimal("0.25"))
+    if not cell:
+        slot = _change_request_slot(conn, person["id"])
+        if not slot:
+            skip("change request", "no_room")
+            return
+        w, d = slot
+        started = datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=18)
+        entry = query_one(conn, """
+            INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, status, note, tracked_hours,
+                                      created_at, updated_at)
+            VALUES (:u, :m, :p, :d, :h, 'pending', :n, :h, :at, :at) RETURNING id""",
+            u=person["id"], m=w["milestone_id"], p=w["project_id"], d=d, h=CHANGE_HOURS, n=CHANGE_NOTE,
+            at=started + timedelta(hours=float(CHANGE_HOURS)))
+        conn.run("""INSERT INTO time_timers (user_id, milestone_id, work_date, started_at, stopped_at, tracked_hours,
+                                             note, submitted_at, entry_id)
+                    VALUES (:u, :m, :d, :s, :e, :h, :n, :e, :entry)""",
+                 u=person["id"], m=w["milestone_id"], d=d, s=started, e=started + timedelta(hours=float(CHANGE_HOURS)),
+                 h=CHANGE_HOURS, n=CHANGE_NOTE, entry=entry["id"])
+        cell = query_one(conn, """SELECT t.id, t.milestone_id, t.project_id, t.work_date, t.hours, m.name AS milestone,
+                                         p.name AS project, p.manager_id FROM time_entries t
+                                  JOIN milestones m ON m.id = t.milestone_id JOIN projects p ON p.id = t.project_id
+                                  WHERE t.id = :i""", i=entry["id"])
+    requested = CHANGE_TO if cell["hours"] > CHANGE_TO else cell["hours"] - Decimal("0.25")
+    request = query_one(conn, """
+        INSERT INTO time_edit_requests (user_id, milestone_id, project_id, work_date, current_hours, requested_hours,
+                                        reason)
+        VALUES (:u, :m, :p, :d, :c, :r, :reason) RETURNING id""",
+        u=person["id"], m=cell["milestone_id"], p=cell["project_id"], d=cell["work_date"], c=cell["hours"],
+        r=requested, reason=CHANGE_REASON)
+    payload = json.dumps({"request_id": str(request["id"]), "work_date": str(cell["work_date"]),
+                          "week_start": str(week_start(cell["work_date"])), "current_hours": float(cell["hours"]),
+                          "requested_hours": float(requested), "reason": CHANGE_REASON,
+                          "first_name": person["first_name"], "name": f"{person['first_name']} {person['last_name']}",
+                          "milestone": {"id": str(cell["milestone_id"]), "name": cell["milestone"]},
+                          "project": {"id": str(cell["project_id"]), "name": cell["project"]}})
+    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
+                VALUES (:r, 'TIME_EDIT_REQUESTED', :s, CAST(:p AS jsonb))""",
+             r=cell["manager_id"], s=person["id"], p=payload)
+    out["change_requests_created"].append(
+        f"{person['first_name']} {person['last_name']}: {cell['project']} / {cell['milestone']} on "
+        f"{cell['work_date']} from {cell['hours']:f}h to {requested:f}h")
+
+
 def _flag_example_slot(conn):
     """(person and work item, days) for the flagged example: a demo employee on an in-progress milestone of an active
     project, last week or this week before today, four weekdays with nothing on that milestone, each day staying
@@ -542,6 +649,7 @@ def seed(conn, *, curate: bool = True) -> dict:
         _demo_workflow(conn, {key: [] for key in WORKFLOW_KEYS}, lambda item, reason: None)
         _demo_hr_submission(conn)
         _demo_time_tracking(conn, {key: [] for key in TIME_TRACKING_KEYS}, lambda item, reason: None)
+        _demo_change_request(conn, {"change_requests_created": []}, lambda item, reason: None)
         mark_flags_live(conn)
     return creds
 
@@ -622,14 +730,15 @@ def demo_backfill(conn) -> dict:
     and required skills (the seed's own and every department-plan step by name), the Schema Mapping progress
     update and resolved kickback fill blanks only (see _demo_workflow); the demo HR submission is added only while
     there is none; hour tracking fills blanks on pending hours only (see _demo_time_tracking: work notes and
-    tracked hours on Gia's pending entries, and one flagged pending example while there is none). Assignees and
+    tracked hours on Gia's pending entries, and one flagged pending example while there is none); one pending change
+    request on timer hours from Eli only while there is no change request at all (see _demo_change_request). Assignees and
     approved, rejected or HR-submitted hours are never touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
            "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "plan_board_arranged": [],
            "conversations_created": [], **{key: [] for key in WORKFLOW_KEYS}, "hr_submissions_created": [], "requests_updated": [],
-           "users_renamed": [], **{key: [] for key in TIME_TRACKING_KEYS},
+           "users_renamed": [], **{key: [] for key in TIME_TRACKING_KEYS}, "change_requests_created": [],
            "already_set": 0, "skipped": []}
 
     def skip(item: str, reason: str) -> None:
@@ -805,6 +914,7 @@ def demo_backfill(conn) -> dict:
             skip("HR submission", why_not)
 
         _demo_time_tracking(conn, out, skip)
+        _demo_change_request(conn, out, skip)
     return out
 
 

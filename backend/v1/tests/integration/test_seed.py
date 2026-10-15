@@ -343,8 +343,9 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
         "Apollo Data Migration / Cutover", "Apollo Data Migration / Schema Mapping", "Atlas Customer Portal / Build",
         "Atlas Customer Portal / Launch", "Delta Compliance Audit / Audit Fieldwork"]
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2 + NO_GIA_HOURS
-    # Beacon's board (Design alone is already in place) and the flagged pending example (Eli's same 9h every day).
-    assert result["already_set"] == 2
+    # Beacon's board (Design alone is already in place), the flagged pending example (Eli's same 9h every day) and
+    # Eli's change request (the old seed is wound back from today's, which has it).
+    assert result["already_set"] == 3
     assert (result["entry_notes_added"], result["entries_marked_tracked"], result["flagged_examples_created"]) ==         ([], [], [])
     assert result["skills_created"] == list(SKILLS)
     assert sorted(result["user_skills_updated"]) == sorted(PEOPLE_SKILLS)
@@ -385,8 +386,9 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
         assert result[key] == [], key
     # departments of people and projects, Beacon, difficulties, the executive login, the public demo admin,
     # the demo messages, priorities, Beacon's planning board, people's skills, milestone details, the progress
-    # update, the kickback, the HR submission, the demo request's department, the flagged pending example
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5 + 1 + len(PEOPLE_SKILLS) + 9 + 1 + 1 + 1 + 1 + 1
+    # update, the kickback, the HR submission, the demo request's department, the flagged pending example, the
+    # change request
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5 + 1 + len(PEOPLE_SKILLS) + 9 + 1 + 1 + 1 + 1 + 1 + 1
     assert result["users_created"] == [] and result["conversations_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2 + NO_GIA_HOURS
 
@@ -439,9 +441,9 @@ def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
     assert "Apollo Data Migration / Discovery" not in result["difficulties_updated"]
     assert "Apollo Data Migration / Cutover" not in result["priorities_updated"]
     assert {"item": "user riley.chen", "reason": "department_archived"} in result["skipped"]
-    # The four kept values, Beacon's board (Design alone, already in place) and the flagged pending example (Eli's
-    # same 9h every day this week).
-    assert result["already_set"] == 6
+    # The four kept values, Beacon's board (Design alone, already in place), the flagged pending example (Eli's
+    # same 9h every day this week) and Eli's change request.
+    assert result["already_set"] == 7
     # Beacon still switches to pull: Design keeps its assignee, so it simply isn't claimable.
     assert state["projects"]["Beacon Mobile App"][1] == "pull"
 
@@ -778,3 +780,27 @@ def test_demo_backfill_fills_gias_pending_notes_and_tracked_hours_only_while_bla
     assert (untouched["note"], untouched["tracked_hours"]) == ("", Decimal(0))
     again = demo_backfill(conn)
     assert again["entry_notes_added"] == [] and again["entries_marked_tracked"] == []
+
+
+def test_seed_has_a_change_request_from_eli_on_timer_hours_and_the_backfill_adds_it_once(client, conn):
+    from app.seed import demo_backfill
+    seed(conn)
+    req = query_one(conn, """SELECT r.*, u.username FROM time_edit_requests r JOIN users u ON u.id = r.user_id""")
+    assert (req["username"], req["status"], req["current_hours"], req["requested_hours"]) ==         ("employee.demo", "pending", Decimal(2), Decimal("1.5"))
+    entry = query_one(conn, """SELECT * FROM time_entries WHERE user_id = :u AND milestone_id = :m AND work_date = :d""",
+                      u=req["user_id"], m=req["milestone_id"], d=req["work_date"])
+    assert (entry["hours"], entry["tracked_hours"], entry["status"]) == (Decimal(2), Decimal(2), "pending")
+    timer = query_one(conn, "SELECT * FROM time_timers WHERE entry_id = :e", e=entry["id"])
+    assert timer["submitted_at"] is not None and timer["tracked_hours"] == 2
+    assert query_one(conn, "SELECT count(*) AS n FROM time_timers WHERE stopped_at IS NULL")["n"] == 0  # none running
+    manager = login(client, "manager.demo", DEMO_PASSWORD)
+    listed = client.request("GET", "/time-edit-requests", token=manager)[1]
+    assert [r["id"] for r in listed] == [str(req["id"])] and listed[0]["can_decide"]
+    bell = client.request("GET", "/notifications", token=manager)[1]
+    assert any(n["type"] == "TIME_EDIT_REQUESTED" for n in bell)
+    # A live database without one gets it from the backfill, once.
+    conn.run("DELETE FROM time_edit_requests")
+    result = demo_backfill(conn)
+    assert len(result["change_requests_created"]) == 1, result["skipped"]
+    assert demo_backfill(conn)["change_requests_created"] == []
+    assert query_one(conn, "SELECT count(*) AS n FROM time_edit_requests")["n"] == 1
