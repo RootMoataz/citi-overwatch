@@ -165,9 +165,9 @@ flowchart TD
 
 | | Archive | Restore | Sees it on the Archive page |
 |---|---|---|---|
-| Project | Admin | Admin | Admins; the project's manager (read-only, "Only an admin can restore a project") |
+| Project | Admin | Admin | Admins; executives (read-only); the project's manager (read-only, "Only an admin can restore a project") |
 | Milestone | Admin, the project's manager | Admin, the project's manager (while the project itself isn't archived) | Admins; the project's manager, with **Restore** |
-| Person | Admin | Admin | Admins only |
+| Person | Admin | Admin | Admins; executives (read-only) |
 
 - **Code:** `load_milestone()` in [`app/authz.py`](../../backend/v1/app/authz.py) lets an archived milestone through only for someone who manages its project, so other managers and employees get `404`; `restore_milestone()` asks for `manage=True`. Projects stay admin-only at the route. [`app/features/archive/service.py`](../../backend/v1/app/features/archive/service.py) filters a manager's list to `p.manager_id = me`, leaves people out, and sets `can_restore` per item.
 - **UI:** [`ArchivePage.jsx`](../../frontend/src/features/archive/ArchivePage.jsx) shows **Restore** only where `can_restore` is true and hides the People filter from managers. Milestones are archived from the project's Milestones tab.
@@ -384,3 +384,58 @@ No scheduler and no new AWS pieces: the reminder is created **lazily** when its 
 - **Format** ([`lib/csv.js`](../../frontend/src/lib/csv.js)): UTF-8 with a BOM so Excel reads accents, CRLF line ends, RFC 4180 quoting (cells with a comma, quote or line break are quoted, inner quotes doubled), readable headers with units (`Budget (USD)`, `Progress (%)`), plain numbers (no `$`, `%` or thousands separators), ISO dates, and timestamps as ISO 8601 UTC. Yes/No for flags.
 - **CSV injection:** a text cell starting with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading `'`, so a spreadsheet shows it as text instead of running it as a formula. Numbers are written as numbers, so a negative amount stays `-250`.
 - **Print / PDF** (dashboard on the manager and admin homes, and the project Budget tab) calls `window.print()`; the browser's dialog offers "Save as PDF". The print stylesheet ([`app/PrintStyles.jsx`](../../frontend/src/app/PrintStyles.jsx)) hides the sidebar, top bar, buttons, filters and tabs, prints on white, keeps cards, table rows and charts from splitting across pages and fits charts to the page width. The theme switches to light while printing (`usePrinting()` in [`colorMode.js`](../../frontend/src/app/colorMode.js), driven by the button, `beforeprint`/`afterprint` and the `print` media query), so a dark-mode user still gets a light printout. A small print-only header shows the page title, who printed it with their role, and the date and time.
+
+## 16. Roles and the executive's read-only guard
+
+| | Admin | Manager | Employee | Executive |
+|---|---|---|---|---|
+| Home | Control centre + organisation dashboard | Dashboard with their approvals on top | My week | Organisation dashboard, marked **Read-only view** |
+| Projects | All, edit, archive | Theirs (edit), others they're on | The ones they're on | All, every tab (hours included), no edits |
+| Timesheet | Yes | Yes | Yes | No (they don't log hours) |
+| Approvals | Everything | Their projects + delegated ones | No | No |
+| Allocation, smart insights | Everyone | Their people | Themselves only (insights) | Everyone |
+| Archive | Everything, restores | Their projects' items, restores milestones | No | Everything, restores nothing |
+| Audit log | Yes | No | No | Yes (no pay fields) |
+| People, departments, project requests | Manage | Requests only | No | No (departments list only) |
+| Profiles | Anyone, with salary | Their people, no salary | Themselves | Anyone, never a salary (not even their own) |
+
+```mermaid
+flowchart TD
+  R[request] --> A{signed in?}
+  A -- no --> N[401]
+  A -- yes --> X{role executive and method<br/>POST / PUT / PATCH / DELETE?}
+  X -- yes --> O{route allow_executive?<br/>own password, name and email, photo, notifications}
+  O -- no --> RO["403 READ_ONLY (handler never runs)"]
+  O -- yes --> H
+  X -- no --> RL{route roles allow it?}
+  RL -- no --> F[403 FORBIDDEN]
+  RL -- yes --> H[handler]
+  H --> P{caller is an executive?}
+  P -- yes --> S["strip every salary / hourly_rate key from the JSON, at any depth"]
+  P -- no --> Out[response]
+  S --> Out
+```
+
+- **Code:** the guard and the stripping are in [`app/router.py`](../../backend/v1/app/router.py) (`_guard`, `_without_pay`), using `redact_pay()` from [`app/authz.py`](../../backend/v1/app/authz.py). `Ctx.sees_all` (admin or executive) widens what services read: `visible_projects`, `load_project` (archived projects too), the dashboard's and allocation's people, the archive and profiles. `manages()` stays admin-or-manager, so no edit path opens for an executive even before the guard.
+- **Why central:** a write route added later is read-only for executives by default, and pay can't leak through a new response shape. [`tests/integration/test_executive.py`](../../backend/v1/tests/integration/test_executive.py) walks every registered write route and checks the opt-in list exactly, and checks the main read endpoints contain no `salary` or `hourly_rate` key (while the admin's audit log does).
+- **Roles:** an admin creates executives from People like any role. An executive has no reporting manager, can't manage projects, join teams or be a delegate; moving a manager with projects or reports to executive is `409 HAS_DEPENDENTS`.
+- **UI:** [`lib/permissions.js`](../../frontend/src/lib/permissions.js) answers no to every write action for executives (`isReadOnly()` labels the view), [`app/access.js`](../../frontend/src/app/access.js) and [`app/nav.jsx`](../../frontend/src/app/nav.jsx) give them Dashboard, Projects, Allocation, Archive and Audit log, and `canViewProfile` lets them open anyone.
+
+## 17. Delegate approver
+
+```mermaid
+flowchart TD
+  M["PUT /projects/{id} by its manager or an admin<br/>{delegate_approver_id, delegate_until?}"] --> V{active manager or admin,<br/>not the project's manager?<br/>until not in the past?}
+  V -- no --> E[400 VALIDATION_ERROR]
+  V -- yes --> W["save; audit update; DELEGATE_ASSIGNED to a newly named delegate"]
+  W --> Q["GET /approvals as the delegate:<br/>p.manager_id = me OR (p.delegate_approver_id = me AND (until IS NULL OR until ≥ today))"]
+  Q --> D{approve / reject}
+  D -- own hours --> SA[403 SELF_APPROVAL]
+  D -- after the end date, removed,<br/>or no longer a manager/admin --> NF[404, as for any other manager]
+  D -- ok --> OK["decided; audit after.as_delegate_for = project manager"]
+```
+
+- **Active** means a delegate is set, today (UTC) is on or before `delegate_until` or there is none, the project isn't archived, and the delegate is still a manager or admin. `acts_as_delegate()` and `APPROVER_SQL` in [`app/authz.py`](../../backend/v1/app/authz.py) are that one rule, used by the queue and decisions ([`app/features/time/service.py`](../../backend/v1/app/features/time/service.py)), the dashboard's pending count, smart insights and which profiles a manager may open.
+- **What a delegate gets:** the project's pending hours in their Approvals queue, labelled **Delegated from *manager***, the budget impact (cost, never an hourly rate unless they're an admin), approve and reject. Not other projects of the same manager, not their own hours, not the project's settings.
+- **The manager keeps every right**; delegation adds an approver, it doesn't move the queue.
+- **UI:** the project dialog's **Delegate approver** and **Delegate until** fields ([`ProjectForm.jsx`](../../frontend/src/features/projects/ProjectForm.jsx), sent only when changed), "Approvals delegated to *X* until *date*" on the project's Overview, and the label in [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx). The bell's `DELEGATE_ASSIGNED` alert opens `/approvals?project=…`.

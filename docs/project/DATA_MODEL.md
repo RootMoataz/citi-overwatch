@@ -1,6 +1,6 @@
 # Data model
 
-The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, and [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
+The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode, [`005_user_avatars.sql`](../../backend/v1/migrations/005_user_avatars.sql) adds profile photos, and [`006_executive_delegates.sql`](../../backend/v1/migrations/006_executive_delegates.sql) adds the `executive` role and each project's delegate approver. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
 
 Conventions:
 
@@ -40,7 +40,7 @@ erDiagram
     uuid id PK
     text username "unique on lower()"
     text email "unique on lower()"
-    user_role role "admin | manager | employee"
+    user_role role "admin | manager | employee | executive"
     numeric salary "annual, ≥ 0"
     uuid manager_id FK "required for employees"
     uuid department_id FK "optional"
@@ -57,6 +57,8 @@ erDiagram
     numeric budget "≥ 0"
     project_status status "planned | active | on_hold | completed"
     uuid manager_id FK
+    uuid delegate_approver_id FK "optional, a manager or admin"
+    date delegate_until "optional"
     uuid department_id FK "optional"
     text work_mode "push | pull"
     timestamptz completed_at
@@ -94,7 +96,7 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `users` | Every account.<br>• Usernames and emails are unique **regardless of case**, through unique indexes on `lower(…)`.<br>• `manager_id` is the reporting manager. The service requires it for employees.<br>• `must_change_password` and `temp_password_expires_at` (72 h) drive the forced change.<br>• `failed_login_count` and `locked_until` drive the 15-minute lockout.<br>• `department_id` (optional) is set by an admin.<br>• `avatar_updated_at` is set while the person has a profile photo; it's the photo's version in `avatar_url`.<br>• Indexed on `manager_id` and `department_id`. |
+| `users` | Every account. `role` is `admin`, `manager`, `employee` or `executive` (read-only leadership, added by migration 006 with `ALTER TYPE … ADD VALUE`, so existing rows are untouched).<br>• Usernames and emails are unique **regardless of case**, through unique indexes on `lower(…)`.<br>• `manager_id` is the reporting manager. The service requires it for employees.<br>• `must_change_password` and `temp_password_expires_at` (72 h) drive the forced change.<br>• `failed_login_count` and `locked_until` drive the 15-minute lockout.<br>• `department_id` (optional) is set by an admin.<br>• `avatar_updated_at` is set while the person has a profile photo; it's the photo's version in `avatar_url`.<br>• Indexed on `manager_id` and `department_id`. |
 | `user_avatars` | One profile photo per person (`user_id` is the primary key, deleted with the user). `png` is the sanitised PNG the server rebuilt, never the uploaded bytes; a `CHECK` caps it at 1 MB. Kept out of `users` so the many `SELECT * FROM users` reads never carry image bytes. Added by migration `005_user_avatars.sql`. |
 | `departments` | Admin-managed groups for people and projects. The name is unique **regardless of case** (unique index on `lower(name)`, archived ones included). Archiving hides a department from the pickers and the dashboard filter; people and projects already in it keep it until someone changes them. |
 | `refresh_tokens` | One row per session. Only `token_hash` (unique) is stored. `revoked_at` is set on rotation, logout, password change and reset. |
@@ -105,7 +107,7 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `projects` | The project's name (unique among non-archived projects, by a partial unique index on `lower(name)`), dates, budget, status and its one manager. `completed_at` is set when the project is completed.<br>• `department_id` (optional) is set by the project's manager or an admin.<br>• `work_mode` is `push` (the default: the manager assigns milestones) or `pull` (team members claim ready milestones, see [LOGIC_WALKTHROUGH §11](LOGIC_WALKTHROUGH.md#11-pull-mode-claiming-a-milestone)); a `CHECK` allows only those two. |
+| `projects` | The project's name (unique among non-archived projects, by a partial unique index on `lower(name)`), dates, budget, status and its one manager. `completed_at` is set when the project is completed.<br>• `department_id` (optional) is set by the project's manager or an admin.<br>• `work_mode` is `push` (the default: the manager assigns milestones) or `pull` (team members claim ready milestones, see [LOGIC_WALKTHROUGH §11](LOGIC_WALKTHROUGH.md#11-pull-mode-claiming-a-milestone)); a `CHECK` allows only those two.<br>• `delegate_approver_id` and `delegate_until` (migration 006, both optional): one other active manager or admin who may decide the project's pending hours while `delegate_until` is empty or today or later. A `CHECK` forbids an end date without a delegate; the service checks the delegate's role and that it isn't the project's manager. Partial index on `delegate_approver_id`. See [LOGIC_WALKTHROUGH §17](LOGIC_WALKTHROUGH.md#17-delegate-approver). |
 | `project_requests` | A manager's proposal: name, description, proposed dates and budget, and a reason. `status` is `pending`, `approved` or `rejected`, and the row records `decided_by`, `decided_at` and `decision_comment`. On approval, `project_id` links to the project it created. |
 | `project_members` | Staffing. `(project_id, user_id)` is unique, and `planned_hours_per_week` must be more than 0 and at most 40. The cross-project 40-hour cap is checked in the service, because it depends on which projects' dates overlap. |
 
@@ -123,7 +125,7 @@ erDiagram
 | Table | Purpose and notes |
 |---|---|
 | `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget. |
-| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED` or `SUPPORT_ROUTED`.<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
+| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY` or `DELEGATE_ASSIGNED`.<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
 
 ### Audit
 

@@ -73,8 +73,9 @@ Open http://localhost:3000 and sign in with a demo login. Locally, emails aren't
 | Admin | `admin.demo2`, `admin.demo3`, `admin.demo4` | Private, held by the owner (live site) |
 | Manager | `manager.demo` | `Demo123!` |
 | Employee | `employee.demo` | `Demo123!` |
+| Executive (read-only) | `executive.demo` | `Demo123!` |
 
-The two published demo logins never lock and can't change their password, so nobody can lock graders out. On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
+The three published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation. On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
 
 Other useful commands:
 

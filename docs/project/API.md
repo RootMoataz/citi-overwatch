@@ -36,6 +36,7 @@ Every error has the same envelope:
 | 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED` | No token, or an expired access token (the client refreshes and retries once) |
 | 401 | `INVALID_CREDENTIALS`, `TEMP_PASSWORD_EXPIRED`, `REFRESH_INVALID` | Sign-in and refresh |
 | 403 | `FORBIDDEN`, `NOT_ASSIGNED`, `SELF_APPROVAL`, `PASSWORD_CHANGE_REQUIRED`, `DEMO_ACCOUNT` | Not allowed for your role or this record; approving your own hours; a temporary password is still in use; changing a published demo account's password |
+| 403 | `READ_ONLY` | An executive called a `POST`, `PUT`, `PATCH` or `DELETE` route other than their own account's (see [Executives](#executives-read-only)) |
 | 404 | `NOT_FOUND` | It doesn't exist, **or you aren't allowed to see it** (so its existence isn't revealed) |
 | 405 | `METHOD_NOT_ALLOWED` | The path exists, but not with this method |
 | 409 | `STALE_ENTRY` | The time entry changed (edited or decided by someone else) since you loaded it |
@@ -44,6 +45,13 @@ Every error has the same envelope:
 | 500 | `INTERNAL_ERROR` | An unexpected error. It's logged with a stack trace, under the same `request_id` |
 
 Success codes: `200` OK, `201` created, `204` archived or no content.
+
+## Executives (read-only)
+
+`role: "executive"` is read-only leadership. Executives read what an admin reads for delivery oversight: `/dashboard`, `/insights/smart`, `/allocations`, `/projects` (all, archived ones included) and every project tab, `/milestones/…`, `/archive` (every type, `can_restore` always `false`), `/audit-log`, `/departments`, `/users` (names only, like a manager) and anyone's `/users/{id}/profile`. They have no timesheet and no approvals queue (`/approvals`, `/project-requests` and someone else's `/time-entries` are `403`).
+
+- **No writes.** The router refuses every `POST`, `PUT`, `PATCH` and `DELETE` for an executive with `403 READ_ONLY` before the handler runs. A route opts in with `allow_executive=True`; only their own account does: `POST /auth/change-password`, `PUT /me`, `PUT /me/avatar`, `DELETE /me/avatar`, `POST /notifications/read-all`, `POST /notifications/{id}/read` (sign-in, refresh and logout need no token). A test walks every registered write route and checks this list.
+- **No pay.** Every JSON response to an executive has every `salary` and `hourly_rate` field removed, at any depth, including the audit log's `changes` and their own `/me` and profile.
 
 ---
 
@@ -85,11 +93,11 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/users?q=&role=&archived=&page=&page_size=` | Admins and managers. Managers get no salaries |
+| GET | `/users?q=&role=&archived=&page=&page_size=` | Admins, managers and executives. Managers and executives get only `id`, `username`, names and `job_title`. `role` is `admin`, `manager`, `employee` or `executive` |
 | POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, department_id?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent |
 | GET | `/users/{id}` | |
-| GET | `/users/{id}/profile?week=` | Every role. Admins see anyone; managers see themselves and people on a project they manage; employees see only themselves. Anyone else gets `404`. `salary` is only included for admins and the person themselves |
-| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary`, `manager_id` and `department_id` (an active department, or `null` to clear it; anything else is `400`). You can't change your own role or salary |
+| GET | `/users/{id}/profile?week=` | Every role. Admins and executives see anyone; managers see themselves, their reports, people on a project they manage and anyone whose hours wait for them (delegated projects included); employees see only themselves. Anyone else gets `404`. `salary` is only included for admins and the person themselves, never for an executive |
+| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary`, `manager_id` and `department_id` (an active department, or `null` to clear it; anything else is `400`). You can't change your own role or salary. Moving a manager or admin to `employee` or `executive` is `409 HAS_DEPENDENTS` while they manage projects or have reports |
 | DELETE | `/users/{id}` | Archives the account → `204`. Returns `409 HAS_DEPENDENTS` if they manage projects or have reports |
 | POST | `/users/{id}/restore` | |
 | POST | `/users/{id}/reset-password` | Issues a new temporary password, forces a change at the next sign-in and ends their sessions → `{email_sent, temp_password?}` |
@@ -187,14 +195,14 @@ Every change is in the audit log (`entity_type` `department`).
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects?q=&status=&manager=&department=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see. `archived` is admin only; `department` is a department ID. Each item has `team`: its active members as `[{id, name}]`, by last name (for the list's avatars) |
+| GET | `/projects?q=&status=&manager=&department=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see (admins and executives: all). `archived` is for admins and executives; `department` is a department ID. Each item has `team`: its active members as `[{id, name}]`, by last name (for the list's avatars), and `delegate` (below) |
 | POST | `/projects` | Admin. `{name, description?, start_date, predicted_end_date, budget, manager_id, status?, department_id?, work_mode?}` → `201`. `work_mode` is `push` (default) or `pull` |
 | GET | `/projects/{id}` | `404` if you can't see it |
-| PUT | `/projects/{id}` | The project's manager or an admin, including `department_id` (an active department or `null`) and `work_mode`. Only admins can change the manager |
+| PUT | `/projects/{id}` | The project's manager or an admin, including `department_id` (an active department or `null`) and `work_mode`. Only admins can change the manager. `delegate_approver_id` (an active manager or admin other than the project's manager, or `null` to remove it, which also clears the date; otherwise `400 VALIDATION_ERROR` `{delegate_approver_id: "invalid"}`) and `delegate_until` (optional date, not in the past: `{delegate_until: "past"}`; without a delegate: `{delegate_until: "no_delegate"}`). Naming a new delegate sends them `DELEGATE_ASSIGNED`. Every project view has `delegate`: `null` or `{id, name, until, active}`, where `active` means no end date or today ≤ `until` |
 | DELETE | `/projects/{id}` | Admin only (`403` for managers, even their own project). Archives the project → `204` |
 | POST | `/projects/{id}/restore` | Admin only (`403` for managers) |
 | GET | `/projects/{id}/summary` | Budget, consumed, remaining, percentages, risk reasons and team size |
-| GET | `/projects/{id}/milestone-costs` | Per non-archived milestone: `approved_hours`, `pending_hours`, `approved_cost` and `budget_pct`, plus a `total` whose `approved_cost` is the project's `consumed`. Hours are `null` (and `hours_visible` is `false`) unless you manage the project. Never includes an hourly rate |
+| GET | `/projects/{id}/milestone-costs` | Per non-archived milestone: `approved_hours`, `pending_hours`, `approved_cost` and `budget_pct`, plus a `total` whose `approved_cost` is the project's `consumed`. Hours are `null` (and `hours_visible` is `false`) unless you manage the project or are an executive. Never includes an hourly rate |
 
 ```http
 GET /api/v1/projects?page_size=1
@@ -255,8 +263,8 @@ A missing field:
 |---|---|---|
 | GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones, each with `role`: `primary` or `supporting`, the `project`'s `status`, and `open`: `false` when the project is on hold or completed), entries and totals. `user` lets a manager or admin view someone else |
 | PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week, all or nothing. `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it. See the rules below |
-| GET | `/approvals?user=&project=&milestone=` | Pending entries you can decide (never your own) |
-| GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry. `hourly_rate` is included for admins only, because a rate reveals a salary; managers get the cost |
+| GET | `/approvals?user=&project=&milestone=` | Admins and managers. Pending entries you can decide (never your own): admins all; managers their projects' and those of projects delegated to them while the delegation is active. Each item has `delegated_from`: `{id, name}` of the project's manager when it's in your queue as the delegate, otherwise `null` |
+| GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry, for whoever may decide it (the project's manager, an admin, or its active delegate). `hourly_rate` is included for admins only, because a rate reveals a salary; managers and delegates get the cost |
 | POST | `/time-entries/{id}/approve` | `{expected_hours?}`: the hours you saw. Copies the hourly rate onto the entry, which then counts toward the budget. Returns `409 STALE_ENTRY` if the entry changed since you loaded it |
 | POST | `/time-entries/{id}/reject` | `{reason, expected_hours?}`. Same `409 STALE_ENTRY` guard. Sends the employee an `ENTRY_REJECTED` alert |
 
@@ -320,6 +328,7 @@ As an admin (managers get the same without `hourly_rate`):
 | `SUPPORT_ASSIGNED` | The employee who was auto-routed | "You've been added as support on *milestone* (*project*), due *date*" | `name`, `end_date`, `milestone`, `project`, `from_milestone` |
 | `SUPPORT_ROUTED` | That milestone's project manager | "*Name* was auto-routed to support *milestone*" | Same as `SUPPORT_ASSIGNED` |
 | `MILESTONE_CLAIMED` | The project's manager (not when they claim it themselves) | "*Name* claimed *milestone* (*project*)" | `name`, `milestone {id, name}`, `project {id, name}` |
+| `DELEGATE_ASSIGNED` | The newly named delegate approver (not when the same delegate is saved again) | "*Name* made you the delegate approver for *project*: you can approve hours for *manager* until *date*" (or "until further notice") | `project {id, name}`, `manager {id, name}`, `until` |
 
 | `TIMESHEET_EMPTY` | An active employee or manager on at least one active project with no pending or approved hours this week, from Friday 14:00 to the end of Sunday, New York time | "Your timesheet for the week of Mon 12 Oct is empty" | `week_start` |
 
@@ -343,9 +352,9 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/dashboard?department=` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals`. `department` (an ID) keeps only that department's projects in every project-based number, only its people in `over_allocated`, and only its projects' entries in `pending_approvals` ([department filter](LOGIC_WALKTHROUGH.md#12-the-dashboards-department-filter)) |
-| GET | `/allocations?week=` | Admins and managers. Per person (with their `department_id`): projects with planned, logged and approved hours, totals and `utilization_pct` |
+| GET | `/allocations?week=` | Admins, managers and executives. Per person (with their `department_id`): projects with planned, logged and approved hours, totals and `utilization_pct` |
 | GET | `/insights/smart?department=` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. `department` (an ID) narrows them the way it narrows `/dashboard`: only that department's projects and people; `400 VALIDATION_ERROR` (`department: invalid_id`) if it isn't an ID. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
-| GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first. `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
+| GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admins and executives (without any `salary` or `hourly_rate` inside `changes`). Newest first. An approval or rejection made as a delegate has `changes.after.as_delegate_for` (the project manager's ID). `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
 
 ```json
 [{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer", "department_id": "4f1c…"},
@@ -375,7 +384,7 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/archive?type=` | Admins and managers (`403` for employees). Admins get every archived project, milestone and person. Managers get only the archived projects they manage and the archived milestones in their projects, never people (`?type=user` is `403`). Newest first. `type` is `project`, `milestone` or `user`. Each item has `can_restore`: always `true` for admins; for managers `true` only on milestones whose project isn't archived (projects are restored by an admin). Restoring uses each type's own `POST …/{id}/restore` |
+| GET | `/archive?type=` | Admins, managers and executives (`403` for employees). Admins and executives get every archived project, milestone and person (executives with `can_restore: false` on everything). Managers get only the archived projects they manage and the archived milestones in their projects, never people (`?type=user` is `403`). Newest first. `type` is `project`, `milestone` or `user`. Each item has `can_restore`: always `true` for admins; for managers `true` only on milestones whose project isn't archived (projects are restored by an admin). Restoring uses each type's own `POST …/{id}/restore` |
 
 ```json
 {"items": [{"type": "milestone", "id": "202d87b5-…", "name": "Schema Mapping", "archived_at": "2026-10-13T18:00:15.020027-04:00",
@@ -397,4 +406,4 @@ These run only through an IAM-authorized `aws lambda invoke`, never through the 
 | `{"op": "rotate_demo"}` | `{"rotated": 13}`: gives every seeded account except `admin.demo`, `manager.demo` and `employee.demo` a random password (run once on the public site) |
 | `{"op": "seed"}` | `{"seeded": true, "demo_users": ["admin.demo", "manager.demo", "employee.demo"]}`. Does nothing once the demo data exists |
 | `{"op": "create_admins", "users": [{"username", "first_name", "last_name"}, ...]}` | `{"created": [{"username", "password"}], "skipped": [...]}`: adds ready-to-use admin logins with random passwords (no forced change on first login); usernames that already exist are skipped. Used to create the live demo admins `admin.demo2`–`admin.demo4` |
-| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode and difficulty up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty on demo milestones (matched by project and milestone name) only while still `medium`. Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |
+| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode and difficulty up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty on demo milestones (matched by project and milestone name) only while still `medium`. Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |
