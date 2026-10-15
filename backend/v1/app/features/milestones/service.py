@@ -80,6 +80,7 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
             "is_assignee": any(str(a["id"]) == ctx.user_id for a in people),
             "claimable": claimable, "can_claim": claimable and on_team,
             "completed_at": m["completed_at"], "is_archived": m["is_archived"],
+            "plan_column": m["plan_column"], "sequence": m["sequence"],  # place on the planning board
         })
     return out
 

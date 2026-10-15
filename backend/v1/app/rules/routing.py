@@ -18,6 +18,13 @@ def urgency(m: dict, today: date) -> tuple:
     return (m["end_date"] >= today, priority_rank(m.get("priority")), m["end_date"], m["name"].lower(), str(m["id"]))
 
 
+def next_milestone_order_key(m: dict) -> tuple:
+    """Where a milestone sits in its project's workflow: the planning board's sequence first (milestones without
+    one go last), then the end date and the name so the order is stable."""
+    seq = m.get("sequence")
+    return (seq is None, seq if seq is not None else 0, m.get("end_date"), m["name"].lower(), str(m["id"]))
+
+
 def pick_support_milestone(candidates: list[dict], *, today: date, exclude_id: str,
                            member_projects: set[str]) -> dict | None:
     """The most urgent in-progress milestone on an active project the person is staffed on

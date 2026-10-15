@@ -59,6 +59,26 @@ PROJECT_DEPARTMENTS = {
 }
 PULL_PROJECT, CLAIMABLE_MILESTONE = "Beacon Mobile App", "Design"
 
+# Beacon is still being planned: besides Design and Prototype (Scheduled) its board holds cards not yet scheduled.
+# (name, column, place in the column, first day, last day (days after the project starts), difficulty, priority,
+# description). With these left over and Design unassigned, finalizing the plan shows failing checks.
+PLAN_CARDS = [
+    ("User Research", "backlog", 1, 0, 15, "easy", "high", "Shadow field teams for a day to learn how they work."),
+    ("Offline Sync", "backlog", 2, 121, 170, "hard", "critical", "Work without signal and sync when back online."),
+    ("Push Notifications", "ready", 1, 100, 140, "medium", "low", "Tell people when a job is assigned to them."),
+]
+
+
+def _plan_card(conn, project: dict, card: tuple) -> None:
+    name, column, seq, first, last, difficulty, priority, description = card
+    end_limit = project["predicted_end_date"]
+    conn.run("""INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty, priority,
+                                        plan_column, sequence)
+                VALUES (:p, :n, :desc, :s, :e, :dif, :pr, :col, :seq)""",
+             p=project["id"], n=name, desc=description, s=min(project["start_date"] + timedelta(days=first), end_limit),
+             e=min(project["start_date"] + timedelta(days=last), end_limit), dif=difficulty, pr=priority, col=column,
+             seq=seq)
+
 # (project, milestone) -> difficulty; every other demo milestone is 'medium'.
 DIFFICULTIES = {
     ("Apollo Data Migration", "Discovery"): "easy",
@@ -214,11 +234,13 @@ def demo_backfill(conn) -> dict:
     it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
     seed's difficulty and priority, each only while it's still 'medium'; executive.demo is created (published demo password) only
     if that username doesn't exist yet; the demo message thread and Schema Mapping discussion are added only while
-    there are no conversations at all. Assignees and hours are never touched. Safe to run again.
+    there are no conversations at all; Beacon's planning cards (PLAN_CARDS) are added one by one, each only while Beacon
+    is still planned, its plan isn't finalized and it has no milestone of that name. Assignees and hours are never
+    touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
-           "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "conversations_created": [], "already_set": 0,
+           "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "plan_cards_created": [], "conversations_created": [], "already_set": 0,
            "skipped": []}
 
     def skip(item: str, reason: str) -> None:
@@ -319,6 +341,25 @@ def demo_backfill(conn) -> dict:
                             WHERE id = ANY(:ids) AND priority = 'medium'""",
                          pr=priority, ids=[r["id"] for r in rows if r["priority"] == "medium"])
                 out["priorities_updated"].append(label)
+
+        # Beacon's planning cards, each only while Beacon is still being planned and has no milestone of that name
+        # (archived ones count, so a card someone removed doesn't come back).
+        plan = query_one(conn, """SELECT id, name, start_date, predicted_end_date, status::text AS status,
+                                         plan_finalized_at FROM projects WHERE name = :n AND NOT is_archived""",
+                         n=PULL_PROJECT)
+        if not plan:
+            skip(f"{PULL_PROJECT} plan", "missing")
+        elif plan["status"] != "planned" or plan["plan_finalized_at"] is not None:
+            skip(f"{PULL_PROJECT} plan", "plan_closed")
+        else:
+            for card in PLAN_CARDS:
+                label = f"{PULL_PROJECT} / {card[0]}"
+                if query_one(conn, "SELECT 1 AS ok FROM milestones WHERE project_id = :p AND name = :n",
+                             p=plan["id"], n=card[0]):
+                    skip(label, "already_set")
+                else:
+                    _plan_card(conn, plan, card)
+                    out["plan_cards_created"].append(label)
 
         # The demo messages, only while nobody has written anything yet.
         if query_one(conn, "SELECT 1 AS ok FROM conversations LIMIT 1"):
@@ -435,6 +476,9 @@ def _load(conn) -> None:
     depends(prototype, design)
     member(beacon, "gia.rossi", 20)
     member(beacon, "hugo.lee", 20)
+    assign(prototype, "hugo.lee")
+    for card in PLAN_CARDS:
+        _plan_card(conn, beacon, card)
     cobalt = project("Cobalt Infrastructure Upgrade", "riley.chen", "on_hold", d(-30), d(120), 150000,
                      "Replace end-of-life network hardware.")
     assessment = milestone(cobalt, "Assessment", d(-30), d(10), "in_progress")

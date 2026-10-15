@@ -479,6 +479,9 @@ def _message(r: dict, who: str) -> str:
         until = f"until {short_day(p['until'])}" if p.get("until") else "until further notice"
         return (f"{who} made you the delegate approver for {p['project']['name']}: you can approve hours "
                 f"for {p['manager']['name']} {until}")
+    if r["type"] == "PLAN_FINALIZED":
+        first = "your first milestone" if p.get("assigned") else "the first milestone"
+        return f"{p['project']['name']} plan finalized: {first} is {p['milestone']['name']}"
     if r["type"] == "MESSAGE_RECEIVED":
         return f"{who} sent you a message"
     if r["type"] == "TIMESHEET_EMPTY":
