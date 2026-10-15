@@ -12,7 +12,7 @@ from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.projects.service import project_consumed
 from app.http import ApiError
-from app.rules.overtime import approval_breakdown, forecast_total, hourly_rate, week_flags
+from app.rules.overtime import approval_breakdown, forecast_total, hourly_rate, overtime_ids, week_flags
 from app.validation import as_date, as_decimal, as_str, as_uuid, require
 
 MIN_HOURS = Decimal("0.25")
@@ -60,6 +60,23 @@ def _week_logged(conn, user_id: str, start: date) -> Decimal:
     return Decimal(row["h"])
 
 
+def _overtime(conn, user_id, start: date) -> set[str]:
+    """Ids of the user's entries that are overtime in the week of `start`, from the hours as they are NOW.
+    The stored over_40 is only a snapshot from save time, so every response recomputes it from here."""
+    rows = query(conn, """SELECT t.id, t.hours FROM time_entries t
+                          JOIN milestones lm ON lm.id = t.milestone_id AND NOT lm.is_archived
+                          JOIN projects lp ON lp.id = t.project_id AND NOT lp.is_archived
+                          WHERE t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b
+                            AND t.status IN ('pending', 'approved')
+                          ORDER BY t.work_date, t.milestone_id""",
+                 u=str(user_id), a=start, b=start + timedelta(days=6))
+    return overtime_ids([(str(r["id"]), r["hours"]) for r in rows])
+
+
+def _live(e: dict, overtime: set[str]) -> dict:
+    return {**e, "over_40": str(e["id"]) in overtime}
+
+
 # ---------- reading a week ----------
 
 def get_week(conn, ctx: Ctx, params: dict) -> dict:
@@ -88,6 +105,8 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         WHERE t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b{project_filter}
         ORDER BY t.work_date, t.milestone_id""", u=user_id, a=start, b=end, **args)
     name = _name(user)
+    overtime = _overtime(conn, user_id, start)
+    entries = [_live(e, overtime) for e in entries]
     return {
         "week_start": start,
         "user": {"id": user["id"], "name": name},
@@ -132,6 +151,15 @@ def _alert_recipient(conn, ctx: Ctx, project_manager_id) -> str | None:
     admin = query_one(conn, """SELECT id FROM users WHERE role = 'admin' AND NOT is_archived
                                AND id <> CAST(:me AS uuid) ORDER BY created_at LIMIT 1""", me=ctx.user_id)
     return str(admin["id"]) if admin else None
+
+
+def _sync_stored_flags(conn, user_id, start: date) -> None:
+    """Rewrite the week's stored over_40 so it matches the hours after this save (lowered hours clear it)."""
+    overtime = list(_overtime(conn, user_id, start))
+    conn.run("""UPDATE time_entries SET over_40 = (CAST(id AS text) = ANY(CAST(:ot AS text[])))
+                WHERE user_id = CAST(:u AS uuid) AND work_date BETWEEN :a AND :b
+                  AND over_40 IS DISTINCT FROM (CAST(id AS text) = ANY(CAST(:ot AS text[])))""",
+             ot=overtime, u=str(user_id), a=start, b=start + timedelta(days=6))
 
 
 def save_week(conn, ctx: Ctx, body: dict) -> dict:
@@ -190,6 +218,7 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
                                 VALUES (CAST(:r AS uuid), 'OVER_40H', CAST(:s AS uuid), :w, CAST(:p AS jsonb))
                                 ON CONFLICT (type, subject_user_id, week_start) DO NOTHING""",
                              r=recipient, s=ctx.user_id, w=start, p=payload)
+        _sync_stored_flags(conn, ctx.user_id, start)
     return get_week(conn, ctx, {"week": str(start)})
 
 
@@ -225,11 +254,14 @@ def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
         JOIN projects p ON p.id = t.project_id WHERE {' AND '.join(where)}
         ORDER BY t.work_date, lower(u.last_name)""", **args)
     totals: dict[tuple, Decimal] = {}
+    overtime: dict[tuple, set[str]] = {}
     out = []
     for r in rows:
         key = (str(r["user_id"]), week_start(r["work_date"]))
         if key not in totals:
             totals[key] = _week_logged(conn, key[0], key[1])
+            overtime[key] = _overtime(conn, key[0], key[1])
+        r = _live(r, overtime[key])
         name = _name(r)
         out.append({"entry": _entry_view(r, name, show_rate=ctx.is_admin), "label": label(r, name),
                     "user": {"id": r["user_id"], "name": name},
@@ -323,7 +355,9 @@ def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None,
                                                     "reason": reason})
         if not approve:
             _alert_rejected(conn, entry, project, reason)
+            _sync_stored_flags(conn, entry["user_id"], week_start(entry["work_date"]))  # rejected hours stop counting
     row = query_one(conn, "SELECT * FROM time_entries WHERE id = :i", i=entry["id"])
+    row = _live(row, _overtime(conn, row["user_id"], week_start(row["work_date"])))
     return _entry_view(row, _name(entry), show_rate=ctx.is_admin)
 
 

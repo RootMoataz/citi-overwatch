@@ -16,6 +16,17 @@ def week_flags(*, before_total: Decimal, after_total: Decimal,
     return over, crossed
 
 
+def overtime_ids(entries, cap: Decimal = WEEKLY_CAP) -> set:
+    """entries: one user-week's counted (id, hours), in logging order (work date, then milestone).
+    Overtime is the entry whose hours take the running total over the cap, and every entry after it."""
+    running, out = Decimal(0), set()
+    for entry_id, hours in entries:
+        running += hours
+        if running > cap:
+            out.add(entry_id)
+    return out
+
+
 def forecast_total(*, consumed: Decimal, weekly_costs: list[Decimal], weeks_remaining: int) -> Decimal:
     recent = weekly_costs[-FORECAST_WEEKS:]
     if not recent:

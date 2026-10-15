@@ -57,3 +57,11 @@ def test_hourly_rate_is_salary_over_2080_to_the_cent():
     assert hourly_rate(D("104000")) == D("50.00")
     assert hourly_rate(D("100000")) == D("48.08")
     assert hourly_rate(D("0")) == D("0.00")
+
+
+def test_overtime_ids_flags_the_crossing_entry_and_everything_after():
+    from app.rules.overtime import overtime_ids
+    assert overtime_ids([("a", D(9)), ("b", D(9)), ("c", D(9)), ("d", D(9)), ("e", D(9))]) == {"e"}
+    assert overtime_ids([("a", D(20)), ("b", D(20)), ("c", D("0.25")), ("d", D(1))]) == {"c", "d"}
+    assert overtime_ids([("a", D("1.5")), ("b", D(9)), ("c", D(9)), ("d", D(9)), ("e", D(9))]) == set()
+    assert overtime_ids([]) == set()
