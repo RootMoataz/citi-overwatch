@@ -37,10 +37,12 @@ def assign(conn, ms, user):
     conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=ms["id"], u=user["id"])
 
 
-def save(client, conn, user, ms, n, hours, week=MONDAY):
-    return call(client, conn, user, "PUT", "/time-entries",
-                {"week": str(week), "entries": [{"milestone_id": str(ms["id"]), "work_date": str(day(n, week)),
-                                                 "hours": hours}]})
+def save(client, conn, user, ms, n, hours, week=MONDAY, note="Worked on the milestone tasks"):
+    """note=None re-sends the cell without a note (as the grid does when only hours are shown)."""
+    cell = {"milestone_id": str(ms["id"]), "work_date": str(day(n, week)), "hours": hours}
+    if note is not None:
+        cell["note"] = note  # new or changed hours need a work note (proof of work)
+    return call(client, conn, user, "PUT", "/time-entries", {"week": str(week), "entries": [cell]})
 
 
 # ---------- tracks_own_hours ----------
@@ -297,7 +299,7 @@ def submitted_week(client, conn):
 def test_submitted_hours_can_still_change_and_are_flagged(client, conn):
     admin, mgr, ada, ms, entry, first = submitted_week(client, conn)
     # Re-sending the grid unchanged changes nothing.
-    assert save(client, conn, ada, ms, 0, 8, week=LAST_MONDAY)[0] == 200
+    assert save(client, conn, ada, ms, 0, 8, week=LAST_MONDAY, note=None)[0] == 200
     assert query_one(conn, "SELECT changed_after_hr_submission FROM time_entries WHERE id = :i",
                      i=entry["id"])["changed_after_hr_submission"] is False
     status, body, _, _ = save(client, conn, ada, ms, 0, 6, week=LAST_MONDAY)

@@ -28,7 +28,15 @@ def save(client, conn, user, entries, week=None):
                           json={"week": week or day(0), "entries": entries})
 
 
-def cell(ms, n, hours, note=None):
+# Proof of work: new or changed hours need a 10-500 character work note (or a progress update that day), so a cell
+# carries this note unless a test says otherwise (note=None sends no note at all).
+PROOF_NOTE = "Worked on the milestone tasks"
+_DEFAULT = object()
+
+
+def cell(ms, n, hours, note=_DEFAULT):
+    if note is _DEFAULT:
+        note = PROOF_NOTE
     out = {"milestone_id": str(ms["id"]), "work_date": day(n), "hours": hours}
     if note is not None:
         out["note"] = note

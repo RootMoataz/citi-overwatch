@@ -60,6 +60,9 @@ DENIED = {
     ("DELETE", "/skills/{id}"): "archiving a skill",
     ("POST", "/skills/{id}/restore"): "restoring a skill",
     ("PUT", "/users/{id}/skills"): "changing a person's skills",
+    # Timers: the demo admin keeps no timesheet, and a timer left running would log hours for whoever signs in next.
+    ("POST", "/timers"): "starting a timer",
+    ("POST", "/timers/stop"): "stopping a timer (it logs hours)",
     # Payroll: sending approved hours to HR (also refused by name).
     ("POST", "/hr-submissions"): "submitting approved hours to HR",
 }

@@ -1,5 +1,5 @@
 from app.features.reminders import service as reminders
-from app.features.time import service
+from app.features.time import service, timers
 from app.http import json_response
 from app.router import router
 
@@ -59,3 +59,19 @@ def mark_all_read(req, ctx, conn):
 @router.route("POST", "/notifications/{id}/read", allow_executive=True)
 def mark_read(req, ctx, conn):
     return json_response(200, service.mark_read(conn, ctx, req.path_params["id"]))
+
+
+# Timers: one running per person; stopping one logs its hours (app.features.time.timers).
+@router.route("GET", "/timers/current")
+def current_timer(req, ctx, conn):
+    return json_response(200, timers.current(conn, ctx))
+
+
+@router.route("POST", "/timers")
+def start_timer(req, ctx, conn):
+    return json_response(201, timers.start(conn, ctx, req.json()))
+
+
+@router.route("POST", "/timers/stop")
+def stop_timer(req, ctx, conn):
+    return json_response(200, timers.stop(conn, ctx, req.json()))

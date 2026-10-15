@@ -16,8 +16,10 @@ from app.authz import APPROVER_SQL, acts_as_delegate, is_assignee, load_project,
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.projects.service import project_consumed
+from app.features.time.flags import person_week_flags
 from app.http import ApiError
 from app.rules.overtime import approval_breakdown, forecast_total, hourly_rate, overtime_ids, week_flags
+from app.rules.time_tracking import NOTE_MAX, NOTE_MIN, clean_note, entry_source, is_proof_note, tracked_after_edit
 from app.rules.timesheets import keeps_timesheet
 from app.validation import as_date, as_decimal, as_str, as_uuid, require
 
@@ -54,11 +56,35 @@ def label(entry: dict, full_name: str) -> str:
 
 
 def _entry_view(e: dict, full_name: str, *, show_rate: bool) -> dict:
-    """show_rate: an hourly rate reveals a salary, so only admins and the entry's owner get it."""
+    """show_rate: an hourly rate reveals a salary, so only admins and the entry's owner get it.
+    source: how the hours got there (tracked by a timer, typed by hand, or mixed). needs_note: timer hours still
+    waiting for a work note (a progress update that day settles it too; see _proof_updates)."""
     fields = ["id", "user_id", "milestone_id", "project_id", "work_date", "hours", "status", "over_40",
               "edited_after_decision", "rejection_reason", "note", "decided_at", "hr_submitted_at",
-              "changed_after_hr_submission", "hr_changed_at"] + (["hourly_rate"] if show_rate else [])
-    return {k: e[k] for k in fields} | {"label": label(e, full_name)}
+              "changed_after_hr_submission", "hr_changed_at", "tracked_hours", "needs_note", "created_at"]         + (["hourly_rate"] if show_rate else [])
+    return {k: e[k] for k in fields} | {"label": label(e, full_name),
+                                        "source": entry_source(e["hours"], e["tracked_hours"])}
+
+
+def _proof_updates(conn, user_id, start: date, end: date) -> dict[tuple[str, date], dict]:
+    """(milestone id, New York date) -> the person's latest progress update on that milestone that day, which
+    counts as proof of work for the hours they logged on it that day."""
+    rows = query(conn, """SELECT DISTINCT ON (milestone_id, d) milestone_id, d, body, created_at FROM (
+                              SELECT milestone_id, body, created_at,
+                                     CAST(created_at AT TIME ZONE 'America/New_York' AS date) AS d
+                              FROM milestone_updates WHERE author_id = CAST(:u AS uuid)
+                                AND created_at BETWEEN CAST(:a AS timestamptz) - interval '1 day'
+                                                   AND CAST(:b AS timestamptz) + interval '2 days') x
+                          WHERE d BETWEEN :a AND :b ORDER BY milestone_id, d, created_at DESC""",
+                 u=str(user_id), a=start, b=end)
+    return {(str(r["milestone_id"]), r["d"]): {"body": r["body"], "created_at": r["created_at"]} for r in rows}
+
+
+def _settled(e: dict, updates: dict) -> dict:
+    """The entry with needs_note cleared when a progress update that day already proves the work."""
+    if e["needs_note"] and (str(e["milestone_id"]), e["work_date"]) in updates:
+        return {**e, "needs_note": False}
+    return e
 
 
 def _week_logged(conn, user_id: str, start: date) -> Decimal:
@@ -119,7 +145,8 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         ORDER BY t.work_date, t.milestone_id""", u=user_id, a=start, b=end, **args)
     name = _name(user)
     overtime = _overtime(conn, user_id, start)
-    entries = [_live(e, overtime) for e in entries]
+    updates = _proof_updates(conn, user_id, start, end)
+    entries = [_settled(_live(e, overtime), updates) for e in entries]
     return {
         "week_start": start,
         "user": {"id": user["id"], "name": name},
@@ -176,12 +203,22 @@ def _changes_something(conn, ctx: Ctx, ms: dict, work_date: date, hours: Decimal
             or existing["status"] == "rejected")  # re-saving a rejected cell resubmits it
 
 
+def work_note(value) -> str:
+    """A work note as stored: trimmed text, at most NOTE_MAX characters (empty when there's none)."""
+    if value is not None and not isinstance(value, str):
+        raise ApiError(400, "VALIDATION_ERROR", "The work note must be text", {"note": "invalid"})
+    note = clean_note(value)
+    if len(note) > NOTE_MAX:
+        raise ApiError(400, "VALIDATION_ERROR", f"Keep work notes to {NOTE_MAX} characters", {"note": f"max:{NOTE_MAX}"})
+    return note
+
+
 def _validate_cell(conn, ctx: Ctx, cell: dict, start: date) -> dict:
     require(cell, "milestone_id", "work_date", "hours")
     milestone_id = as_uuid(cell["milestone_id"], "milestone_id")
     work_date = as_date(cell["work_date"], "work_date")
     hours = _hours(cell["hours"], work_date)
-    note = as_str(cell.get("note") or "", "note", min_len=0, max_len=1000) if "note" in cell else None
+    note = work_note(cell["note"]) if "note" in cell else None
     if not (start <= work_date <= start + timedelta(days=6)):
         raise ApiError(400, "OUTSIDE_WEEK", f"{work_date} isn't in the week of {start}")
     ms = query_one(conn, """SELECT m.*, p.start_date AS p_start, p.predicted_end_date AS p_end, p.manager_id,
@@ -240,6 +277,96 @@ def _require_timesheet(conn, ctx: Ctx) -> None:
                        "Your account doesn't keep a timesheet. An admin can turn on \"Tracks own hours\" for you.")
 
 
+def lock_person(conn, ctx: Ctx) -> dict:
+    """One save per person at a time: lock their user row so two concurrent saves (or a save and a timer stop) can't
+    each pass the 24h day check (or the 40h week total) against hours the other is about to write. NO KEY UPDATE
+    leaves rows that merely reference the user (entries, notifications) free to be inserted by others.
+    Call inside a transaction."""
+    return query_one(conn, """SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)
+                              FOR NO KEY UPDATE""", i=ctx.user_id)
+
+
+def existing_entry(conn, ctx: Ctx, milestone_id, work_date: date) -> dict | None:
+    return query_one(conn, """SELECT * FROM time_entries WHERE user_id = CAST(:u AS uuid)
+                              AND milestone_id = :m AND work_date = :d""", u=ctx.user_id, m=milestone_id, d=work_date)
+
+
+def has_proof_update(conn, ctx: Ctx, milestone_id, work_date: date) -> bool:
+    """Did the person post a progress update on this milestone on that (New York) date?"""
+    return (str(milestone_id), work_date) in _proof_updates(conn, ctx.user_id, work_date, work_date)
+
+
+def _missing_proof(conn, ctx: Ctx, cells: list[dict]) -> list[dict]:
+    """New or changed cells with hours but neither a work note (10-500 characters) nor a progress update on that
+    milestone that day. Unchanged cells are grandfathered: hours saved before this rule never fail it."""
+    missing = []
+    for c in cells:
+        if c["hours"] == 0:
+            continue
+        ms, existing = c["milestone"], existing_entry(conn, ctx, c["milestone"]["id"], c["work_date"])
+        note = c["note"] if c["note"] is not None else (existing["note"] if existing else "")
+        if existing and existing["hours"] == c["hours"] and existing["note"] == note \
+                and existing["status"] != "rejected":
+            continue
+        if is_proof_note(note) or has_proof_update(conn, ctx, ms["id"], c["work_date"]):
+            continue
+        missing.append({"milestone_id": str(ms["id"]), "milestone": ms["name"], "work_date": str(c["work_date"]),
+                        "reason": "note_too_short" if note else "no_note"})
+    return missing
+
+
+def proof_error(missing: list[dict]) -> ApiError:
+    missing = sorted(missing, key=lambda m: (m["work_date"], m["milestone"].lower()))
+    cells = ", ".join(f"{m['milestone']} on {short_day(m['work_date'])}" for m in missing)
+    return ApiError(400, "PROOF_REQUIRED",
+                    f"Add a work note ({NOTE_MIN}-{NOTE_MAX} characters) or post a progress update that day for: "
+                    f"{cells}", {"cells": missing})
+
+
+def write_entry(conn, ctx: Ctx, me: dict, start: date, ms: dict, work_date: date, hours: Decimal, note: str,
+                existing: dict | None, *, tracked: Decimal | None = None, needs_note: bool = False) -> str:
+    """Write one person's hours on a milestone and day (new or changed; the caller has validated and locked), the
+    way every save does: back to pending, overtime flag and the one-time 40h alert, HR-changed flag, audit.
+    tracked: the hours that now came from timers; None for a hand edit, which keeps at most the new hours."""
+    before = _week_logged(conn, ctx.user_id, start)
+    counted_before = existing["hours"] if existing and existing["status"] in COUNTED else Decimal(0)
+    after = before - counted_before + hours
+    over_40, crossed = week_flags(before_total=before, after_total=after)
+    decided = bool(existing) and (existing["status"] != "pending" or existing["edited_after_decision"])
+    if tracked is None:
+        tracked = tracked_after_edit(existing["tracked_hours"], hours) if existing else Decimal(0)
+    if existing:
+        # Hours already sent to HR may still change; they're flagged until an admin re-sends them.
+        conn.run("""UPDATE time_entries SET hours = :h, note = :n, status = 'pending', over_40 = :o,
+                    edited_after_decision = :e, hourly_rate = NULL, decided_by = NULL, decided_at = NULL,
+                    rejection_reason = NULL, updated_at = now(), tracked_hours = :t, needs_note = :nn,
+                    changed_after_hr_submission = (hr_submission_id IS NOT NULL),
+                    hr_changed_at = CASE WHEN hr_submission_id IS NOT NULL THEN now() ELSE hr_changed_at END
+                    WHERE id = :i""",
+                 h=hours, n=note, o=over_40, e=decided, t=tracked, nn=needs_note, i=existing["id"])
+        entry_id = existing["id"]
+    else:
+        entry_id = query_one(conn, """
+            INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, note, over_40,
+                                      tracked_hours, needs_note)
+            VALUES (CAST(:u AS uuid), :m, :p, :d, :h, :n, :o, :t, :nn) RETURNING id""",
+            u=ctx.user_id, m=ms["id"], p=ms["project_id"], d=work_date, h=hours, n=note, o=over_40, t=tracked,
+            nn=needs_note)["id"]
+    record(conn, ctx, "log" if not existing else "edit", "time_entry", str(entry_id),
+           before={"hours": existing["hours"], "status": existing["status"]} if existing else None,
+           after={"hours": hours, "over_40": over_40, "tracked_hours": tracked})
+    if crossed:
+        recipient = _alert_recipient(conn, ctx, ms["manager_id"])
+        if recipient:
+            payload = json.dumps({"name": f"{me['first_name']} {me['last_name']}",
+                                  "week_total": float(after), "project_id": str(ms["project_id"])})
+            conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, week_start, payload)
+                        VALUES (CAST(:r AS uuid), 'OVER_40H', CAST(:s AS uuid), :w, CAST(:p AS jsonb))
+                        ON CONFLICT (type, subject_user_id, week_start) DO NOTHING""",
+                     r=recipient, s=ctx.user_id, w=start, p=payload)
+    return str(entry_id)
+
+
 def save_week(conn, ctx: Ctx, body: dict) -> dict:
     _require_timesheet(conn, ctx)
     require(body, "week", "entries")
@@ -250,17 +377,14 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
     cells = [c for c in cells if not c["closed"]]  # what's left on a closed project is an unchanged re-send
     cells.sort(key=lambda c: (c["work_date"], str(c["milestone"]["id"])))
     with transaction(conn):
-        # One save per person at a time: lock their user row so two concurrent saves can't each pass the 24h
-        # day check (or the 40h week total) against hours the other is about to write. NO KEY UPDATE leaves
-        # rows that merely reference the user (entries, notifications) free to be inserted by others.
-        me = query_one(conn, """SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)
-                                FOR NO KEY UPDATE""", i=ctx.user_id)
+        me = lock_person(conn, ctx)
         _check_daily_cap(conn, ctx, cells)
+        missing = _missing_proof(conn, ctx, cells)
+        if missing:
+            raise proof_error(missing)
         for c in cells:
             ms = c["milestone"]
-            existing = query_one(conn, """SELECT * FROM time_entries WHERE user_id = CAST(:u AS uuid)
-                                          AND milestone_id = :m AND work_date = :d""",
-                                 u=ctx.user_id, m=ms["id"], d=c["work_date"])
+            existing = existing_entry(conn, ctx, ms["id"], c["work_date"])
             note = c["note"] if c["note"] is not None else (existing["note"] if existing else "")
             if c["hours"] == 0:
                 if not existing:
@@ -271,42 +395,11 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
                 conn.run("DELETE FROM time_entries WHERE id = :i", i=existing["id"])
                 record(conn, ctx, "delete_draft", "time_entry", str(existing["id"]))
                 continue
-            if existing and existing["hours"] == c["hours"] and existing["note"] == note                     and existing["status"] != "rejected":
+            if existing and existing["hours"] == c["hours"] and existing["note"] == note \
+                    and existing["status"] != "rejected":
                 continue  # unchanged cell: keep its status (re-saving the grid mustn't reset approvals)
             # An unchanged re-save of a rejected cell is a resubmission: it goes back for approval.
-            before = _week_logged(conn, ctx.user_id, start)
-            counted_before = existing["hours"] if existing and existing["status"] in COUNTED else Decimal(0)
-            after = before - counted_before + c["hours"]
-            over_40, crossed = week_flags(before_total=before, after_total=after)
-            decided = bool(existing) and (existing["status"] != "pending" or existing["edited_after_decision"])
-            if existing:
-                # Hours already sent to HR may still change; they're flagged until an admin re-sends them.
-                conn.run("""UPDATE time_entries SET hours = :h, note = :n, status = 'pending', over_40 = :o,
-                            edited_after_decision = :e, hourly_rate = NULL, decided_by = NULL, decided_at = NULL,
-                            rejection_reason = NULL, updated_at = now(),
-                            changed_after_hr_submission = (hr_submission_id IS NOT NULL),
-                            hr_changed_at = CASE WHEN hr_submission_id IS NOT NULL THEN now() ELSE hr_changed_at END
-                            WHERE id = :i""",
-                         h=c["hours"], n=note, o=over_40, e=decided, i=existing["id"])
-                entry_id = existing["id"]
-            else:
-                entry_id = query_one(conn, """
-                    INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, note, over_40)
-                    VALUES (CAST(:u AS uuid), :m, :p, :d, :h, :n, :o) RETURNING id""",
-                    u=ctx.user_id, m=ms["id"], p=ms["project_id"], d=c["work_date"], h=c["hours"],
-                    n=note, o=over_40)["id"]
-            record(conn, ctx, "log" if not existing else "edit", "time_entry", str(entry_id),
-                   before={"hours": existing["hours"], "status": existing["status"]} if existing else None,
-                   after={"hours": c["hours"], "over_40": over_40})
-            if crossed:
-                recipient = _alert_recipient(conn, ctx, ms["manager_id"])
-                if recipient:
-                    payload = json.dumps({"name": f"{me['first_name']} {me['last_name']}",
-                                          "week_total": float(after), "project_id": str(ms["project_id"])})
-                    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, week_start, payload)
-                                VALUES (CAST(:r AS uuid), 'OVER_40H', CAST(:s AS uuid), :w, CAST(:p AS jsonb))
-                                ON CONFLICT (type, subject_user_id, week_start) DO NOTHING""",
-                             r=recipient, s=ctx.user_id, w=start, p=payload)
+            write_entry(conn, ctx, me, start, ms, c["work_date"], c["hours"], note, existing)
         _sync_stored_flags(conn, ctx.user_id, start)
     return get_week(conn, ctx, {"week": str(start)})
 
@@ -354,13 +447,16 @@ def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
         ORDER BY t.work_date, lower(u.last_name)""", **args)
     totals: dict[tuple, Decimal] = {}
     overtime: dict[tuple, set[str]] = {}
+    updates: dict[tuple, dict] = {}
     out = []
     for r in rows:
         key = (str(r["user_id"]), week_start(r["work_date"]))
         if key not in totals:
             totals[key] = _week_logged(conn, key[0], key[1])
             overtime[key] = _overtime(conn, key[0], key[1])
-        r = _live(r, overtime[key])
+            updates[key] = _proof_updates(conn, key[0], key[1], key[1] + timedelta(days=6))
+        r = _settled(_live(r, overtime[key]), updates[key])
+        update = updates[key].get((str(r["milestone_id"]), r["work_date"]))
         name = _name(r)
         delegated = str(r["p_manager_id"]) != ctx.user_id and acts_as_delegate(
             ctx, {"delegate_approver_id": r["delegate_approver_id"], "delegate_until": r["delegate_until"],
@@ -370,7 +466,13 @@ def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
                     "user": {"id": r["user_id"], "name": name},
                     "milestone": {"id": r["milestone_id"], "name": r["milestone_name"]},
                     "project": {"id": r["project_id"], "name": r["project_name"]},
-                    "week_logged_total": totals[key]})
+                    "week_logged_total": totals[key],
+                    # Proof of work beside the entry: its note, or the progress update posted that day.
+                    "progress_update": {"body": _clip(update["body"], 200), "created_at": update["created_at"]}
+                    if update else None})
+    flags = person_week_flags(conn, set(totals))
+    for item in out:
+        item["flags"] = flags.get(str(item["entry"]["id"]), [])
     return out
 
 
@@ -532,7 +634,8 @@ def approved_weeks(conn, ctx: Ctx, params: dict) -> list[dict]:
         where.append("(p.manager_id = CAST(:me AS uuid) OR t.decided_by = CAST(:me AS uuid))")
     rows = query(conn, f"""
         SELECT t.user_id, date_trunc('week', t.work_date)::date AS wk, u.first_name, u.last_name, u.username,
-               count(*) AS n, sum(t.hours) AS h, coalesce(sum(t.hours * t.hourly_rate), 0) AS c,
+               count(*) AS n, sum(t.hours) AS h, sum(t.tracked_hours) AS tracked,
+               coalesce(sum(t.hours * t.hourly_rate), 0) AS c,
                count(t.hr_submission_id) FILTER (WHERE NOT t.changed_after_hr_submission) AS submitted,
                count(*) FILTER (WHERE t.changed_after_hr_submission) AS changed,
                max(t.hr_submitted_at) AS submitted_at, array_agg(DISTINCT p.name) AS projects
@@ -543,7 +646,7 @@ def approved_weeks(conn, ctx: Ctx, params: dict) -> list[dict]:
     out = []
     for r in rows:
         week = {"user": {"id": r["user_id"], "name": _name(r), "username": r["username"]}, "week_start": r["wk"],
-                "entry_count": r["n"], "hours": r["h"], "projects": sorted(r["projects"], key=str.lower),
+                "entry_count": r["n"], "hours": r["h"], "tracked_hours": r["tracked"], "projects": sorted(r["projects"], key=str.lower),
                 "hr_submitted": r["submitted"] == r["n"], "hr_submitted_count": r["submitted"],
                 "hr_submitted_at": r["submitted_at"], "hr_changed_count": r["changed"]}
         if ctx.is_admin:
@@ -606,6 +709,8 @@ def _message(r: dict, who: str) -> str:
         return f"{p['project']['name']} plan finalized: {first} is {p['milestone']['name']}"
     if r["type"] == "MESSAGE_RECEIVED":
         return f"{who} sent you a message"
+    if r["type"] == "TIMER_AUTO_STOPPED":
+        return f"Your timer on {p['milestone']['name']} stopped at midnight — check your hours"
     if r["type"] == "TIMESHEET_EMPTY":
         return f"Your timesheet for the week of {short_day(r['week_start'])} is empty"
     return f"{who} passed 40h for the week of {r['week_start']}"
