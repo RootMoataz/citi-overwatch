@@ -16,7 +16,7 @@ import { formatMoney, fullName } from '../../lib/format.js'
 import CreateUserWizard from './CreateUserWizard.jsx'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 
-const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
+const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
 
 const CSV_COLUMNS = [
   { header: 'Name', value: (u) => fullName(u) },

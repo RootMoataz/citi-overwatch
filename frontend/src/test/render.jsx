@@ -17,6 +17,7 @@ export const users = {
   admin: { id: 'u-admin', username: 'admin.demo', first_name: 'Avery', last_name: 'Admin', role: 'admin' },
   manager: { id: 'u-mgr', username: 'manager.demo', first_name: 'Morgan', last_name: 'Manager', role: 'manager' },
   employee: { id: 'u-emp', username: 'employee.demo', first_name: 'Eli', last_name: 'Employee', role: 'employee' },
+  executive: { id: 'u-exec', username: 'executive.demo', first_name: 'Eve', last_name: 'Executive', role: 'executive' },
 }
 
 /** Render a page as a signed-in user, with a probe that prints the current URL. */

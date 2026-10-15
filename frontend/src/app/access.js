@@ -8,14 +8,15 @@ import { useToast } from './toast.js'
  * still decides per record (a project you're not on, a profile you may not see). Kept in step with the
  * navigation's permission checks by a test. */
 export const ROUTE_ROLES = {
+  timesheet: ['admin', 'manager', 'employee'], // executives don't log hours
   approvals: ['admin', 'manager'],
   requests: ['admin', 'manager'],
-  allocation: ['admin', 'manager'],
-  archive: ['admin', 'manager'],
+  allocation: ['admin', 'manager', 'executive'],
+  archive: ['admin', 'manager', 'executive'],
   people: ['admin'],
   'people/:id': ['admin'],
   departments: ['admin'],
-  audit: ['admin'],
+  audit: ['admin', 'executive'],
 }
 
 export const NO_ACCESS = "You don't have access to that page."

@@ -16,12 +16,12 @@ import UserAvatar from '../components/UserAvatar.jsx'
 import AvatarDialog from '../features/avatar/AvatarDialog.jsx'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
+import { ROLE_LABEL } from '../lib/labels.js'
 import { can } from '../lib/permissions.js'
 import { useColorMode } from './colorMode.js'
 import { DRAWER_WIDTH, NAV } from './nav.jsx'
 import { AVATAR_SIZE } from '../lib/avatarLook.js'
 
-const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
 
 const THEMES = [
   { value: 'light', label: 'Light', icon: <LightMode fontSize="small" /> },

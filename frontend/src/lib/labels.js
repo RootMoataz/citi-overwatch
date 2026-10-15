@@ -1,3 +1,14 @@
+/** Roles as people read them, in the order the role pickers offer them. */
+export const ROLE_LABEL = { employee: 'Employee', manager: 'Manager', admin: 'Admin', executive: 'Executive' }
+export const ROLE_OPTIONS = Object.entries(ROLE_LABEL).map(([value, label]) => ({ value, label }))
+/** What each role means, for the people who assign them. */
+export const ROLE_HELP = {
+  employee: 'Logs hours on assigned milestones',
+  manager: 'Runs projects and approves their hours',
+  admin: 'Manages people, projects and settings',
+  executive: 'Read-only view of every project, workload and the audit log; never sees salaries',
+}
+
 export const RISK_LABELS = {
   OVERDUE_MILESTONE: 'Overdue milestone',
   PAST_DUE: 'Past due date',

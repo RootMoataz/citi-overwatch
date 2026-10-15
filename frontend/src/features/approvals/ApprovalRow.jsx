@@ -1,4 +1,4 @@
-import { Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material'
+import { Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material'
 import { useId, useState } from 'react'
 import { useApproveEntry, useRejectEntry } from '../../api/queries.js'
 import { STATUS, statusColor } from '../../app/theme.js'
@@ -57,6 +57,10 @@ export default function ApprovalRow({ item, showContext = true }) {
           <Typography variant="caption" sx={{ color: (t) => statusColor(tone, t) }}>{item.label}</Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', ml: 1 }}>{formatHours(item.week_logged_total)} this week</Typography>
           {item.entry.edited_after_decision ? <Typography variant="caption" sx={{ ml: 1 }}>· Edited</Typography> : null}
+          {item.delegated_from ? (
+            <Chip size="small" variant="outlined" color="info" label={`Delegated from ${item.delegated_from.name}`}
+              sx={{ ml: 1, height: 20 }} />
+          ) : null}
         </Box>
         <Stack direction="row" sx={{ gap: 1, flexShrink: 0 }}>
           <Button size="small" onClick={() => setOpen((o) => !o)} aria-expanded={open}>Budget impact</Button>

@@ -45,7 +45,7 @@ export default function App() {
           <Route index element={<HomePage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
-          <Route path="timesheet" element={<TimesheetPage />} />
+          <Route path="timesheet" element={<RequireAuth roles={ROUTE_ROLES.timesheet}><TimesheetPage /></RequireAuth>} />
           <Route path="approvals" element={<RequireAuth roles={ROUTE_ROLES.approvals}><ApprovalsPage /></RequireAuth>} />
           <Route path="requests" element={<RequireAuth roles={ROUTE_ROLES.requests}><RequestsPage /></RequireAuth>} />
           <Route path="allocation" element={<RequireAuth roles={ROUTE_ROLES.allocation}><AllocationPage /></RequireAuth>} />

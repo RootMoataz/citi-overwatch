@@ -39,6 +39,7 @@ function renderGuarded(user, route) {
 const denied = {
   employee: ['/approvals', '/allocation', '/people', '/people/u-ada', '/archive', '/audit', '/departments', '/requests'],
   manager: ['/people', '/people/u-ada', '/audit', '/departments'],
+  executive: ['/approvals', '/requests', '/people', '/people/u-ada', '/departments', '/timesheet'],
 }
 
 describe('route guard', () => {
@@ -53,6 +54,16 @@ describe('route guard', () => {
 
   test.each(['/approvals', '/allocation', '/archive', '/requests'])('managers open %s', (path) => {
     renderGuarded(users.manager, path)
+    expect(screen.getByText('Guarded page')).toBeInTheDocument()
+  })
+
+  test.each(['/allocation', '/archive', '/audit'])('executives open %s', (path) => {
+    renderGuarded(users.executive, path)
+    expect(screen.getByText('Guarded page')).toBeInTheDocument()
+  })
+
+  test.each(['admin', 'manager', 'employee'])('%s keeps a timesheet', (role) => {
+    renderGuarded(users[role], '/timesheet')
     expect(screen.getByText('Guarded page')).toBeInTheDocument()
   })
 

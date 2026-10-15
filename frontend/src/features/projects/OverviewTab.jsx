@@ -6,6 +6,14 @@ import { RISK_LABELS, WORK_MODE } from '../../lib/labels.js'
 import { formatDate, formatMoney, formatPct } from '../../lib/format.js'
 import StatTile from './StatTile.jsx'
 
+/** Who else may approve this project's hours, and until when. */
+function DelegateLine({ delegate }) {
+  const text = delegate.active
+    ? `Approvals delegated to ${delegate.name} ${delegate.until ? `until ${formatDate(delegate.until)}` : 'until further notice'}`
+    : `Delegation to ${delegate.name} ended ${formatDate(delegate.until)}`
+  return <Typography variant="body2" sx={{ color: delegate.active ? 'info.main' : 'text.secondary', mb: 0.5 }}>{text}</Typography>
+}
+
 export default function OverviewTab({ project }) {
   const summary = useProjectSummary(project.id)
   const s = summary.data
@@ -27,6 +35,7 @@ export default function OverviewTab({ project }) {
         <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 2, mb: 0.5 }}>
           Manager: <PersonWithAvatar person={project.manager} sx={{ ml: 0.5, color: 'text.primary' }} />
         </Typography>
+        {project.delegate ? <DelegateLine delegate={project.delegate} /> : null}
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Department: {project.department?.name ?? 'None'}</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           {WORK_MODE[project.work_mode ?? 'push'].label} mode: {WORK_MODE[project.work_mode ?? 'push'].help.toLowerCase()}

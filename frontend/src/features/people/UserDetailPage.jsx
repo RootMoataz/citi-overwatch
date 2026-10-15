@@ -17,6 +17,7 @@ import { fullName } from '../../lib/format.js'
 import ShowOnceDialog from './ShowOnceDialog.jsx'
 import { relayCredentials } from '../../lib/emailRelay.js'
 import { useToast } from '../../app/toast.js'
+import { ROLE_OPTIONS } from '../../lib/labels.js'
 
 const FIELDS = ['first_name', 'last_name', 'email', 'username', 'role', 'job_title', 'salary', 'manager_id', 'department_id']
 
@@ -103,7 +104,7 @@ export default function UserDetailPage() {
             helperText="Only admins can change usernames" /></Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField select label="Role" value={form.role} onChange={set('role')} disabled={self} helperText={self ? "You can't change your own role" : ' '}>
-              <MenuItem value="employee">Employee</MenuItem><MenuItem value="manager">Manager</MenuItem><MenuItem value="admin">Admin</MenuItem>
+              {ROLE_OPTIONS.map((r) => <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>

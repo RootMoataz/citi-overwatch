@@ -10,7 +10,7 @@ import AvatarDialog from '../avatar/AvatarDialog.jsx'
 import { formatMoney } from '../../lib/format.js'
 import { EMAIL_RE } from '../../lib/schemas.js'
 
-const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
+const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
 
 function ReadOnly({ label, value }) {
   return (

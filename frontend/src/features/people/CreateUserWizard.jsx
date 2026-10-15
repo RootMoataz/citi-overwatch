@@ -13,11 +13,11 @@ import { formatMoney, fullName } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { relayCredentials } from '../../lib/emailRelay.js'
 import { EMAIL_RE, generatePassword, passwordRuleErrors } from '../../lib/schemas.js'
+import { ROLE_HELP, ROLE_LABEL, ROLE_OPTIONS } from '../../lib/labels.js'
 import { useToast } from '../../app/toast.js'
 import ShowOnceDialog from './ShowOnceDialog.jsx'
 
 const STEPS = ['Name', 'Email & role', 'Username', 'Password', 'Review']
-const ROLES = [{ value: 'employee', label: 'Employee' }, { value: 'manager', label: 'Manager' }, { value: 'admin', label: 'Admin' }]
 const USERNAME_RE = /^[a-z0-9._]{3,20}$/
 
 /** Debounce a value so the username check doesn't fire on every key press. */
@@ -132,8 +132,9 @@ export default function CreateUserWizard({ onClose, onCreated }) {
                 helperText={form.email && !EMAIL_RE.test(form.email.trim()) ? 'Enter a valid email address' : 'Sign-in details are sent here'} />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField select label="Role" required value={form.role} onChange={(e) => set({ role: e.target.value })}>
-                {ROLES.map((r) => <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>)}
+              <TextField select label="Role" required value={form.role} onChange={(e) => set({ role: e.target.value })}
+                helperText={ROLE_HELP[form.role]}>
+                {ROLE_OPTIONS.map((r) => <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>)}
               </TextField>
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
@@ -167,7 +168,7 @@ export default function CreateUserWizard({ onClose, onCreated }) {
         {step === 4 ? (
           <Table size="small" aria-label="Review the new account">
             <TableBody>
-              {[['Name', `${form.first_name} ${form.last_name}`], ['Email', form.email], ['Role', ROLES.find((r) => r.value === form.role)?.label],
+              {[['Name', `${form.first_name} ${form.last_name}`], ['Email', form.email], ['Role', ROLE_LABEL[form.role]],
                 ['Reports to', manager ? fullName(manager) : '—'], ['Job title', form.job_title || '—'],
                 ['Salary', form.salary === '' ? '—' : formatMoney(form.salary)], ['Username', form.username]].map(([k, v]) => (
                 <TableRow key={k}><TableCell component="th" scope="row" sx={{ color: 'text.secondary' }}>{k}</TableCell><TableCell>{v}</TableCell></TableRow>

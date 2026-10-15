@@ -14,11 +14,12 @@ export const DRAWER_WIDTH = 248
 
 const HOME_LABEL = { employee: 'My week', admin: 'Control centre' }
 
-// `to` and `label` can depend on who's signed in. Items marked `admin: true` sit in their own "Admin" group for admins.
+// `to` and `label` can depend on who's signed in. Items marked `admin: true` sit in their own "Admin" group for admins;
+// executives get the read-only ones (Archive, Audit log) with their work items.
 export const NAV = [
   { to: '/', label: (user) => HOME_LABEL[user?.role] ?? 'Dashboard', icon: <Dashboard />, end: true },
   { to: '/projects', label: 'Projects', icon: <Folder /> },
-  { to: '/timesheet', label: 'My timesheet', icon: <Schedule /> },
+  { to: '/timesheet', label: 'My timesheet', icon: <Schedule />, action: 'timesheet.use' },
   { to: (user) => `/people/${user.id}/profile`, label: 'My history', icon: <ManageHistory />, action: 'history.own' },
   { to: '/approvals', label: 'Approvals', icon: <AssignmentTurnedIn />, action: 'approvals.view' },
   { to: '/allocation', label: 'Allocation', icon: <ViewTimeline />, action: 'allocation.view' },

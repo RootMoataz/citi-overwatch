@@ -11,6 +11,7 @@ const TARGETS = {
   SUPPORT_ASSIGNED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   SUPPORT_ROUTED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   MILESTONE_CLAIMED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
+  DELEGATE_ASSIGNED: (n) => [`/approvals?project=${n.payload.project.id}`, "Review the project's hours in Approvals"],
   TIMESHEET_EMPTY: (n) => [`/timesheet?week=${n.week_start}`, 'Log your hours for that week'],
 }
 const target = (n) => (TARGETS[n.type] ?? TARGETS.OVER_40H)(n)

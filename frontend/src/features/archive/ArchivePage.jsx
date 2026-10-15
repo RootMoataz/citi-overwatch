@@ -12,6 +12,7 @@ import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import { utcIso } from '../../lib/csv.js'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
+import { can, isReadOnly } from '../../lib/permissions.js'
 
 // Everything that can be archived and restored today, with what restoring it does.
 const TYPES = {
@@ -33,9 +34,9 @@ const when = (iso) => (iso ? new Date(iso).toLocaleString() : '—')
 
 export default function ArchivePage() {
   const { user } = useSession()
-  const admin = user?.role === 'admin'
-  // Managers see the projects they manage and the milestones in them; archived people are for admins only.
-  const types = Object.entries(TYPES).filter(([t]) => admin || t !== 'user')
+  const everything = can(user, 'archive.everything')
+  // Managers see the projects they manage and the milestones in them; archived people are for admins and executives.
+  const types = Object.entries(TYPES).filter(([t]) => everything || t !== 'user')
   const archive = useArchive()
   const restore = useRestoreArchived()
   const [type, setType] = useState('')
@@ -60,8 +61,9 @@ export default function ArchivePage() {
   if (leaving) return null
   return (
     <>
-      <PageHeader title="Archive" subtitle={admin
-        ? 'Everything archived, in one place. Restoring brings a record back exactly as it was.'
+      <PageHeader title="Archive" subtitle={isReadOnly(user)
+        ? 'Everything archived, in one place. Read-only: only an admin restores records.'
+        : everything ? 'Everything archived, in one place. Restoring brings a record back exactly as it was.'
         : 'Archived work from the projects you manage. You can restore milestones; only an admin can restore a project.'}
         actions={<ExportCsvButton name="archive" columns={CSV_COLUMNS} rows={items} />} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>

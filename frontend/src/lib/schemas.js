@@ -65,6 +65,8 @@ export const projectSchema = z.object({
   status: z.string().optional(),
   department_id: z.string().optional().default(''),
   work_mode: z.enum(['push', 'pull']),
+  delegate_approver_id: z.string().optional().default(''),
+  delegate_until: z.string().optional().default(''),
 }).superRefine(endAfterStart('start_date', 'predicted_end_date'))
 
 export const requestSchema = z.object({

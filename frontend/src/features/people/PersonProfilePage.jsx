@@ -14,7 +14,7 @@ import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
 import StatTile from '../projects/StatTile.jsx'
 
-const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
+const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
 
 function ReadOnly({ label, value }) {
   return (

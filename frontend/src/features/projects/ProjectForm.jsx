@@ -3,7 +3,7 @@ import {
   Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Grid, InputAdornment, MenuItem, TextField,
 } from '@mui/material'
 import { useId, useState } from 'react'
-import { Controller, useForm } from 'react-hook-form'
+import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useMediaQuery } from 'react-responsive'
 import { useDepartments, useManagers } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
@@ -18,17 +18,22 @@ const NEXT_STATUS = {
   planned: ['planned', 'active'], active: ['active', 'on_hold', 'completed'],
   on_hold: ['on_hold', 'active', 'completed'], completed: ['completed'],
 }
-const FIELD_MESSAGES = { name: { taken: 'A project with this name already exists' } }
+const FIELD_MESSAGES = {
+  name: { taken: 'A project with this name already exists' },
+  delegate_approver_id: { invalid: 'Pick an active manager or admin other than the project manager' },
+  delegate_until: { past: "The delegation can't end in the past", no_delegate: 'Pick a delegate approver first' },
+}
 const FORM_CODES = ['MILESTONES_OUT_OF_RANGE', 'MILESTONES_INCOMPLETE', 'INVALID_TRANSITION']
 
-/** Create (admin) or edit (manager/admin) a project. */
+/** Create (admin) or edit (manager/admin) a project. Editing also sets the delegate approver: another active manager
+ * or admin who may approve the project's hours, optionally until a date. */
 export default function ProjectForm({ open, project, onClose, onSave }) {
   const { user } = useSession()
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const titleId = useId()
   const editing = Boolean(project)
   const admin = user?.role === 'admin'
-  const managers = useManagers(open && admin)
+  const managers = useManagers(open && (admin || editing))
   const departments = useDepartments({ enabled: open })
   // An archived department isn't offered any more, but a project already in one still shows it.
   const departmentOptions = [...(departments.data?.items ?? [])]
@@ -43,8 +48,16 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
       predicted_end_date: project?.predicted_end_date ?? '', budget: project?.budget ?? '',
       manager_id: project ? String(project.manager.id) : '', status: project?.status ?? 'planned',
       department_id: project?.department ? String(project.department.id) : '', work_mode: project?.work_mode ?? 'push',
+      delegate_approver_id: project?.delegate ? String(project.delegate.id) : '', delegate_until: project?.delegate?.until ?? '',
     },
   })
+  const [managerId, delegateId] = useWatch({ control, name: ['manager_id', 'delegate_approver_id'] })
+  // Anyone who can approve except the project's own manager (they approve anyway).
+  const delegateOptions = (managers.data ?? []).filter((m) => String(m.id) !== String(managerId))
+  if (project?.delegate && !delegateOptions.some((m) => String(m.id) === String(project.delegate.id))) {
+    const [first_name, ...rest] = project.delegate.name.split(' ')
+    delegateOptions.push({ id: project.delegate.id, first_name, last_name: rest.join(' ') })
+  }
 
   const onSubmit = async (values) => {
     setFailure(null)
@@ -53,6 +66,14 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
       department_id: values.department_id || null, work_mode: values.work_mode }
     if (admin) body.manager_id = values.manager_id
     if (editing && values.status !== project.status) body.status = values.status
+    if (editing) {
+      // Sent only when changed, so saving other fields never re-checks an end date that has since passed.
+      const before = { id: project.delegate ? String(project.delegate.id) : '', until: project.delegate?.until ?? '' }
+      if (values.delegate_approver_id !== before.id || (values.delegate_approver_id && values.delegate_until !== before.until)) {
+        body.delegate_approver_id = values.delegate_approver_id || null
+        if (values.delegate_approver_id) body.delegate_until = values.delegate_until || null
+      }
+    }
     if (!editing) body.status = 'planned'
     try {
       await onSave(body)
@@ -133,6 +154,26 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
                 </TextField>
               )} />
             </Grid>
+            {editing ? (
+              <>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Controller name="delegate_approver_id" control={control} render={({ field }) => (
+                    <TextField select label="Delegate approver" {...field} disabled={isSubmitting}
+                      error={Boolean(errors.delegate_approver_id)}
+                      helperText={errors.delegate_approver_id?.message ?? 'Can approve this project\'s hours, e.g. while you\'re away'}>
+                      <MenuItem value="">No delegate</MenuItem>
+                      {delegateOptions.map((m) => <MenuItem key={m.id} value={String(m.id)}>{fullName(m)}</MenuItem>)}
+                    </TextField>
+                  )} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField label="Delegate until" type="date" {...register('delegate_until')}
+                    slotProps={{ inputLabel: { shrink: true } }} disabled={isSubmitting || !delegateId}
+                    error={Boolean(errors.delegate_until)}
+                    helperText={errors.delegate_until?.message ?? 'Optional; empty means until you remove it'} />
+                </Grid>
+              </>
+            ) : null}
             {editing ? (
               <Grid size={{ xs: 12, sm: 6 }}>
                 <Controller name="status" control={control} render={({ field }) => (

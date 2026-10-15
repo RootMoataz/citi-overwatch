@@ -64,8 +64,8 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [creating, setCreating] = useState(false)
   const projects = useProjects(filters)
-  const showManagerFilter = user.role !== 'employee'
-  const managers = useManagers(showManagerFilter && user.role === 'admin')
+  const showManagerFilter = can(user, 'projects.filterByManager')  // admins and executives see every manager's projects
+  const managers = useManagers(showManagerFilter)
   const create = useCreateProject()
 
   const setFilter = (key, value) => setParams((prev) => {
@@ -129,7 +129,7 @@ export default function ProjectsPage() {
             <MenuItem value="">All statuses</MenuItem>
             {['planned', 'active', 'on_hold', 'completed'].map((s) => <MenuItem key={s} value={s}>{STATUS[s].label}</MenuItem>)}
           </TextField>
-          {showManagerFilter && user.role === 'admin' ? (
+          {showManagerFilter ? (
             <TextField select label="Manager" value={filters.manager ?? ''} onChange={(e) => setFilter('manager', e.target.value)} sx={{ flex: 1 }}>
               <MenuItem value="">All managers</MenuItem>
               {(managers.data ?? []).map((m) => <MenuItem key={m.id} value={String(m.id)}>{`${m.first_name} ${m.last_name}`}</MenuItem>)}
