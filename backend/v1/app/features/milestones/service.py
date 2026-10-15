@@ -209,6 +209,8 @@ def set_assignees(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
         raise ApiError(400, "NOT_A_MEMBER", "Add people to the project before assigning them",
                        {"user_ids": outsiders})
     with transaction(conn):
+        # Lock the milestone first, as claim_milestone() does, so a claim in flight finishes before this list lands.
+        conn.run("SELECT id FROM milestones WHERE id = CAST(:m AS uuid) FOR UPDATE", m=milestone_id)
         # Remove only the people dropped from the list, so the ones kept keep their role (primary or supporting).
         conn.run("""DELETE FROM milestone_assignees WHERE milestone_id = CAST(:m AS uuid)
                     AND NOT (user_id = ANY(CAST(:ids AS uuid[])))""", m=milestone_id, ids=sorted(users))

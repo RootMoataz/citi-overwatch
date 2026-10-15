@@ -158,3 +158,28 @@ def test_claims_refused_unless_the_project_is_planned_or_active(client, conn):
     conn.run("UPDATE projects SET status = 'planned' WHERE id = :i", i=project["id"])
     assert can_claim() is True
     assert claim(client, conn, member, ms)[0] == 200
+
+
+def test_manager_setting_assignees_waits_for_a_claim_in_flight(client, conn):
+    """A claim holds the milestone row; the manager's assignee list must be applied after it, not mixed with it."""
+    mgr, member, other, project = setup(conn)
+    ms = make_milestone(conn, project)
+    rival = dbmod._open()
+    try:
+        rival.run("BEGIN")
+        rival.run("SELECT id FROM milestones WHERE id = :m FOR UPDATE", m=ms["id"])
+        rival.run("INSERT INTO milestone_assignees (milestone_id, user_id, role) VALUES (:m, :u, 'primary')",
+                  m=ms["id"], u=other["id"])
+        result = {}
+        waiter = threading.Thread(target=lambda: result.update(response=client.request(
+            "PUT", f"/milestones/{ms['id']}/assignees", token=token_for(conn, mgr),
+            json={"user_ids": [str(member["id"])]})))
+        waiter.start()
+        time.sleep(0.5)
+        assert waiter.is_alive(), "setting assignees should wait for the claim's lock"
+        rival.run("COMMIT")
+        waiter.join(timeout=10)
+    finally:
+        rival.close()
+    assert result["response"][0] == 200
+    assert [a["user_id"] for a in assignees(conn, ms)] == [member["id"]]
