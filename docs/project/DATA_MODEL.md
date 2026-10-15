@@ -1,6 +1,6 @@
 # Data model
 
-The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode, [`005_user_avatars.sql`](../../backend/v1/migrations/005_user_avatars.sql) adds profile photos, [`006_executive_delegates.sql`](../../backend/v1/migrations/006_executive_delegates.sql) adds the `executive` role and each project's delegate approver, [`007_messages.sql`](../../backend/v1/migrations/007_messages.sql) adds messages, [`008_milestone_priority.sql`](../../backend/v1/migrations/008_milestone_priority.sql) adds milestone priority, [`009_milestone_workflow.sql`](../../backend/v1/migrations/009_milestone_workflow.sql) adds the milestone workflow and skills, [`010_milestone_sequence.sql`](../../backend/v1/migrations/010_milestone_sequence.sql) adds the planning board, [`011_timesheet_hr.sql`](../../backend/v1/migrations/011_timesheet_hr.sql) adds HR submissions and `tracks_own_hours`, [`012_demo_accounts.sql`](../../backend/v1/migrations/012_demo_accounts.sql) adds public demo accounts (`is_public_demo`), [`013_milestone_estimates.sql`](../../backend/v1/migrations/013_milestone_estimates.sql) adds `estimated_hours`, and [`014_time_tracking.sql`](../../backend/v1/migrations/014_time_tracking.sql) adds timers, tracked hours, `needs_note` and the `app_settings` table (hour-tracking safeguards). They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
+The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode, [`005_user_avatars.sql`](../../backend/v1/migrations/005_user_avatars.sql) adds profile photos, [`006_executive_delegates.sql`](../../backend/v1/migrations/006_executive_delegates.sql) adds the `executive` role and each project's delegate approver, [`007_messages.sql`](../../backend/v1/migrations/007_messages.sql) adds messages, [`008_milestone_priority.sql`](../../backend/v1/migrations/008_milestone_priority.sql) adds milestone priority, [`009_milestone_workflow.sql`](../../backend/v1/migrations/009_milestone_workflow.sql) adds the milestone workflow and skills, [`010_milestone_sequence.sql`](../../backend/v1/migrations/010_milestone_sequence.sql) adds the planning board, [`011_timesheet_hr.sql`](../../backend/v1/migrations/011_timesheet_hr.sql) adds HR submissions and `tracks_own_hours`, [`012_demo_accounts.sql`](../../backend/v1/migrations/012_demo_accounts.sql) adds public demo accounts (`is_public_demo`), [`013_milestone_estimates.sql`](../../backend/v1/migrations/013_milestone_estimates.sql) adds `estimated_hours`, [`014_time_tracking.sql`](../../backend/v1/migrations/014_time_tracking.sql) adds timers, tracked hours, `needs_note` and the `app_settings` table (hour-tracking safeguards), and [`015_timer_workflow.sql`](../../backend/v1/migrations/015_timer_workflow.sql) adds timer drafts, remote stops, over-limit alert bookkeeping and change requests (the timer workflow). They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
 
 Conventions:
 
@@ -40,7 +40,10 @@ erDiagram
   time_entries ||--o{ hr_submission_entries : "sent in"
   users ||--o{ time_timers : "runs (one at a time)"
   milestones ||--o{ time_timers : "timed on"
-  time_entries |o--o{ time_timers : "logged into (entry_id)"
+  time_entries |o--o{ time_timers : "submitted into (entry_id)"
+  time_timers ||--o{ time_timer_alerts : "alerted once per limit"
+  users ||--o{ time_edit_requests : "asks to change"
+  milestones ||--o{ time_edit_requests : "about"
   hr_submissions |o--o{ hr_submissions : "corrects (resubmission_of)"
   users ||--o{ notifications : receives
   users ||--o{ conversation_participants : "takes part in"
@@ -127,7 +130,28 @@ erDiagram
     timestamptz started_at
     timestamptz stopped_at "NULL while running"
     bool auto_stopped "stopped at midnight"
-    numeric logged_hours
+    numeric logged_hours "before 015 only"
+    uuid entry_id FK
+    numeric tracked_hours "the stop's rounded hours (draft until submitted)"
+    timestamptz submitted_at "NULL = draft"
+    text note
+    uuid stopped_by FK "a manager's remote stop"
+    text stop_message
+  }
+  time_timer_alerts {
+    uuid timer_id PK
+    text kind PK "daily | milestone | weekly"
+  }
+  time_edit_requests {
+    uuid id PK
+    uuid user_id FK
+    uuid milestone_id FK
+    date work_date
+    numeric current_hours
+    numeric requested_hours
+    text reason "10-500"
+    text status "pending | approved | rejected"
+    uuid decided_by FK
     uuid entry_id FK
   }
   hr_submissions {
@@ -188,10 +212,12 @@ erDiagram
 | Table | Purpose and notes |
 |---|---|
 | `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget.<br>• HR (migration 011): `hr_submission_id` and `hr_submitted_at` point at the latest HR submission that sent the entry. Sent entries aren't locked; changing one sets `changed_after_hr_submission` and `hr_changed_at` until a later submission re-sends it (`CHECK`: the flag needs `hr_submission_id`).<br>• Hour tracking (migration 014): `note` is the work note (10-500 characters counts as proof of work; new or changed hours need it unless a progress update that day covers them). `tracked_hours` (`numeric(5,2)`, default 0, `CHECK` ≥ 0 and ≤ `hours`) is how much came from timers, giving the derived source label tracked / manual / mixed; a hand edit keeps at most the new hours. `needs_note` (default `false`) marks timer hours saved without proof, which approvers see as "No proof of work". Existing rows became manual, with no note needed. |
-| `time_timers` | Start/stop timers (migration 014): `user_id`, `milestone_id`, `work_date` (the New York date it started), `started_at`, `stopped_at` (`NULL` while running), `auto_stopped` (stopped at 23:59:59 of its day because it ran past midnight), and what the stop logged: `logged_hours` and `entry_id` (`ON DELETE SET NULL`, so clearing a draft entry is never blocked). A partial unique index on `user_id WHERE stopped_at IS NULL` allows **one running timer per person**. `CHECK`s: `stopped_at ≥ started_at`, and an auto-stopped timer is stopped. Indexed on `(user_id, started_at DESC)`. See [LOGIC_WALKTHROUGH §28](LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags). |
+| `time_timers` | Start/stop timers (migration 014): `user_id`, `milestone_id`, `work_date` (the New York date it started), `started_at`, `stopped_at` (`NULL` while running), `auto_stopped` (stopped at 23:59:59 of its day because it ran past midnight), and what the stop logged: `logged_hours` and `entry_id` (`ON DELETE SET NULL`, so clearing a draft entry is never blocked). A partial unique index on `user_id WHERE stopped_at IS NULL` allows **one running timer per person**. `CHECK`s: `stopped_at ≥ started_at`, and an auto-stopped timer is stopped. Indexed on `(user_id, started_at DESC)`.<br>• Timer workflow (migration 015): a stop no longer writes an entry. `tracked_hours` (`numeric(5,2)`, default 0, 0-24) is what the stop recorded, a **draft** of that day's cell while `submitted_at` is `NULL`; Save week (or an approved change request) sets `submitted_at` and `entry_id`. `note` (≤ 500) is the stop's note, pre-filling the cell's. `stopped_by` and `stop_message` record a manager's remote stop. Timers from before 015 keep `tracked_hours = 0` (their hours were logged straight away: `logged_hours`, `entry_id`), so none becomes a draft. Partial index on `(user_id, work_date)` for drafts. See [LOGIC_WALKTHROUGH §28](LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags). |
+| `time_timer_alerts` | Migration 015. One row per `(timer_id, kind)` (primary key; `kind` in `daily`, `milestone`, `weekly`) once the approvers were alerted that a running timer passed 125% of that limit, so the alert goes out once. `ON DELETE CASCADE` with the timer. |
+| `time_edit_requests` | Migration 015. An employee asking to change a locked (timer) cell: `user_id`, `milestone_id`, `project_id`, `work_date`, `current_hours` (saved + draft when asked), `requested_hours` (`> 0`, ≤ 24), `reason` (10-500), `status` (`pending`/`approved`/`rejected`), `decided_by`, `decided_at` (`CHECK`: set exactly when decided), `decision_comment` (≤ 500), `entry_id` (the entry an approval wrote). A partial unique index on `(user_id, milestone_id, work_date) WHERE status = 'pending'` allows one pending request per cell; indexed on `(project_id, status)`. |
 | `hr_submissions` | A pay period an admin handed to HR (migration 011): `period_start`–`period_end` (at most 31 days), `submitted_by`, `submitted_at`, snapshot totals `entry_count`, `correction_count`, `total_hours`, `total_cost`, and `resubmission_of`: the earlier submission its corrections re-send (`NULL` when it has none). |
 | `hr_submission_entries` | What each submission sent, row by row and as it was then (`PRIMARY KEY (submission_id, entry_id)`): `hours`, `hourly_rate`, `cost`, `is_correction`, and for corrections `previous_submission_id` and `previous_hours` (`CHECK`: a correction always names the submission it corrects). The payroll CSV is rebuilt from these rows, so a later edit never changes an earlier export. The foreign key also keeps a sent entry from being deleted. |
-| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY`, `DELEGATE_ASSIGNED`, `AUTO_ASSIGNED`, `AUTO_ROUTED`, `NO_QUALIFIED_PERSON`, `MILESTONE_UPDATE` (one unread per milestone and recipient), `KICKBACK_RAISED`, `KICKBACK_RESOLVED`, `PLAN_FINALIZED`, `TIMER_AUTO_STOPPED` (a timer that ran past midnight) or `MESSAGE_RECEIVED` (`payload.conversation_id`; at most one unread per conversation and recipient, refreshed by each new message).<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
+| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY`, `DELEGATE_ASSIGNED`, `AUTO_ASSIGNED`, `AUTO_ROUTED`, `NO_QUALIFIED_PERSON`, `MILESTONE_UPDATE` (one unread per milestone and recipient), `KICKBACK_RAISED`, `KICKBACK_RESOLVED`, `PLAN_FINALIZED`, `TIMER_AUTO_STOPPED` (a timer that ran past midnight), `TIMER_STOPPED_BY_MANAGER`, `TIMER_OVER_LIMIT`, `TIME_EDIT_REQUESTED`, `TIME_EDIT_APPROVED`, `TIME_EDIT_REJECTED` or `MESSAGE_RECEIVED` (`payload.conversation_id`; at most one unread per conversation and recipient, refreshed by each new message).<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
 
 ### Messages (migration 007)
 

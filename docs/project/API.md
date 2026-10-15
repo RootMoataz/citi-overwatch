@@ -72,13 +72,15 @@ Operations, `Demo123!`), behind the sign-in page's Admin button. The real `admin
     `PUT /users/{id}`, `DELETE /users/{id}`, `POST /users/{id}/restore`, `POST /users/{id}/reset-password`,
     `DELETE /users/{id}/avatar`, `DELETE /projects/{id}`, `POST /projects/{id}/restore`, `POST /departments`,
     `PUT /departments/{id}`, `DELETE /departments/{id}`, `POST /departments/{id}/restore`, `POST /timers`,
-    `POST /timers/stop` (the demo admin keeps no timesheet, and a running timer would log hours for the next
-    visitor); and any write route whose
+    `POST /timers/stop` (the demo admin keeps no timesheet, and a running timer would record hours for the next
+    visitor), `POST /timers/{id}/stop-remote` (it messages a real person and changes their hours),
+    `POST /time-edit-requests` (an employee's request on their own timesheet); and any write route whose
     path mentions `password`, `credential` or an `hr` segment (for example a future
     `/timesheets/{id}/submit-to-hr`), whatever the lists say.
   - **Allowed:** every read, and notifications, messages and milestone discussions; creating and editing projects;
     project requests and their decisions; staffing (`/projects/{id}/members`); every milestone write including archive
-    and restore; logging your own hours and approving or rejecting hours.
+    and restore; logging your own hours and approving or rejecting hours; approving or rejecting change requests on
+    timer hours (`/time-edit-requests/{id}/approve|reject`, the demo workflow).
   - **Anything else is refused** until it is reviewed: a test fails while any write route is in neither list.
 - **Sign-in.** Wrong passwords never lock a public demo account (anyone could lock everyone else out), and it gets no
   forgotten-password codes. Instead each client address gets 20 sign-ins to it per rolling minute (`429 RATE_LIMITED`);
@@ -357,7 +359,7 @@ Who logs hours: employees always; managers and admins only when `tracks_own_hour
 | POST | `/approvals/approve-week` | Admins and managers. `{entries: [{id, expected_hours}]}`: approves one person's week in one step, all or nothing (at most 100 entries). Each entry gets the same checks as a single approval (`403 SELF_APPROVAL`, `404`, `400 NOT_PENDING`, `409 STALE_ENTRY`); entries of more than one person or week are `400 MIXED_WEEKS` → `{approved, user_id, week_start}` |
 | GET | `/timesheets/approved?from=&to=` | Admins and managers. Approved hours per person and week (default: the last 8 weeks; at most a year): admins everyone, managers the projects they manage plus anything they approved themselves. Each row: `user {id, name, username}`, `week_start`, `entry_count`, `hours`, `tracked_hours` (of those, the hours that came from timers), `projects`, `hr_submitted` (every entry sent to HR and unchanged since), `hr_submitted_count`, `hr_submitted_at`, `hr_changed_count` (entries changed after they were sent), and `cost` for admins only (cost ÷ hours would reveal a rate) |
 
-Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)), `created_at`, and from migration 014: `note` (the work note), `tracked_hours` (the hours that came from timers), `source` (`tracked` when all of them did, `manual` when none, `mixed`), and `needs_note` (timer hours saved without proof of work; `false` once a note or a progress update that day covers them).
+Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)), `created_at`, and from migration 014: `note` (the work note), `tracked_hours` (the hours that came from timers), `source` (`tracked` when all of them did, `manual` when none, `mixed`), and `needs_note` (timer hours saved without proof of work; `false` once a note or a progress update that day covers them). The week also carries `totals.draft` (timer hours not submitted yet; they're not in `logged` or `approved`), `drafts` (`[{milestone_id, work_date, hours, note}]`: per cell, the stopped timers' hours waiting for Save week and the latest stop note) and `locks` (`[{milestone_id, work_date, hours, draft_hours, tracked_hours, request}]`: cells with timer hours, `hours` = saved + draft, `request` = the pending change request or `null`). Managers viewing someone's week see these for their own projects only.
 
 ```http
 GET /api/v1/time-entries          (as employee.demo, this week)
@@ -405,24 +407,42 @@ A hand edit keeps at most the new hours as tracked (`tracked_hours = min(tracked
 
 ### Timers
 
-One running timer per person, for whoever keeps a timesheet. Stopping it logs the time on that day's entry for the
-milestone through the same checks as `PUT /time-entries`. See [LOGIC_WALKTHROUGH §28](LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags).
+One running timer per person, for whoever keeps a timesheet. Stopping it never submits hours: the rounded time is
+kept as a draft of that day's cell, which the person submits with **Save week** (`PUT /time-entries`). See
+[LOGIC_WALKTHROUGH §28](LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags).
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/timers/current` | `{timer, now, stopped}`: your running timer or `null`, the server's clock (count the elapsed time from it), and `stopped`: when this read stopped a timer left past midnight, what it logged (same shape as a stop), else `null`. People who keep no timesheet always get `timer: null` |
+| GET | `/timers/current` | `{timer, now, stopped, limits, level, unsubmitted}`: your running timer or `null`; the server's clock (count the elapsed time from it); `stopped`: when this read stopped a timer left past midnight, what it did (same shape as a stop), else `null`; `limits`: the running timer's limits, each `{kind: daily \| milestone \| weekly, limit_hours, used_hours, total_hours, percent, level: ok \| warning \| over, warn_at, over_at, message}` (`warn_at`/`over_at`: when the clock reaches 100% and 125%); `level`: the worst; `unsubmitted`: your timer drafts per cell `[{work_date, week_start, milestone, project, hours}]`. People who keep no timesheet always get `timer: null` and empty lists |
 | POST | `/timers` | `{milestone_id}` → `201 {timer, now, stopped}`. Starts now (server time) on the New York date. Same rules as logging hours: `403 TIMESHEET_DISABLED`, `400 NOT_ASSIGNED`, `409 PROJECT_NOT_OPEN`, `400 OUT_OF_PROJECT_RANGE`; another timer running is `409 TIMER_RUNNING` (`details.timer_id`) |
-| POST | `/timers/stop` | `{note?}` (at most 500 characters). Stops the running timer (`409 NO_TIMER` when none) → `{timer, logged_hours, elapsed_hours, auto_stopped, needs_note, not_logged, message}`. Hours are the elapsed time to the nearest 0.25h; under 7.5 minutes logs nothing. When the hours can't be logged (the day would pass 24h, the project closed meanwhile…) the timer still stops and `not_logged` is `{code, message}` |
+| POST | `/timers/stop` | `{note?}` (at most 500 characters; kept on the timer, it pre-fills the cell's note). Stops the running timer (`409 NO_TIMER` when none) → `{timer, added_hours, elapsed_hours, auto_stopped, work_date, week_start, not_logged, message}`. Hours are the elapsed time to the nearest 0.25h (under 7.5 minutes: nothing), cut to what's left of the 24h day. **No time entry is created or changed.** When nothing can be recorded (the project closed meanwhile) the timer still stops and `not_logged` is `{code, message}` |
+| GET | `/timers/live` | Admins, executives, managers (`403` otherwise). `{now, today, items}`: running timers in reach (admins and executives: all; managers: direct reports and timers on projects they manage or approve for as active delegate). Item: `{id, person {id, name, first_name}, milestone, project, started_at, work_date, elapsed_seconds, today_hours, today_used_hours, limits, level, can_stop}` (no pay). Stops timers in reach left past midnight first |
+| POST | `/timers/{id}/stop-remote` | Admins and managers. `{message}` (10-500 characters, required). Stops someone's running timer: their time so far becomes their draft, `stopped_by`/`stop_message` are recorded, they get `TIMER_STOPPED_BY_MANAGER`, and the message is posted in your one-to-one conversation with them (created if needed) as "⏹ Stopped your timer on *milestone* (1h 20m): *message*". → the stop's shape plus `conversation_id`. `403 FORBIDDEN` unless you're an admin or manage the person (direct report) or the project (manager or active delegate); `400 OWN_TIMER` for your own; `409 NO_TIMER` when it already stopped |
 
-A timer is `{id, milestone {id, name}, project {id, name}, work_date, started_at, stopped_at, auto_stopped, logged_hours, entry_id}`.
+A timer is `{id, milestone {id, name}, project {id, name}, work_date, started_at, stopped_at, auto_stopped, tracked_hours, submitted, note}`
+(`tracked_hours`: what the stop recorded; `submitted`: Save week or an approved change request took it into an entry).
 
 ```json
 {"timer": {"id": "4be1…", "milestone": {"id": "202d…", "name": "Schema Mapping"}, "project": {"id": "86a8…", "name": "Apollo Data Migration"},
-           "work_date": "2026-10-14", "started_at": "2026-10-14T13:02:00+00:00", "stopped_at": "2026-10-14T15:10:41+00:00",
-           "auto_stopped": false, "logged_hours": 2.25, "entry_id": "c990…"},
- "logged_hours": 2.25, "elapsed_hours": 2.25, "auto_stopped": false, "needs_note": true, "not_logged": null,
- "message": "Logged 2.25h on Schema Mapping (Wed 14 Oct). Add a work note so your manager can see what you did"}
+           "work_date": "2026-10-13", "started_at": "2026-10-13T13:02:00+00:00", "stopped_at": "2026-10-13T14:34:41+00:00",
+           "auto_stopped": false, "tracked_hours": 1.5, "submitted": false, "note": ""},
+ "added_hours": 1.5, "elapsed_hours": 1.5, "auto_stopped": false, "work_date": "2026-10-13", "week_start": "2026-10-12",
+ "not_logged": null, "message": "Added 1.5h to Tuesday's cell — open your timesheet to submit."}
 ```
+
+### Change requests on timer hours
+
+A cell with timer hours (a draft, or `tracked_hours > 0`) is locked: `PUT /time-entries` answers
+`409 TIMER_HOURS_LOCKED` (`details.cells: [{milestone_id, milestone, work_date, hours, sent}]`) when such a cell is
+sent with hours other than saved + draft.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/time-edit-requests?status=pending` | `status`: `pending` (default), `approved`, `rejected`, `all`. Managers: requests they may decide (their projects and active delegations); admins: everyone's but their own; executives: everyone's (read-only); anyone else: their own. Item: `{id, user, milestone, project, work_date, week_start, current_hours, requested_hours, reason, status, created_at, decided_at, decided_by, decision_comment, can_decide}` |
+| POST | `/time-edit-requests` | Whoever keeps a timesheet. `{milestone_id, work_date, requested_hours, reason}` → `201`. Same cell rules as logging hours; `requested_hours` 0.25-24 (two decimals); `reason` 10-500 characters (`details.reason: min_length:10`). `400 NOT_LOCKED` (no timer hours there), `400 NO_CHANGE` (the cell already holds that), `409 CHANGE_REQUEST_PENDING` (one pending per cell), `400 DAY_OVER_24H`. Notifies `TIME_EDIT_REQUESTED` |
+| POST | `/time-edit-requests/{id}/approve` | Admins, the project's manager, its active delegate (`404`/`403` otherwise; `403 SELF_APPROVAL` for your own). `{comment?}` (≤ 500). Sets the cell to the requested hours as a **pending** entry (drafts submitted with it; tracked = min(tracked + draft, hours)); audit `approved_edit`; notifies `TIME_EDIT_APPROVED`. `400 NOT_PENDING` once decided |
+| POST | `/time-edit-requests/{id}/reject` | Same people. `{comment?}`. Leaves the cell; notifies `TIME_EDIT_REJECTED` |
+
 
 ```http
 GET /api/v1/time-entries/d273b5fc-02a1-41a8-8388-5d2c33698ee5/breakdown
@@ -486,7 +506,11 @@ Admins hand the approved hours of a pay period (a week, up to 31 days) to HR. Th
 | `KICKBACK_RAISED` | The project's manager and its active delegate | "*Name* kicked back *milestone* (*project*): *category* – *reason*" | `name`, `milestone`, `project`, `category`, `category_label`, `reason` |
 | `KICKBACK_RESOLVED` | Whoever raised it and the milestone's assignees | "*Name* returned *milestone* to you: *note*" or "… put *milestone* back in the queue: *note*" | `name`, `milestone`, `project`, `resolution`, `note` |
 | `TIMESHEET_EMPTY` | An active employee or manager on at least one active project with no pending or approved hours this week, from Friday 14:00 to the end of Sunday, New York time | "Your timesheet for the week of Mon 12 Oct is empty" | `week_start` |
-| `TIMER_AUTO_STOPPED` | The person whose timer ran past midnight (New York); created when their next timer read, start or stop finds it | "Your timer on Schema Mapping stopped at midnight — check your hours" | `timer_id`, `work_date`, `week_start`, `logged_hours`, `milestone`, `project`, `not_logged` (why nothing was logged, or `null`) |
+| `TIMER_AUTO_STOPPED` | The person whose timer ran past midnight (New York); created when their next timer read, start or stop (or a live-feed read covering them) finds it | "Your timer on Schema Mapping stopped at midnight — 4h added to Tuesday's cell, not submitted yet" (alerts from before migration 015: "… — check your hours") | `timer_id`, `work_date`, `week_start`, `added_hours`, `milestone`, `project` |
+| `TIMER_STOPPED_BY_MANAGER` | The person whose timer a manager or admin stopped from Live now | "Morgan stopped your timer on Schema Mapping: *message*" | `timer_id`, `message`, `added_hours`, `work_date`, `week_start`, `by {id, first_name, name}`, `milestone`, `project` |
+| `TIMER_OVER_LIMIT` | The project's manager and active delegate (never the owner), once per timer and limit kind, when a running timer passes 125% of a limit | "Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit" | `timer_id`, `kind`, `limit_hours`, `total_hours`, `work_date`, `message`, `milestone`, `project` |
+| `TIME_EDIT_REQUESTED` | The project's manager and active delegate (an admin when the requester is the manager) | "Eli asked to change Tue's Schema Mapping hours from 6h to 4.5h: *reason*" | `request_id`, `first_name`, `name`, `work_date`, `week_start`, `current_hours`, `requested_hours`, `reason`, `milestone`, `project` |
+| `TIME_EDIT_APPROVED` / `TIME_EDIT_REJECTED` | The employee who asked | "Morgan approved your change: Schema Mapping on Tue is now 4.5h (waiting for approval). *comment*" / "Morgan declined your change to Schema Mapping on Tue: *comment*" | the request's fields plus `comment`, `by` |
 
 For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, so the bell can open that week's timesheet; `TIMESHEET_EMPTY` links to `/timesheet?week=<week_start>` the same way.
 

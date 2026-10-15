@@ -1012,14 +1012,17 @@ Three safeguards make logged hours easier to trust without slowing honest people
 [`app/rules/hour_flags.py`](../../backend/v1/app/rules/hour_flags.py) (red flags), both pure. Service:
 [`app/features/time/timers.py`](../../backend/v1/app/features/time/timers.py),
 [`app/features/time/service.py`](../../backend/v1/app/features/time/service.py) (`save_week`, `write_entry`) and
-[`app/features/time/flags.py`](../../backend/v1/app/features/time/flags.py). Schema: migration 014.
+[`app/features/time/flags.py`](../../backend/v1/app/features/time/flags.py). The timer workflow (drafts, locked cells,
+change requests, the live feed and over-limit alerts) adds
+[`app/rules/timer_limits.py`](../../backend/v1/app/rules/timer_limits.py) (pure) and
+[`app/features/time/changes.py`](../../backend/v1/app/features/time/changes.py). Schema: migrations 014 and 015.
 
-### Start/stop timer
+### Start/stop timer: stopping keeps a draft, Save week submits it
 
 ```mermaid
 sequenceDiagram
   actor Emp as Employee
-  participant API as /timers
+  participant API as /timers and /time-entries
   participant DB as PostgreSQL
 
   Emp->>API: POST /timers {milestone_id}
@@ -1028,9 +1031,12 @@ sequenceDiagram
   API->>DB: lock the person's row; INSERT time_timers (work_date = New York today)<br/>(partial unique index: one running timer per person)
   Emp->>API: POST /timers/stop {note?}
   API->>DB: lock the person's row, stop the timer
-  API->>API: hours = elapsed, nearest 0.25h (under 7.5 min: nothing)
-  API->>DB: add to that day's entry through save_week's path:<br/>24h day cap, closed-project gate, overtime, HR flag, back to pending
-  API-->>Emp: "Logged 2.25h on Schema Mapping (Wed 14 Oct)"
+  API->>API: hours = elapsed, nearest 0.25h (under 7.5 min: nothing),<br/>never taking the day past 24h
+  API->>DB: time_timers.tracked_hours = hours, note = note (no time entry is touched)
+  API-->>Emp: "Added 1.5h to Tuesday's cell — open your timesheet to submit."
+  Emp->>API: GET /time-entries → drafts + locks: the cell shows saved + draft hours, locked
+  Emp->>API: PUT /time-entries (Save week) with the cell at saved + draft
+  API->>DB: write the entry (pending, proof of work as usual),<br/>tracked_hours += draft; timers submitted_at = now, entry_id = entry
 ```
 
 - **One at a time.** Starting while a timer runs is `409 TIMER_RUNNING`; the partial unique index on
@@ -1041,23 +1047,90 @@ sequenceDiagram
   `app/public_demo.py` (`DEMO_RESTRICTED`).
 - **The day it counts on** is the New York date the timer started (`work_date`), the same clock as the Friday
   reminder (the app keeps no per-user timezone; the conversion is hand-written so the Lambda needs no tz database).
-- **Rounding.** Elapsed time to the nearest quarter hour, 7.5 minutes rounding up: 7 minutes logs nothing (the person
-  is told), 8 minutes logs 0.25h, 52 minutes 0.75h, 53 minutes 1h.
-- **Adding to the day's entry.** The hours go onto the entry for that milestone and day (created when there is none),
-  through `write_entry`, the same code `save_week` uses, under the same per-person row lock: the 24h day cap and the
-  one-cell 24h limit, overtime recomputed (and the one-time 40h alert), `changed_after_hr_submission` when the entry
-  had gone to HR, and back to `pending` (with "Edited") if it had been decided. A rejected entry's hours don't count,
-  so the timer's hours replace them.
-- **When the hours can't be logged** (the day would pass 24h, the project was put on hold meanwhile), the timer
-  still stops, nothing is logged, and the response says why (`not_logged`), so a timer can never get stuck.
+- **Rounding.** Elapsed time to the nearest quarter hour, 7.5 minutes rounding up: 7 minutes adds nothing (the person
+  is told), 8 minutes adds 0.25h, 52 minutes 0.75h, 53 minutes 1h.
+- **Stopping never submits hours.** The rounded hours stay on the timer row (`time_timers.tracked_hours`, with the
+  stop's optional `note`) as a **draft** of that day's cell. No time entry is created or changed, so drafts never count
+  toward pending or approved totals, budgets or the 40h overtime alert. The 24h day still holds: the draft is cut to
+  what's left of the day (saved hours + other drafts), to the quarter hour below, and the message says so. If the
+  project closed meanwhile, nothing is recorded and `not_logged` says why, so a timer can never get stuck.
+- **Pre-filled cells.** `GET /time-entries` returns `drafts` (per cell: hours and the latest stop note) and `locks`.
+  The timesheet shows the cell as saved hours + draft hours with a timer mark and "from timer, not submitted yet",
+  and a banner: "You have 2.5h of timer time not submitted yet — Save week to submit." The stop's note pre-fills the
+  cell's work note.
+- **Save week submits.** The cell is sent at saved + draft hours, like any other change: proof of work, the 24h day,
+  overtime and the 40h alert, the HR-changed flag, back to pending. The server attributes the drafts of that
+  person, milestone and day to the entry: `tracked_hours = min(tracked + drafts, hours)`, and marks the timers
+  `submitted_at` with `entry_id`. A sent cell without a note gets the stop's note. Drafts of cells not sent stay drafts.
 - **Midnight.** A timer still running after its day ends is stopped at 23:59:59 New York time of that day,
-  `auto_stopped = true`, its hours logged as above, and the person gets a `TIMER_AUTO_STOPPED` alert: "Your timer on
-  *X* stopped at midnight — check your hours". Nothing is scheduled: it happens on their next `GET /timers/current`,
-  start or stop (the header chip reads it on every page load).
+  `auto_stopped = true`, into a draft as above, and the person gets a `TIMER_AUTO_STOPPED` alert: "Your timer on *X*
+  stopped at midnight — 4h added to Tuesday's cell, not submitted yet". Nothing is scheduled: it happens on their
+  next `GET /timers/current`, start or stop, or on a manager's `GET /timers/live` that covers them.
 - **Tracked vs manual.** `time_entries.tracked_hours` is the part of the hours that came from timers. The label is
-  derived: **Tracked** (all of it), **Manual** (none) or **Mixed**. A hand edit keeps at most the new hours as tracked
-  (`min(tracked_hours, hours)`). The timesheet and the review show the label; each person-week in To review and
-  Approved shows "Tracked 68% · Manual 32%".
+  derived: **Tracked** (all of it), **Manual** (none) or **Mixed**. The timesheet and the review show the label; each
+  person-week in To review and Approved shows "Tracked 68% · Manual 32%".
+- **Before migration 015** a stop wrote straight into the entry and could set `needs_note`. Those timers keep
+  `tracked_hours = 0` (never drafts) and those entries keep `needs_note` and the `NO_PROOF` flag until a note is added.
+
+### Locked timer cells and change requests
+
+- **Locked.** A cell with timer hours, a draft or submitted (`time_entries.tracked_hours > 0`), is locked
+  (`is_locked` in `time_tracking.py`). The timesheet shows its value read-only with a lock (or timer) icon and the
+  tooltip "Timer hours can't be edited — request a change". The note can still change and the cell is submitted
+  normally. Cells without timer hours stay editable.
+- **The server enforces it.** `save_week` refuses the whole save with `409 TIMER_HOURS_LOCKED`
+  (`details.cells: [{milestone_id, milestone, work_date, hours, sent}]`) when a locked cell is sent with any hours
+  other than saved + draft, clearing it included. There is no lasting grant: an approved request applies the change
+  itself.
+- **Request a change.** On a locked cell, **Request a change** asks for the hours wanted (0.25-24, two decimals, not
+  what the cell holds) and why (10-500 characters). `POST /time-edit-requests` stores it as `pending` with the cell's
+  `current_hours` and checks the 24h day. One pending request per cell (partial unique index;
+  `409 CHANGE_REQUEST_PENDING`). The project's manager and its active delegate get `TIME_EDIT_REQUESTED`: "Eli asked
+  to change Tue's Schema Mapping hours from 6h to 4.5h: *reason*" (an admin when the requester is the manager).
+- **Deciding.** On **Timesheets → Change requests** (also the bell's link) the manager, the active delegate or an
+  admin approves or rejects, with an optional comment; never their own. **Approve** sets the cell to the requested
+  hours as a pending entry through `write_entry` (drafts go in with it; `tracked_hours = min(tracked + draft, hours)`,
+  so the cell stays locked; note: the entry's, else the stop's, else the reason), audited as `approved_edit` by the
+  approver, and tells the employee (`TIME_EDIT_APPROVED`). **Reject** leaves the cell as it is and tells the employee
+  with the comment (`TIME_EDIT_REJECTED`). The new hours still go through normal approval.
+
+### Live now: running timers and remote stop
+
+- **`GET /timers/live`** (admins, executives, managers) lists running timers in the caller's reach, scoped like the
+  dashboard: everyone for admins and executives; for a manager, their direct reports and anyone timing work on a
+  project they manage or approve for as its active delegate. Each item: person, milestone, project, `started_at`,
+  `elapsed_seconds` (the screen ticks locally from the server's `now`), `today_hours` with the timer, the limits and
+  warning level, and `can_stop`. It first stops (into drafts) any timer in reach left past midnight.
+- **The card.** "Live now" sits on the manager's home (beside Approvals), the admin's control centre, the executive's
+  dashboard (read-only) and the Timesheets page. Each row ticks every second and shows **Warning** (≥100% of a limit)
+  or **Over** (≥125%) chips.
+- **Remote stop.** Managers and admins (never executives, never the public demo admin) press **Stop timer**, write a
+  message (10-500 characters) and `POST /timers/{id}/stop-remote`. Only an admin or someone who oversees that person
+  or project may (`403` otherwise). The time so far becomes the employee's draft exactly as if they had stopped it
+  (locked, submitted with Save week); the timer records `stopped_by` and `stop_message`; the employee gets
+  `TIMER_STOPPED_BY_MANAGER` ("Morgan stopped your timer on Schema Mapping: *message*"), and the message is posted in
+  their one-to-one conversation (reused, or created) as "⏹ Stopped your timer on Schema Mapping (1h 20m): *message*".
+  Audited as `timer_remote_stop`.
+
+### Over-limit warnings
+
+Pure rules in [`app/rules/timer_limits.py`](../../backend/v1/app/rules/timer_limits.py). A running timer is measured
+against three limits, each as hours already used + the running timer:
+
+| Limit | Ceiling | Used before the timer |
+|---|---|---|
+| `daily` | 8h (`DAILY_LIMIT`; planned hours never lower it) | the person's pending and approved hours that day + their drafts that day |
+| `milestone` | the milestone's `estimated_hours` (skipped without one) | everyone's pending and approved hours on it + every draft on it |
+| `weekly` | 40h (`WEEKLY_LIMIT`, the overtime line) | the person's pending and approved hours that week + their drafts that week |
+
+- **The employee** is warned at 100%. `GET /timers/current` returns each limit with `warn_at` and `over_at` (when
+  the clock reaches 100% and 125%), so the screen changes exactly then without asking again: a banner on My week and
+  the timesheet, a toast once per timer and limit ("You've reached your 8h for today on this timer", "Schema
+  Mapping's estimate is used up"), the header chip turns amber, and Puppy mentions it.
+- **The approvers** (the project's manager and active delegate, not the owner; admins see it in Live now) get one
+  `TIMER_OVER_LIMIT` bell alert per timer and limit kind once it passes 125% (`OVER_LIMIT_ALERT = 1.25`): "Eli's timer
+  on Schema Mapping is at 10h today — over the 8h daily limit". `time_timer_alerts (timer_id, kind)` keeps it to one.
+  Nothing is scheduled: it's checked on `GET /timers/current`, `GET /timers/live`, `GET /notifications` and on stop.
 
 ### Proof of work
 
@@ -1086,7 +1159,7 @@ The rules see every pending and approved entry of the person-week (whichever pro
 | `BACKDATED` | info | Created more than 7 days after its work date (New York dates; 7 days late is fine, 8 isn't) |
 | `OVER_PLAN` | warn | The person-week on one project is over 150% of their planned hours there (`planned_hours_per_week`); no plan, no flag |
 | `NO_ACTIVITY` | info | No sign-in and no other activity by the person that day: no audit entry (a sign-in is one), session refresh, progress update, message sent or timer started |
-| `NO_PROOF` | warn | `needs_note` timer hours with no progress update that day |
+| `NO_PROOF` | warn | `needs_note` timer hours with no progress update that day (only entries from before migration 015, when a stop saved hours directly; timer hours now go through Save week's proof of work) |
 
 **The go-live cutoff.** `BACKDATED` and `NO_ACTIVITY` read a sign-in trail and creation dates that hours logged before
 the feature don't have (the seeded and curated demo history was inserted, not logged through the app). So they judge

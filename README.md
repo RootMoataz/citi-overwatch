@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,041 backend (349 unit · 692 integration, 98% coverage) · 765 frontend component (63 files) · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,087 backend (364 unit · 723 integration, 97% coverage) · 793 frontend component (65 files) · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -33,7 +33,7 @@ Highlights:
 - **Accounts.** Admins create them in a five-step wizard with live username checks and a generated password. The welcome email carries a temporary password, which must be changed at first sign-in.
 - **Timesheets.** Employees (and managers or admins an admin has switched to "Tracks own hours") log hours on the milestones they're assigned to. Every hour needs the project manager's (or delegate's) approval before it counts toward the budget. Going over 40 hours is a warning, not a block. Admins submit approved pay periods to HR, and later edits come back as corrections.
 - **Approvals.** The Timesheets page groups pending hours by person-week. Each entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
-- **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
+- **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight) whose hours pre-fill a locked timesheet cell until **Save week** submits them (a **Request a change** goes to the manager), a **Live now** card where managers watch running timers tick and can stop one with a message, warnings at 100% of the 8h day, the milestone's estimate or the 40h week (the manager is alerted at 125%), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
 - **Nothing is ever deleted.** Records are archived and an admin can restore them. Every change is written to the **audit log**.
 - **Responsive.** A sidebar on desktop, a drawer on phones, and tables that become cards on small screens.
 
@@ -160,8 +160,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,041 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 765 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,087 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 793 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

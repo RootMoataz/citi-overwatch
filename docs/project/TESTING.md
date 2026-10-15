@@ -9,13 +9,13 @@ The tests are built for **debugging**, not only for a green tick:
 
 | Layer | Tool | Count | What a failure here means |
 |---|---|---|---|
-| Rules (unit) | pytest | part of 349 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
-| Core (unit) | pytest | part of 349 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
-| API (integration) | pytest + real PostgreSQL 17 | 692 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 765 (63 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Rules (unit) | pytest | part of 364 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
+| Core (unit) | pytest | part of 364 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
+| API (integration) | pytest + real PostgreSQL 17 | 723 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
+| Frontend (component) | Vitest + React Testing Library + MSW | 793 (65 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
-Counts as of 2026-10-15: **1,041 backend** (349 unit, 692 integration, 98% coverage) and **765 frontend** in 63 files, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-15: **1,087 backend** (364 unit, 723 integration, 97% coverage) and **793 frontend** in 65 files, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (62 of 108 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -80,19 +80,19 @@ Windows 11, PostgreSQL 17, Node 24, Python 3.12, at commit `820d131` (timers, pr
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs python -m pytest -o addopts="" -q
-1041 passed in 191.09s (0:03:11)
+1087 passed in 174.91s (0:02:54)
 
 # backend/v1: same, with --cov=app --cov-report=term
-TOTAL                                     5980    149    98%
-1041 passed in 198.78s (0:03:18)
+TOTAL                                     6456    176    97%
+1087 passed in 186.58s (0:03:06)
 
 # collected per layer
-tests/unit:        349 tests
-tests/integration: 692 tests
+tests/unit:        364 tests
+tests/integration: 723 tests
 
 # frontend: npx vitest run --maxWorkers=4
- Test Files  63 passed (63)
-      Tests  765 passed (765)
+ Test Files  65 passed (65)
+      Tests  793 passed (793)
    Duration  98.50s
 ```
 

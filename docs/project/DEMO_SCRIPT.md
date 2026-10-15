@@ -25,7 +25,10 @@ Each step is marked:
 
 | Step | Effect | Repeatable? |
 |---|---|---|
-| Start/Stop timer under 7.5 minutes | Stores a timer row; logs no hours | Yes |
+| Start/Stop timer | Stores a timer row; 7.5+ minutes become a draft in Eli's timesheet cell (not submitted) | Yes (drafts sit there until Save week) |
+| Eli's **Save week** with a timer draft | Submits the draft as pending, Tracked hours | Yes (it adds hours to Eli's day) |
+| Morgan's **Stop timer** in Live now | Stops Eli's timer, posts a message in their thread, adds a draft | Yes |
+| **Approve** Eli's change request | Sets that cell to the requested hours (pending) | **No, one-shot** (Eli can ask again on another timer cell) |
 | Save week without a note | Refused (`400 PROOF_REQUIRED`); nothing saved | Yes |
 | Kick back Hypercare (optional) | Hypercare becomes Blocked; Apollo becomes at risk | Yes: Morgan presses **Put back in the queue** |
 | Message Morgan | Adds a message to the thread | Yes |
@@ -37,6 +40,12 @@ Each step is marked:
 | Create the instructors' accounts with Puppy (real admin) | Creates accounts and sends one real email each | **No, one-shot** (each email and username works once) |
 
 Rehearse only the READ and repeatable steps. Save the one-shot steps for the real run.
+
+**Before you start (about 10 minutes ahead):** the live feed needs a timer that is really running, and the seed never
+starts one (it would tick from the seed's time). Open a **second browser or a private window**, sign in there as
+**Employee** and press **Start** on *Schema Mapping*. Leave that window open: it is "Eli at his desk". Eli already
+has 9h on Schema Mapping today, so his timer shows the **8h day** warning at once and passes 125% (10h) after an
+hour, which is when Morgan's bell gets "Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit".
 
 ---
 
@@ -68,27 +77,38 @@ Click **Employee**.
    each is written in words."
 2. **Estimates (READ).** Open **Projects → Apollo Data Migration → Milestones**. *Schema Mapping* reads
    "Est. 383h · …" and "306.75h logged · 80% of estimate". The line turns amber above 90% and red above 100%.
-3. **Timer (WRITE, repeatable).** Back on **My week**, press **Start** on *Schema Mapping*. The button turns into a
-   running clock, and a timer chip appears in the header. Press the clock; the **Stop your timer?** dialog has an
-   optional **What did you work on?** note. Press **Stop timer**. Stopped under 7.5 minutes, it logs nothing and says
-   "Timer stopped after less than 7.5 minutes, so nothing was logged". Say: "Timer hours are rounded to the nearest
-   quarter hour and marked Tracked."
-4. **Proof of work (WRITE attempt, refused, repeatable).** Open **My timesheet**. Change today's *Schema Mapping*
+3. **Your manager (READ).** Under **This week**, the **Your manager** card shows Morgan's photo, title and
+   department and a **Message Morgan** button. Say: "One press to message your manager." (Same card on your own
+   profile.)
+4. **Timer: start → stop → pre-filled, locked cell → Save week (WRITE, repeatable).** The timer started in the other
+   window is running: the header chip ticks and turns amber, and a banner says "You've reached your 8h for today on
+   this timer". Press the chip; the **Stop your timer?** dialog says "Stopping now adds 0.25h to Thursday's cell on
+   your timesheet. It isn't submitted until you Save week there." Add a note (**What did you work on?**) and press
+   **Stop timer**. The toast: "Added 0.25h to Thursday's cell — open your timesheet to submit." Open **My
+   timesheet**: today's *Schema Mapping* cell shows saved + timer hours with a timer mark, "from timer, not submitted
+   yet", and the banner "You have 0.25h of timer time not submitted yet — Save week to submit." Hover it: "Timer hours
+   can't be edited — request a change". Press **Save week**. Say: "Stopping a timer never submits hours. The employee
+   still submits them, with proof of work, and can't type over them. To fix them they press **Request a change**,
+   which goes to the manager." (Stopped under 7.5 minutes, nothing is added and the toast says so.) Then press
+   **Start** again in the other window so Morgan has a live timer to watch.
+5. **Proof of work (WRITE attempt, refused, repeatable).** Open **My timesheet**. Change Wednesday's *Schema Mapping*
    cell from 8 to 7 and press **Save week**. The page shows **Add a work note before saving** and lists the cell.
    Say: "New or changed hours need a 10 to 500 character note, or a progress update that day. Old hours aren't
    checked." Put the 8 back. Nothing was saved.
-5. **Kick back (optional: WRITE, repeatable, changes live data).** On Apollo's **Milestones** tab, press
+6. **Kick back (optional: WRITE, repeatable, changes live data).** On Apollo's **Milestones** tab, press
    **Kick back** on *Hypercare*. Pick a category under **What's wrong?**, write a reason in **Explain** (10+
    characters) and press **Kick back**. Hypercare becomes Blocked and Apollo becomes at risk ("Kicked back – needs
    review"). This makes the manager's Ctrl+K step return Apollo. Undo it as Morgan with **Put back in the queue**.
-6. **Messages (WRITE, repeatable).** Open **Messages**. Open the thread with Morgan Manager (it has one unread
+7. **Messages (WRITE, repeatable).** Open **Messages**. Open the thread with Morgan Manager (it has one unread
    message) and send a short reply. Say: "Employees can message their manager, their project managers and other
    employees, but not admins or executives. The server enforces that."
-7. **Puppy (READ).** Click the dog next to the bell (**Puppy assistant**). Show **Summary** ("What needs you"),
+8. **Puppy (READ).** Click the dog next to the bell (**Puppy assistant**). Show **Summary** ("What needs you"),
    then **Sound** and press ▶ (**Preview Puppy bark**). Say: "Puppy follows rules from your data. No AI service is
    involved, and nothing you type leaves the browser."
 
-**If something goes wrong:** if **Start** is disabled, another timer is running; stop it first. If
+**If something goes wrong:** if **Start** is disabled, another timer is running; stop it first. If the stop adds
+nothing, the timer ran under 7.5 minutes: show the seeded Saturday 10 Oct cell (2h, Tracked, "Change requested") in
+last week's timesheet instead. If
 the proof-of-work error doesn't appear, the cell wasn't changed; type a different number. If the kickback dialog
 refuses, the reason is under 10 characters. Skip anything that stalls; Puppy is the strongest closer.
 
@@ -96,39 +116,54 @@ refuses, the reason is under 10 characters. Skip anything that stalls; Puppy is 
 
 Sign out, click **Manager**.
 
-1. **Dashboard (READ).** Approvals waiting sit on top. In **Risk**, Morgan's projects show **Nothing at risk**
+1. **Dashboard (READ).** Approvals waiting and **Live now** sit on top. Live now shows Eli's timer ticking every
+   second with a **Warning: 8h day, 40h week** chip (or **Over** past 125%). In **Risk**, Morgan's projects show **Nothing at risk**
    (or Apollo with "Kicked back – needs review" if Eli kicked back Hypercare). **Smart insights** ("Rule-based
    suggestions from your live data") shows "Approvals are piling up" with a **Medium Severity** chip: 5 entries
    waiting more than 3 days, the oldest 14 days. In **Budget used per project**, each bullet shows budget as the
    track, consumed as the bar and the forecast as the marker. Click **Apollo Data Migration** to open its Budget
    tab (8.4% used at 23.1% progress), then go back.
-2. **Timesheets → To review (READ).** Open **Timesheets**. Turn on **Only flagged**. Gia Rossi has two weeks:
+2. **Stop Eli's timer with a message (WRITE, repeatable).** In Live now press **Stop timer** on Eli's row, write
+   "Please stop here and join the 3pm review call" (10+ characters) and press **Stop timer and send**. In Eli's window:
+   the bell shows "Morgan stopped your timer on Schema Mapping: …", **Messages** has "⏹ Stopped your timer on Schema
+   Mapping (…): …" in their thread, and the time so far is a locked draft in today's cell. Say: "Managers see who is
+   timing work right now, get one alert when a timer passes 125% of a limit, and can stop it with a reason the
+   employee actually reads."
+3. **Change requests (WRITE, one-shot).** Open **Timesheets**. **Change requests** lists Eli's request on Saturday
+   10 Oct's *Schema Mapping*: "2h → 1.5h" and his reason. Press **Approve**, add a comment and press **Approve
+   change**. Eli's cell becomes 1.5h, pending approval like any hours, and he is told. (Reject keeps the cell and sends
+   the comment instead.)
+4. **Timesheets → To review (READ).** Still on **Timesheets**. Turn on **Only flagged**. Gia Rossi has two weeks:
    - Week of Mon 5 Oct: 4 × 8.5h on *Build: frontend*, flagged **Same hours daily** and **Over plan**,
      "Tracked 0% · Manual 100%".
    - Week of Mon 12 Oct: 24h, flagged **Over plan**, "Tracked 83% · Manual 17%", with work notes beside each entry.
 
    Say: "Red flags inform the approver. They never block."
-3. **Approve week (WRITE, one-shot).** On Gia's week of 12 Oct, press **Approve week**. Approved hours move to
+5. **Approve week (WRITE, one-shot).** On Gia's week of 12 Oct, press **Approve week**. Approved hours move to
    **Approved**, and Apollo's consumed budget rises. Leave the week of 5 Oct for later demos.
-4. **Complete and auto-route (WRITE, one-shot).** Open **Projects → Apollo Data Migration → Milestones**. *Cutover*
+6. **Complete and auto-route (WRITE, one-shot).** Open **Projects → Apollo Data Migration → Milestones**. *Cutover*
    (Critical, Hard) has **Nobody assigned** and waits on *Schema Mapping*. On *Schema Mapping* (Ready for review,
    Eli, Ben, Ana), press **Complete**. Confetti fires and the toast reads "Completed. Auto-assigned Ben Okafor to
    Cutover". Say: "Cutover needs Backend Development or DevOps. Ben has both, so he matched the most required skills.
    He also fits under his 40-hour plan."
-5. **Planning board (READ).** Open **Projects → Beacon Mobile App**. The **Plan** tab is a Kanban board: Backlog →
+7. **Planning board (READ).** Open **Projects → Beacon Mobile App**. The **Plan** tab is a Kanban board: Backlog →
    Ready → Scheduled. Press **Finalize plan**. The dialog "Finalize the plan for Beacon Mobile App?" lists six checks;
    two fail (cards left in Ready and Backlog; scheduled milestones with nobody assigned), so finalizing stays
    disabled. Close it. Don't drag cards: moves are saved.
-6. **Email this report (WRITE, repeatable).** Back on the dashboard, press **Email this report**. Untick
+8. **Email this report (WRITE, repeatable).** Back on the dashboard, press **Email this report**. Untick
    **Send to me** (Morgan's address is a demo address). The field then reads **Recipient email**: type your own
    address and press **Send**. A per-recipient result appears ("Sent to …"). Say: "The report is built in the
    browser and sent through EmailJS, because the Lambda has no internet route."
-7. **Ctrl+K (READ).** Press Ctrl+K and type "at-risk projects in Technology". The palette shows the interpreted chip
+9. **Ctrl+K (READ).** Press Ctrl+K and type "at-risk projects in Technology". The palette shows the interpreted chip
    *Projects · At risk · Technology*. Press Enter. The list shows Apollo if Eli kicked back Hypercare; otherwise
    it's empty, which is the right answer for Morgan's projects.
 
 **If something goes wrong:**
 
+- Live now says "Nobody is running a timer right now": the other window's timer was stopped or ran past midnight.
+  Press **Start** there again; the card refreshes within 30 seconds (or reload).
+- **Change requests** is missing: the seeded request was decided already. As Eli, press **Request a change** on any
+  locked (timer) cell to make a new one.
 - Gia's weeks are missing from **To review**: someone approved them already. Show a remaining flagged week, or the
   `timesheets-review.png` screenshot.
 - *Schema Mapping* is already Completed: someone ran this step. Show *Cutover* with Ben as primary, then open its
@@ -228,7 +263,7 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,041 backend tests at 98% coverage, 765 frontend component tests, and 6 end-to-end runs on desktop and
+> Tests: 1,087 backend tests at 97% coverage, 793 frontend component tests, and 6 end-to-end runs on desktop and
 > iPhone.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
@@ -268,8 +303,8 @@ Nothing is deleted, only archived. The hourly rate (salary ÷ 2,080) is frozen o
 One open kickback per milestone and one running timer per person are enforced by partial unique indexes. HR
 submissions keep a frozen copy of each payroll CSV.
 
-**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (349 unit tests).
-692 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 765 component tests use Vitest
+**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (364 unit tests).
+723 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 793 component tests use Vitest
 and MSW, where an unhandled request fails the test. 6 Playwright runs cover 3 journeys on desktop Chrome and iPhone
 13. Two fail-closed tests walk every write route for the executive and demo-admin guards.
 
