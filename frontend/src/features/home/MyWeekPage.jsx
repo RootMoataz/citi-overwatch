@@ -200,8 +200,13 @@ export default function MyWeekPage() {
       <TimerLimitBanner showUnsubmitted />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
-          {profile.data ? <Reveal><ThisWeek week={profile.data.this_week} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
-          {profile.data?.user?.manager ? <YourManagerCard manager={profile.data.user.manager} sx={{ mt: 2 }} /> : null}
+          {/* This week stretches to the row's height; the manager card sits under it inside the same column. */}
+          <Stack sx={{ gap: 2, height: '100%' }}>
+            <Box sx={{ flexGrow: 1 }}>
+              {profile.data ? <Reveal><ThisWeek week={profile.data.this_week} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+            </Box>
+            {profile.data?.user?.manager ? <YourManagerCard manager={profile.data.user.manager} /> : null}
+          </Stack>
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
           {profile.data ? <Reveal index={1}><MyMilestones milestones={profile.data.milestones} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}

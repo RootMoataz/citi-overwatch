@@ -82,40 +82,41 @@ function LiveRow({ item, serverNow, startedMs, readOnly, demo, onStop }) {
   const reached = item.limits.filter((l) => limitLevel(l, serverNow) !== 'ok')
   return (
     <Box component="li" sx={{ py: 1.25, borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0, pt: 0 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' } }}>
-        <Stack direction="row" sx={{ gap: 1.25, alignItems: 'center', minWidth: 0, flexGrow: 1 }}>
-          <UserAvatar userId={item.person.id} name={item.person.name} size={36} />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle2" component="p" sx={{ lineHeight: 1.3 }}>
-              <PersonLink person={item.person} context={{ managed: true }} />
-            </Typography>
-            <Typography variant="caption" component="p" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>
-              {item.milestone.name} · {item.project.name}
-            </Typography>
-          </Box>
-        </Stack>
-        <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
-          <Typography component="span" aria-label={`${item.person.name}'s timer: ${formatElapsed(elapsed)}`}
-            sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '1.05rem', minWidth: 64 }}>
-            {formatElapsed(elapsed)}
+      {/* Two lines at any card width: who and the clock, then today's total, warnings and Stop. */}
+      <Stack direction="row" sx={{ gap: 1.25, alignItems: 'center', minWidth: 0 }}>
+        <UserAvatar userId={item.person.id} name={item.person.name} size={36} />
+        <Box sx={{ minWidth: 0, flexGrow: 1 }}>
+          <Typography variant="subtitle2" component="p" sx={{ lineHeight: 1.3 }}>
+            <PersonLink person={item.person} context={{ managed: true }} />
           </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatHours(Math.round(today * 4) / 4)} today</Typography>
-          {level !== 'ok' ? (
-            <Tooltip title={reached.map((l) => `${LIMIT_LABEL[l.kind]}: ${formatHours(l.limit_hours)} limit`).join(' · ')}>
-              <Chip size="small" color={LEVEL_CHIP[level].color} label={`${LEVEL_CHIP[level].label}: ${reached.map((l) => LIMIT_LABEL[l.kind]).join(', ')}`} />
-            </Tooltip>
-          ) : null}
-          {!readOnly && (item.can_stop !== false || demo) ? (
-            <Tooltip title={demo ? DEMO_DISABLED : `Stop ${item.person.name}'s timer with a message`}>
-              <span>
-                <Button size="small" variant="outlined" color="error" startIcon={<StopCircle />} disabled={demo}
-                  aria-label={`Stop ${item.person.name}'s timer`} onClick={() => onStop(item, elapsed)}>
-                  Stop timer
-                </Button>
-              </span>
-            </Tooltip>
-          ) : null}
-        </Stack>
+          <Typography variant="caption" component="p" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>
+            {item.milestone.name} · {item.project.name}
+          </Typography>
+        </Box>
+        <Typography component="span" aria-label={`${item.person.name}'s timer: ${formatElapsed(elapsed)}`}
+          sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700, fontSize: '1.15rem', flexShrink: 0,
+            color: level === 'over' ? 'error.main' : level === 'warning' ? 'warning.main' : 'text.primary' }}>
+          {formatElapsed(elapsed)}
+        </Typography>
+      </Stack>
+      <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 0.75, pl: { xs: 0, sm: 5.75 } }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatHours(Math.round(today * 4) / 4)} today</Typography>
+        {level !== 'ok' ? (
+          <Tooltip title={reached.map((l) => `${LIMIT_LABEL[l.kind]}: ${formatHours(l.limit_hours)} limit`).join(' · ')}>
+            <Chip size="small" color={LEVEL_CHIP[level].color} label={`${LEVEL_CHIP[level].label}: ${reached.map((l) => LIMIT_LABEL[l.kind]).join(', ')}`} />
+          </Tooltip>
+        ) : null}
+        <Box sx={{ flexGrow: 1 }} />
+        {!readOnly && (item.can_stop !== false || demo) ? (
+          <Tooltip title={demo ? DEMO_DISABLED : `Stop ${item.person.name}'s timer with a message`}>
+            <span>
+              <Button size="small" variant="outlined" color="error" startIcon={<StopCircle />} disabled={demo}
+                aria-label={`Stop ${item.person.name}'s timer`} onClick={() => onStop(item, elapsed)}>
+                Stop timer
+              </Button>
+            </span>
+          </Tooltip>
+        ) : null}
       </Stack>
     </Box>
   )
