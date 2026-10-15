@@ -7,7 +7,7 @@ from app.migrate import apply_migrations
 
 EXPECTED = {"users", "refresh_tokens", "password_reset_codes", "app_secrets", "projects",
             "project_requests", "project_members", "milestones", "milestone_dependencies",
-            "milestone_assignees", "milestone_notes", "time_entries", "notifications", "audit_log"}
+            "milestone_assignees", "milestone_notes", "time_entries", "notifications", "audit_log", "departments"}
 
 
 def test_migrations_create_all_tables(db):
@@ -57,3 +57,18 @@ def test_milestone_difficulty_defaults_to_medium_and_is_checked(conn):
         conn.run("UPDATE milestones SET difficulty = :d", d=value)
     with pytest.raises(DatabaseError):
         conn.run("UPDATE milestones SET difficulty = 'extreme'")
+
+
+def test_work_mode_defaults_to_push_and_is_checked(conn):
+    from tests.helpers import make_project, make_user
+    project = make_project(conn, make_user(conn, role="manager"))
+    assert query(conn, "SELECT work_mode FROM projects WHERE id = :i", i=project["id"]) == [{"work_mode": "push"}]
+    conn.run("UPDATE projects SET work_mode = 'pull'")
+    with pytest.raises(DatabaseError):
+        conn.run("UPDATE projects SET work_mode = 'kanban'")
+
+
+def test_department_names_unique_ignoring_case(conn):
+    conn.run("INSERT INTO departments (name) VALUES ('Operations')")
+    with pytest.raises(DatabaseError):
+        conn.run("INSERT INTO departments (name) VALUES ('OPERATIONS')")

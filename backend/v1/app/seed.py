@@ -38,6 +38,14 @@ PEOPLE = [
 ]
 
 
+# Department -> the demo people in it.
+DEPARTMENTS = {
+    "Technology": ("manager.demo", "employee.demo", "ana.ruiz", "ben.okafor", "chloe.park", "gia.rossi", "hugo.lee"),
+    "Operations": ("admin.demo", "riley.chen", "dev.patel", "emma.stone", "finn.walsh", "isla.nguyen", "jack.brown"),
+    "Risk & Compliance": ("kira.sato", "leo.martin"),
+}
+
+
 def seed(conn) -> dict:
     creds = {"admin": ("admin.demo", DEMO_PASSWORD), "manager": ("manager.demo", DEMO_PASSWORD),
              "employee": ("employee.demo", DEMO_PASSWORD)}
@@ -93,26 +101,32 @@ def _load(conn) -> None:
     monday = today - timedelta(days=today.weekday())
     pw_hash = hash_password(DEMO_PASSWORD)  # one hash for every demo account keeps seeding fast
     people: dict[str, dict] = {}
+    departments = {name: query_one(conn, "INSERT INTO departments (name) VALUES (:n) RETURNING id", n=name)["id"]
+                   for name in DEPARTMENTS}
+    department_of = {username: departments[name] for name, members in DEPARTMENTS.items() for username in members}
 
     for username, first, last, role, title, salary, reports_to in PEOPLE:
         people[username] = query_one(conn, """
             INSERT INTO users (username, email, first_name, last_name, job_title, role, salary,
-                               manager_id, password_hash, must_change_password)
-            VALUES (:u, :e, :f, :l, :t, CAST(:r AS user_role), :s, CAST(:m AS uuid), :h, false)
+                               manager_id, password_hash, must_change_password, department_id)
+            VALUES (:u, :e, :f, :l, :t, CAST(:r AS user_role), :s, CAST(:m AS uuid), :h, false, :dept)
             RETURNING *""", u=username, e=f"{username}@acme.example", f=first, l=last, t=title, r=role,
-            s=salary, m=str(people[reports_to]["id"]) if reports_to else None, h=pw_hash)
+            s=salary, m=str(people[reports_to]["id"]) if reports_to else None, h=pw_hash,
+            dept=department_of[username])
 
     def d(days: int) -> date:
         return today + timedelta(days=days)
 
-    def project(name, manager, status, start, end, budget, description, completed=False):
+    def project(name, manager, status, start, end, budget, description, department, completed=False,
+                work_mode="push"):
         return query_one(conn, """
             INSERT INTO projects (name, description, start_date, predicted_end_date, budget, status,
-                                  manager_id, created_by, completed_at)
+                                  manager_id, created_by, completed_at, department_id, work_mode)
             VALUES (:n, :desc, :s, :e, :b, CAST(:st AS project_status), :m, :c,
-                    CASE WHEN :done THEN now() - interval '30 days' END)
+                    CASE WHEN :done THEN now() - interval '30 days' END, :dept, :mode)
             RETURNING *""", n=name, desc=description, s=start, e=end, b=Decimal(budget), st=status,
-            m=people[manager]["id"], c=people["admin.demo"]["id"], done=completed)
+            m=people[manager]["id"], c=people["admin.demo"]["id"], done=completed,
+            dept=departments[department], mode=work_mode)
 
     def milestone(proj, name, start, end, status, description="", difficulty="medium"):
         return query_one(conn, """
@@ -152,7 +166,7 @@ def _load(conn) -> None:
 
     # 1. Healthy active project with a three-step dependency chain.
     apollo = project("Apollo Data Migration", "manager.demo", "active", d(-90), d(75), 250000,
-                     "Move customer records from the legacy warehouse to the new platform.")
+                     "Move customer records from the legacy warehouse to the new platform.", "Technology")
     discovery = milestone(apollo, "Discovery", d(-90), d(-60), "completed", "Inventory every legacy table.",
                           "easy")
     mapping = milestone(apollo, "Schema Mapping", d(-59), d(10), "in_progress", "Map legacy fields to the new model.")
@@ -168,7 +182,7 @@ def _load(conn) -> None:
 
     # 2. At-risk project: past its predicted end with an overdue milestone.
     atlas = project("Atlas Customer Portal", "riley.chen", "active", d(-120), d(-4), 60000,
-                    "Self-service portal for customer account changes.")
+                    "Self-service portal for customer account changes.", "Operations")
     requirements = milestone(atlas, "Requirements", d(-120), d(-90), "completed", difficulty="easy")
     build = milestone(atlas, "Build", d(-89), d(-8), "in_progress", difficulty="hard")
     launch = milestone(atlas, "Launch", d(-7), d(-4), "not_started")
@@ -179,20 +193,22 @@ def _load(conn) -> None:
     assign(build, "dev.patel", "emma.stone", "employee.demo")
     assign(launch, "finn.walsh")
 
-    # 3-5. Planned, on hold and completed projects.
+    # 3-5. Planned, on hold and completed projects. Beacon works in pull mode: its team claims the milestones.
     beacon = project("Beacon Mobile App", "manager.demo", "planned", d(20), d(200), 90000,
-                     "Native mobile app for field teams.")
-    milestone(beacon, "Design", d(20), d(60), "not_started")
+                     "Native mobile app for field teams.", "Technology", work_mode="pull")
+    design = milestone(beacon, "Design", d(20), d(60), "not_started")
+    prototype = milestone(beacon, "Prototype", d(61), d(120), "not_started", difficulty="hard")
+    depends(prototype, design)
     member(beacon, "gia.rossi", 20)
     member(beacon, "hugo.lee", 20)
     cobalt = project("Cobalt Infrastructure Upgrade", "riley.chen", "on_hold", d(-30), d(120), 150000,
-                     "Replace end-of-life network hardware.")
+                     "Replace end-of-life network hardware.", "Operations")
     assessment = milestone(cobalt, "Assessment", d(-30), d(10), "in_progress", difficulty="easy")
     for username in ("isla.nguyen", "jack.brown", "finn.walsh"):
         member(cobalt, username, 20)
     assign(assessment, "isla.nguyen", "jack.brown")
     delta = project("Delta Compliance Audit", "manager.demo", "completed", d(-200), d(-30), 40000,
-                    "Annual controls audit.", completed=True)
+                    "Annual controls audit.", "Risk & Compliance", completed=True)
     audit = milestone(delta, "Audit Fieldwork", d(-200), d(-30), "completed", difficulty="hard")
     member(delta, "kira.sato", 20)
     member(delta, "leo.martin", 20)

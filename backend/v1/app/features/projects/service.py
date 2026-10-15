@@ -10,6 +10,7 @@ from app.authz import load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.common import conflict_from
+from app.features.departments.service import check_department
 from app.http import ApiError
 from app.rules.at_risk import at_risk_reasons, weighted_progress
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
@@ -18,7 +19,9 @@ STATUSES = ("planned", "active", "on_hold", "completed")
 CREATE_STATUSES = ("planned", "active", "on_hold")
 TRANSITIONS = {("planned", "active"), ("active", "on_hold"), ("on_hold", "active"),
                ("active", "completed"), ("on_hold", "completed")}
-EDITABLE = {"name", "description", "start_date", "predicted_end_date", "budget", "status", "manager_id"}
+EDITABLE = {"name", "description", "start_date", "predicted_end_date", "budget", "status", "manager_id",
+            "department_id", "work_mode"}
+WORK_MODES = ("push", "pull")
 MAX_BUDGET = Decimal("1000000000")
 TENTH = Decimal("0.1")
 
@@ -80,15 +83,22 @@ def decorate(project: dict, milestones: list[dict], consumed: Decimal) -> dict:
             consumed=consumed, milestones=milestones, today=today()),
         "manager": {"id": project["manager_id"],
                     "name": f"{project.get('manager_first', '')} {project.get('manager_last', '')}".strip()},
+        "department": ({"id": project["department_id"], "name": project.get("department_name")}
+                       if project.get("department_id") else None),
+        "work_mode": project["work_mode"],
         "is_archived": project["is_archived"], "completed_at": project["completed_at"],
         "created_at": project["created_at"],
     }
 
 
+# A project row plus its manager's and department's names.
+WITH_NAMES = """SELECT p.*, u.first_name AS manager_first, u.last_name AS manager_last, d.name AS department_name
+                FROM projects p JOIN users u ON u.id = p.manager_id
+                LEFT JOIN departments d ON d.id = p.department_id"""
+
+
 def _with_manager(conn, project_id: str) -> dict:
-    return query_one(conn, """SELECT p.*, u.first_name AS manager_first, u.last_name AS manager_last
-                              FROM projects p JOIN users u ON u.id = p.manager_id
-                              WHERE p.id = CAST(:i AS uuid)""", i=str(project_id))
+    return query_one(conn, f"""{WITH_NAMES} WHERE p.id = CAST(:i AS uuid)""", i=str(project_id))
 
 
 def project_view(conn, project_id: str) -> dict:
@@ -127,6 +137,8 @@ def _clean(body: dict, *, partial: bool) -> dict:
             out[field] = as_date(body[field], field)
     if "budget" in body:
         out["budget"] = as_decimal(body["budget"], "budget", min=Decimal(0), max=MAX_BUDGET)
+    if "work_mode" in body:
+        out["work_mode"] = as_enum(body["work_mode"], "work_mode", WORK_MODES)
     return out
 
 
@@ -136,6 +148,8 @@ def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") 
     data = _clean(body, partial=False)
     data.setdefault("description", "")
     data.setdefault("budget", Decimal(0))
+    data.setdefault("work_mode", "push")
+    data["department_id"] = check_department(conn, body.get("department_id"))
     data["status"] = as_enum(body.get("status", "planned"), "status", CREATE_STATUSES)
     data["manager_id"] = _check_manager(conn, body["manager_id"])
     _check_dates(data["start_date"], data["predicted_end_date"])
@@ -143,9 +157,10 @@ def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") 
         with transaction(conn):
             row = query_one(conn, """
                 INSERT INTO projects (name, description, start_date, predicted_end_date, budget, status,
-                                      manager_id, created_by)
+                                      manager_id, created_by, department_id, work_mode)
                 VALUES (:name, :description, :start_date, :predicted_end_date, :budget,
-                        CAST(:status AS project_status), CAST(:manager_id AS uuid), CAST(:by AS uuid))
+                        CAST(:status AS project_status), CAST(:manager_id AS uuid), CAST(:by AS uuid),
+                        CAST(:department_id AS uuid), :work_mode)
                 RETURNING *""", by=ctx.user_id, **data)
             record(conn, ctx, audit_action, "project", str(row["id"]), after=data)
     except DatabaseError as exc:
@@ -169,6 +184,8 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
         if not ctx.is_admin:
             raise ApiError(403, "FORBIDDEN", "Only an admin can change a project's manager")
         changes["manager_id"] = _check_manager(conn, body["manager_id"])
+    if "department_id" in body:
+        changes["department_id"] = check_department(conn, body["department_id"])
     start = changes.get("start_date", before["start_date"])
     end = changes.get("predicted_end_date", before["predicted_end_date"])
     _check_dates(start, end)
@@ -197,7 +214,8 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
             changes["status"] = target
     if not changes:
         return project_view(conn, project_id)
-    casts = {"status": "CAST(:status AS project_status)", "manager_id": "CAST(:manager_id AS uuid)"}
+    casts = {"status": "CAST(:status AS project_status)", "manager_id": "CAST(:manager_id AS uuid)",
+             "department_id": "CAST(:department_id AS uuid)"}
     sets = ", ".join(f"{k} = {casts.get(k, ':' + k)}" for k in changes)
     try:
         with transaction(conn):
@@ -271,16 +289,20 @@ def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:
                       "approved_cost": consumed, "budget_pct": _pct(consumed, budget)}}
 
 
-def visible_projects(conn, ctx: Ctx, *, archived: bool = False) -> list[dict]:
-    """Every project row the caller may see, with the manager's name."""
-    base = """SELECT p.*, u.first_name AS manager_first, u.last_name AS manager_last
-              FROM projects p JOIN users u ON u.id = p.manager_id WHERE p.is_archived = :archived"""
+def visible_projects(conn, ctx: Ctx, *, archived: bool = False, department: str | None = None) -> list[dict]:
+    """Every project row the caller may see, with the manager's and department's names;
+    `department` (an id) keeps only that department's projects."""
+    base = WITH_NAMES + " WHERE p.is_archived = :archived"
+    args = {"archived": archived if ctx.is_admin else False}
+    if department:
+        base += " AND p.department_id = CAST(:dept AS uuid)"
+        args["dept"] = as_uuid(department, "department")
     if ctx.is_admin:
-        return query(conn, base + " ORDER BY lower(p.name)", archived=archived)
+        return query(conn, base + " ORDER BY lower(p.name)", **args)
     return query(conn, base + """ AND (p.manager_id = CAST(:me AS uuid) OR EXISTS (
                 SELECT 1 FROM project_members pm WHERE pm.project_id = p.id
                 AND pm.user_id = CAST(:me AS uuid) AND NOT pm.is_archived)) ORDER BY lower(p.name)""",
-                 archived=False, me=ctx.user_id)
+                 me=ctx.user_id, **args)
 
 
 def decorated(conn, rows: list[dict]) -> list[dict]:
@@ -292,7 +314,8 @@ def decorated(conn, rows: list[dict]) -> list[dict]:
 
 def list_projects(conn, ctx: Ctx, params: dict) -> dict:
     page, size = page_params(params)
-    rows = visible_projects(conn, ctx, archived=ctx.is_admin and params.get("archived") == "true")
+    rows = visible_projects(conn, ctx, archived=ctx.is_admin and params.get("archived") == "true",
+                            department=params.get("department") or None)
     if params.get("q"):
         needle = params["q"].strip().lower()
         rows = [r for r in rows if needle in r["name"].lower() or needle in (r["description"] or "").lower()]

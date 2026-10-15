@@ -5,7 +5,7 @@ from app.router import router
 
 @router.route("GET", "/dashboard")
 def dashboard(req, ctx, conn):
-    return json_response(200, service.dashboard(conn, ctx))
+    return json_response(200, service.dashboard(conn, ctx, req.query))
 
 
 @router.route("GET", "/insights/smart")

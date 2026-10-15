@@ -107,3 +107,24 @@ def test_seed_milestones_have_a_mix_of_difficulties(conn):
     seed(conn)
     difficulties = {r["difficulty"] for r in query(conn, "SELECT DISTINCT difficulty FROM milestones")}
     assert difficulties == {"easy", "medium", "hard"}
+
+
+def test_seed_puts_people_and_projects_in_departments(conn):
+    seed(conn)
+    names = {r["name"] for r in query(conn, "SELECT name FROM departments WHERE NOT is_archived")}
+    assert names >= {"Technology", "Risk & Compliance", "Operations"}
+    assert query_one(conn, "SELECT count(*) AS n FROM projects WHERE department_id IS NULL")["n"] == 0
+    assert query_one(conn, "SELECT count(*) AS n FROM users WHERE department_id IS NULL")["n"] == 0
+    used = query(conn, "SELECT DISTINCT d.name FROM projects p JOIN departments d ON d.id = p.department_id")
+    assert len(used) == 3
+
+
+def test_seed_has_a_pull_project_with_a_claimable_milestone(conn):
+    seed(conn)
+    pull = query(conn, "SELECT id FROM projects WHERE work_mode = 'pull'")
+    assert len(pull) == 1
+    open_work = query(conn, """SELECT m.id FROM milestones m WHERE m.project_id = :p AND m.status = 'not_started'
+                               AND NOT EXISTS (SELECT 1 FROM milestone_assignees a WHERE a.milestone_id = m.id)
+                               AND NOT EXISTS (SELECT 1 FROM milestone_dependencies d WHERE d.milestone_id = m.id)""",
+                      p=pull[0]["id"])
+    assert open_work

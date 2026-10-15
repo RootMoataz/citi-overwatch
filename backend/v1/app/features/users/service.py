@@ -9,6 +9,7 @@ from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.auth.service import revoke_all_sessions
 from app.features.common import conflict_from, user_public
+from app.features.departments.service import check_department
 from app.features.users.welcome import TEMP_PASSWORD_HOURS, send_welcome
 from app.http import ApiError
 from app.rules.usernames import is_valid_username, normalize_username, suggest_usernames
@@ -16,7 +17,8 @@ from app.security import generate_temp_password, hash_password, password_policy_
 from app.validation import as_decimal, as_email, as_enum, as_str, as_uuid, page_params, require
 
 ROLES = ("admin", "manager", "employee")
-EDITABLE = {"first_name", "last_name", "email", "job_title", "role", "salary", "manager_id", "username"}
+EDITABLE = {"first_name", "last_name", "email", "job_title", "role", "salary", "manager_id", "username",
+            "department_id"}
 PICKER_FIELDS = ("id", "username", "first_name", "last_name", "job_title")
 MAX_SALARY = Decimal("10000000")
 
@@ -120,6 +122,7 @@ def create_user(conn, ctx: Ctx, body: dict) -> dict:
     data.setdefault("job_title", "")
     data.setdefault("salary", Decimal(0))
     data["manager_id"] = _check_manager(conn, data["role"], body.get("manager_id"))
+    data["department_id"] = check_department(conn, body.get("department_id"))
     if "username" not in data:
         options = suggest_usernames(data["first_name"], data["last_name"], None,
                                     lambda u: _username_taken(conn, u), count=1)
@@ -135,9 +138,11 @@ def create_user(conn, ctx: Ctx, body: dict) -> dict:
         with transaction(conn):
             user = query_one(conn, """
                 INSERT INTO users (username, email, first_name, last_name, job_title, role, salary,
-                                   manager_id, password_hash, must_change_password, temp_password_expires_at)
+                                   manager_id, department_id, password_hash, must_change_password,
+                                   temp_password_expires_at)
                 VALUES (:username, :email, :first_name, :last_name, :job_title, CAST(:role AS user_role),
-                        :salary, CAST(:manager_id AS uuid), :hash, true, now() + make_interval(hours => :hrs))
+                        :salary, CAST(:manager_id AS uuid), CAST(:department_id AS uuid), :hash, true,
+                        now() + make_interval(hours => :hrs))
                 RETURNING *""", hash=hash_password(str(password)), hrs=TEMP_PASSWORD_HOURS, **data)
             record(conn, ctx, "create", "user", str(user["id"]), after=user_public(user, include_salary=True))
     except DatabaseError as exc:
@@ -169,11 +174,13 @@ def update_user(conn, ctx: Ctx, user_id: str, body: dict) -> dict:
         _require_no_dependents(conn, user_id, "demote")
     if "manager_id" in body or "role" in changes:
         changes["manager_id"] = _check_manager(conn, role, body.get("manager_id", before["manager_id"]), user_id)
+    if "department_id" in body:
+        changes["department_id"] = check_department(conn, body["department_id"])
     if not changes:
         return user_public(before, include_salary=True)
     sets = ", ".join(
         f"{k} = CAST(:{k} AS user_role)" if k == "role" else
-        f"{k} = CAST(:{k} AS uuid)" if k == "manager_id" else f"{k} = :{k}" for k in changes)
+        f"{k} = CAST(:{k} AS uuid)" if k in ("manager_id", "department_id") else f"{k} = :{k}" for k in changes)
     try:
         with transaction(conn):
             after = query_one(conn, f"UPDATE users SET {sets}, updated_at = now() "

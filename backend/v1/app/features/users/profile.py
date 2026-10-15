@@ -35,9 +35,13 @@ def _header(conn, ctx: Ctx, user: dict) -> dict:
     if user["manager_id"]:
         m = query_one(conn, "SELECT id, first_name, last_name FROM users WHERE id = :i", i=user["manager_id"])
         manager = {"id": m["id"], "name": f"{m['first_name']} {m['last_name']}"}
+    department = None
+    if user["department_id"]:
+        d = query_one(conn, "SELECT id, name FROM departments WHERE id = :i", i=user["department_id"])
+        department = {"id": d["id"], "name": d["name"]}
     out = {"id": user["id"], "name": f"{user['first_name']} {user['last_name']}", "first_name": user["first_name"],
            "last_name": user["last_name"], "job_title": user["job_title"], "role": user["role"],
-           "is_archived": user["is_archived"], "manager": manager}
+           "is_archived": user["is_archived"], "manager": manager, "department": department}
     if ctx.is_admin or str(user["id"]) == ctx.user_id:  # a salary is only ever shown to admins and its owner
         out["salary"] = user["salary"]
     return out

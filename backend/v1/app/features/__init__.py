@@ -9,3 +9,4 @@ from app.features.milestones import routes as _milestones  # noqa: F401
 from app.features.time import routes as _time  # noqa: F401
 from app.features.insights import routes as _insights  # noqa: F401
 from app.features.archive import routes as _archive  # noqa: F401
+from app.features.departments import routes as _departments  # noqa: F401

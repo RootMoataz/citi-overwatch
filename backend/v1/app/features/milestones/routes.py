@@ -49,6 +49,11 @@ def change_status(req, ctx, conn):
     return json_response(200, service.change_status(conn, ctx, req.path_params["id"], req.json()))
 
 
+@router.route("POST", "/milestones/{id}/claim")
+def claim_milestone(req, ctx, conn):
+    return json_response(200, service.claim_milestone(conn, ctx, req.path_params["id"]))
+
+
 @router.route("GET", "/milestones/{id}/notes")
 def list_notes(req, ctx, conn):
     return json_response(200, service.list_notes(conn, ctx, req.path_params["id"]))

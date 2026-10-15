@@ -389,6 +389,8 @@ def _message(r: dict, who: str) -> str:
                 f"due {short_day(p['end_date'])}")
     if r["type"] == "SUPPORT_ROUTED":
         return f"{who} was auto-routed to support {p['milestone']['name']}"
+    if r["type"] == "MILESTONE_CLAIMED":
+        return f"{who} claimed {p['milestone']['name']} ({p['project']['name']})"
     return f"{who} passed 40h for the week of {r['week_start']}"
 
 

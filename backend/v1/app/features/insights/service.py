@@ -18,22 +18,24 @@ TENTH = Decimal("0.1")
 def _people_scope(conn, ctx: Ctx) -> list[dict]:
     """Who the caller may see workload for: admins everyone; managers their projects' people and reports."""
     if ctx.is_admin:
-        return query(conn, """SELECT id, first_name, last_name, job_title FROM users
+        return query(conn, """SELECT id, first_name, last_name, job_title, department_id FROM users
                               WHERE NOT is_archived AND role IN ('employee', 'manager')
                               ORDER BY lower(last_name), lower(first_name)""")
     if ctx.role == "manager":
-        return query(conn, """SELECT u.id, u.first_name, u.last_name, u.job_title FROM users u
+        return query(conn, """SELECT u.id, u.first_name, u.last_name, u.job_title, u.department_id FROM users u
                               WHERE NOT u.is_archived AND (u.manager_id = CAST(:me AS uuid) OR u.id IN (
                                 SELECT pm.user_id FROM project_members pm JOIN projects p ON p.id = pm.project_id
                                 WHERE p.manager_id = CAST(:me AS uuid) AND NOT p.is_archived AND NOT pm.is_archived))
                               ORDER BY lower(u.last_name), lower(u.first_name)""", me=ctx.user_id)
-    return query(conn, "SELECT id, first_name, last_name, job_title FROM users WHERE id = CAST(:me AS uuid)",
-                 me=ctx.user_id)
+    return query(conn, """SELECT id, first_name, last_name, job_title, department_id FROM users
+                          WHERE id = CAST(:me AS uuid)""", me=ctx.user_id)
 
 
-def dashboard(conn, ctx: Ctx) -> dict:
+def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
+    """`department` (an id) narrows the project widgets to its projects and the over-40h list to its people."""
+    department = (params or {}).get("department") or None
     today = _today()
-    rows = visible_projects(conn, ctx)
+    rows = visible_projects(conn, ctx, department=department)
     items = decorated(conn, rows)
     by_id = {str(r["id"]): r for r in rows}
     ids = list(by_id)
@@ -58,6 +60,10 @@ def dashboard(conn, ctx: Ctx) -> dict:
 
     start = week_start(today)
     people = {str(p["id"]): p for p in _people_scope(conn, ctx)}
+    if department:
+        in_dept = {str(r["id"]) for r in query(conn, "SELECT id FROM users WHERE department_id = CAST(:d AS uuid)",
+                                               d=department)}
+        people = {k: v for k, v in people.items() if k in in_dept}
     totals = query(conn, """SELECT t.user_id, sum(t.hours) AS h FROM time_entries t
                             JOIN milestones lm ON lm.id = t.milestone_id AND NOT lm.is_archived
                             JOIN projects lp ON lp.id = t.project_id AND NOT lp.is_archived
@@ -81,11 +87,13 @@ def dashboard(conn, ctx: Ctx) -> dict:
     pending = 0
     if ctx.is_manager:
         manager_filter = "" if ctx.is_admin else " AND p.manager_id = CAST(:me AS uuid)"
+        if department:
+            manager_filter += " AND p.department_id = CAST(:dept AS uuid)"
         pending = query_one(conn, f"""SELECT count(*) AS n FROM time_entries t JOIN projects p ON p.id = t.project_id
                                       JOIN milestones m ON m.id = t.milestone_id
                                       WHERE t.status = 'pending' AND t.user_id <> CAST(:me AS uuid)
                                         AND NOT p.is_archived AND NOT m.is_archived{manager_filter}""",
-                            me=ctx.user_id)["n"]
+                            me=ctx.user_id, **({"dept": department} if department else {}))["n"]
 
     return {"status_counts": counts, "projects": items,
             "at_risk": [{"id": i["id"], "name": i["name"], "reasons": i["at_risk_reasons"]}
@@ -127,7 +135,7 @@ def allocations(conn, ctx: Ctx, params: dict) -> list[dict]:
                              "logged": h.get("logged") or Decimal(0), "approved": h.get("approved") or Decimal(0)})
         logged_total = sum((r["logged"] or Decimal(0) for (u, _), r in hours.items() if u == pid), Decimal(0))
         out.append({"user": {"id": person["id"], "name": f"{person['first_name']} {person['last_name']}",
-                             "job_title": person["job_title"]},
+                             "job_title": person["job_title"], "department_id": person["department_id"]},
                     "projects": projects,
                     "planned_total": sum((p["planned"] for p in projects), Decimal(0)),
                     "logged_total": logged_total,

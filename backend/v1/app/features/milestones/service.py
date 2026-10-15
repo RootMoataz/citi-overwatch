@@ -12,6 +12,7 @@ from app.db import query, query_one, transaction
 from app.features.members.service import other_planned_hours
 from app.http import ApiError
 from app.rules.capacity import fits_weekly_plan
+from app.rules.claim import claim_blocker
 from app.rules.cycles import creates_cycle, dependency_order
 from app.rules.milestone_status import can_transition
 from app.rules.routing import pick_support_milestone
@@ -58,18 +59,23 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
     edges = _edges(conn, project_id)
     assignees, supporting = _assignees(conn, project_id)
     status_of = {str(m["id"]): m["status"] for m in _project_milestones(conn, project_id)}
+    work_mode = query_one(conn, "SELECT work_mode FROM projects WHERE id = CAST(:p AS uuid)", p=str(project_id))["work_mode"]
+    on_team = is_member(conn, str(project_id), ctx.user_id)
     out = []
     for m in milestones:
         mid = str(m["id"])
         preds = sorted(edges.get(mid, set()))
         blocked = any(status_of.get(p) != "completed" for p in preds)
         people = assignees.get(mid, [])
+        claimable = claim_blocker(work_mode=work_mode, status=m["status"], is_archived=m["is_archived"],
+                                  blocked=blocked, assignee_count=len(people)) is None
         out.append({
             "id": m["id"], "project_id": m["project_id"], "name": m["name"], "description": m["description"],
             "start_date": m["start_date"], "end_date": m["end_date"], "status": m["status"],
             "difficulty": m["difficulty"], "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
             "blocked": blocked, "predecessors": preds, "assignees": people, "supporting_ids": supporting.get(mid, []),
             "is_assignee": any(str(a["id"]) == ctx.user_id for a in people),
+            "claimable": claimable, "can_claim": claimable and on_team,
             "completed_at": m["completed_at"], "is_archived": m["is_archived"],
         })
     return out
@@ -208,6 +214,48 @@ def set_assignees(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
             conn.run("""INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (CAST(:m AS uuid), CAST(:u AS uuid))
                         ON CONFLICT (milestone_id, user_id) DO NOTHING""", m=milestone_id, u=user)
         record(conn, ctx, "set_assignees", "milestone", milestone_id, after={"user_ids": sorted(users)})
+    return _view(conn, ctx, milestone_id)
+
+
+CLAIM_ERRORS = {
+    "NOT_PULL_PROJECT": "This project works in push mode: its manager assigns the milestones",
+    "NOT_READY": "Only milestones that are ready to start (not started, nothing left to wait on) can be claimed",
+    "ALREADY_CLAIMED": "Someone is already on this milestone",
+}
+
+
+def claim_milestone(conn, ctx: Ctx, milestone_id: str) -> dict:
+    """Pull mode (LOGIC_WALKTHROUGH §10): a team member takes a ready, unassigned milestone as its primary assignee.
+    The milestone row is locked first, so of two claims at once the second sees the first and gets 409."""
+    _, project = load_milestone(conn, ctx, milestone_id)
+    if project["work_mode"] != "pull":
+        raise ApiError(409, "NOT_PULL_PROJECT", CLAIM_ERRORS["NOT_PULL_PROJECT"])
+    if not is_member(conn, str(project["id"]), ctx.user_id):
+        raise ApiError(403, "NOT_A_MEMBER", "Only people on the project team can claim milestones")
+    with transaction(conn):
+        m = query_one(conn, """SELECT m.id, m.name, m.status::text AS status, m.is_archived, p.work_mode, p.manager_id,
+                                      p.id AS project_id, p.name AS project_name
+                               FROM milestones m JOIN projects p ON p.id = m.project_id
+                               WHERE m.id = CAST(:i AS uuid) FOR UPDATE OF m""", i=milestone_id)
+        taken = query_one(conn, "SELECT count(*) AS n FROM milestone_assignees WHERE milestone_id = CAST(:i AS uuid)",
+                          i=milestone_id)["n"]
+        waiting = query_one(conn, """SELECT count(*) AS n FROM milestone_dependencies d
+                                     JOIN milestones p ON p.id = d.depends_on_id
+                                     WHERE d.milestone_id = CAST(:i AS uuid) AND NOT p.is_archived
+                                       AND p.status <> 'completed'""", i=milestone_id)["n"]
+        code = claim_blocker(work_mode=m["work_mode"], status=m["status"], is_archived=m["is_archived"],
+                             blocked=bool(waiting), assignee_count=taken)
+        if code:
+            raise ApiError(409, code, CLAIM_ERRORS[code])
+        conn.run("""INSERT INTO milestone_assignees (milestone_id, user_id, role)
+                    VALUES (CAST(:m AS uuid), CAST(:u AS uuid), 'primary')""", m=milestone_id, u=ctx.user_id)
+        record(conn, ctx, "claim", "milestone", milestone_id, after={"user_id": ctx.user_id})
+        if str(m["manager_id"]) != ctx.user_id:
+            me = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
+            _notify(conn, m["manager_id"], "MILESTONE_CLAIMED", ctx.user_id,
+                    {"name": f"{me['first_name']} {me['last_name']}",
+                     "milestone": {"id": str(m["id"]), "name": m["name"]},
+                     "project": {"id": str(m["project_id"]), "name": m["project_name"]}})
     return _view(conn, ctx, milestone_id)
 
 
