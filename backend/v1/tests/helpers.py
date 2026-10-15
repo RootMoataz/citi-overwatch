@@ -83,3 +83,22 @@ def add_member(conn, project: dict, user: dict, hours=Decimal("10")) -> dict:
         INSERT INTO project_members (project_id, user_id, planned_hours_per_week)
         VALUES (CAST(:p AS uuid), CAST(:u AS uuid), :h) RETURNING *""",
         p=str(project["id"]), u=str(user["id"]), h=hours)
+
+
+def make_skill(conn, name: str) -> dict:
+    """A skill by name (the migration seeds a catalogue that can still be there), its id as text."""
+    row = query_one(conn, """INSERT INTO skills (name) VALUES (:n)
+                             ON CONFLICT ((lower(name))) DO UPDATE SET is_archived = false RETURNING *""", n=name)
+    return {**row, "id": str(row["id"])}
+
+
+def give_skills(conn, user: dict, *skills: dict) -> None:
+    for s in skills:
+        conn.run("INSERT INTO user_skills (user_id, skill_id) VALUES (:u, CAST(:s AS uuid)) ON CONFLICT DO NOTHING",
+                 u=user["id"], s=s["id"])
+
+
+def require_skills(conn, milestone: dict, *skills: dict) -> None:
+    for s in skills:
+        conn.run("INSERT INTO milestone_skills (milestone_id, skill_id) VALUES (:m, CAST(:s AS uuid))",
+                 m=milestone["id"], s=s["id"])

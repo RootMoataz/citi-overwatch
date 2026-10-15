@@ -20,6 +20,8 @@ def at_risk_reasons(*, status: str, is_archived: bool, predicted_end: date, budg
     reasons = []
     if any(m["end_date"] < today and m["status"] != "completed" for m in milestones):
         reasons.append("OVERDUE_MILESTONE")
+    if any(m["status"] == "blocked" for m in milestones):
+        reasons.append("BLOCKED_MILESTONE")  # kicked back, waiting for the manager's review
     if today > predicted_end:
         reasons.append("PAST_DUE")
     if budget > 0:

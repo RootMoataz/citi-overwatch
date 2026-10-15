@@ -109,6 +109,24 @@ def milestone_deadlines(milestones: list[dict], *, today: date) -> list[dict]:
     return out
 
 
+# ---------- 3b. kicked back and waiting for review ----------
+
+def blocked_milestones(milestones: list[dict]) -> list[dict]:
+    """Milestones an assignee kicked back ('blocked'): always high, since nothing moves until the manager answers.
+    milestones may carry `kickback`: {category_label, raised_by}."""
+    out = []
+    for m in sorted(milestones, key=lambda m: (priority_rank(m.get("priority")), m["end_date"])):
+        if m["status"] != "blocked":
+            continue
+        kickback = m.get("kickback") or {}
+        who = f" by {kickback['raised_by']}" if kickback.get("raised_by") else ""
+        why = f" ({kickback['category_label']})" if kickback.get("category_label") else ""
+        out.append(_insight("milestone_blocked", m["id"], "high", f"{m['name']} was kicked back",
+                            f"{m['name']} ({m['project_name']}) was kicked back{who}{why} and is blocked until "
+                            f"its manager reviews it.", _project_link(m["project_id"], "milestones")))
+    return out
+
+
 # ---------- 4. over-allocation, and who could take the extra work ----------
 
 def over_allocation(people: list[dict]) -> list[dict]:
@@ -202,6 +220,7 @@ def rank(insights: list[dict]) -> list[dict]:
 
 def smart_insights(*, today: date, projects: list[dict], milestones: list[dict], people: list[dict],
                    pending_dates: list[date], rejections: list[dict]) -> list[dict]:
-    return rank(budget_overrun(projects) + milestone_deadlines(milestones, today=today) + over_allocation(people)
+    return rank(blocked_milestones(milestones) + budget_overrun(projects) + milestone_deadlines(milestones, today=today)
+                + over_allocation(people)
                 + budget_burn_gap(projects) + approval_backlog(pending_dates, today=today)
                 + idle_milestones(milestones, today=today) + rejection_patterns(rejections, today=today))

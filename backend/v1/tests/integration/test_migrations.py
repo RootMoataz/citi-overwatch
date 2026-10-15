@@ -7,7 +7,8 @@ from app.migrate import apply_migrations
 
 EXPECTED = {"users", "refresh_tokens", "password_reset_codes", "app_secrets", "projects",
             "project_requests", "project_members", "milestones", "milestone_dependencies",
-            "milestone_assignees", "milestone_notes", "time_entries", "notifications", "audit_log", "departments"}
+            "milestone_assignees", "milestone_notes", "time_entries", "notifications", "audit_log", "departments",
+            "skills", "user_skills", "milestone_skills", "milestone_updates", "milestone_kickbacks"}
 
 
 def test_migrations_create_all_tables(db):
@@ -83,3 +84,20 @@ def test_department_names_unique_ignoring_case(conn):
     conn.run("INSERT INTO departments (name) VALUES ('Operations')")
     with pytest.raises(DatabaseError):
         conn.run("INSERT INTO departments (name) VALUES ('OPERATIONS')")
+
+
+def test_workflow_migration_adds_blocked_and_one_open_kickback_per_milestone(conn):
+    from tests.helpers import make_milestone, make_project, make_user
+    labels = [r["v"] for r in query(conn, "SELECT unnest(enum_range(NULL::milestone_status))::text AS v")]
+    assert labels[-1] == "blocked"
+    mgr = make_user(conn, role="manager")
+    ms = make_milestone(conn, make_project(conn, mgr))
+    assert query(conn, "SELECT objective, completion_criteria FROM milestones") == [
+        {"objective": "", "completion_criteria": ""}]
+    insert = """INSERT INTO milestone_kickbacks (milestone_id, raised_by, category, reason, previous_status)
+                VALUES (:m, :u, 'blocker', 'The test server is down again', 'in_progress')"""
+    conn.run(insert, m=ms["id"], u=mgr["id"])
+    with pytest.raises(DatabaseError):
+        conn.run(insert, m=ms["id"], u=mgr["id"])
+    with pytest.raises(DatabaseError):
+        conn.run("UPDATE milestone_kickbacks SET resolution = 'returned'")  # needs resolved_at and resolved_by too

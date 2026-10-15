@@ -57,7 +57,7 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
     for item in items:
         counts[item["status"]] += 1
 
-    overdue, due_soon = [], []
+    overdue, due_soon, blocked = [], [], []
     if ids:
         milestones = query(conn, """SELECT id, project_id, name, end_date, status, difficulty, priority FROM milestones
                                     WHERE project_id = ANY(CAST(:ids AS uuid[])) AND NOT is_archived
@@ -66,6 +66,8 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
             entry = {"id": m["id"], "name": m["name"], "end_date": m["end_date"], "status": m["status"],
                      "difficulty": m["difficulty"], "priority": m["priority"],
                      "project": {"id": m["project_id"], "name": by_id[str(m["project_id"])]["name"]}}
+            if m["status"] == "blocked":
+                blocked.append(entry)
             if m["end_date"] < today:
                 overdue.append(entry)
             elif m["end_date"] <= today + timedelta(days=DUE_SOON_DAYS):
@@ -73,6 +75,7 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
         # Within each list the most important come first, then the earliest due (the query's order).
         overdue.sort(key=lambda e: priority_rank(e["priority"]))
         due_soon.sort(key=lambda e: priority_rank(e["priority"]))
+        blocked.sort(key=lambda e: priority_rank(e["priority"]))
 
     start = week_start(today)
     people = {str(p["id"]): p for p in _people_scope(conn, ctx, department)}
@@ -109,9 +112,10 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
                             me=ctx.user_id, today=today, **({"dept": department} if department else {}))["n"]
 
     return {"status_counts": counts, "projects": items,
-            "at_risk": [{"id": i["id"], "name": i["name"], "reasons": i["at_risk_reasons"]}
+            "at_risk": [{"id": i["id"], "name": i["name"], "reasons": i["at_risk_reasons"],
+                         "blocked_count": sum(1 for b in blocked if str(b["project"]["id"]) == str(i["id"]))}
                         for i in items if i["at_risk_reasons"]],
-            "milestones": {"overdue": overdue, "due_soon": due_soon},
+            "milestones": {"overdue": overdue, "due_soon": due_soon, "blocked": blocked},
             "over_allocated": over, "budgets": budgets, "pending_approvals": pending}
 
 

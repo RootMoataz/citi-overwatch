@@ -230,4 +230,4 @@ def test_executive_has_no_timesheet_or_approvals(client, conn, org):
 
 def test_executive_user_list_is_names_only(client, conn, org):
     body = client.request("GET", "/users?role=manager", token=token_for(conn, org["exe"]))[1]
-    assert body["items"] and set(body["items"][0]) == {"id", "username", "first_name", "last_name", "job_title"}
+    assert body["items"] and set(body["items"][0]) == {"id", "username", "first_name", "last_name", "job_title", "skills"}

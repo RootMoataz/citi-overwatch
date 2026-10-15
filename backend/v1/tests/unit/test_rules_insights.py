@@ -2,7 +2,8 @@ from datetime import date, timedelta
 from decimal import Decimal as D
 
 from app.rules.insights import (
-    approval_backlog, budget_burn_gap, budget_overrun, idle_milestones, milestone_deadlines, over_allocation,
+    approval_backlog, blocked_milestones, budget_burn_gap, budget_overrun, idle_milestones, milestone_deadlines,
+    over_allocation,
     rank, rejection_patterns, smart_insights,
 )
 
@@ -229,3 +230,20 @@ def test_smart_insights_combines_every_rule():
 
 def test_smart_insights_with_no_data_is_empty():
     assert smart_insights(today=TODAY, projects=[], milestones=[], people=[], pending_dates=[], rejections=[]) == []
+
+
+# ---------- kicked back ----------
+
+def test_a_kicked_back_milestone_is_a_high_insight_naming_who_and_why():
+    kickback = {"category_label": "Unclear requirement", "raised_by": "Eli Employee"}
+    [i] = blocked_milestones([milestone(status="blocked", kickback=kickback), milestone(id="m2")])
+    assert (i["kind"], i["severity"], i["title"]) == ("milestone_blocked", "high", "Build was kicked back")
+    assert i["detail"] == ("Build (Apollo) was kicked back by Eli Employee (Unclear requirement) and is blocked "
+                           "until its manager reviews it.")
+    assert i["link"] == {"to": "project", "id": "p1", "tab": "milestones"}
+
+
+def test_blocked_milestones_lead_the_smart_insights():
+    found = smart_insights(today=TODAY, projects=[project(forecast=D("200000"))], milestones=[milestone(status="blocked")],
+                           people=[], pending_dates=[], rejections=[])
+    assert [i["kind"] for i in found][:2] == ["milestone_blocked", "budget_overrun"]

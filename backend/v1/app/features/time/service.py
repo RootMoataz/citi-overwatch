@@ -463,6 +463,11 @@ def short_day(value) -> str:
     return f"{d:%a} {d.day} {d:%b}"
 
 
+def _clip(text: str, limit: int = 140) -> str:
+    """A long reason or note cut to fit the bell, on a word boundary."""
+    return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
+
+
 def _message(r: dict, who: str) -> str:
     p = r["payload"] or {}
     if r["type"] == "ENTRY_REJECTED":
@@ -475,6 +480,26 @@ def _message(r: dict, who: str) -> str:
         return f"{who} was auto-routed to support {p['milestone']['name']}"
     if r["type"] == "MILESTONE_CLAIMED":
         return f"{who} claimed {p['milestone']['name']} ({p['project']['name']})"
+    if r["type"] == "AUTO_ASSIGNED":
+        return (f"You're next on {p['milestone']['name']} ({p['project']['name']}) now that "
+                f"{p['from_milestone']['name']} is completed, due {short_day(p['end_date'])}")
+    if r["type"] == "AUTO_ROUTED":
+        skill = f" (skill: {', '.join(p['skills'])})" if p.get("skills") else ""
+        return (f"{who} was auto-assigned to {p['milestone']['name']} after {p['from_milestone']['name']} "
+                f"was completed{skill}")
+    if r["type"] == "NO_QUALIFIED_PERSON":
+        needs = f" (needs {', '.join(p['skills'])})" if p.get("skills") else ""
+        return f"No qualified person for {p['milestone']['name']}{needs} in {p['project']['name']}"
+    if r["type"] == "MILESTONE_UPDATE":
+        percent = f" ({p['percent_complete']}% complete)" if p.get("percent_complete") is not None else ""
+        return f"{who} posted an update on {p['milestone']['name']}{percent}"
+    if r["type"] == "KICKBACK_RAISED":
+        return (f"{who} kicked back {p['milestone']['name']} ({p['project']['name']}): "
+                f"{p['category_label']} – {_clip(p['reason'])}")
+    if r["type"] == "KICKBACK_RESOLVED":
+        if p["resolution"] == "returned":
+            return f"{who} returned {p['milestone']['name']} to you: {_clip(p['note'])}"
+        return f"{who} put {p['milestone']['name']} back in the queue: {_clip(p['note'])}"
     if r["type"] == "DELEGATE_ASSIGNED":
         until = f"until {short_day(p['until'])}" if p.get("until") else "until further notice"
         return (f"{who} made you the delegate approver for {p['project']['name']}: you can approve hours "

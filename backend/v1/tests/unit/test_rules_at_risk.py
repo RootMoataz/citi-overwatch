@@ -80,3 +80,10 @@ def test_burn_uses_weighted_done_percent():
     hard_done = [ms(later, "completed", "hard"), ms(later, "in_progress", "easy")]  # 75% weighted
     assert reasons(consumed=D(940), milestones=hard_done) == []                   # 94 - 75 = 19
     assert reasons(consumed=D(950), milestones=hard_done) == ["BUDGET_BURN"]
+
+
+def test_a_kicked_back_milestone_puts_the_project_at_risk():
+    assert reasons(milestones=[ms(date(2026, 12, 1), status="blocked")]) == ["BLOCKED_MILESTONE"]
+    late = [ms(date(2026, 10, 1), status="blocked")]
+    assert reasons(milestones=late) == ["OVERDUE_MILESTONE", "BLOCKED_MILESTONE"]
+    assert reasons(status="completed", milestones=late) == []

@@ -10,6 +10,7 @@ from app.db import query, query_one, transaction
 from app.features.auth.service import revoke_all_sessions
 from app.features.common import conflict_from, user_public
 from app.features.departments.service import check_department
+from app.features.skills.lookup import skills_of
 from app.features.users.welcome import TEMP_PASSWORD_HOURS, send_welcome
 from app.http import ApiError
 from app.rules.usernames import is_valid_username, normalize_username, suggest_usernames
@@ -116,6 +117,9 @@ def list_users(conn, ctx: Ctx, params: dict) -> dict:
         items = [user_public(r, include_salary=True) for r in rows]
     else:
         items = [{k: r[k] for k in PICKER_FIELDS} for r in rows]
+    skills = skills_of(conn, [r["id"] for r in rows])
+    for item in items:
+        item["skills"] = skills.get(str(item["id"]), [])
     return {"items": items, "total": total}
 
 

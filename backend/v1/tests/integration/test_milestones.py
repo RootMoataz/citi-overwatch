@@ -103,14 +103,14 @@ def test_cross_project_dependency_rejected(client, conn):
     assert (status, body["error"]["code"]) == (400, "CROSS_PROJECT_DEPENDENCY")
 
 
-def test_blocked_display_status_and_cannot_start(client, conn):
+def test_waiting_display_status_and_cannot_start(client, conn):
     mgr, assignee, _, project = setup(conn)
     a = make_milestone(conn, project, name="A", start=date(2026, 1, 5), end=date(2026, 2, 1))
     b = make_milestone(conn, project, name="B", start=date(2026, 2, 2), end=date(2026, 3, 1))
     assign(conn, b, assignee)
     set_deps(client, conn, mgr, b, [a])
     items = {m["name"]: m for m in listing(client, conn, assignee, project)}
-    assert items["B"]["display_status"] == "blocked" and items["B"]["predecessors"] == [str(a["id"])]
+    assert items["B"]["display_status"] == "waiting" and items["B"]["predecessors"] == [str(a["id"])]
     status, body, _, _ = move(client, conn, assignee, b, "in_progress")
     assert (status, body["error"]["code"]) == (400, "INVALID_TRANSITION")
     move(client, conn, mgr, a, "in_progress")
