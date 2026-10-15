@@ -66,8 +66,13 @@ def _can_view(conn, ctx: Ctx, user_id: str) -> bool:
 def _header(conn, ctx: Ctx, user: dict) -> dict:
     manager = None
     if user["manager_id"]:
-        m = query_one(conn, "SELECT id, first_name, last_name FROM users WHERE id = :i", i=user["manager_id"])
-        manager = {"id": m["id"], "name": f"{m['first_name']} {m['last_name']}"}
+        m = query_one(conn, """SELECT u.id, u.first_name, u.last_name, u.job_title, u.is_archived, d.id AS d_id,
+                                     d.name AS d_name FROM users u LEFT JOIN departments d ON d.id = u.department_id
+                              WHERE u.id = :i""", i=user["manager_id"])
+        # Enough for a "Your manager" card: who they are, what they do and where (never a salary).
+        manager = {"id": m["id"], "name": f"{m['first_name']} {m['last_name']}", "first_name": m["first_name"],
+                   "last_name": m["last_name"], "job_title": m["job_title"], "is_archived": m["is_archived"],
+                   "department": {"id": m["d_id"], "name": m["d_name"]} if m["d_id"] else None}
     department = None
     if user["department_id"]:
         d = query_one(conn, "SELECT id, name FROM departments WHERE id = :i", i=user["department_id"])

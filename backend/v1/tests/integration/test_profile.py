@@ -44,7 +44,10 @@ def test_profile_numbers_and_history(client, conn):
     assert status == 200
     user = body["user"]
     assert (user["name"], user["job_title"], user["role"]) == ("Ada Lovelace", "Analyst", "employee")
-    assert user["manager"] == {"id": str(mgr["id"]), "name": "Morgan Manager"}
+    # Enough to show "Your manager" with a one-press Message button: name, first name, title and department.
+    assert user["manager"] == {"id": str(mgr["id"]), "name": "Morgan Manager", "first_name": "Morgan",
+                               "last_name": "Manager", "job_title": "Engineer", "department": None,
+                               "is_archived": False}
     assert body["this_week"] == {"week_start": str(MONDAY), "logged": 46.0, "overtime": 6.0, "planned": 45.0}
     assert body["all_time"] == {"logged": 52.0, "approved": 30.0}
     projects = {p["name"]: p for p in body["projects"]}
