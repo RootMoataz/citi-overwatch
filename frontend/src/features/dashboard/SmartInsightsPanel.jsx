@@ -16,9 +16,9 @@ const useSmartInsights = (department) => useQuery({
 })
 
 const SEVERITY = {
-  high: { label: 'High', color: 'error', Icon: ErrorOutline },
-  medium: { label: 'Medium', color: 'warning', Icon: WarningAmber },
-  low: { label: 'Low', color: 'info', Icon: InfoOutlined },
+  high: { label: 'High Severity', color: 'error', Icon: ErrorOutline },
+  medium: { label: 'Medium Severity', color: 'warning', Icon: WarningAmber },
+  low: { label: 'Low Severity', color: 'info', Icon: InfoOutlined },
 }
 
 function target(link) {

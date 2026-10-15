@@ -71,7 +71,7 @@ describe('HomePage by role', () => {
     const rows = within(mine).getAllByRole('listitem')
     expect(rows.map((r) => within(r).getByRole('heading').textContent)).toEqual(['Design', 'Review'])
     expect(within(rows[0]).getByText('In progress')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('Hard')).toBeInTheDocument()
+    expect(within(rows[0]).getByText('Hard Difficulty')).toBeInTheDocument()
     expect(within(rows[0]).getByRole('link', { name: 'Apollo' })).toHaveAttribute('href', '/projects/p1?tab=milestones')
     expect(within(rows[1]).getByText(/supporting/i)).toBeInTheDocument()
 

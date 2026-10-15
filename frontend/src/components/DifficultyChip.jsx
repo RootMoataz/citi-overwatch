@@ -17,7 +17,7 @@ export default function DifficultyChip({ difficulty, sx }) {
   if (!DIFFICULTY[difficulty]) return null
   const label = (
     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
-      {DIFFICULTY[difficulty]}
+      {DIFFICULTY[difficulty]} Difficulty
       <Box component="span" aria-hidden sx={{ display: 'inline-flex', gap: '2px', ml: 0.75 }}>
         {[1, 2, 3].map((i) => (
           <Box key={i} component="span" sx={{ width: 5, height: 5, borderRadius: '50%', border: '1px solid currentColor',
