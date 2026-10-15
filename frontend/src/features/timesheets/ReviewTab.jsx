@@ -83,7 +83,7 @@ export default function ReviewTab({ filters, onClearFilters }) {
           Every logged hour needs your approval before it counts toward the project budget. Rejecting needs a reason.
         </Typography>
         {Object.keys(filters).length ? <Button onClick={onClearFilters}>Show everyone</Button> : null}
-        <ExportCsvButton name="approvals" columns={CSV_COLUMNS} rows={items} />
+        <ExportCsvButton name="approvals" columns={CSV_COLUMNS} rows={items} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }} />
       </Stack>
       <ErrorAlert error={approvals.error} onRetry={() => approvals.refetch()} sx={{ mb: 2 }} />
       {approvals.isLoading ? <Skeleton variant="rounded" height={200} /> : null}

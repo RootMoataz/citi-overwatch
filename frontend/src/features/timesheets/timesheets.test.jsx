@@ -146,7 +146,7 @@ describe('Timesheets tabs by role', () => {
     open(users.admin, '/timesheets?tab=hr')
     const user = userEvent.setup()
     const table = await screen.findByRole('table', { name: /hr submissions/i })
-    const row = within(table).getByText('Oct 5, 2026 – Oct 11, 2026').closest('tr')
+    const row = within(table).getByRole('button', { name: 'Payroll CSV for Oct 5, 2026 – Oct 11, 2026' }).closest('tr')
     expect(within(row).getByText('Submitted to HR (export ready)')).toBeInTheDocument()
     expect(within(row).getByText(/re-sends changes to sep 28, 2026/i)).toBeInTheDocument()
     await user.click(within(row).getByRole('button', { name: /payroll csv/i }))

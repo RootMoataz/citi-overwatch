@@ -63,7 +63,7 @@ function SubmitPanel() {
         <TextField label="Period end" type="date" value={end} onChange={(e) => setEnd(e.target.value)}
           slotProps={{ inputLabel: { shrink: true } }} error={!valid}
           helperText={valid ? 'A week, a fortnight or a month' : `End on or after the start, at most ${MAX_DAYS} days`} />
-        <Button sx={{ alignSelf: { sm: 'center' } }} onClick={() => { setStart(lastMonday); setEnd(addDays(lastMonday, 6)) }}>Last week</Button>
+        <Button sx={{ alignSelf: { sm: 'center' }, whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => { setStart(lastMonday); setEnd(addDays(lastMonday, 6)) }}>Last week</Button>
       </Stack>
       <ErrorAlert error={preview.error ?? failure} sx={{ mb: 2 }} />
       {valid && preview.isLoading ? <Skeleton variant="rounded" height={64} /> : null}
@@ -73,7 +73,7 @@ function SubmitPanel() {
             {plural(p.entry_count, 'approved entry', 'approved entries')} · {formatHours(p.total_hours)} · {formatMoney(p.total_cost)} · {plural(p.people, 'person', 'people')}
           </Typography>
           {p.pending_count ? (
-            <Alert severity="info">{plural(p.pending_count, 'entry', 'entries')} in this period still wait for approval and won't be included.</Alert>
+            <Alert severity="info">{plural(p.pending_count, 'entry', 'entries')} in this period still {p.pending_count === 1 ? 'waits' : 'wait'} for approval and won't be included.</Alert>
           ) : null}
           {p.corrections_ready ? (
             <FormControlLabel control={<Checkbox checked={includeCorrections} onChange={(e) => setIncludeCorrections(e.target.checked)} />}
@@ -113,7 +113,7 @@ function NeedsResubmission() {
             <TableHead>
               <TableRow>
                 <TableCell>Person</TableCell><TableCell>Day</TableCell><TableCell>Work</TableCell>
-                <TableCell align="right">Sent → now</TableCell><TableCell>Sent in</TableCell><TableCell>Status</TableCell>
+                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>Sent → now</TableCell><TableCell>Sent in</TableCell><TableCell>Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -153,7 +153,7 @@ function DownloadPayroll({ submission }) {
   }
   return (
     <>
-      <Button size="small" variant="outlined" startIcon={<FileDownload />} disabled={busy} onClick={download}
+      <Button size="small" variant="outlined" startIcon={<FileDownload />} disabled={busy} onClick={download} sx={{ whiteSpace: 'nowrap' }}
         aria-label={`Payroll CSV for ${periodLabel(submission)}`}>Payroll CSV</Button>
       <ErrorAlert error={failure} sx={{ mt: 1 }} />
     </>
@@ -184,8 +184,8 @@ function Submissions({ canDownload }) {
             <TableBody>
               {rows.map((s) => (
                 <TableRow key={s.id}>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    {periodLabel(s)}
+                  <TableCell sx={{ minWidth: 140, maxWidth: 200 }}>
+                    {formatDate(s.period_start)} –<br />{formatDate(s.period_end)}
                     {s.resubmission_of ? (
                       <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>
                         Re-sends changes to {periodLabel(s.resubmission_of)}
@@ -193,7 +193,10 @@ function Submissions({ canDownload }) {
                     ) : null}
                   </TableCell>
                   <TableCell><StatusChip status="approved" label={HR_SUBMITTED} /></TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(s.submitted_at)} · {s.submitted_by.name}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    {formatDate(s.submitted_at)}
+                    <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>by {s.submitted_by.name}</Typography>
+                  </TableCell>
                   <TableCell align="right">{s.people}</TableCell>
                   <TableCell align="right">
                     {s.entry_count}

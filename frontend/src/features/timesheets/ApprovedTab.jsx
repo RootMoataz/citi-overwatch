@@ -51,10 +51,10 @@ export default function ApprovedTab() {
           {admin ? 'Approved hours of everyone, by week.' : 'Approved hours on the projects you manage, by week.'}
           {' '}Admins send them to HR for payroll.
         </Typography>
-        <TextField select size="small" label="Show" value={span} onChange={(e) => setSpan(Number(e.target.value))} sx={{ minWidth: 160 }}>
+        <TextField select size="small" label="Show" value={span} onChange={(e) => setSpan(Number(e.target.value))} fullWidth={false} sx={{ width: 180, flexShrink: 0 }}>
           {SPANS.map((n) => <MenuItem key={n} value={n}>Last {n} weeks</MenuItem>)}
         </TextField>
-        <ExportCsvButton name="approved-weeks" columns={columns} rows={rows} />
+        <ExportCsvButton name="approved-weeks" columns={columns} rows={rows} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }} />
       </Stack>
       <ErrorAlert error={weeks.error} onRetry={() => weeks.refetch()} sx={{ mb: 2 }} />
       {weeks.isLoading ? <Skeleton variant="rounded" height={200} /> : null}

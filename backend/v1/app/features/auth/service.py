@@ -48,7 +48,7 @@ def clear_cookie() -> str:
 
 def session_user(user: dict) -> dict:
     return {k: user[k] for k in ("id", "username", "first_name", "last_name", "email", "role",
-                                 "must_change_password")}
+                                 "must_change_password", "tracks_own_hours")}
 
 
 def _issue(conn, user: dict, *, restricted: bool) -> tuple[str, list[str]]:

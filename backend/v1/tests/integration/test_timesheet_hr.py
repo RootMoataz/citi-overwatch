@@ -101,9 +101,13 @@ def test_a_role_change_resets_tracks_own_hours_unless_it_is_set_too(client, conn
     assert (body["role"], body["tracks_own_hours"]) == ("manager", True)
 
 
-def test_me_reports_tracks_own_hours(client, conn):
+def test_me_and_the_session_report_tracks_own_hours(client, conn):
     _, mgr, _, _, _, _ = world(conn)
     assert call(client, conn, mgr, "GET", "/me")[1]["tracks_own_hours"] is False
+    hands_on = make_user(conn, role="manager", username="hands.on", password="Passw0rd!")
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=hands_on["id"])
+    status, body, _, _ = client.request("POST", "/auth/login", json={"username": "hands.on", "password": "Passw0rd!"})
+    assert status == 200 and body["user"]["tracks_own_hours"] is True  # the app decides on My timesheet from this
 
 
 def test_friday_reminder_skips_managers_without_a_timesheet():
