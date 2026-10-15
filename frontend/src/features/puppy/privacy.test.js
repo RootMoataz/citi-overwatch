@@ -53,6 +53,26 @@ describe('pickApproval', () => {
   })
 })
 
+describe('timer pickers', () => {
+  test('live timers, change requests, drafts and warnings keep names and levels only', () => {
+    const view = puppyView({
+      live: [{ id: 't1', person: { id: 'u1', name: 'Eli Employee', salary: 1 }, milestone: { id: 'm1', name: 'Schema Mapping' },
+        project: { id: 'p1', name: 'Apollo' }, level: 'over', today_hours: 10, limits: [{ kind: 'daily', level: 'over', used_hours: 9 }] }],
+      changeRequests: [{ id: 'r1', user: { id: 'u1', name: 'Eli Employee' }, reason: 'secret reason', requested_hours: 4 }],
+      unsubmitted: [{ work_date: '2026-10-13', week_start: '2026-10-12', milestone: { id: 'm1', name: 'Schema Mapping' }, hours: 1.5,
+        note: 'secret note' }],
+      timerWarnings: [{ kind: 'daily', message: 'You reached 8h', milestone: { id: 'm1', name: 'Schema Mapping' }, used_hours: 9 }],
+    })
+    expect(view.live).toEqual([{ id: 't1', person: { id: 'u1', name: 'Eli Employee' }, milestone: { id: 'm1', name: 'Schema Mapping' },
+      project: { id: 'p1', name: 'Apollo' }, level: 'over', limits: [{ kind: 'daily', level: 'over' }] }])
+    expect(view.changeRequests).toEqual([{ id: 'r1', user: { id: 'u1', name: 'Eli Employee' } }])
+    expect(view.unsubmitted).toEqual([{ work_date: '2026-10-13', week_start: '2026-10-12',
+      milestone: { id: 'm1', name: 'Schema Mapping' }, hours: 1.5 }])
+    expect(view.timerWarnings).toEqual([{ kind: 'daily', message: 'You reached 8h', milestone: { id: 'm1', name: 'Schema Mapping' } }])
+    expect(JSON.stringify(view)).not.toContain('secret')
+  })
+})
+
 describe('redact', () => {
   test('drops every sensitive key at any depth', () => {
     const out = redact({ a: 1, salary: 2, nested: { hourly_rate: 3, list: [{ email: 'x', keep: 'y' }] } })

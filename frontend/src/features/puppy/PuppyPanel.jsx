@@ -16,12 +16,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client.js'
 import { useContacts, useUnreadMessages } from '../../api/messages.js'
-import { useApprovals, useMarkAllRead, useMissingTimesheets } from '../../api/queries.js'
+import { useApprovals, useEditRequests, useLiveTimers, useMarkAllRead, useMissingTimesheets } from '../../api/queries.js'
 import { ROUTE_ROLES } from '../../app/access.js'
 import { useColorMode } from '../../app/colorMode.js'
 import { useToast } from '../../app/toast.js'
 import { can } from '../../lib/permissions.js'
 import usePaletteData from '../palette/usePaletteData.js'
+import { useTimer } from '../timer/useTimer.js'
 import { buildActions } from './actions.js'
 import AskPuppy from './AskPuppy.jsx'
 import ConfirmAction from './ConfirmAction.jsx'
@@ -60,11 +61,17 @@ function usePuppyData(user, notifications) {
   const insights = useTopInsights()
   const contacts = useContacts(user?.role === 'employee')
   const palette = usePaletteData(user)
+  // Timers: the viewer's own (unsubmitted hours, limits reached) and, for those who oversee people, who's running one.
+  const live = useLiveTimers(can(user, 'timesheets.view'))
+  const changeRequests = useEditRequests('pending', approver)
+  const timer = useTimer()
   const view = useMemo(() => puppyView({ notifications, insights: insights.data, approvals: approvals.data, missing: missing.data,
     projects: palette.projects, milestones: palette.milestones, contacts: contacts.data?.items, people: palette.people,
-    departments: palette.departments }),
+    departments: palette.departments, live: live.data?.items, changeRequests: changeRequests.data,
+    unsubmitted: timer.unsubmitted,
+    timerWarnings: timer.timer ? timer.reached.map((l) => ({ ...l, milestone: timer.timer.milestone })) : [] }),
   [notifications, insights.data, approvals.data, missing.data, palette.projects, palette.milestones, contacts.data,
-    palette.people, palette.departments])
+    palette.people, palette.departments, live.data, changeRequests.data, timer.unsubmitted, timer.timer, timer.reached])
   return { view, unreadMessages: unread.data?.unread ?? 0, insightsLoading: insights.isLoading, loading: palette.loading }
 }
 
@@ -99,7 +106,8 @@ function Summary({ user, view, unreadMessages, insightsLoading, go }) {
   const [dismissed, setDismissed] = useState(readDismissed)
   const today = todayIso()
   const sentences = buildSummary({ user, today, notifications: view.notifications, unreadMessages, approvals: view.approvals,
-    missing: view.missing })
+    missing: view.missing, unsubmitted: view.unsubmitted, timerWarnings: view.timerWarnings, live: view.live,
+    changeRequests: view.changeRequests })
   const tips = buildTips({ user, today, notifications: view.notifications, approvals: view.approvals, milestones: view.milestones,
     dismissed })
   const top = view.insights.slice(0, 3)

@@ -164,3 +164,60 @@ describe('summary sentences', () => {
     expect(humanizeType(undefined)).toBe('new')
   })
 })
+
+describe('timer sentences', () => {
+  const liveTimer = (name, level, kind = 'daily') => ({ id: name, person: { id: name, name }, milestone: { id: 'm1', name: 'Schema Mapping' },
+    level, limits: [{ kind, level }] })
+
+  test('an employee hears about timer hours not submitted yet and a timer at its limit', () => {
+    const items = buildSummary({ user: users.employee, today: TODAY,
+      unsubmitted: [{ work_date: '2026-10-13', week_start: '2026-10-12', milestone: { id: 'm1', name: 'Schema Mapping' }, hours: 1.5 }],
+      timerWarnings: [{ kind: 'daily', message: "You've reached your 8h for today on this timer", milestone: { name: 'Schema Mapping' } }] })
+    expect(texts(items)).toEqual([
+      "You've reached your 8h for today on this timer (timer on Schema Mapping)",
+      "Your timer hours for Tuesday aren't submitted yet",
+    ])
+    expect(items[1].to).toBe('/timesheet?week=2026-10-12')
+    const several = buildSummary({ user: users.employee, today: TODAY, unsubmitted: [
+      { work_date: '2026-10-12', week_start: '2026-10-12' }, { work_date: '2026-10-13', week_start: '2026-10-12' }] })
+    expect(texts(several)).toEqual(["Your timer hours for 2 days aren't submitted yet"])
+  })
+
+  test('a manager hears who runs a timer, who is past a limit, and the change requests waiting', () => {
+    const items = buildSummary({ user: users.manager, today: TODAY,
+      live: [liveTimer('Eli Employee', 'over'), liveTimer('Ada Lovelace', 'ok')],
+      changeRequests: [{ id: 'r1', user: { id: 'u-emp', name: 'Eli Employee' } }] })
+    expect(texts(items)).toEqual([
+      '1 change request on timer hours is waiting',
+      '2 people are running timers now',
+      "Eli's timer is over the daily limit",
+    ])
+    expect(items.map((i) => i.to)).toEqual(['/timesheets#change-requests', '/timesheets', '/timesheets'])
+    const two = buildSummary({ user: users.manager, today: TODAY,
+      live: [liveTimer('Eli Employee', 'warning', 'milestone'), liveTimer('Ada Lovelace', 'over')] })
+    expect(texts(two)).toEqual(['2 people are running timers now', '2 timers are at or over their limits'])
+    const one = buildSummary({ user: users.manager, today: TODAY, live: [liveTimer('Eli Employee', 'warning', 'milestone')] })
+    expect(texts(one)).toEqual(['1 person is running a timer now', "Eli's timer is at its estimate"])
+  })
+
+  test('employees never hear about other people\'s timers; executives hear who runs one', () => {
+    const live = [liveTimer('Eli Employee', 'ok')]
+    expect(buildSummary({ user: users.employee, today: TODAY, live, changeRequests: [{ id: 'r1' }] })).toEqual([])
+    expect(texts(buildSummary({ user: users.executive, today: TODAY, live }))).toEqual(['1 person is running a timer now'])
+  })
+
+  test('a remote stop and decided change requests, without the message itself', () => {
+    const items = buildSummary({ user: users.employee, today: TODAY, notifications: [
+      note('s1', 'TIMER_STOPPED_BY_MANAGER', { week_start: '2026-10-12', message: 'Morgan stopped your timer on Schema Mapping: secret',
+        payload: { by: { id: 'u-mgr', name: 'Morgan Manager' }, milestone: { id: 'm1', name: 'Schema Mapping' } } }),
+      note('a1', 'TIME_EDIT_APPROVED', { week_start: '2026-10-12', payload: { milestone: { id: 'm1', name: 'Schema Mapping' } } }),
+      note('r1', 'TIME_EDIT_REJECTED', { week_start: '2026-10-12', payload: { milestone: { id: 'm2', name: 'Build' } } }),
+      note('o1', 'TIMER_OVER_LIMIT'), note('q1', 'TIME_EDIT_REQUESTED')] })
+    expect(texts(items)).toEqual([
+      'Morgan stopped your timer on Schema Mapping',
+      'Your change to Schema Mapping was approved',
+      'Your change to Build was declined',
+    ])
+    expect(JSON.stringify(items)).not.toContain('secret')
+  })
+})

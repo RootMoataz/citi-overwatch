@@ -43,9 +43,24 @@ export function pickNotification(n) {
       ...(p.project ? { project: ref(p.project) } : {}),
       ...(p.milestone ? { milestone: ref(p.milestone) } : {}),
       ...(p.manager ? { manager: ref(p.manager) } : {}),
+      ...(p.by ? { by: ref(p.by) } : {}),
     },
   }
 }
+
+/** A running timer from the live feed: whose, on what, and its warning level (no hours, no pay). */
+export const pickLiveTimer = (t) => ({ id: t?.id, person: ref(t?.person), milestone: ref(t?.milestone), project: ref(t?.project),
+  level: t?.level, limits: (t?.limits ?? []).map((l) => ({ kind: l?.kind, level: l?.level })) })
+
+/** A change request waiting for the viewer: only who asked (the reason stays on the Timesheets page). */
+export const pickChangeRequest = (r) => ({ id: r?.id, user: ref(r?.user) })
+
+/** One cell of the viewer's own timer hours not submitted yet. */
+export const pickUnsubmitted = (u) => ({ work_date: u?.work_date, week_start: u?.week_start, milestone: ref(u?.milestone),
+  hours: Number(u?.hours ?? 0) })
+
+/** A limit the viewer's own running timer has reached: the warning sentence and the milestone's name. */
+export const pickTimerWarning = (w) => ({ kind: w?.kind, message: redactText(w?.message ?? ''), milestone: ref(w?.milestone) })
 
 export const pickInsight = (i) => ({ id: i?.id, severity: i?.severity, title: redactText(i?.title ?? ''),
   detail: redactText(i?.detail ?? ''), link: pick(i?.link ?? {}, ['to', 'id', 'tab']) })
@@ -66,8 +81,12 @@ export const pickPerson = (p) => ({ id: p?.id, name: redactText(p?.name ?? ''), 
 
 /** Everything Puppy reads, allow-listed. Missing parts stay missing (undefined / empty), never an error. */
 export function puppyView({ notifications, insights, approvals, missing, projects, milestones, contacts, people,
-  departments } = {}) {
+  departments, live, changeRequests, unsubmitted, timerWarnings } = {}) {
   return {
+    live: (live ?? []).map(pickLiveTimer),
+    changeRequests: (changeRequests ?? []).map(pickChangeRequest),
+    unsubmitted: (unsubmitted ?? []).map(pickUnsubmitted),
+    timerWarnings: (timerWarnings ?? []).map(pickTimerWarning),
     people: (people ?? []).map(pickPerson),
     departments: (departments ?? []).map(ref),
     notifications: (notifications ?? []).map(pickNotification),

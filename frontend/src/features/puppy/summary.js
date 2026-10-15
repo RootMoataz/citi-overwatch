@@ -1,11 +1,16 @@
 // Puppy's summary: the unread notifications (and a few things the app already knows) turned into plain sentences,
 // each with the page to open. Fixed rules, no AI. Pure, so every sentence is tested.
 //
-// buildSummary({ user, today, notifications, unreadMessages, approvals, missing }) → [{ id, text, to }]
+// buildSummary({ user, today, notifications, unreadMessages, approvals, missing, unsubmitted, timerWarnings, live,
+//               changeRequests }) → [{ id, text, to }]
 //   notifications   the unread list from GET /notifications
 //   unreadMessages  the unread message count from GET /messages/unread-count
 //   approvals       pending hours from GET /approvals (approvers only), cut down by privacy.pickApproval
 //   missing         GET /timesheet-reminders: {week_start, people} (managers and admins only)
+//   unsubmitted     the viewer's timer hours not submitted yet (GET /timers/current), per cell
+//   timerWarnings   limits the viewer's running timer has reached right now ({milestone, message})
+//   live            running timers the viewer oversees (GET /timers/live: managers, admins, executives)
+//   changeRequests  change requests on timer hours waiting for the viewer (GET /time-edit-requests: approvers)
 // Types Puppy doesn't know yet (new ones are being added) get a generic sentence, never an error.
 import { formatDate } from '../../lib/format.js'
 import { can } from '../../lib/permissions.js'
@@ -100,6 +105,76 @@ function missingSentence(missing, today) {
   return { id: 'missing', to: '/', text: `${who} logged hours for ${weekPhrase(missing.week_start, today)}` }
 }
 
+/** "Your timer hours for Tuesday aren't submitted yet" (or for N days): they wait in the timesheet as drafts. */
+function unsubmittedSentence(cells) {
+  const days = [...new Set(cells.map((c) => c.work_date).filter(Boolean))].sort()
+  if (!days.length) return null
+  const to = `/timesheet?week=${cells.find((c) => c.work_date === days[0])?.week_start ?? mondayOfIso(days[0])}`
+  return { id: 'timer-unsubmitted', to,
+    text: days.length === 1 ? `Your timer hours for ${weekdayOf(days[0])} aren't submitted yet`
+      : `Your timer hours for ${days.length} days aren't submitted yet` }
+}
+
+/** The viewer's own running timer at a limit: the warning the banner shows. */
+function timerWarningSentence(warnings) {
+  if (!warnings.length) return null
+  const w = warnings[0]
+  return { id: 'timer-limit', to: '/timesheet', text: `${w.message} (timer on ${w.milestone?.name ?? 'a milestone'})` }
+}
+
+const LIMIT_PHRASE = { daily: 'the daily limit', milestone: 'its estimate', weekly: 'the weekly limit' }
+
+/** Managers: who's running a timer now, and whose timer is past a limit. */
+function liveSentences(live) {
+  if (!live.length) return []
+  const out = [{ id: 'timers-live', to: '/timesheets',
+    text: `${live.length} ${plural(live.length, 'person is', 'people are')} running ${plural(live.length, 'a timer', 'timers')} now` }]
+  const past = live.filter((t) => t.level === 'warning' || t.level === 'over')
+  if (past.length === 1) {
+    const t = past[0]
+    const kind = (t.limits ?? []).find((l) => l.level === t.level)?.kind ?? 'daily'
+    out.push({ id: 'timers-over', to: '/timesheets',
+      text: `${firstName(t.person?.name)}'s timer is ${t.level === 'over' ? 'over' : 'at'} ${LIMIT_PHRASE[kind]}` })
+  } else if (past.length > 1) {
+    out.push({ id: 'timers-over', to: '/timesheets', text: `${past.length} timers are at or over their limits` })
+  }
+  return out
+}
+
+function changeRequestsSentence(requests) {
+  const n = requests.length
+  if (!n) return null
+  return { id: 'change-requests', to: '/timesheets#change-requests',
+    text: `${n} change ${plural(n, 'request', 'requests')} on timer hours ${plural(n, 'is', 'are')} waiting` }
+}
+
+/** "Morgan stopped your timer on Schema Mapping" (never the message itself: that's in Messages). */
+function stoppedByManager(items) {
+  const n = items[0]
+  const week = n.week_start ?? n.payload?.week_start
+  if (items.length > 1) {
+    return { id: 'TIMER_STOPPED_BY_MANAGER', to: '/messages', text: `Your timer was stopped ${items.length} times by your manager` }
+  }
+  return { id: 'TIMER_STOPPED_BY_MANAGER', to: week ? `/timesheet?week=${week}` : '/timesheet',
+    text: `${firstName(n.payload?.by?.name ?? n.subject_user?.name)} stopped your timer on ${n.payload?.milestone?.name ?? 'a milestone'}` }
+}
+
+function editDecided(type, approved) {
+  return (items) => {
+    const n = items[0]
+    const week = n.week_start ?? n.payload?.week_start
+    const what = items.length === 1 ? `Your change to ${n.payload?.milestone?.name ?? 'your hours'} was`
+      : `${items.length} of your changes were`
+    return { id: type, to: week ? `/timesheet?week=${week}` : '/timesheet', text: `${what} ${approved ? 'approved' : 'declined'}` }
+  }
+}
+
+/** "2026-10-13" → "Tuesday". */
+function weekdayOf(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })
+}
+
 function support(items) {
   if (items.length === 1) {
     const p = items[0].payload ?? {}
@@ -158,11 +233,13 @@ function unknown(type, items) {
   return { id: type, to, text: items[0].message || `You have a new ${label} notification` }
 }
 
+// TIME_EDIT_REQUESTED and TIMER_OVER_LIMIT are told from the change requests and the live feed instead.
 const KNOWN = new Set(['TIMESHEET_EMPTY', 'ENTRY_REJECTED', 'MESSAGE_RECEIVED', 'OVER_40H', 'SUPPORT_ASSIGNED',
-  'SUPPORT_ROUTED', 'MILESTONE_CLAIMED', 'DELEGATE_ASSIGNED', ...WORKFLOW.map(([type]) => type)])
+  'SUPPORT_ROUTED', 'MILESTONE_CLAIMED', 'DELEGATE_ASSIGNED', 'TIMER_STOPPED_BY_MANAGER', 'TIME_EDIT_APPROVED',
+  'TIME_EDIT_REJECTED', 'TIME_EDIT_REQUESTED', 'TIMER_OVER_LIMIT', ...WORKFLOW.map(([type]) => type)])
 
 export function buildSummary({ user, today = new Date().toISOString().slice(0, 10), notifications = [], unreadMessages = 0,
-  approvals = [], missing = null } = {}) {
+  approvals = [], missing = null, unsubmitted = [], timerWarnings = [], live = [], changeRequests = [] } = {}) {
   const byType = new Map()
   for (const n of notifications ?? []) {
     if (!byType.has(n.type)) byType.set(n.type, [])
@@ -173,6 +250,10 @@ export function buildSummary({ user, today = new Date().toISOString().slice(0, 1
   const manages = user?.role === 'manager' || user?.role === 'admin'
 
   const sentences = [
+    can(user, 'timer.use') ? timerWarningSentence(timerWarnings ?? []) : null,
+    can(user, 'timer.use') ? unsubmittedSentence(unsubmitted ?? []) : null,
+    can(user, 'approvals.view') ? changeRequestsSentence(changeRequests ?? []) : null,
+    ...(can(user, 'timesheets.view') ? liveSentences(live ?? []) : []),
     can(user, 'approvals.view') ? approvalsSentence(approvals ?? []) : null,
     can(user, 'approvals.view') ? flagsSentence(approvals ?? []) : null,
     when(of('TIMESHEET_EMPTY'), (items) => emptyTimesheet(items, today)),
@@ -186,6 +267,9 @@ export function buildSummary({ user, today = new Date().toISOString().slice(0, 1
     when(of('MILESTONE_CLAIMED'), (items) => single('MILESTONE_CLAIMED', items,
       (count) => `${count} milestones were claimed by your team`)),
     when(of('DELEGATE_ASSIGNED'), delegate),
+    when(of('TIMER_STOPPED_BY_MANAGER'), stoppedByManager),
+    when(of('TIME_EDIT_APPROVED'), editDecided('TIME_EDIT_APPROVED', true)),
+    when(of('TIME_EDIT_REJECTED'), editDecided('TIME_EDIT_REJECTED', false)),
     ...WORKFLOW.map(([type, many]) => when(of(type), workflow(type, many))),
     ...[...byType].filter(([type]) => !KNOWN.has(type)).map(([type, items]) => unknown(type, items)),
   ]
