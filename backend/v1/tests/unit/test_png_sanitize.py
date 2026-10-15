@@ -198,3 +198,60 @@ def test_transparency_must_fit_the_colour_type():
     trns_first = make_png(16, 16, colour=3, raw=raw, extra_before_idat=[chunk(b"tRNS", b"\x00"),
                                                                         chunk(b"PLTE", b"\x00\x00\x00")])
     assert reason(trns_first) == "bad_chunk"
+
+
+def grey_png(depth=8, trns=None, size=16):
+    raw = (b"\x00" + bytes(-(-size * depth // 8))) * size
+    extra = [chunk(b"tRNS", trns)] if trns is not None else []
+    return make_png(size, size, depth=depth, colour=0, raw=raw, extra_before_idat=extra)
+
+
+def rgb_png(trns=None, size=16):
+    raw = (b"\x00" + bytes(size * 3)) * size
+    extra = [chunk(b"tRNS", trns)] if trns is not None else []
+    return make_png(size, size, depth=8, colour=2, raw=raw, extra_before_idat=extra)
+
+
+def palette_png(entries, trns=None, depth=8):
+    size = 16
+    raw = (b"\x00" + bytes(-(-size * depth // 8))) * size
+    extra = [chunk(b"tRNS", trns)] if trns is not None else []
+    return make_png(size, size, depth=depth, colour=3, plte=bytes(3 * entries), raw=raw, extra_before_idat=extra)
+
+
+def test_grey_transparency_is_exactly_one_two_byte_sample_within_the_bit_depth():
+    assert b"tRNS" in chunk_types(sanitize_png(grey_png(trns=b"\x00\xff")))
+    assert b"tRNS" in chunk_types(sanitize_png(grey_png(depth=4, trns=b"\x00\x0f")))
+    for bad in (b"", b"\x00", b"\x00\x00\x00", b"\x00" * 6):
+        assert reason(grey_png(trns=bad)) == "bad_chunk"
+    assert reason(grey_png(depth=4, trns=b"\x00\x10")) == "bad_chunk"  # 16 doesn't fit in 4 bits
+    assert reason(grey_png(depth=8, trns=b"\x01\x00")) == "bad_chunk"
+
+
+def test_rgb_transparency_is_exactly_one_six_byte_colour():
+    assert b"tRNS" in chunk_types(sanitize_png(rgb_png(trns=b"\x00\x01\x00\x02\x00\x03")))
+    for bad in (b"", b"\x00\x00", b"\x00" * 4, b"\x00" * 7, b"\x00" * 8):
+        assert reason(rgb_png(trns=bad)) == "bad_chunk"
+    assert reason(rgb_png(trns=b"\x00\x00\x01\x00\x00\x00")) == "bad_chunk"  # 256 doesn't fit in 8 bits
+
+
+def test_palette_transparency_has_at_most_one_alpha_per_entry():
+    assert b"tRNS" in chunk_types(sanitize_png(palette_png(4, trns=b"\x00\x80")))
+    assert b"tRNS" in chunk_types(sanitize_png(palette_png(4, trns=b"\x00" * 4)))
+    assert reason(palette_png(4, trns=b"\x00" * 5)) == "bad_chunk"
+    assert reason(palette_png(4, trns=b"")) == "bad_chunk"
+
+
+def test_transparency_is_refused_for_images_that_already_have_alpha():
+    raw = (b"\x00" + bytes(16 * 2)) * 16
+    grey_alpha = make_png(16, 16, depth=8, colour=4, raw=raw, extra_before_idat=[chunk(b"tRNS", b"\x00\x00")])
+    assert reason(grey_alpha) == "bad_chunk"
+    assert reason(make_png(extra_before_idat=[chunk(b"tRNS", b"\x00" * 6)])) == "bad_chunk"
+
+
+def test_a_palette_cannot_have_more_entries_than_the_bit_depth_can_index():
+    assert chunk_types(sanitize_png(palette_png(2, depth=1)))[:2] == [b"IHDR", b"PLTE"]
+    assert reason(palette_png(3, depth=1)) == "bad_chunk"
+    assert sanitize_png(palette_png(16, depth=4))
+    assert reason(palette_png(17, depth=4)) == "bad_chunk"
+    assert sanitize_png(palette_png(256, depth=8))

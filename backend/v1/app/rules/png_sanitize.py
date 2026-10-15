@@ -125,6 +125,20 @@ def _inflate(compressed: bytes, header: dict) -> bytes:
     return raw
 
 
+def _check_transparency(trns: bytes, header: dict, palette: bytes | None) -> None:
+    """tRNS is one grey sample (2 bytes), one RGB colour (6 bytes) or up to one alpha per palette entry; each
+    sample must fit the bit depth. Colour types 4 and 6 carry alpha already and never get one."""
+    colour, depth = header["colour"], header["depth"]
+    if colour == 3:
+        if not 1 <= len(trns) <= len(palette) // 3:
+            raise PngRejected("bad_chunk")
+        return
+    if colour not in (0, 2) or len(trns) != (2 if colour == 0 else 6):
+        raise PngRejected("bad_chunk")
+    if any(sample >> depth for sample in struct.unpack(f">{len(trns) // 2}H", trns)):
+        raise PngRejected("bad_chunk")
+
+
 def sanitize_png(data: bytes) -> bytes:
     """Validate `data` as a PNG and return a fresh copy holding only what's needed to draw it."""
     if len(data) > MAX_BYTES:
@@ -166,6 +180,11 @@ def sanitize_png(data: bytes) -> bytes:
     if palette is not None and (header["colour"] in (0, 4) or not palette or len(palette) % 3
                                 or len(palette) > 3 * 256):
         raise PngRejected("bad_chunk")
+    if header["colour"] == 3 and len(palette) // 3 > 2 ** header["depth"]:  # more entries than pixels can index
+        raise PngRejected("bad_chunk")
+    trns = next((p for t, p in kept if t == b"tRNS"), None)
+    if trns is not None:
+        _check_transparency(trns, header, palette)
     if not idat:
         raise PngRejected("bad_image_data")
     raw = _inflate(b"".join(idat), header)
