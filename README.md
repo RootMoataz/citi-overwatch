@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,087 backend (364 unit · 723 integration, 97% coverage) · 793 frontend component (65 files) · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,087 backend (364 unit · 723 integration, 97% coverage) · 793 frontend component (65 files) · 6 end-to-end (3 journeys × desktop + mobile, last run 13 Oct) — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -30,7 +30,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 Highlights:
 
 - **Four roles plus a public demo.** Admin, manager, employee and a read-only executive, enforced on the server and reflected in the UI ([permission matrix](docs/project/USER_STORIES.md#roles-at-a-glance)). A public demo admin gets 5-minute sessions and a fail-closed list of allowed writes.
-- **Accounts.** Admins create them in a five-step wizard with live username checks and a generated password. The welcome email carries a temporary password, which must be changed at first sign-in.
+- **Accounts.** Admins create them in a five-step wizard with live username checks and a generated password, or several at once in a conversation with Puppy. The welcome email carries a temporary password, which must be changed at first sign-in. Everyone sees a **Your manager** card on My week and their profile, with one press to message their manager.
 - **Timesheets.** Employees (and managers or admins an admin has switched to "Tracks own hours") log hours on the milestones they're assigned to. Every hour needs the project manager's (or delegate's) approval before it counts toward the budget. Going over 40 hours is a warning, not a block. Admins submit approved pay periods to HR, and later edits come back as corrections.
 - **Approvals.** The Timesheets page groups pending hours by person-week. Each entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
 - **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight) whose hours pre-fill a locked timesheet cell until **Save week** submits them (a **Request a change** goes to the manager), a **Live now** card where managers watch running timers tick and can stop one with a message, warnings at 100% of the 8h day, the milestone's estimate or the 40h week (the manager is alerted at 125%), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
@@ -55,19 +55,23 @@ Screenshots from the live site with the demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![My week: hours logged against the 40-hour week, and the employee's milestones with status, priority and difficulty chips and a Start timer button](docs/images/my-week.png) | ![Kick back dialog on the Hypercare milestone: a category and an explanation, with Cancel and Kick back buttons](docs/images/kickback.png) |
-| **My week**: hours so far, assigned milestones, a start/stop timer | **Kick back** a blocked milestone to the manager with a reason |
+| ![My week: hours logged against the 40-hour week, the Your manager card, and the employee's milestones with status, priority and difficulty chips and a Start button for the timer](docs/images/my-week.png) | ![Kick back dialog on the Hypercare milestone: a category and an explanation, with Cancel and Kick back buttons](docs/images/kickback.png) |
+| **My week**: hours so far, your manager, assigned milestones, a start/stop timer | **Kick back** a blocked milestone to the manager with a reason |
+| ![My timesheet for the week of Oct 5: Saturday's Schema Mapping cell holds 2h of timer hours, locked, with a "Change requested: 1.5h" chip and a Tracked label](docs/images/timer-locked-cell.png) | ![The This week card above the Your manager card: Morgan Manager, Delivery Manager in Technology, with a Message Morgan button](docs/images/your-manager.png) |
+| **Locked timer cell**: timer hours pre-fill the cell; **Request a change** asks the manager | **Your manager**: who they are, and one press to message them |
 
 <p>
-  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone: week picker, the Schema Mapping row with hours per day, a Start timer button and Tracked/Manual source chips" width="30%">
+  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone: week picker, the Schema Mapping row with hours per day, a Start button for the timer and Tracked/Manual source chips" width="30%">
 </p>
 
 ### Manager
 
 | | |
 |---|---|
-| ![Manager dashboard: approvals waiting, risk tiles, smart insights and active projects](docs/images/dashboard.png) | ![Timesheets To review filtered to flagged weeks: Gia Rossi's entries with work notes, Same hours daily and Over plan red flags, and the tracked/manual share](docs/images/timesheets-review.png) |
-| **Dashboard**: approvals, risk, insights and project status | **Timesheets → To review**: red flags, work notes and the tracked share |
+| ![Manager dashboard: approvals waiting beside Live now with one running timer, then the risk tiles](docs/images/dashboard.png) | ![Timesheets To review filtered to flagged weeks: Gia Rossi's entries with work notes, Same hours daily and Over plan red flags, and the tracked/manual share](docs/images/timesheets-review.png) |
+| **Dashboard**: approvals, Live now, risk, insights and project status | **Timesheets → To review**: red flags, work notes and the tracked share |
+| ![Manager home: Approvals beside the Live now card, where Eli Employee's timer on Schema Mapping ticks with 8h today, a Warning: 8h day chip and a Stop timer button](docs/images/live-now.png) | ![Timesheets page: Live now with Eli's running timer, then Change requests with Eli Employee's request on Schema Mapping, Sat Oct 10, 2h → 1.5h, his reason and Approve and Reject buttons](docs/images/change-requests.png) |
+| **Live now**: running timers tick here, with Warning/Over chips and **Stop timer** | **Change requests**: approve or reject a change to locked timer hours |
 | ![Beacon Mobile App planning board with Backlog, Ready and Scheduled columns of milestone cards](docs/images/planning-board.png) | ![Finalize the plan dialog listing six plan checks, two of them needing fixes](docs/images/finalize-checklist.png) |
 | **Planning board** for a planned project | **Finalize** checks before the project goes active |
 | ![Apollo Data Migration milestone Schema Mapping expanded: priority and difficulty chips, the people on it, the done-when checklist, required skills and pending hours](docs/images/milestones.png) | ![Apollo Data Migration Budget tab: planned, consumed and remaining budget, a forecast marker and cost by milestone](docs/images/budget.png) |
@@ -81,7 +85,7 @@ Screenshots from the live site with the demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![Organisation dashboard marked Read-only view, with a projects-by-status donut and risk tiles](docs/images/executive.png) | ![Audit log grouped by day, with readable sentences and before/after changes](docs/images/audit.png) |
+| ![Organisation dashboard marked Read-only view, with a projects-by-status donut, the Live now card and risk tiles](docs/images/executive.png) | ![Audit log grouped by day, with readable sentences and before/after changes](docs/images/audit.png) |
 | **Organisation dashboard**: every project, no edits, no salaries | **Audit log**: who changed what, and when |
 
 ![Command palette with the query "at-risk projects in Technology" interpreted as Projects · At risk · Technology](docs/images/palette.png)
@@ -90,8 +94,10 @@ Screenshots from the live site with the demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![Control centre with the demo admin's countdown banner, admin shortcut tiles and projects by status](docs/images/control-centre.png) | ![Timesheets HR submission tab: pick a pay period, totals, and past submissions with a payroll CSV](docs/images/hr-submission.png) |
+| ![Control centre with the demo admin's countdown banner, admin shortcut tiles, Live now and projects by status](docs/images/control-centre.png) | ![Timesheets HR submission tab: pick a pay period, totals, and past submissions with a payroll CSV](docs/images/hr-submission.png) |
 | **Control centre** (the 5-minute demo banner is visible) | **HR submission**: pay periods, corrections and payroll CSV |
+| ![Puppy's Do it tab for the public demo admin: Create user accounts replaced by the notice "Creating accounts is disabled in the public demo."](docs/images/puppy-create-users.png) | |
+| **Puppy → Do it → Create user accounts**: a real admin gets the create-accounts conversation; the public demo admin gets this notice | |
 
 ## Architecture
 
@@ -142,7 +148,7 @@ The **Admin demo** (the sign-in page's "Admin" button) is a separate public acco
 
 The full allow and deny lists are in `backend/v1/app/public_demo.py`; [Logic walkthrough §26](docs/project/LOGIC_WALKTHROUGH.md#26-the-public-demo-admin) explains them. Seed creates it; on an existing database run the `demo_backfill` operation (it adds `demo.admin` only if missing).
 
-**Creating several accounts at once.** Signed in as a real admin (not `demo.admin`), open Puppy and choose **Do it → Create user accounts**, or ask "create accounts for the instructors". Puppy asks for the names, then the emails, then each person's role, manager and department, shows a summary and creates nothing until you confirm. It uses the same `POST /users` as the People page and emails each person a random temporary password (through the browser email relay when the server can't), or shows each password once if you prefer. Up to 25 people per batch. The public demo admin is told it's disabled. Locally the server writes the welcome emails to `backend/v1/.outbox/`. See [Logic walkthrough §27](docs/project/LOGIC_WALKTHROUGH.md#27-puppy-the-rule-based-assistant).
+**Creating several accounts at once.** Signed in as a real admin (not `demo.admin`), open Puppy and choose **Do it → Create user accounts**, or ask "create accounts for the instructors". Puppy asks for the names, then the emails, then each person's role, manager and department, shows a summary and creates nothing until you confirm. It uses the same `POST /users` as the People page and emails each person a random temporary password (through the browser email relay when the server can't), or shows each password once if you prefer. Up to 25 people per batch. The public demo admin is told it's disabled, and it is never offered (or accepted by the server) as anyone's manager, because its login is shared. Locally the server writes the welcome emails to `backend/v1/.outbox/`, and each row says "Saved to the local outbox (not sent)" instead of "Emailed". See [Logic walkthrough §27](docs/project/LOGIC_WALKTHROUGH.md#27-puppy-the-rule-based-assistant).
 
 The published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation, which also renames an existing `executive.demo` from the earlier seed's "Eve Executive" to Moataz Hikal, Executive Sponsor (only while it still has that old name). On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
 

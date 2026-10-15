@@ -158,6 +158,9 @@ Requirements the owner (**U**) added once the minimum was live, grouped by role.
 
 - [x] My week home page: hours against 40, milestones by urgency, milestones to claim
 - [x] Start/stop timer: one at a time, header clock, quarter-hour rounding, midnight auto-stop, Tracked/Manual/Mixed labels
+- [x] Timer workflow: a stop keeps a draft that pre-fills a locked timesheet cell and **Save week** submits it; **Request a change** on a locked cell goes to the manager
+- [x] Over-limit warnings at 100% of the 8h day, the milestone's estimate or the 40h week (banner, toast, amber clock)
+- [x] **Your manager** card on My week and the person's own profile, with one press to message them
 - [x] Proof of work: a 10–500 character note or a same-day progress update on new or changed hours
 - [x] Kick back a milestone with a category and reason; see the resolution
 - [x] Auto-routing: support on *Ready for review*, next ready milestone as primary on *Completed*, skill- and capacity-aware
@@ -172,6 +175,8 @@ Requirements the owner (**U**) added once the minimum was live, grouped by role.
 - [x] Department presets and project templates (Technology, Operations, Risk & Compliance)
 - [x] Milestone priority, difficulty and estimates, labelled in words with distinct colours
 - [x] Delegate approver with an end date
+- [x] **Live now**: running timers ticking on the dashboard and Timesheets, Warning/Over chips, remote **Stop timer** with a message; one alert per timer and limit at 125%
+- [x] **Change requests** on Timesheets: approve or reject changes to locked timer hours
 - [x] Resolve kickbacks; skills for the employees they manage
 - [x] Email this report (browser relay) and Print / PDF; Missing timesheets card; department filter on the dashboard
 
@@ -181,7 +186,8 @@ Requirements the owner (**U**) added once the minimum was live, grouped by role.
 - [x] HR submissions per pay period with payroll CSV and corrections for entries changed after sending
 - [x] Departments and skills catalogue
 - [x] "Tracks own hours" switch: managers and admins keep a timesheet only when turned on
-- [x] Executive accounts; one reporting manager per person
+- [x] Executive accounts; one reporting manager per person (never the shared public demo admin)
+- [x] Create several accounts in a conversation with Puppy (names, emails, roles, a summary, nothing created until confirmed; real admins only); local runs say "Saved to the local outbox (not sent)"
 - [x] Welcome and reset emails relayed from the admin's browser (EmailJS) while the Lambda has no email route
 
 ### Executive

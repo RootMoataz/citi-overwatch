@@ -631,6 +631,12 @@ rolling minute (`429`). The inbox and unread badge poll every 5 seconds on Messa
 every 3 seconds. Bodies are plain text: React escapes them and `white-space: pre-wrap` keeps line breaks; nothing is
 turned into links or markup.
 
+**Your manager card.** My week (under **This week**) and the person's own profile show a **Your manager** card
+([`YourManagerCard.jsx`](../../frontend/src/features/people/YourManagerCard.jsx)) built from the profile's `manager`
+(name, photo, job title, department; never pay): **View profile** when the viewer may open it, and **Message
+*First*** when `GET /messages/contacts` lists the manager, which opens Messages with that conversation started. The
+card is hidden when the person has no manager or the manager is archived.
+
 The seed (and `demo_backfill`, only while no conversation exists) adds a three-message thread between Morgan
 Manager and Eli Employee and the Schema Mapping discussion with Eli, Ana and Ben, each leaving Eli one unread message.
 
@@ -891,7 +897,11 @@ flowchart TD
 - **Summary:** up to 3 dismissible tips, then "What needs you" as plain sentences (`summary.js`). Examples: "2
   timesheets are waiting for your approval" (one per person-week, approvers only), "Your timesheet for this week is
   empty", "1 of your time entries was rejected", "2 unread messages from Morgan", "Eli Employee went over 40 hours this
-  week", "2 of your people haven't logged hours for last week" (managers and admins). Notification types Puppy doesn't
+  week", "2 of your people haven't logged hours for last week" (managers and admins). The timer workflow adds "Your
+  timer hours for Tuesday aren't submitted yet", the running timer's limit warning ("You've reached your 8h for today
+  on this timer (timer on Schema Mapping)"), "Morgan stopped your timer on Schema Mapping" (never the message), "Your
+  change to Schema Mapping was approved" (or declined), and for approvers "2 people are running timers now", "Eli's
+  timer is over the daily limit" and "1 change request on timer hours is waiting". Notification types Puppy doesn't
   know get a generic sentence (the server's own message, or "3 new plan finalized notifications"), never an error.
   Below that are quick links and the top 3 smart insights.
 - **Do it:** actions Puppy runs for you (`actions.js`). Each shows exactly what will happen ("Puppy will mark 5
@@ -935,8 +945,8 @@ at once, for example the instructors.
      a name ↔ email table.
   5. For each person in turn, under "Person 2 of 4 · Jane Roe · jane@example.com": "What role should Jane Roe
      have?" (**Employee**, **Manager**, **Executive**, **Admin**); for employees "Who will Jane Roe report to?"
-     (active managers and admins); then "Department for Jane Roe?" (the departments, or **Skip**). From the second
-     person on, **Same as previous** answers the manager or department question and **Use the same for everyone
+     (active managers and admins, never the shared public demo admin, which the server also refuses as a
+     manager); then "Department for Jane Roe?" (the departments, or **Skip**). From the second person on, **Same as previous** answers the manager or department question and **Use the same for everyone
      left** copies the previous person's role, manager and department to everyone remaining.
   6. A summary table (name, username, email, role, manager, department) with **Edit** and **Remove** on each row,
      and: "I'll create these 4 accounts with randomly generated temporary passwords that meet the security rules,
@@ -961,8 +971,9 @@ at once, for example the instructors.
   server's admin check, public demo guard, validation, password policy, must-change-password and audit log all
   apply. Each password is made in the browser by `generatePassword()` (12 characters with upper and lower case, a
   digit and a symbol) just before its request. The table shows live progress per row (Creating… → Created ✓ →
-  Emailed ✓ or Email failed); a failure shows the server's message, and **Retry failed** re-creates only the
-  failed rows (after an **Edit** if needed) and retries emails that didn't go out. Accounts already created are
+  Emailed ✓ or Email failed; on a local server, which only writes the email to `backend/v1/.outbox/`
+  (`email_delivery: "outbox"`), "Saved to the local outbox (not sent)" and the closing line says so); a failure
+  shows the server's message, and **Retry failed** re-creates only the failed rows (after an **Edit** if needed) and retries emails that didn't go out. Accounts already created are
   never sent again.
 - **Email:** if the server emailed the details (`email_sent: true`) nothing more happens; otherwise the browser
   relay sends the welcome email (`relayCredentials`, as the People wizard does). If neither works (locally the

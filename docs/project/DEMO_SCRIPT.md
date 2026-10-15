@@ -44,8 +44,8 @@ Rehearse only the READ and repeatable steps. Save the one-shot steps for the rea
 **Before you start (about 10 minutes ahead):** the live feed needs a timer that is really running, and the seed never
 starts one (it would tick from the seed's time). Open a **second browser or a private window**, sign in there as
 **Employee** and press **Start** on *Schema Mapping*. Leave that window open: it is "Eli at his desk". Eli already
-has 9h on Schema Mapping today, so his timer shows the **8h day** warning at once and passes 125% (10h) after an
-hour, which is when Morgan's bell gets "Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit".
+has 8h on Schema Mapping today, so his timer shows the **8h day** warning at once and passes 125% (10h) after two
+hours, which is when Morgan's bell gets "Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit".
 
 ---
 
@@ -117,9 +117,9 @@ refuses, the reason is under 10 characters. Skip anything that stalls; Puppy is 
 Sign out, click **Manager**.
 
 1. **Dashboard (READ).** Approvals waiting and **Live now** sit on top. Live now shows Eli's timer ticking every
-   second with a **Warning: 8h day, 40h week** chip (or **Over** past 125%). In **Risk**, Morgan's projects show **Nothing at risk**
+   second with "8h today" and a **Warning: 8h day** chip (**Over: 8h day** past 125%). In **Risk**, Morgan's projects show **Nothing at risk**
    (or Apollo with "Kicked back – needs review" if Eli kicked back Hypercare). **Smart insights** ("Rule-based
-   suggestions from your live data") shows "Approvals are piling up" with a **Medium Severity** chip: 5 entries
+   suggestions from your live data") shows "Approvals are piling up" with a **Medium Severity** chip: 6 entries
    waiting more than 3 days, the oldest 14 days. In **Budget used per project**, each bullet shows budget as the
    track, consumed as the bar and the forecast as the marker. Click **Apollo Data Migration** to open its Budget
    tab (8.4% used at 23.1% progress), then go back.
@@ -219,7 +219,8 @@ first if there's time).
 Before the talk, have the instructors' full names and email addresses ready in a note, one line each, in the same
 order. Each account sends one real email through EmailJS (free plan: 200 a month, shared with **Email this report**),
 and an address or username can only be used once, so a rehearsal with the real addresses spends them: rehearse
-locally (`admin.demo` / `Demo123!` on `localhost`) or with throwaway addresses.
+locally (`admin.demo` / `Demo123!` on `localhost`, where each row ends "Saved to the local outbox (not sent)"
+instead of "Emailed ✓") or with throwaway addresses.
 
 1. Click the dog (**Puppy assistant**) → **Ask** tab, type `create accounts for the instructors` and press Enter.
    (Or **Do it → Create user accounts**.) Say: "Puppy is still rule-based. It asks, I answer, and nothing is
@@ -264,7 +265,7 @@ Say:
 > sanitiser, so nothing uploaded is served as-is.
 >
 > Tests: 1,087 backend tests at 97% coverage, 793 frontend component tests, and 6 end-to-end runs on desktop and
-> iPhone.
+> iPhone (last recorded on 13 October, before the timer redesign).
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
 > renamed to ACME Scout after this presentation."
@@ -296,9 +297,9 @@ approver decides.
 **How is the public demo safe?** `demo.admin` gets a server-enforced 5-minute session that refreshing can't extend.
 A denylist plus an allowlist means any write route not reviewed yet is refused. Anything with `password`,
 `credential` or an `hr` path segment is refused by name. It never locks out (20 sign-ins a minute per address
-instead). A test walks all 62 write routes and fails if one is in neither list.
+instead). A test walks all 66 write routes and fails if one is in neither list.
 
-**Data model highlights?** 29 tables over 14 migrations (plus `schema_migrations`). UUID keys. `numeric` money.
+**Data model highlights?** 31 tables over 15 migrations (plus `schema_migrations`). UUID keys. `numeric` money.
 Nothing is deleted, only archived. The hourly rate (salary ÷ 2,080) is frozen on each entry when it's approved.
 One open kickback per milestone and one running timer per person are enforced by partial unique indexes. HR
 submissions keep a frozen copy of each payroll CSV.
@@ -306,6 +307,6 @@ submissions keep a frozen copy of each payroll CSV.
 **Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (364 unit tests).
 723 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 793 component tests use Vitest
 and MSW, where an unhandled request fails the test. 6 Playwright runs cover 3 journeys on desktop Chrome and iPhone
-13. Two fail-closed tests walk every write route for the executive and demo-admin guards.
+13 (last recorded on 13 October, before the timer redesign). Two fail-closed tests walk every write route for the executive and demo-admin guards.
 
 **Don't know?** "Good question. Let me show you where that lives." Open `LOGIC_WALKTHROUGH.md` or `DECISIONS.md`.

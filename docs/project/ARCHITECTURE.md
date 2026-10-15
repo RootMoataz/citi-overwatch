@@ -31,7 +31,7 @@ flowchart LR
 ```
 
 - **One origin.** CloudFront serves the static app from S3 and routes `/api/v1*` to the Lambda's Function URL, so the browser never makes cross-origin calls to the API and the refresh cookie can be `SameSite=Strict`. A CloudFront Function (`spa_routes`) rewrites extension-less paths to `/index.html` on the S3 behaviour only, so deep links work and API `403`/`404`s are never rewritten.
-- **One Lambda for the whole API.** `backend/v1` (108 routes, 62 of them writes) is discovered by its `requirements.txt` and packaged by `bin/deploy-backend.sh` (Terraform). Its dependencies are pure Python (`pg8000`, `PyJWT`, standard-library PBKDF2), so it builds on Windows without Docker. Memory is 1024 MB because Lambda CPU scales with memory: PBKDF2 at 600k iterations took about 4.4 s at 128 MB and takes about 0.75 s warm now ([DECISIONS.md](DECISIONS.md)).
+- **One Lambda for the whole API.** `backend/v1` (114 routes, 66 of them writes) is discovered by its `requirements.txt` and packaged by `bin/deploy-backend.sh` (Terraform). Its dependencies are pure Python (`pg8000`, `PyJWT`, standard-library PBKDF2), so it builds on Windows without Docker. Memory is 1024 MB because Lambda CPU scales with memory: PBKDF2 at 600k iterations took about 4.4 s at 128 MB and takes about 0.75 s warm now ([DECISIONS.md](DECISIONS.md)).
 - **No internet from the Lambda.** The function runs in the workshop VPC with no NAT and no VPC endpoints, and it uses the platform's pre-made role (`create_role = false` in `infra/lambda.tf`), which carries no SES permission. Server-side email therefore fails fast (one try, a 1-second connect timeout, a 10-minute cooldown, `app/email.py`). The fix needs the instructors: an SES VPC interface endpoint plus the permission.
 - **Email from the browser.** When the server answers `email_sent: false` for a new account or an admin password reset, the admin's browser sends it through one fixed EmailJS template ([`lib/emailRelay.js`](../../frontend/src/lib/emailRelay.js)); if that is off or fails, the admin sees the temporary password once. "Email this report" builds the dashboard report in the browser and sends it the same way (a delivery result per recipient). Forgotten-password codes are never relayed.
 - **No AI service.** With no internet route there is nothing to call, so smart insights are server-side rules (`app/rules/insights.py`), and Puppy and the command palette's phrase matching are fixed rules running in the browser.
@@ -43,14 +43,14 @@ Each feature is `app/features/<name>/routes.py` (thin: method, path, roles) plus
 
 | Area | Modules | What they do |
 |---|---|---|
-| **Identity and access** | `auth`, `users`, `avatars`, [`public_demo.py`](../../backend/v1/app/public_demo.py), [`router.py`](../../backend/v1/app/router.py) | Sign-in, rotating refresh cookie, lockout (5 failures → 15 minutes), forced password change, admin resets and forgotten-password codes; the account wizard; one reporting manager per person; profile photos through the PNG sanitiser ([`rules/png_sanitize.py`](../../backend/v1/app/rules/png_sanitize.py)). The router's executive read-only guard and the public demo guard run before any handler |
+| **Identity and access** | `auth`, `users`, `avatars`, [`public_demo.py`](../../backend/v1/app/public_demo.py), [`router.py`](../../backend/v1/app/router.py) | Sign-in, rotating refresh cookie, lockout (5 failures → 15 minutes), forced password change, admin resets and forgotten-password codes; the account wizard; one reporting manager per person (never the shared public demo admin); profile photos through the PNG sanitiser ([`rules/png_sanitize.py`](../../backend/v1/app/rules/png_sanitize.py)). The router's executive read-only guard and the public demo guard run before any handler |
 | **Projects and planning** | `projects`, `members`, `requests`, `planning`, `departments`, [`presets.py`](../../backend/v1/app/presets.py) | Projects with status counts, budget and a delegate approver; staffing under the 40-hour planned cap; project requests; department presets and project templates (`/project-templates`); the Backlog → Ready → Scheduled board and the finalize checks that move a project from Planned to Active |
 | **Milestones** | `milestones` (`service`, `workflow`, `routing`, `notify`), `skills` | Milestones with dependencies (cycle-checked), priority, difficulty, estimates and skills; the status workflow; auto-routing after *Ready for review* (support) and *Completed* (next ready milestone as primary); kickbacks and their resolution; progress updates; history; pull-mode claiming |
-| **Time** | `time` (`service`, `timers`, `flags`), `hr`, `reminders` | The week grid save, approvals with budget impact, approve week, approved weeks; start/stop timers with midnight auto-stop; proof of work (a note or same-day progress update); red flags for approvers; HR pay-period submissions with corrections; the Friday reminder |
+| **Time** | `time` (`service`, `timers`, `changes`, `flags`), `hr`, `reminders` | The week grid save, approvals with budget impact, approve week, approved weeks; start/stop timers whose stop keeps a draft that **Save week** submits, locked timer cells and change requests (`changes`), the Live now feed with remote stop, over-limit alerts at 125% of the 8h day, the milestone's estimate or the 40h week, and the midnight auto-stop (all worked out lazily on reads, with no scheduler); proof of work (a note or same-day progress update); red flags for approvers; HR pay-period submissions with corrections; the Friday reminder |
 | **Communication** | `messages`, notifications (in `users`/`time`/`milestones` via `notify`) | Conversations, milestone Discuss threads, read receipts and unread counts under [`rules/messaging.py`](../../backend/v1/app/rules/messaging.py); bell notifications with one-time alerts guarded by unique constraints |
 | **Insight and history** | `insights` (`service`, `smart`), `activity`, `archive`, audit ([`audit.py`](../../backend/v1/app/audit.py)) | Dashboard, allocation and rule-based smart insights; the Live activity feed scoped in SQL; the archive and restores; the audit log rendered as sentences |
 
-**Puppy** (`frontend/src/features/puppy/`) has no backend module. It reuses the bell's `GET /notifications` poll and the caches the pages already load, cuts everything down to an allow-list of harmless fields ([`privacy.js`](../../frontend/src/features/puppy/privacy.js): no pay, costs, contact details or message bodies), and runs fixed rules for its Summary, Do it (each action confirmed first), Ask and Sound tabs ([LOGIC_WALKTHROUGH §27](LOGIC_WALKTHROUGH.md#27-puppy-the-rule-based-assistant)).
+**Puppy** (`frontend/src/features/puppy/`) has no backend module. It reuses the bell's `GET /notifications` poll and the caches the pages already load, cuts everything down to an allow-list of harmless fields ([`privacy.js`](../../frontend/src/features/puppy/privacy.js): no pay, costs, contact details or message bodies), and runs fixed rules for its Summary, Do it (each action confirmed first, including the admins' create-accounts conversation, which calls the same `POST /users` as the People page), Ask and Sound tabs ([LOGIC_WALKTHROUGH §27](LOGIC_WALKTHROUGH.md#27-puppy-the-rule-based-assistant)).
 
 ## Operator operations
 
@@ -58,7 +58,7 @@ Each feature is `app/features/<name>/routes.py` (thin: method, path, roles) plus
 
 | `op` | What it does | Safe to repeat? |
 |---|---|---|
-| `migrate` | Applies `backend/v1/migrations/*.sql` (001–014) in order, recording each | Yes: applied files are skipped |
+| `migrate` | Applies `backend/v1/migrations/*.sql` (001–015) in order, recording each | Yes: applied files are skipped |
 | `seed` | Loads the demo data, including the curated plans (`demo_curate`) | Yes: it does nothing once the demo data exists |
 | `rotate_demo` | Random passwords for every seeded account whose password isn't published | Yes |
 | `create_admins` | Admin logins with random passwords, returned only to the operator | Yes: existing usernames are skipped |
@@ -84,7 +84,7 @@ The live data is never reset: changes to demo data go through these additive ope
 | Exports | [`lib/csv.js`](../../frontend/src/lib/csv.js) | CSVs (projects, audit, approvals, payroll) are built in the browser; a text cell starting with `= + - @`, tab or CR is prefixed with `'` so spreadsheets never run it as a formula |
 | Rate limits | `auth/service.py`, `rules/messaging.py` | Account lockout after 5 failed sign-ins (15 minutes); public demo sign-ins 20/minute per address (`429`); messages 20 per person per rolling minute (`429`) |
 | Messaging | [`rules/messaging.py`](../../backend/v1/app/rules/messaging.py) | Admins, executives and managers may start a conversation with anyone active; employees only with their own manager, their projects' managers and active delegates, and other employees |
-| Concurrency | services | Race-prone steps are single atomic `UPDATE … RETURNING` statements, row locks (`FOR UPDATE`: per-person time saves and timers, HR submissions, completion routing) or unique constraints (one alert per person-week, one running timer, one open kickback) |
+| Concurrency | services | Race-prone steps are single atomic `UPDATE … RETURNING` statements, row locks (`FOR UPDATE`: per-person time saves and timers, HR submissions, completion routing) or unique constraints (one alert per person-week, one running timer, one pending change request per cell, one over-limit alert per timer and limit, one open kickback) |
 | Passwords | `security.py` | PBKDF2-SHA256, 600,000 iterations; unknown usernames are checked against a dummy hash so timing reveals nothing; temporary passwords expire after 72 hours |
 
 The frontend's [`lib/permissions.js`](../../frontend/src/lib/permissions.js) and [`app/access.js`](../../frontend/src/app/access.js) mirror these rules to hide or disable controls (with a tooltip for demo-restricted ones), but the server is the authority.
@@ -102,10 +102,12 @@ sequenceDiagram
   participant DB as Aurora
 
   E->>API: POST /timers {milestone_id} … POST /timers/stop {note}
-  API->>DB: lock person row · round to 0.25h · add to the day's entry (tracked_hours)
-  E->>API: PUT /time-entries (week grid, a note per new or changed cell)
-  API->>API: validate cells · 24h/day · project open · proof of work (400 PROOF_REQUIRED)
-  API->>DB: upsert entries → pending · freeze over_40 · one overtime alert per person-week · audit
+  API->>DB: lock person row · round to 0.25h · keep it on the timer as a draft (no entry written)
+  M->>API: GET /timers/live (Live now) · optional POST /timers/{id}/stop-remote {message}
+  E->>API: PUT /time-entries (week grid; timer cells locked at saved + draft; a note per new or changed cell)
+  API->>API: validate cells · 24h/day · project open · locked cells unchanged (409 TIMER_HOURS_LOCKED) · proof of work (400 PROOF_REQUIRED)
+  API->>DB: upsert entries → pending · drafts submitted · freeze over_40 · one overtime alert per person-week · audit
+  E->>API: POST /time-edit-requests (to change a locked cell) → M approves or rejects
   M->>API: GET /approvals (grouped by person-week, with flags and tracked share)
   API->>DB: load entries + red flags (same hours daily, long day, over plan, no proof…)
   M->>API: POST /time-entries/{id}/approve {hours seen} or /approvals/approve-week
@@ -191,7 +193,7 @@ Layers, from outside in:
 | Router | [`app/router.py`](../../backend/v1/app/router.py) | `route(method, pattern, auth=, roles=, allow_restricted=, allow_executive=)` registry, authentication, role gate, executive and public demo guards, pay stripping for executives, request ID, logging |
 | Auth helpers | [`app/authz.py`](../../backend/v1/app/authz.py) | "Can this person see or manage this project/milestone?", in one place |
 | Features | [`app/features/*/`](../../backend/v1/app/features/) | `routes.py` (thin) + `service.py` (logic), per feature: activity, archive, auth, avatars, departments, hr, insights, members, messages, milestones, planning, projects, reminders, requests, skills, time, users (see [Feature modules](#feature-modules-backend)) |
-| Rules | [`app/rules/`](../../backend/v1/app/rules/) | Pure functions: at-risk, overtime, cycles, capacity, usernames, milestone status, priority, routing, claims, estimates, planning checks, messaging, insights, timesheets and reminders, time tracking, hour flags, PNG sanitising |
+| Rules | [`app/rules/`](../../backend/v1/app/rules/) | Pure functions: at-risk, overtime, cycles, capacity, usernames, milestone status, priority, routing, claims, estimates, planning checks, messaging, insights, timesheets and reminders, time tracking (timer drafts and locks), timer limits, hour flags, PNG sanitising |
 | Data | [`app/db.py`](../../backend/v1/app/db.py), [`app/dberrors.py`](../../backend/v1/app/dberrors.py) | Connections, transactions, query helpers; unique violations → `409`, constraint failures → `400` |
 | Cross-cutting | [`audit.py`](../../backend/v1/app/audit.py), [`email.py`](../../backend/v1/app/email.py), [`security.py`](../../backend/v1/app/security.py), [`validation.py`](../../backend/v1/app/validation.py) | Audit log, email, hashing and tokens, field validators |
 

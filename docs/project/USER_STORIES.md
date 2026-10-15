@@ -29,6 +29,8 @@ Shared behaviour on every page (so it isn't repeated in each story):
 | Edit a project, plan it on the board, staff it, manage its milestones, approve its hours | every project | projects they manage (and hours of projects delegated to them) | — | sees every project, changes nothing |
 | Move an assigned milestone to *in progress* / *ready for review*, kick it back, post updates | ✅ | ✅ | milestones assigned to them | — |
 | Log their own hours (timesheet and timer) | only with "Tracks own hours" | only with "Tracks own hours" | ✅ | — |
+| See running timers (**Live now**); stop one with a message | everyone's, and may stop them | their people's and projects', and may stop them | — | everyone's, read-only |
+| Decide a change request on locked timer hours | ✅ (never their own) | projects they manage or approve as delegate | asks for one on their own cells | sees them, decides nothing |
 | Submit approved pay periods to HR | ✅ | — | — | sees the list of submissions |
 | Start a conversation | with anyone active | with anyone active | with their managers and other employees | with anyone active |
 | See the audit log | ✅ | — | — | ✅ (no pay fields) |
@@ -445,7 +447,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### N3. Ask Puppy what needs me (U) — Done
 **As** anyone, **I want** a small assistant that summarises what needs my attention **so that** I don't have to visit every page.
-- **Success:** the panel's Summary lists "What needs you" (approvals waiting, red-flagged entries, people over 40 hours, missing timesheets), tips and the top insights; Do it runs a confirmed action; Ask answers fixed help questions; Sound picks an alert sound for new notifications.
+- **Success:** the panel's Summary lists "What needs you" (approvals waiting, red-flagged entries, people over 40 hours, missing timesheets, timer hours not submitted yet, a timer at its limit, who's running timers, change requests waiting), tips and the top insights; Do it runs a confirmed action; Ask answers fixed help questions; Sound picks an alert sound for new notifications.
 - **Privacy:** Puppy reads only what my role already sees, through an allow-list, and says "Puppy follows rules from your data — no AI service involved."
 
 #### N4. Message the people I work with (U) — Done
@@ -469,8 +471,19 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### E2. Time my work with a start/stop timer (U) — Done
 **As** an employee, **I want** to start a timer on a milestone and stop it when I'm done **so that** my hours are logged for me.
-- **Success:** one running timer at a time, a live clock in the header, hours rounded to the nearest quarter hour and added to that day's entry ("Logged 2.25h on Schema Mapping"); entries show Tracked, Manual or Mixed.
-- **Failure:** starting a second timer is refused (`409 TIMER_RUNNING`); a timer left running stops at midnight New York time and tells me to check my hours; if the hours can't be logged (the day would pass 24h, the project was paused) the timer still stops and says why.
+- **Success:** one running timer at a time, a live clock in the header. **Stop your timer?** says what it adds; stopping rounds to the nearest quarter hour and keeps the hours as a **draft** of that day's cell ("Added 0.25h to Thursday's cell — open your timesheet to submit."), never submitting them. The timesheet shows the cell pre-filled and locked ("from timer, not submitted yet"), with "You have 0.25h of timer time not submitted yet — Save week to submit."; **Save week** submits it with proof of work like any hours. Entries show Tracked, Manual or Mixed.
+- **Warnings:** at 100% of the 8h day, the milestone's estimate or the 40h week, a banner and a toast ("You've reached your 8h for today on this timer") and the header chip turns amber. It never stops the timer.
+- **Failure:** starting a second timer is refused (`409 TIMER_RUNNING`); under 7.5 minutes adds nothing and says so; a timer left running stops at midnight New York time into a draft and tells me; if the hours can't be recorded (the day would pass 24h, the project was paused) the timer still stops and says why. Typing over a locked cell is refused (`409 TIMER_HOURS_LOCKED`).
+
+#### E8. Ask to change timer hours (U) — Done
+**As** an employee, **I want** to ask my manager to correct hours my timer recorded **so that** a timer I forgot to stop doesn't stand, without my being able to rewrite tracked time myself.
+- **Success:** **Request a change** on a locked cell asks for **Hours you want instead** and **Why?** (10–500 characters); the cell then shows "Change requested: 1.5h". When my manager decides, my bell says "Your change to Schema Mapping was approved" (the cell becomes the requested hours, pending approval) or declined (the cell stays).
+- **Failure:** a second request on the same cell (`409 CHANGE_REQUEST_PENDING`), the hours the cell already holds (`400 NO_CHANGE`), or a reason under 10 characters is refused.
+
+#### E9. Message my manager in one press (U) — Done
+**As** an employee, **I want** to see who my manager is and message them straight away **so that** I know who to ask.
+- **Success:** a **Your manager** card under **This week** on My week (and on my own profile) with their photo, job title and department, **View profile** and **Message Morgan**, which opens Messages with that conversation.
+- **Empty:** no card when I have no manager or they were archived.
 
 #### E3. Explain my hours (U) — Done
 **As** an employee, **I want** to add a short work note to new or changed hours **so that** my manager can approve them with confidence.
@@ -498,6 +511,17 @@ Everything below was built after the first deploy and is live. **Status** is **D
 **As** a manager, **I want** pending hours grouped by person-week with red flags **so that** I approve fast and look closer only where it matters.
 - **Success:** each week shows entries, hours waiting, hours logged, "Tracked 68% · Manual 32%" and a red-flag count; each entry shows its note or progress update and its flags (same hours daily, long day, closed milestone, backdated, over plan, no activity, no proof). **Only flagged** filters the list; **Approve week** approves a whole person-week; **Approved** lists approved weeks.
 - **Failure:** an entry changed since I loaded it is refused (`409 STALE_ENTRY`) and reloads; I can never approve my own hours.
+
+#### G9. See who's timing work and stop a timer (U) — Done
+**As** a manager, **I want** a live list of my people's running timers **so that** I can spot a timer left running and stop it with a reason.
+- **Success:** **Live now** on my dashboard and on Timesheets lists each running timer (person, milestone, project) ticking every second, with **Warning** (100% of a limit) or **Over** (125%) chips. **Stop timer** asks for a message (10–500 characters) and **Stop timer and send**: the time so far becomes the person's draft, they get a bell alert, and the message appears in our one-to-one conversation.
+- **Alerts:** one bell alert per timer and limit once it passes 125% ("Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit").
+- **Empty:** "Nobody is running a timer right now." Executives see the card read-only; the public demo admin can't stop timers.
+
+#### G10. Decide change requests on timer hours (U) — Done
+**As** a manager (or delegate, or admin), **I want** to approve or reject requests to change locked timer hours **so that** tracked time changes only with my say-so.
+- **Success:** **Timesheets → Change requests** shows "2h → 1.5h", the project and the reason; **Approve** or **Reject** opens "Approve Eli's change?" with an optional comment and **Approve change** / **Reject change**. Approving makes the cell the requested hours, pending approval like any hours; rejecting keeps it. The employee is told either way.
+- **Failure:** my own request is refused (`403 SELF_APPROVAL`); a request already decided is refused (`400 NOT_PENDING`).
 
 #### G2. Plan a project on a board and finalize it (U) — Done
 **As** a manager, **I want** to move milestones from Backlog through Ready to Scheduled and finalize the plan **so that** a project starts only when it's ready.
@@ -537,6 +561,11 @@ Everything below was built after the first deploy and is live. **Status** is **D
 **As** an admin, **I want** to submit a week, fortnight or month of approved hours to HR and download its payroll CSV **so that** payroll gets exactly what was approved.
 - **Success:** a preview of entries, hours, cost and people; each approved entry is sent once; a sent entry edited later goes back to pending, is listed under **Needs re-submission**, and the next submission re-sends it as a correction.
 - **Failure:** entries still waiting for approval are excluded and called out; two admins can't send the same entry (row locks).
+
+#### AD8. Create several accounts in one conversation with Puppy (U) — Done
+**As** an admin, **I want** to onboard a group (for example the instructors) by answering Puppy's questions **so that** I don't run the wizard once per person.
+- **Success:** **Do it → Create user accounts** (or "create accounts for the instructors" in Ask) asks for the names, then the emails in the same order, then each person's role, manager and department, shows a summary with **Edit** and **Remove**, and creates nothing until **Yes, create and email**. Each row goes Creating… → Created ✓ → Emailed ✓; each person gets a random temporary password by email and must change it at first sign-in. Up to 25 people.
+- **Failure:** mismatched counts ("I got 2 emails for 3 people — who's missing?"), invalid, repeated or taken addresses are caught before anything is created; a row the server refuses shows its message and **Retry failed**; if an email can't be sent, **Show passwords once**. The public demo admin gets "Creating accounts is disabled in the public demo." and is never offered as anyone's manager. Locally rows say "Saved to the local outbox (not sent)".
 
 #### AD3. Manage departments and the skills catalogue (U) — Done
 **As** an admin, **I want** to add, rename, archive and restore departments and skills **so that** filters, presets and routing match the organisation.

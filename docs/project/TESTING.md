@@ -17,7 +17,7 @@ The tests are built for **debugging**, not only for a green tick:
 
 Counts as of 2026-10-15: **1,087 backend** (364 unit, 723 integration, 97% coverage) and **793 frontend** in 65 files, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
 
-**Fail-closed guard tests.** Two integration tests walk every registered write route (62 of 108 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
+**Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
 Development was test-first: each rule and endpoint started as a failing test.
 
@@ -36,7 +36,8 @@ python -m pytest --cov=app --cov-report=term       # with coverage
 python -m pytest -k overtime -vv                   # one area, verbose
 
 # what the counts above came from (own database, default -q addopts overridden):
-OVERWATCH_TEST_DB=overwatch_test_docs python -m pytest -o addopts="" -q
+OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
+OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q --cov=app
 ```
 
 - Set `OVERWATCH_TEST_DB=<name>` to use a separate test database. Two runs at the same time can then never truncate each other's data.
@@ -76,15 +77,18 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 
 ## Current results (2026-10-15)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12, at commit `820d131` (timers, proof of work and red flags).
+Windows 11, PostgreSQL 17, Node 24, Python 3.12, at commit `59d29fe` (the timer workflow: drafts, locked cells, change requests, Live now, over-limit alerts; Puppy's create-accounts conversation).
 
 ```
-# backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs python -m pytest -o addopts="" -q
-1087 passed in 174.91s (0:02:54)
+# backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
+1087 passed in 182.73s (0:03:02)
 
-# backend/v1: same, with --cov=app --cov-report=term
-TOTAL                                     6456    176    97%
-1087 passed in 186.58s (0:03:06)
+# backend/v1: same, with --cov=app
+appeatures	ime	imers.py                240      9    96%
+app
+ules	imer_limits.py                   59      0   100%
+TOTAL                                     6456    175    97%
+1087 passed in 276.86s (0:04:36)
 
 # collected per layer
 tests/unit:        364 tests
@@ -93,10 +97,10 @@ tests/integration: 723 tests
 # frontend: npx vitest run --maxWorkers=4
  Test Files  65 passed (65)
       Tests  793 passed (793)
-   Duration  98.50s
+   Duration  167.58s
 ```
 
-The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, 6 tests) wasn't re-run for this snapshot; its last recorded result is below.
+The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, 6 tests) wasn't re-run for this snapshot. Its last recorded run is the one below, **6 passed on 13 October 2026**, before the hour-tracking safeguards and the timer redesign. None of its three journeys uses the timer (the timer workflow is covered by `test_timer_workflow.py` and `timerWorkflow.test.jsx` above), but the overtime journey types hours without a work note, which proof of work (migration 014) now refuses, so expect that journey to need a note step before it passes again.
 
 ## Results (2026-10-13, after the final review's fixes; Windows 11, PostgreSQL 17.11, Node 24, Python 3.12)
 
@@ -185,4 +189,5 @@ These checks were run after the final deploy, scripted in Playwright against the
 | No load or concurrency tests | The race-prone steps (login lockout counter, reset-code attempts, refresh-token claim, the one-time over-40 alert) are single atomic SQL statements or unique constraints, each with an integration test |
 | No automated accessibility audit | Queries in the component and e2e tests use roles and labels (`getByRole`, `getByLabel`), which fail if a control has no accessible name. Contrast relies on the theme's palette and hasn't been machine-audited |
 | The e2e tests sign out by clearing cookies, not through the user menu | The menu lives in the drawer on phones. The menu item itself isn't tested directly; the server's logout endpoint is covered by integration tests |
+| The end-to-end suite hasn't been re-run since 13 October | It predates proof of work and the timer workflow; the overtime journey saves hours without a work note and needs updating. The integration and component suites above cover both features |
 | The request log line doesn't include the user ID | The audit log records the actor with the same `request_id` |
