@@ -148,3 +148,12 @@ def test_activity_reads_naturally(client, conn):
                           WHERE a.action IN ('set_skills', 'create') ORDER BY a.created_at""")
     assert [s["sentence"] for s in summarize(conn, rows)] == ["Avery Admin updated the skills of Eli Employee",
                                                               "Avery Admin added skill Security"]
+
+
+def test_team_lists_show_skills(client, conn):
+    mgr, _, _, teammate, _ = org(conn)
+    qa = skill(conn, "QA")
+    conn.run("INSERT INTO user_skills (user_id, skill_id) VALUES (:u, CAST(:s AS uuid))", u=teammate["id"], s=qa["id"])
+    project = query_one(conn, "SELECT project_id FROM project_members WHERE user_id = :u", u=teammate["id"])
+    members = call(client, conn, mgr, "GET", f"/projects/{project['project_id']}/members")[1]
+    assert members[0]["user"]["skills"] == [{"id": qa["id"], "name": "QA"}]
