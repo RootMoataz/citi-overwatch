@@ -59,7 +59,8 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
     edges = _edges(conn, project_id)
     assignees, supporting = _assignees(conn, project_id)
     status_of = {str(m["id"]): m["status"] for m in _project_milestones(conn, project_id)}
-    work_mode = query_one(conn, "SELECT work_mode FROM projects WHERE id = CAST(:p AS uuid)", p=str(project_id))["work_mode"]
+    project = query_one(conn, """SELECT work_mode, status::text AS status, is_archived FROM projects
+                                 WHERE id = CAST(:p AS uuid)""", p=str(project_id))
     on_team = is_member(conn, str(project_id), ctx.user_id)
     out = []
     for m in milestones:
@@ -67,8 +68,9 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
         preds = sorted(edges.get(mid, set()))
         blocked = any(status_of.get(p) != "completed" for p in preds)
         people = assignees.get(mid, [])
-        claimable = claim_blocker(work_mode=work_mode, status=m["status"], is_archived=m["is_archived"],
-                                  blocked=blocked, assignee_count=len(people)) is None
+        claimable = claim_blocker(work_mode=project["work_mode"], project_status=project["status"],
+                                  project_archived=project["is_archived"], status=m["status"],
+                                  is_archived=m["is_archived"], blocked=blocked, assignee_count=len(people)) is None
         out.append({
             "id": m["id"], "project_id": m["project_id"], "name": m["name"], "description": m["description"],
             "start_date": m["start_date"], "end_date": m["end_date"], "status": m["status"],
@@ -219,6 +221,7 @@ def set_assignees(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
 
 CLAIM_ERRORS = {
     "NOT_PULL_PROJECT": "This project works in push mode: its manager assigns the milestones",
+    "PROJECT_NOT_ACTIVE": "Milestones can only be claimed while the project is planned or active",
     "NOT_READY": "Only milestones that are ready to start (not started, nothing left to wait on) can be claimed",
     "ALREADY_CLAIMED": "Someone is already on this milestone",
 }
@@ -234,6 +237,7 @@ def claim_milestone(conn, ctx: Ctx, milestone_id: str) -> dict:
         raise ApiError(403, "NOT_A_MEMBER", "Only people on the project team can claim milestones")
     with transaction(conn):
         m = query_one(conn, """SELECT m.id, m.name, m.status::text AS status, m.is_archived, p.work_mode, p.manager_id,
+                                      p.status::text AS project_status, p.is_archived AS project_archived,
                                       p.id AS project_id, p.name AS project_name
                                FROM milestones m JOIN projects p ON p.id = m.project_id
                                WHERE m.id = CAST(:i AS uuid) FOR UPDATE OF m""", i=milestone_id)
@@ -243,7 +247,8 @@ def claim_milestone(conn, ctx: Ctx, milestone_id: str) -> dict:
                                      JOIN milestones p ON p.id = d.depends_on_id
                                      WHERE d.milestone_id = CAST(:i AS uuid) AND NOT p.is_archived
                                        AND p.status <> 'completed'""", i=milestone_id)["n"]
-        code = claim_blocker(work_mode=m["work_mode"], status=m["status"], is_archived=m["is_archived"],
+        code = claim_blocker(work_mode=m["work_mode"], project_status=m["project_status"],
+                             project_archived=m["project_archived"], status=m["status"], is_archived=m["is_archived"],
                              blocked=bool(waiting), assignee_count=taken)
         if code:
             raise ApiError(409, code, CLAIM_ERRORS[code])

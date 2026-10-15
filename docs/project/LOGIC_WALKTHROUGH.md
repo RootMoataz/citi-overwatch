@@ -280,17 +280,18 @@ flowchart TD
   P -- yes --> M{caller on the team?}
   M -- no --> E2["403 NOT_A_MEMBER"]
   M -- yes --> L["BEGIN; SELECT the milestone … FOR UPDATE<br/>(a second claim waits here)"]
-  L --> R["claim_blocker(): not started, not archived,<br/>every predecessor completed, nobody on it"]
+  L --> R["claim_blocker(): project planned or active,<br/>milestone not started, not archived,<br/>every predecessor completed, nobody on it"]
+  R -- project on hold, completed or archived --> E5["409 PROJECT_NOT_ACTIVE"]
   R -- not ready --> E3["409 NOT_READY"]
   R -- someone on it --> E4["409 ALREADY_CLAIMED"]
   R -- ok --> W["INSERT milestone_assignees role = 'primary'<br/>audit claim (actor = the claimer)<br/>MILESTONE_CLAIMED to the project manager; COMMIT"]
 ```
 
-- **Code:** the eligibility check is a pure function, `claim_blocker()` in [`app/rules/claim.py`](../../backend/v1/app/rules/claim.py). `claim_milestone()` in [`app/features/milestones/service.py`](../../backend/v1/app/features/milestones/service.py) locks the milestone row, re-reads its status, assignees and predecessors, and writes the assignment, the audit entry and the notification in one transaction.
+- **Code:** the eligibility check is a pure function, `claim_blocker()` in [`app/rules/claim.py`](../../backend/v1/app/rules/claim.py). `claim_milestone()` in [`app/features/milestones/service.py`](../../backend/v1/app/features/milestones/service.py) locks the milestone row, re-reads its status and the project's status, assignees and predecessors, and writes the assignment, the audit entry and the notification in one transaction.
 - **Race:** the row lock means two claims at once can't both win. The second waits for the first to commit, then sees an assignee and gets `409 ALREADY_CLAIMED` (tested with two real database connections in `tests/integration/test_claim.py`).
 - **Who can claim:** active team members only. The manager and admins (unless they're on the team) assign through the milestone dialog, as in push mode, which still works in pull projects.
 - **The 40-hour cap is unchanged:** claimers are already on the team, so their planned hours don't move; the cap is checked when someone joins a team (section 8). Manager assignments don't check it either.
-- **The list says what's claimable:** each milestone has `claimable` (pull project, ready, nobody on it) and `can_claim` (claimable and the caller is on the team), from the same `claim_blocker()`.
+- **The list says what's claimable:** each milestone has `claimable` (pull project that's planned or active, ready, nobody on it) and `can_claim` (claimable and the caller is on the team), from the same `claim_blocker()`.
 - **UI:** [`MilestonesTab.jsx`](../../frontend/src/features/milestones/MilestonesTab.jsx) shows a short pull-mode explanation and a **Claim** button on each milestone the viewer can claim; a lost race shows the server's message on that card. The manager's bell links to the project's milestones.
 - **Example (demo data):** *Beacon Mobile App* is in pull mode. Gia and Hugo are on its team; *Design* has nobody on it and nothing to wait on, so either can claim it. *Prototype* waits on *Design*, so it can't be claimed until *Design* is completed.
 

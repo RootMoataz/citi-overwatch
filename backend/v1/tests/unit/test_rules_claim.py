@@ -2,7 +2,7 @@ from app.rules.claim import claim_blocker
 
 
 def blocker(**overrides):
-    facts = {"work_mode": "pull", "status": "not_started", "is_archived": False, "blocked": False,
+    facts = {"work_mode": "pull", "project_status": "active", "project_archived": False, "status": "not_started", "is_archived": False, "blocked": False,
              "assignee_count": 0}
     facts.update(overrides)
     return claim_blocker(**facts)
@@ -29,3 +29,15 @@ def test_a_milestone_with_anyone_on_it_is_already_taken():
 
 def test_push_is_reported_before_anything_else():
     assert blocker(work_mode="push", status="completed", assignee_count=2) == "NOT_PULL_PROJECT"
+
+
+def test_only_planned_or_active_projects_take_claims():
+    assert blocker(project_status="planned") is None
+    for status in ("on_hold", "completed"):
+        assert blocker(project_status=status) == "PROJECT_NOT_ACTIVE"
+    assert blocker(project_archived=True) == "PROJECT_NOT_ACTIVE"
+
+
+def test_inactive_project_is_reported_before_the_milestones_own_state():
+    assert blocker(project_status="on_hold", status="completed", assignee_count=1) == "PROJECT_NOT_ACTIVE"
+    assert blocker(work_mode="push", project_status="on_hold") == "NOT_PULL_PROJECT"

@@ -139,3 +139,22 @@ def test_milestone_list_says_what_the_caller_can_claim(client, conn):
     assert flags(member) == {"Ready": (False, False), "Taken": (False, False)}
     status, body, _, _ = claim(client, conn, member, ready)
     assert (status, body["error"]["code"]) == (409, "NOT_PULL_PROJECT")
+
+
+def test_claims_refused_unless_the_project_is_planned_or_active(client, conn):
+    _, member, _, project = setup(conn)
+    ms = make_milestone(conn, project)
+
+    def can_claim():
+        body = client.request("GET", f"/projects/{project['id']}/milestones", token=token_for(conn, member))[1]
+        return body[0]["can_claim"]
+
+    for status in ("on_hold", "completed"):
+        conn.run("UPDATE projects SET status = CAST(:s AS project_status) WHERE id = :i", s=status, i=project["id"])
+        assert can_claim() is False
+        status_code, body, _, _ = claim(client, conn, member, ms)
+        assert (status_code, body["error"]["code"]) == (409, "PROJECT_NOT_ACTIVE")
+    assert assignees(conn, ms) == []
+    conn.run("UPDATE projects SET status = 'planned' WHERE id = :i", i=project["id"])
+    assert can_claim() is True
+    assert claim(client, conn, member, ms)[0] == 200
