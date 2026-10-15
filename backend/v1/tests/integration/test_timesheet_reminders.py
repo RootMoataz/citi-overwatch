@@ -150,9 +150,18 @@ def test_before_friday_the_list_is_about_last_week(client, conn, clock):
 def test_manager_loading_the_list_gets_their_own_reminder(client, conn, clock):
     mgr, _, _, project, _ = team(conn)
     add_member(conn, project, mgr)
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=mgr["id"])
     clock(FRI_1400)
     missing(client, conn, mgr)
     assert len(stored(conn, mgr)) == 1
+
+
+def test_a_manager_without_a_timesheet_gets_no_reminder(client, conn, clock):
+    mgr, _, _, project, _ = team(conn)
+    add_member(conn, project, mgr)
+    clock(FRI_1400)
+    missing(client, conn, mgr)
+    assert stored(conn, mgr) == []
 
 
 def test_employees_cannot_list_missing_timesheets(client, conn, clock):

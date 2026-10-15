@@ -65,6 +65,26 @@ def test_seed_contains_at_risk_and_overtime(conn):
     assert rejected["rejection_reason"]
 
 
+def test_seed_timesheets_and_hr_history(conn):
+    seed(conn)
+    tracks = {r["username"]: r["tracks_own_hours"] for r in query(conn, "SELECT username, tracks_own_hours FROM users")}
+    assert tracks["employee.demo"] is True and tracks["manager.demo"] is False and tracks["admin.demo"] is False
+    assert tracks["executive.demo"] is False
+    # Nobody but employees logs hours in the demo, so no manager needs a timesheet.
+    loggers = query(conn, "SELECT DISTINCT u.role FROM time_entries t JOIN users u ON u.id = t.user_id")
+    assert {r["role"] for r in loggers} == {"employee"}
+    # The oldest approved week already went to HR, so the HR tab has history and the rest is ready to submit.
+    subs = query(conn, "SELECT * FROM hr_submissions")
+    assert len(subs) == 1 and subs[0]["entry_count"] > 0
+    submitted = query(conn, "SELECT status, work_date FROM time_entries WHERE hr_submission_id IS NOT NULL")
+    assert len(submitted) == subs[0]["entry_count"] and {r["status"] for r in submitted} == {"approved"}
+    assert all(subs[0]["period_start"] <= r["work_date"] <= subs[0]["period_end"] for r in submitted)
+    assert query_one(conn, """SELECT count(*) AS n FROM time_entries WHERE status = 'approved'
+                              AND hr_submission_id IS NULL""")["n"] > 0
+    request = query_one(conn, "SELECT reason, work_mode FROM project_requests")
+    assert request["reason"] is None and request["work_mode"] == "push"
+
+
 def test_seed_respects_planned_cap(conn):
     seed(conn)
     over = query(conn, """SELECT user_id, sum(planned_hours_per_week) AS h FROM project_members pm

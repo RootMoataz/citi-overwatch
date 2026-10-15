@@ -1,5 +1,9 @@
-"""Timesheets: daily entries per assigned milestone, manager approval, the one-time over-40h alert,
-and the approval budget breakdown with forecast (spec §3.7)."""
+"""Timesheets: daily entries per assigned milestone, manager approval (one entry or a person's whole week), the
+approved weeks, the one-time over-40h alert, and the approval budget breakdown with forecast (spec §3.7).
+
+Lifecycle: pending → approved / rejected → submitted to HR (see app.features.hr). Submitted hours aren't locked: the
+normal rules still apply, but an entry changed after it went to HR is flagged (changed_after_hr_submission) until an
+admin re-sends it as a correction in a new HR submission."""
 
 import json
 import math
@@ -14,6 +18,7 @@ from app.db import query, query_one, transaction
 from app.features.projects.service import project_consumed
 from app.http import ApiError
 from app.rules.overtime import approval_breakdown, forecast_total, hourly_rate, overtime_ids, week_flags
+from app.rules.timesheets import keeps_timesheet
 from app.validation import as_date, as_decimal, as_str, as_uuid, require
 
 MIN_HOURS = Decimal("0.25")
@@ -22,6 +27,9 @@ CENT = Decimal("0.01")
 FORECAST_WEEKS = 4
 COUNTED = ("pending", "approved")  # rejected entries don't count toward the 40h mark (or the 24h day)
 OPEN_STATUSES = ("planned", "active")  # on hold pauses logging; completed closes it
+APPROVED_WEEKS_DEFAULT = 8  # the Approved tab shows the last 8 weeks unless asked for a range
+APPROVED_RANGE_MAX_DAYS = 366
+WEEK_BATCH_MAX = 100  # entries in one "Approve week" (a week has at most 7 days × a few milestones)
 NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")  # hours sent as text: digits and one point only (no "1e1", "+5")
 
 
@@ -48,7 +56,8 @@ def label(entry: dict, full_name: str) -> str:
 def _entry_view(e: dict, full_name: str, *, show_rate: bool) -> dict:
     """show_rate: an hourly rate reveals a salary, so only admins and the entry's owner get it."""
     fields = ["id", "user_id", "milestone_id", "project_id", "work_date", "hours", "status", "over_40",
-              "edited_after_decision", "rejection_reason", "note", "decided_at"] + (["hourly_rate"] if show_rate else [])
+              "edited_after_decision", "rejection_reason", "note", "decided_at", "hr_submitted_at",
+              "changed_after_hr_submission", "hr_changed_at"] + (["hourly_rate"] if show_rate else [])
     return {k: e[k] for k in fields} | {"label": label(e, full_name)}
 
 
@@ -224,7 +233,15 @@ def _sync_stored_flags(conn, user_id, start: date) -> None:
              ot=overtime, u=str(user_id), a=start, b=start + timedelta(days=6))
 
 
+def _require_timesheet(conn, ctx: Ctx) -> None:
+    me = query_one(conn, "SELECT tracks_own_hours FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
+    if not keeps_timesheet(ctx.role, bool(me and me["tracks_own_hours"])):
+        raise ApiError(403, "TIMESHEET_DISABLED",
+                       "Your account doesn't keep a timesheet. An admin can turn on \"Tracks own hours\" for you.")
+
+
 def save_week(conn, ctx: Ctx, body: dict) -> dict:
+    _require_timesheet(conn, ctx)
     require(body, "week", "entries")
     start = week_start(as_date(body["week"], "week"))
     if not isinstance(body["entries"], list):
@@ -263,9 +280,13 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
             over_40, crossed = week_flags(before_total=before, after_total=after)
             decided = bool(existing) and (existing["status"] != "pending" or existing["edited_after_decision"])
             if existing:
+                # Hours already sent to HR may still change; they're flagged until an admin re-sends them.
                 conn.run("""UPDATE time_entries SET hours = :h, note = :n, status = 'pending', over_40 = :o,
                             edited_after_decision = :e, hourly_rate = NULL, decided_by = NULL, decided_at = NULL,
-                            rejection_reason = NULL, updated_at = now() WHERE id = :i""",
+                            rejection_reason = NULL, updated_at = now(),
+                            changed_after_hr_submission = (hr_submission_id IS NOT NULL),
+                            hr_changed_at = CASE WHEN hr_submission_id IS NOT NULL THEN now() ELSE hr_changed_at END
+                            WHERE id = :i""",
                          h=c["hours"], n=note, o=over_40, e=decided, i=existing["id"])
                 entry_id = existing["id"]
             else:
@@ -407,7 +428,9 @@ def _alert_rejected(conn, entry: dict, project: dict, reason: str) -> None:
              u=str(entry["user_id"]), p=payload)
 
 
-def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None, expected_hours=None) -> dict:
+def _decidable(conn, ctx: Ctx, entry_id: str, expected_hours=None) -> tuple[dict, dict]:
+    """The entry and its project, once it's certain the caller may decide it now: not their own, still pending,
+    and (when the caller says what they saw) still the hours they saw."""
     entry, project = _load_entry(conn, ctx, entry_id)
     if str(entry["user_id"]) == ctx.user_id:
         raise ApiError(403, "SELF_APPROVAL", "You can't approve or reject your own hours")
@@ -416,30 +439,40 @@ def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None,
     expected = None if expected_hours is None else as_decimal(expected_hours, "expected_hours")
     if expected is not None and expected != entry["hours"]:
         raise STALE
+    return entry, project
+
+
+def _apply_decision(conn, ctx: Ctx, entry: dict, project: dict, *, approve: bool, reason: str | None) -> None:
+    """Write one decision; the caller holds the transaction."""
     # The guard lives in the UPDATE itself: a decision that lost a race (or an entry edited since it was
     # read) matches no row, so it can never overwrite someone else's decision or approve unseen hours.
     guard = "WHERE id = :i AND status = 'pending' AND hours = :h RETURNING id"
+    if approve:
+        done = query_one(conn, f"""UPDATE time_entries SET status = 'approved', hourly_rate = :r,
+                    decided_by = CAST(:me AS uuid), decided_at = now(), rejection_reason = NULL,
+                    updated_at = now() {guard}""",
+                         r=hourly_rate(entry["salary"]), me=ctx.user_id, i=entry["id"], h=entry["hours"])
+    else:
+        done = query_one(conn, f"""UPDATE time_entries SET status = 'rejected', rejection_reason = :reason,
+                    hourly_rate = NULL, decided_by = CAST(:me AS uuid), decided_at = now(),
+                    updated_at = now() {guard}""",
+                         reason=reason, me=ctx.user_id, i=entry["id"], h=entry["hours"])
+    if not done:
+        raise STALE
+    after = {"status": "approved" if approve else "rejected", "reason": reason}
+    if not manages(ctx, project):  # decided as the project's delegate approver, on the manager's behalf
+        after["as_delegate_for"] = str(project["manager_id"])
+    record(conn, ctx, "approve" if approve else "reject", "time_entry", str(entry["id"]),
+           before={"status": "pending"}, after=after)
+    if not approve:
+        _alert_rejected(conn, entry, project, reason)
+        _sync_stored_flags(conn, entry["user_id"], week_start(entry["work_date"]))  # rejected hours stop counting
+
+
+def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None, expected_hours=None) -> dict:
+    entry, project = _decidable(conn, ctx, entry_id, expected_hours)
     with transaction(conn):
-        if approve:
-            done = query_one(conn, f"""UPDATE time_entries SET status = 'approved', hourly_rate = :r,
-                        decided_by = CAST(:me AS uuid), decided_at = now(), rejection_reason = NULL,
-                        updated_at = now() {guard}""",
-                     r=hourly_rate(entry["salary"]), me=ctx.user_id, i=entry["id"], h=entry["hours"])
-        else:
-            done = query_one(conn, f"""UPDATE time_entries SET status = 'rejected', rejection_reason = :reason,
-                        hourly_rate = NULL, decided_by = CAST(:me AS uuid), decided_at = now(),
-                        updated_at = now() {guard}""",
-                     reason=reason, me=ctx.user_id, i=entry["id"], h=entry["hours"])
-        if not done:
-            raise STALE
-        after = {"status": "approved" if approve else "rejected", "reason": reason}
-        if not manages(ctx, project):  # decided as the project's delegate approver, on the manager's behalf
-            after["as_delegate_for"] = str(project["manager_id"])
-        record(conn, ctx, "approve" if approve else "reject", "time_entry", entry_id,
-               before={"status": "pending"}, after=after)
-        if not approve:
-            _alert_rejected(conn, entry, project, reason)
-            _sync_stored_flags(conn, entry["user_id"], week_start(entry["work_date"]))  # rejected hours stop counting
+        _apply_decision(conn, ctx, entry, project, approve=approve, reason=reason)
     row = query_one(conn, "SELECT * FROM time_entries WHERE id = :i", i=entry["id"])
     row = _live(row, _overtime(conn, row["user_id"], week_start(row["work_date"])))
     return _entry_view(row, _name(entry), show_rate=ctx.is_admin)
@@ -453,6 +486,70 @@ def reject(conn, ctx: Ctx, entry_id: str, body: dict) -> dict:
     require(body, "reason")
     return _decide(conn, ctx, entry_id, approve=False, reason=as_str(body["reason"], "reason", max_len=1000),
                    expected_hours=body.get("expected_hours"))
+
+
+def approve_week(conn, ctx: Ctx, body: dict) -> dict:
+    """Approve every listed entry of one person's week in one step, all or nothing. Each item says the hours the
+    approver saw ({id, expected_hours}); any entry that changed, was decided, or may not be decided by the caller
+    stops the whole batch with the same error a single approval would give."""
+    items = body.get("entries")
+    if not isinstance(items, list) or not items:
+        raise ApiError(400, "VALIDATION_ERROR", "List the entries to approve", {"entries": "required"})
+    if len(items) > WEEK_BATCH_MAX:
+        raise ApiError(400, "VALIDATION_ERROR", f"Approve at most {WEEK_BATCH_MAX} entries at once",
+                       {"entries": f"max_items:{WEEK_BATCH_MAX}"})
+    checked = []
+    for item in items:
+        if not isinstance(item, dict):
+            raise ApiError(400, "VALIDATION_ERROR", "Each entry needs an id", {"entries": "invalid"})
+        require(item, "id")
+        checked.append(_decidable(conn, ctx, str(item["id"]), item.get("expected_hours")))
+    weeks = {(str(e["user_id"]), week_start(e["work_date"])) for e, _ in checked}
+    if len(weeks) != 1 or len({str(e["id"]) for e, _ in checked}) != len(checked):
+        raise ApiError(400, "MIXED_WEEKS", "Approve one person's week at a time", {"entries": "one_person_week"})
+    with transaction(conn):
+        for entry, project in checked:
+            _apply_decision(conn, ctx, entry, project, approve=True, reason=None)
+    user_id, start = weeks.pop()
+    return {"approved": len(checked), "user_id": user_id, "week_start": start}
+
+
+def approved_weeks(conn, ctx: Ctx, params: dict) -> list[dict]:
+    """Approved hours per person-week in a date range (default: the last 8 weeks). Admins see everyone; a manager
+    sees the projects they manage and anything they approved themselves (as a delegate, say). Each week says
+    whether it has gone to HR (hr_submitted: every entry, unchanged since) and how many of its entries changed after
+    they were sent (hr_changed_count: they need re-sending). Only admins get the cost, since cost ÷ hours is the person's rate."""
+    this_week = week_start(_today())
+    end = as_date(params["to"], "to") if params.get("to") else this_week + timedelta(days=6)
+    start = (as_date(params["from"], "from") if params.get("from")
+             else week_start(end) - timedelta(weeks=APPROVED_WEEKS_DEFAULT - 1))
+    if end < start:
+        raise ApiError(400, "VALIDATION_ERROR", "The end date must be on or after the start date", {"to": "before_from"})
+    if (end - start).days > APPROVED_RANGE_MAX_DAYS:
+        raise ApiError(400, "VALIDATION_ERROR", "Pick at most a year", {"to": f"max_{APPROVED_RANGE_MAX_DAYS}_days"})
+    where = ["t.status = 'approved'", "t.work_date BETWEEN :a AND :b"]
+    if not ctx.is_admin:
+        where.append("(p.manager_id = CAST(:me AS uuid) OR t.decided_by = CAST(:me AS uuid))")
+    rows = query(conn, f"""
+        SELECT t.user_id, date_trunc('week', t.work_date)::date AS wk, u.first_name, u.last_name, u.username,
+               count(*) AS n, sum(t.hours) AS h, coalesce(sum(t.hours * t.hourly_rate), 0) AS c,
+               count(t.hr_submission_id) FILTER (WHERE NOT t.changed_after_hr_submission) AS submitted,
+               count(*) FILTER (WHERE t.changed_after_hr_submission) AS changed,
+               max(t.hr_submitted_at) AS submitted_at, array_agg(DISTINCT p.name) AS projects
+        FROM time_entries t JOIN users u ON u.id = t.user_id JOIN projects p ON p.id = t.project_id
+        WHERE {' AND '.join(where)}
+        GROUP BY t.user_id, wk, u.first_name, u.last_name, u.username
+        ORDER BY wk DESC, lower(u.last_name), lower(u.first_name)""", a=start, b=end, me=ctx.user_id)
+    out = []
+    for r in rows:
+        week = {"user": {"id": r["user_id"], "name": _name(r), "username": r["username"]}, "week_start": r["wk"],
+                "entry_count": r["n"], "hours": r["h"], "projects": sorted(r["projects"], key=str.lower),
+                "hr_submitted": r["submitted"] == r["n"], "hr_submitted_count": r["submitted"],
+                "hr_submitted_at": r["submitted_at"], "hr_changed_count": r["changed"]}
+        if ctx.is_admin:
+            week["cost"] = Decimal(r["c"]).quantize(CENT)
+        out.append(week)
+    return out
 
 
 # ---------- notifications ----------

@@ -20,9 +20,15 @@ ROLES = ("admin", "manager", "employee", "executive")
 # Roles that can't own projects or have direct reports, so nobody may be moved into them while they do.
 NOT_MANAGING = ("employee", "executive")
 EDITABLE = {"first_name", "last_name", "email", "job_title", "role", "salary", "manager_id", "username",
-            "department_id"}
+            "department_id", "tracks_own_hours"}
 PICKER_FIELDS = ("id", "username", "first_name", "last_name", "job_title")
 MAX_SALARY = Decimal("10000000")
+
+
+def tracks_by_default(role: str) -> bool:
+    """Who keeps a personal timesheet unless an admin says otherwise: employees do; managers, admins and
+    executives don't (an admin can switch it on for a manager or admin who also does project work)."""
+    return role == "employee"
 
 
 def _username_taken(conn, username: str) -> bool:
@@ -76,6 +82,11 @@ def _fields(body: dict, *, partial: bool) -> dict:
         out["salary"] = as_decimal(body["salary"], "salary", min=Decimal(0), max=MAX_SALARY)
     if body.get("username") is not None:
         out["username"] = _valid_username(body["username"])
+    if "tracks_own_hours" in body:
+        if not isinstance(body["tracks_own_hours"], bool):
+            raise ApiError(400, "VALIDATION_ERROR", "tracks_own_hours must be true or false",
+                           {"tracks_own_hours": "must_be_boolean"})
+        out["tracks_own_hours"] = body["tracks_own_hours"]
     return out
 
 
@@ -123,6 +134,7 @@ def create_user(conn, ctx: Ctx, body: dict) -> dict:
     data = _fields(body, partial=False)
     data.setdefault("job_title", "")
     data.setdefault("salary", Decimal(0))
+    data.setdefault("tracks_own_hours", tracks_by_default(data["role"]))
     data["manager_id"] = _check_manager(conn, data["role"], body.get("manager_id"))
     data["department_id"] = check_department(conn, body.get("department_id"))
     if "username" not in data:
@@ -140,10 +152,10 @@ def create_user(conn, ctx: Ctx, body: dict) -> dict:
         with transaction(conn):
             user = query_one(conn, """
                 INSERT INTO users (username, email, first_name, last_name, job_title, role, salary,
-                                   manager_id, department_id, password_hash, must_change_password,
+                                   manager_id, department_id, tracks_own_hours, password_hash, must_change_password,
                                    temp_password_expires_at)
                 VALUES (:username, :email, :first_name, :last_name, :job_title, CAST(:role AS user_role),
-                        :salary, CAST(:manager_id AS uuid), CAST(:department_id AS uuid), :hash, true,
+                        :salary, CAST(:manager_id AS uuid), CAST(:department_id AS uuid), :tracks_own_hours, :hash, true,
                         now() + make_interval(hours => :hrs))
                 RETURNING *""", hash=hash_password(str(password)), hrs=TEMP_PASSWORD_HOURS, **data)
             record(conn, ctx, "create", "user", str(user["id"]), after=user_public(user, include_salary=True))
@@ -172,6 +184,8 @@ def update_user(conn, ctx: Ctx, user_id: str, body: dict) -> dict:
     if user_id == ctx.user_id and "salary" in changes:
         raise ApiError(403, "FORBIDDEN", "You can't change your own salary")
     role = changes.get("role", before["role"])
+    if role != before["role"] and "tracks_own_hours" not in changes:
+        changes["tracks_own_hours"] = tracks_by_default(role)  # a new role starts from its own default
     if before["role"] in ("manager", "admin") and role in NOT_MANAGING:
         _require_no_dependents(conn, user_id, "demote")
     if "manager_id" in body or "role" in changes:

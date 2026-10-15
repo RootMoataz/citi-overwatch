@@ -27,7 +27,8 @@ def _missing_ids(conn, user_ids: list[str], week: date) -> set[str]:
     """Which of these people have an empty timesheet for `week` (see missing_timesheet)."""
     if not user_ids:
         return set()
-    users = query(conn, "SELECT id, role, is_archived FROM users WHERE id = ANY(CAST(:ids AS uuid[]))", ids=user_ids)
+    users = query(conn, "SELECT id, role, is_archived, tracks_own_hours FROM users WHERE id = ANY(CAST(:ids AS uuid[]))",
+                  ids=user_ids)
     memberships = defaultdict(list)
     for r in query(conn, """SELECT pm.user_id, p.status, p.is_archived AS project_archived,
                                    pm.is_archived AS membership_archived
@@ -45,7 +46,8 @@ def _missing_ids(conn, user_ids: list[str], week: date) -> set[str]:
         entries[str(r["user_id"])].append((str(r["status"]), r["hours"]))
     return {str(u["id"]) for u in users
             if missing_timesheet(role=str(u["role"]), is_archived=u["is_archived"],
-                                 memberships=memberships[str(u["id"])], entries=entries[str(u["id"])])}
+                                 memberships=memberships[str(u["id"])], entries=entries[str(u["id"])],
+                                 tracks_own_hours=u["tracks_own_hours"])}
 
 
 def ensure_own_reminder(conn, ctx: Ctx) -> None:

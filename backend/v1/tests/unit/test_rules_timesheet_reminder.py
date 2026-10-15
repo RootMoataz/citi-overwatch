@@ -77,7 +77,7 @@ def missing(**overrides):
 
 def test_employee_on_an_active_project_with_no_hours_is_missing():
     assert missing()
-    assert missing(role="manager")
+    assert missing(role="manager", tracks_own_hours=True)
 
 
 def test_rejected_hours_alone_still_count_as_empty():
@@ -85,8 +85,10 @@ def test_rejected_hours_alone_still_count_as_empty():
     assert not missing(entries=[("pending", Decimal("8"))])
 
 
-def test_admins_archived_people_and_people_off_active_projects_are_never_missing():
+def test_people_without_a_timesheet_archived_people_and_people_off_active_projects_are_never_missing():
     assert not missing(role="admin")
+    assert not missing(role="manager")  # managers and admins only keep a timesheet when tracks_own_hours is on
+    assert not missing(role="executive", tracks_own_hours=True)
     assert not missing(is_archived=True)
     assert not missing(memberships=[Membership("on_hold", False, False)])
     assert not missing(memberships=[Membership("active", True, False)])

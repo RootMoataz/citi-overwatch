@@ -14,3 +14,4 @@ from app.features.avatars import routes as _avatars  # noqa: F401
 from app.features.reminders import routes as _reminders  # noqa: F401
 from app.features.activity import routes as _activity  # noqa: F401
 from app.features.messages import routes as _messages  # noqa: F401
+from app.features.hr import routes as _hr  # noqa: F401

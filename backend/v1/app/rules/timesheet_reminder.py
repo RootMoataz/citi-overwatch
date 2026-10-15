@@ -8,10 +8,12 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Iterable, NamedTuple
 
+from app.rules.timesheets import LOGGING_ROLES, keeps_timesheet
+
 REMIND_FROM = time(14, 0)            # Friday 14:00 local ...
 FRIDAY, SATURDAY, SUNDAY = 4, 5, 6   # ... until the end of Sunday
 COUNTED = ("pending", "approved")    # rejected hours don't fill a week (same as the 40h rule)
-REMINDED_ROLES = ("employee", "manager")
+REMINDED_ROLES = LOGGING_ROLES  # and of those, only people who keep a timesheet (see keeps_timesheet)
 EST, EDT = timedelta(hours=-5), timedelta(hours=-4)
 
 
@@ -69,7 +71,8 @@ def on_active_project(memberships: Iterable[Membership]) -> bool:
 
 
 def missing_timesheet(*, role: str, is_archived: bool, memberships: Iterable[Membership],
-                      entries: Iterable[tuple[str, Decimal]]) -> bool:
-    """An active employee or manager on at least one active project with no counted hours that week."""
-    return (role in REMINDED_ROLES and not is_archived
+                      entries: Iterable[tuple[str, Decimal]], tracks_own_hours: bool = False) -> bool:
+    """An active person who keeps a timesheet (every employee; a manager or admin with tracks_own_hours), on at
+    least one active project, with no counted hours that week."""
+    return (keeps_timesheet(role, tracks_own_hours) and not is_archived
             and on_active_project(memberships) and is_empty_week(entries))
