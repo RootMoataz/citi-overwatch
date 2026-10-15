@@ -7,7 +7,7 @@ import {
 import { useId, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useMediaQuery } from 'react-responsive'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useApproveRequest, useRejectRequest, useRequests, useSubmitRequest } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -133,6 +133,9 @@ export default function RequestsPage() {
   const [status, setStatus] = useState(decide ? 'pending' : null)
   const requests = useRequests(status)
   const [creating, setCreating] = useState(false)
+  // ?new=1 (the command palette's "new project") opens the request form straight away.
+  const [params, setParams] = useSearchParams()
+  const fromUrl = params.get('new') === '1' && can(user, 'request.submit')
   const [rejecting, setRejecting] = useState(null)
   const leaving = useRedirectOnDenied(requests.error)
   const items = requests.data ?? []
@@ -158,7 +161,7 @@ export default function RequestsPage() {
           {items.map((r) => <RequestCard key={r.id} request={r} decide={decide} onReject={setRejecting} />)}
         </Stack>
       )}
-      {creating ? <RequestForm onClose={() => setCreating(false)} /> : null}
+      {creating || fromUrl ? <RequestForm onClose={() => { setCreating(false); if (fromUrl) setParams({}, { replace: true }) }} /> : null}
       {rejecting ? <RejectDialog request={rejecting} onClose={() => setRejecting(null)} /> : null}
     </>
   )

@@ -1,12 +1,12 @@
 import Add from '@mui/icons-material/Add'
 import Search from '@mui/icons-material/Search'
 import {
-  Box, Button, Checkbox, FormControlLabel, InputAdornment, LinearProgress, Link, MenuItem, Paper, Stack, TextField,
+  Box, Button, Checkbox, Chip, FormControlLabel, InputAdornment, LinearProgress, Link, MenuItem, Paper, Stack, TextField,
   Typography,
 } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
-import { useCreateProject, useManagers, useProjects } from '../../api/queries.js'
+import { useCreateProject, useDepartments, useManagers, useProjects } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -24,7 +24,7 @@ import { PROGRESS_WEIGHTING, RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import ProjectForm from './ProjectForm.jsx'
 
-const FILTERS = ['q', 'status', 'manager', 'at_risk']
+const FILTERS = ['q', 'status', 'manager', 'at_risk', 'department']
 
 const CSV_COLUMNS = [
   { header: 'Project', value: (p) => p.name },
@@ -67,6 +67,8 @@ export default function ProjectsPage() {
   const showManagerFilter = can(user, 'projects.filterByManager')  // admins and executives see every manager's projects
   const managers = useManagers(showManagerFilter)
   const create = useCreateProject()
+  const departments = useDepartments({ enabled: Boolean(filters.department) })
+  const department = (departments.data?.items ?? []).find((d) => String(d.id) === filters.department)
 
   const setFilter = (key, value) => setParams((prev) => {
     const next = new URLSearchParams(prev)
@@ -106,6 +108,9 @@ export default function ProjectsPage() {
   ]
 
   const canCreate = can(user, 'project.create')
+  // ?new=1 (the command palette's "new project") opens the create form straight away.
+  const createFromUrl = canCreate && params.get('new') === '1'
+  const closeCreate = () => { setCreating(false); if (createFromUrl) setFilter('new', '') }
   const empty = Object.keys(filters).length
     ? <EmptyState title="No projects match these filters" description="Try clearing a filter or searching for something else."
         action={<Button onClick={() => { setSearch(''); setParams({}, { replace: true }) }}>Clear filters</Button>} />
@@ -137,6 +142,9 @@ export default function ProjectsPage() {
           ) : null}
           <FormControlLabel label="At risk only" sx={{ flexShrink: 0 }}
             control={<Checkbox checked={filters.at_risk === 'true'} onChange={(e) => setFilter('at_risk', e.target.checked ? 'true' : '')} />} />
+          {filters.department ? (
+            <Chip label={`Department: ${department?.name ?? '…'}`} onDelete={() => setFilter('department', '')} sx={{ flexShrink: 0 }} />
+          ) : null}
         </Stack>
       </Paper>
       <ErrorAlert error={projects.error} onRetry={() => projects.refetch()} sx={{ mb: 2 }} />
@@ -159,8 +167,8 @@ export default function ProjectsPage() {
             <RiskBadges reasons={row.at_risk_reasons} />
           </Stack>
         )} />
-      {creating ? (
-        <ProjectForm open onClose={() => setCreating(false)} onSave={async (body) => {
+      {creating || createFromUrl ? (
+        <ProjectForm open onClose={closeCreate} onSave={async (body) => {
           const created = await create.mutateAsync(body)
           setCreating(false)
           navigate(`/projects/${created.id}`)
