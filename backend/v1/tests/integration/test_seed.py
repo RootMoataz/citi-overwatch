@@ -4,7 +4,12 @@ from decimal import Decimal
 from app.db import query, query_one
 from app.rules.at_risk import at_risk_reasons
 from app.rules.cycles import dependency_order
-from app.seed import DEMO_PASSWORD, PEOPLE, seed
+from app.presets import preset_for
+from app.seed import DEMO_PASSWORD, PEOPLE, PROJECT_DEPARTMENTS, seed
+
+
+def match_preset(project: str, milestone: str) -> bool:
+    return milestone in {s.name for s in preset_for(PROJECT_DEPARTMENTS[project])}
 
 
 def test_seed_idempotent_and_demo_logins_work(client, conn):
@@ -55,8 +60,11 @@ def test_seed_contains_at_risk_and_overtime(conn):
                               WHERE u.username = 'employee.demo' AND t.work_date BETWEEN :a AND :b""",
                      a=monday, b=monday + timedelta(days=6))
     assert week["total"] > 40
+    # Eli's alert this week (the curated timesheets may add another person's overtime request).
     notes = query(conn, """SELECT n.* FROM notifications n JOIN users r ON r.id = n.recipient_id
-                           WHERE r.username = 'manager.demo' AND n.type = 'OVER_40H' AND n.read_at IS NULL""")
+                           JOIN users s ON s.id = n.subject_user_id
+                           WHERE r.username = 'manager.demo' AND n.type = 'OVER_40H' AND n.read_at IS NULL
+                             AND s.username = 'employee.demo'""")
     assert len(notes) == 1 and notes[0]["week_start"] == monday
     statuses = {r["status"] for r in query(conn, "SELECT DISTINCT status FROM time_entries")}
     assert statuses == {"pending", "approved", "rejected"}
@@ -114,6 +122,8 @@ def test_seed_milestones_have_demo_priorities(conn):
     seed(conn)
     rows = query(conn, """SELECT p.name AS project, m.name, m.priority FROM milestones m
                           JOIN projects p ON p.id = m.project_id WHERE m.priority <> 'medium'""")
+    # The curated plan's steps carry their preset's priority; the seed's own milestones keep these.
+    rows = [r for r in rows if not match_preset(r["project"], r["name"])]
     assert {(r["project"], r["name"]): r["priority"] for r in rows} == {
         ("Apollo Data Migration", "Cutover"): "critical", ("Apollo Data Migration", "Schema Mapping"): "high",
         ("Atlas Customer Portal", "Build"): "critical", ("Atlas Customer Portal", "Launch"): "high",
@@ -165,8 +175,8 @@ def demo_state(conn) -> dict:
 
 def seed_the_old_way(conn) -> dict:
     """Seed, note what today's seed gives, then wind it back to how the live database was seeded before
-    departments, pull mode and difficulty (Beacon only had Design then)."""
-    seed(conn)
+    departments, pull mode and difficulty (Beacon only had Design then). The old seed had no curated plan either."""
+    seed(conn, curate=False)
     expected = demo_state(conn)
     conn.run("""DELETE FROM milestone_dependencies
                 WHERE milestone_id IN (SELECT id FROM milestones WHERE name = 'Prototype')""")

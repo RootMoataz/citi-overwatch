@@ -146,13 +146,19 @@ def _demo_messages(conn) -> tuple[list[str], str | None]:
             subject], None
 
 
-def seed(conn) -> dict:
+def seed(conn, *, curate: bool = True) -> dict:
+    """Load the demo once. `curate` rounds it out like the demo_curate operation (app/curate.py) does on the live
+    database, so a fresh database and the curated live one look the same; tests of the older seed turn it off."""
     creds = {"admin": ("admin.demo", DEMO_PASSWORD), "manager": ("manager.demo", DEMO_PASSWORD),
              "employee": ("employee.demo", DEMO_PASSWORD), "executive": (EXECUTIVE[0], DEMO_PASSWORD)}
     if query_one(conn, "SELECT 1 AS ok FROM users WHERE username = 'admin.demo'"):
         return creds
     with transaction(conn):
         _load(conn)
+        if curate:
+            from app.curate import curate as curate_plan  # app.curate reads this module's lists
+
+            curate_plan(conn, datetime.now(timezone.utc).date(), audit=False, archive_test_items=False)
     return creds
 
 
