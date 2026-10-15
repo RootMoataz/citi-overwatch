@@ -1,6 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import AdminPanelSettings from '@mui/icons-material/AdminPanelSettingsOutlined'
 import BusinessCenter from '@mui/icons-material/BusinessCenterOutlined'
+import GitHub from '@mui/icons-material/GitHub'
+import OpenInNew from '@mui/icons-material/OpenInNew'
 import Person from '@mui/icons-material/PersonOutlined'
 import SupervisorAccount from '@mui/icons-material/SupervisorAccountOutlined'
 import { Alert, Box, Button, Divider, Link, Stack, TextField, Typography } from '@mui/material'
@@ -52,6 +54,27 @@ function DemoButtons({ pending, disabled, onPick }) {
         Signs in with a public demo account, filled with sample projects. The Admin demo signs you out after 5 minutes
         and has some actions disabled.
       </Typography>
+    </Box>
+  )
+}
+
+const REPO_URL = 'https://github.com/RootMoataz/citi-overwatch'
+
+/** A pill that opens the project's source code on GitHub in a new tab. */
+function SourceLink() {
+  return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2.5 }}>
+      <Button component="a" href={REPO_URL} target="_blank" rel="noopener noreferrer" size="small"
+        startIcon={<GitHub />} endIcon={<OpenInNew sx={{ fontSize: '0.9rem !important' }} />}
+        sx={{
+          borderRadius: 999, px: 2, py: 0.75, textTransform: 'none', fontWeight: 600, color: 'text.primary',
+          border: 1, borderColor: 'divider', bgcolor: 'action.hover',
+          transition: 'transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease',
+          '&:hover': { bgcolor: 'action.selected', borderColor: 'primary.main', transform: 'translateY(-1px)', boxShadow: 3 },
+          '@media (prefers-reduced-motion: reduce)': { transition: 'none', '&:hover': { transform: 'none' } },
+        }}>
+        View the source on GitHub
+      </Button>
     </Box>
   )
 }
@@ -110,6 +133,7 @@ export default function LoginPage() {
         </Link>
       </Stack>
       <DemoButtons pending={demo} disabled={busy} onPick={signInAsDemo} />
+      <SourceLink />
     </AuthCard>
   )
 }
