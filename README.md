@@ -33,6 +33,7 @@ Highlights:
 - **Accounts.** Admins create them in a five-step wizard with live username checks and a generated password. The welcome email carries a temporary password, which must be changed at first sign-in.
 - **Timesheets.** People log hours on the milestones they're assigned to. Every hour needs the project manager's approval before it counts toward the budget. Going over 40 hours is a warning, not a block.
 - **Approvals.** Each pending entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
+- **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
 - **Nothing is ever deleted.** Records are archived and an admin can restore them. Every change is written to the **audit log**.
 - **Responsive.** A sidebar on desktop, a drawer on phones, and tables that become cards on small screens.
 

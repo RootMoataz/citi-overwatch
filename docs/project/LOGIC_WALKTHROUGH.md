@@ -935,3 +935,107 @@ week's reminder shows again.
 - **Tests:** they seed every one of those keys into every response, for every role, and check that nothing reaches
   Puppy's sentences, tips, actions, answers or the screen. Other tests check that a question never appears in any
   request or in storage, and that every action waits for Confirm.
+
+---
+
+## 28. Hour-tracking safeguards: timers, proof of work, red flags
+
+Three safeguards make logged hours easier to trust without slowing honest people down. Rules:
+[`app/rules/time_tracking.py`](../../backend/v1/app/rules/time_tracking.py) (timer and proof rules) and
+[`app/rules/hour_flags.py`](../../backend/v1/app/rules/hour_flags.py) (red flags), both pure. Service:
+[`app/features/time/timers.py`](../../backend/v1/app/features/time/timers.py),
+[`app/features/time/service.py`](../../backend/v1/app/features/time/service.py) (`save_week`, `write_entry`) and
+[`app/features/time/flags.py`](../../backend/v1/app/features/time/flags.py). Schema: migration 014.
+
+### Start/stop timer
+
+```mermaid
+sequenceDiagram
+  actor Emp as Employee
+  participant API as /timers
+  participant DB as PostgreSQL
+
+  Emp->>API: POST /timers {milestone_id}
+  API->>API: stop a timer left past midnight first (lazily)
+  API->>API: same checks as saving hours: keeps a timesheet, assigned,<br/>project open, today inside the project's dates
+  API->>DB: lock the person's row; INSERT time_timers (work_date = New York today)<br/>(partial unique index: one running timer per person)
+  Emp->>API: POST /timers/stop {note?}
+  API->>DB: lock the person's row, stop the timer
+  API->>API: hours = elapsed, nearest 0.25h (under 7.5 min: nothing)
+  API->>DB: add to that day's entry through save_week's path:<br/>24h day cap, closed-project gate, overtime, HR flag, back to pending
+  API-->>Emp: "Logged 2.25h on Schema Mapping (Wed 14 Oct)"
+```
+
+- **One at a time.** Starting while a timer runs is `409 TIMER_RUNNING`; the partial unique index on
+  `time_timers (user_id) WHERE stopped_at IS NULL` backs it up against races.
+- **Who and where.** The same rules as typing hours (`save_week`'s `_validate_cell`): someone who keeps a timesheet
+  (employees; managers and admins with `tracks_own_hours`), assigned to the milestone, the project planned or active,
+  the day inside the project's dates. Executives are refused by the router (`READ_ONLY`), the public demo admin by
+  `app/public_demo.py` (`DEMO_RESTRICTED`).
+- **The day it counts on** is the New York date the timer started (`work_date`), the same clock as the Friday
+  reminder (the app keeps no per-user timezone; the conversion is hand-written so the Lambda needs no tz database).
+- **Rounding.** Elapsed time to the nearest quarter hour, 7.5 minutes rounding up: 7 minutes logs nothing (the person
+  is told), 8 minutes logs 0.25h, 52 minutes 0.75h, 53 minutes 1h.
+- **Adding to the day's entry.** The hours go onto the entry for that milestone and day (created when there is none),
+  through `write_entry`, the same code `save_week` uses, under the same per-person row lock: the 24h day cap and the
+  one-cell 24h limit, overtime recomputed (and the one-time 40h alert), `changed_after_hr_submission` when the entry
+  had gone to HR, and back to `pending` (with "Edited") if it had been decided. A rejected entry's hours don't count,
+  so the timer's hours replace them.
+- **When the hours can't be logged** (the day would pass 24h, the project was put on hold meanwhile), the timer
+  still stops, nothing is logged, and the response says why (`not_logged`), so a timer can never get stuck.
+- **Midnight.** A timer still running after its day ends is stopped at 23:59:59 New York time of that day,
+  `auto_stopped = true`, its hours logged as above, and the person gets a `TIMER_AUTO_STOPPED` alert: "Your timer on
+  *X* stopped at midnight — check your hours". Nothing is scheduled: it happens on their next `GET /timers/current`,
+  start or stop (the header chip reads it on every page load).
+- **Tracked vs manual.** `time_entries.tracked_hours` is the part of the hours that came from timers. The label is
+  derived: **Tracked** (all of it), **Manual** (none) or **Mixed**. A hand edit keeps at most the new hours as tracked
+  (`min(tracked_hours, hours)`). The timesheet and the review show the label; each person-week in To review and
+  Approved shows "Tracked 68% · Manual 32%".
+
+### Proof of work
+
+- **Rule.** Every new or changed entry with hours needs a work note of 10-500 characters (trimmed) **or** a progress
+  update the person posted on that milestone the same New York day. Clearing a cell needs nothing.
+- **Grandfathering.** A cell re-sent unchanged is never checked, so hours saved before the rule (all the existing demo
+  data) stay valid; the rule applies the next time someone changes them.
+- **`PUT /time-entries`** refuses the whole save with `400 PROOF_REQUIRED` and lists the cells
+  (`details.cells: [{milestone_id, milestone, work_date, reason: no_note | note_too_short}]`). The timesheet shows the
+  list and highlights the note icon under each of those cells.
+- **Timer stops** never fail for want of proof: the stop may carry a note; without one, and without a progress update
+  that day, the hours are saved with `needs_note = true`. The employee sees "Add a note" on that cell; approvers see a
+  red **No proof of work** flag. Adding the note (a normal save) or posting a progress update that day settles it.
+- **Reviewers** see the note, or "Progress update: …" (the first 200 characters), beside each entry in To review.
+
+### Red flags for approvers
+
+Computed on every `GET /approvals`, never stored, and nothing is blocked: they point at entries worth a second look.
+The rules see every pending and approved entry of the person-week (whichever project), because most are about totals.
+
+| Flag | Severity | Rule |
+|---|---|---|
+| `SAME_HOURS_DAILY` | warn | The same non-zero hours on 4 or more weekdays (Mon–Fri) of one week, for one person and milestone: "Same 8h on 4 weekdays this week on Schema Mapping" ("every weekday" for all 5) |
+| `LONG_DAY` | warn | More than 10h in one day across all of the person's milestones (exactly 10h is fine) |
+| `CLOSED_MILESTONE` | warn | Hours on a day **after** the milestone was completed (and it still is), or after it was kicked back and before the kickback was resolved. The day it was completed or kicked back is still a working day on it, so it isn't flagged |
+| `BACKDATED` | info | Created more than 7 days after its work date (New York dates; 7 days late is fine, 8 isn't) |
+| `OVER_PLAN` | warn | The person-week on one project is over 150% of their planned hours there (`planned_hours_per_week`); no plan, no flag |
+| `NO_ACTIVITY` | info | No sign-in and no other activity by the person that day: no audit entry (a sign-in is one), session refresh, progress update, message sent or timer started |
+| `NO_PROOF` | warn | `needs_note` timer hours with no progress update that day |
+
+**The go-live cutoff.** `BACKDATED` and `NO_ACTIVITY` read a sign-in trail and creation dates that hours logged before
+the feature don't have (the seeded and curated demo history was inserted, not logged through the app). So they judge
+only entries created at or after `app_settings.hour_flags_live_since`: migration 014 sets it once when it runs, and a
+fresh demo seed moves it to the end of the seed. With no such row they stay off. The other flags read only the hours,
+so they apply to everything.
+
+**On screen.** Each entry in To review shows ⚠ chips with the sentence as a tooltip; each person-week shows its flag
+count; an **Only flagged** switch keeps the person-weeks with at least one flag (whole weeks, since Approve week acts
+on the week). The CSV export has Source, Tracked hours and Red flags columns. Puppy's summary tells approvers
+"*N* entries have red flags worth a second look": it reads only whether an entry is flagged (`privacy.pickApproval`),
+never the flag text, note, hours or pay.
+
+**Demo data.** The seed and `demo_backfill` fill blanks only, never touching approved, rejected or HR-submitted hours:
+Gia Rossi's pending entries get work notes where they have none, and while none of her pending hours came from a
+timer, her three latest are marked tracked (two fully, one half: Mixed). While no pending entry is flagged
+`SAME_HOURS_DAILY` or `LONG_DAY`, one demo employee gets a pending 8h on four weekdays of a milestone they are on,
+inside every rule (open project, 24h day, a week of at most 40h). A fresh seed already has such weeks (Eli's 9h every
+day this week, Gia's 8.5h last week, Ben's 4h every day last week), so it adds none.
