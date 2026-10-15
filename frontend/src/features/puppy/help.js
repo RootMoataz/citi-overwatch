@@ -36,7 +36,7 @@ export const HELP = [
   { topic: 'day-cap', title: 'Hours per day',
     match: /\b24[\s-]?(?:hours?|h)\b|\bper day\b|\bdaily (?:limit|cap|maximum)\b|\bhours? a day\b/,
     text: 'A day can hold at most 24 hours across all your milestones (pending + approved). Each cell is 0.25–24 hours with '
-      + 'up to 2 decimals. The timesheet marks the day that goes over and Save waits until it is fixed.' },
+      + 'up to 2 decimals. The timesheet marks the day that goes over and Submit waits until it is fixed.' },
   { topic: 'friday', title: 'The Friday reminder', to: '/timesheet', link: 'Open my timesheet',
     match: /\bfriday\b|\breminders?\b/,
     text: 'From Friday 14:00 (New York time) until the end of Sunday, anyone on an active project with no counted hours that '

@@ -174,9 +174,25 @@ describe('Timesheet day view', () => {
     expect(await screen.findByRole('button', { name: 'Start timer on Build' })).toBeInTheDocument() // today, open milestone
     expect(screen.queryByLabelText('Schema Mapping, Wed Oct 14')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show 1 closed milestone' }))
-    expect(screen.getByLabelText('Schema Mapping, Wed Oct 14')).toBeDisabled()
-    expect(screen.getByLabelText('Work note, Schema Mapping')).toBeDisabled()
+    // Logging earlier days on a completed milestone is allowed (as in the week grid), so shown it is editable.
+    expect(screen.getByLabelText('Schema Mapping, Wed Oct 14')).toBeEnabled()
+    expect(screen.getByLabelText('Work note, Schema Mapping')).toBeEnabled()
+    expect(screen.getByText(/milestone completed/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Start timer on Schema Mapping' })).not.toBeInTheDocument()
+  })
+
+  test('an expanded completed milestone accepts hours and a note and submits them', async () => {
+    let body = null
+    server.use(sheetWith({ sheetRows: [
+      { ...rows[0], milestone: { ...rows[0].milestone, status: 'completed' } }, rows[1]] }),
+    http.put(`${API}/time-entries`, async ({ request }) => { body = await request.json(); return saved() }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Show 1 closed milestone' }))
+    await user.type(screen.getByLabelText('Schema Mapping, Wed Oct 14'), '3')
+    await user.type(screen.getByLabelText('Work note, Schema Mapping'), NOTE)
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WED, hours: 3, note: NOTE }] }))
   })
 
   test('milestones of a project on hold are closed and the Start button only shows on today', async () => {
@@ -188,6 +204,7 @@ describe('Timesheet day view', () => {
     expect(screen.queryByLabelText('Build, Wed Oct 14')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Show 1 closed milestone' }))
     expect(screen.getByLabelText('Build, Wed Oct 14')).toBeDisabled()
+    expect(screen.getByLabelText('Work note, Build')).toBeDisabled()
     expect(screen.getByText('Project on hold — logging paused')).toBeInTheDocument()
     await user.click(dayButton('Tue 13 Oct, 0h'))
     expect(screen.getByLabelText('Schema Mapping, Tue Oct 13')).toBeEnabled()
@@ -255,6 +272,36 @@ describe('Timesheet day view', () => {
     await user.click(await screen.findByRole('link', { name: 'Go to Wed Oct 14' }))
     expect(screen.getByTestId('location')).toHaveTextContent(`day=${WED}`)
     expect(dayButton('Wed 14 Oct, 25h')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('a value under 0.25 on another day is listed with a link to it', async () => {
+    renderSheet()
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Mon 12 Oct, 0h' }))
+    await user.type(screen.getByLabelText('Build, Mon Oct 12'), '0.1')
+    await user.click(dayButton('Wed 14 Oct, 0h'))
+    const alert = screen.getByText(/at least 0.25 hours/i).closest('[role=alert]')
+    expect(screen.getByRole('button', { name: 'Submit 1 change' })).toBeDisabled()
+    await user.click(within(alert).getByRole('link', { name: 'Build, Mon Oct 12' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(`day=${MON}`)
+    expect(dayButton('Mon 12 Oct, 0.1h')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('the timer-hours refusal links each cell to its day', async () => {
+    server.use(http.put(`${API}/time-entries`, () => HttpResponse.json({ error: {
+      code: 'TIMER_HOURS_LOCKED', message: "Timer hours can't be edited",
+      details: { cells: [{ milestone_id: 'm1', milestone: 'Schema Mapping', work_date: TUE, hours: 2.5, sent: 1 }] } } },
+    { status: 409 })))
+    renderSheet(`/timesheet?week=${WEEK}&day=${TUE}`)
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Schema Mapping, Tue Oct 13'), '1')
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    const alert = (await screen.findByText("Timer hours can't be edited")).closest('[role=alert]')
+    expect(alert).toHaveTextContent('Schema Mapping, Tue Oct 13 — use Request a change on those cells instead.')
+    await user.click(dayButton('Wed 14 Oct, 0h'))
+    await user.click(within(alert).getByRole('link', { name: 'Schema Mapping, Tue Oct 13' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(`day=${TUE}`)
+    expect(dayButton('Tue 13 Oct, 1h')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('changing week with unsaved edits asks to discard them', async () => {

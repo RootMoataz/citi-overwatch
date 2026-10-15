@@ -11,9 +11,10 @@ import SupportingChip from '../../components/SupportingChip.jsx'
 import { formatDayFull, formatDayLabel, formatHours, todayIso } from '../../lib/format.js'
 
 const LIST_SX = { listStyle: 'none', m: 0, p: 0, '& > li + li': { borderTop: 1, borderColor: 'divider' } }
-const COMPLETED = 'Milestone completed — logging closed'
+const COMPLETED = 'Milestone completed — hours logged after it was completed are flagged for review'
 
-/** One milestone on the open day: hours, a work note that is always there, and the saved entry's status. */
+/** One milestone on the open day: hours, a work note that is always there, and the saved entry's status.
+ * closed: why nothing can be changed (project closed or on hold), or null. A completed milestone stays editable. */
 function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) {
   const { valueOf, noteOf, locks, entries, overDays, attention, isDraft, setHours, setNote } = state
   const k = key(row.milestone.id, day)
@@ -21,6 +22,7 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
   const label = `${row.milestone.name}, ${formatDayLabel(day)}`
   const note = noteOf(k)
   const short = note.trim().length > 0 && !isProofNote(note)
+  const completed = row.milestone.status === 'completed'
   const needed = !closed && attention(k)
   const hint = short ? `At least ${NOTE_MIN} characters`
     : needed ? `Needed: ${NOTE_MIN}-${NOTE_MAX} characters, or post a progress update that day` : `${NOTE_MIN}-${NOTE_MAX} characters`
@@ -36,7 +38,7 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
           {row.role === 'supporting' ? <SupportingChip /> : null}
         </Typography>
         {showProject ? <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{row.project.name}</Typography> : null}
-        {closed ? <Typography variant="caption" sx={{ display: 'block' }}>{closed}</Typography> : null}
+        {closed || completed ? <Typography variant="caption" sx={{ display: 'block' }}>{closed ?? COMPLETED}</Typography> : null}
         {showTimer ? <Box sx={{ mt: 0.75 }}><TimerButton milestone={row.milestone} /></Box> : null}
       </Box>
       <Box>
@@ -63,17 +65,18 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
 export default function DayView({ state, day, thisWeek, onRequest }) {
   const { groups, dayTotal, overDays, closedLabel } = state
   const [showClosed, setShowClosed] = useState(false)
-  const closedReason = (r) => closedLabel(r) ?? (r.milestone.status === 'completed' ? COMPLETED : null)
-  const openGroups = groups.map((g) => ({ ...g, rows: g.rows.filter((r) => !closedReason(r)) })).filter((g) => g.rows.length)
-  const closedRows = groups.flatMap((g) => g.rows.filter((r) => closedReason(r)))
+  // Completed milestones are tucked away with the closed ones, but only a closed or on-hold project locks them.
+  const tucked = (r) => closedLabel(r) || r.milestone.status === 'completed'
+  const openGroups = groups.map((g) => ({ ...g, rows: g.rows.filter((r) => !tucked(r)) })).filter((g) => g.rows.length)
+  const closedRows = groups.flatMap((g) => g.rows.filter(tucked))
   const grouped = openGroups.length > 1
   const over = overDays.includes(day)
   const list = (rows, showProject) => (
     <Box component="ul" sx={LIST_SX}>
       {rows.map((r) => {
-        const closed = closedReason(r)
+        const closed = closedLabel(r)
         return <DayRow key={r.milestone.id} state={state} row={r} day={day} closed={closed} showProject={showProject}
-          showTimer={thisWeek && day === todayIso() && !closed} onRequest={onRequest} />
+          showTimer={thisWeek && day === todayIso() && !closed && r.milestone.status !== 'completed'} onRequest={onRequest} />
       })}
     </Box>
   )

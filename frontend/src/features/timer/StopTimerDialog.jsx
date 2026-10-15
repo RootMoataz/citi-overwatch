@@ -31,14 +31,14 @@ export default function StopTimerDialog({ timer, elapsed, onClose }) {
           <Typography variant="body2">
             {timer.milestone.name} · {timer.project.name} · running {formatElapsed(elapsed)}.{' '}
             {hours ? `Stopping now adds ${formatHours(hours)} to ${weekdayName(timer.work_date)}'s cell on your timesheet. `
-              + 'It isn\'t submitted until you Save week there.'
+              + 'It isn\'t submitted until you press Submit there.'
               : 'Under 7.5 minutes, so stopping now adds nothing.'}
           </Typography>
           <ErrorAlert error={failure} />
           <TextField label="What did you work on?" multiline minRows={2} value={note} autoFocus
             onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))} error={tooShort}
             helperText={tooShort ? `At least ${NOTE_MIN} characters to count as a work note`
-              : `Optional. It pre-fills the cell's work note (${NOTE_MIN}-${NOTE_MAX} characters), which Save week needs unless you post a progress update that day.`}
+              : `Optional. It pre-fills the cell's work note (${NOTE_MIN}-${NOTE_MAX} characters), which Submit needs unless you post a progress update that day.`}
             slotProps={{ htmlInput: { maxLength: NOTE_MAX } }} />
         </Stack>
       </DialogContent>

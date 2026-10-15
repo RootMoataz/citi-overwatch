@@ -58,7 +58,7 @@ describe('timesheet: timer drafts are pre-filled, locked and submitted with the 
     expect(screen.queryByLabelText('Schema Mapping, Tue Oct 13')).not.toBeInTheDocument() // no input to type in
     expect(screen.getByText('from timer, not submitted yet')).toBeInTheDocument()
     expect(screen.getByTestId('timer-draft-banner')).toHaveTextContent(
-      'You have 2.5h of timer time not submitted yet — Save week to submit.')
+      'You have 2.5h of timer time not submitted yet — press Submit to send it.')
     expect(screen.getByTestId('week-total')).toHaveTextContent('2.5h / 40h') // drafts count toward the live warnings
     await userEvent.hover(cell)
     expect(await screen.findByRole('tooltip')).toHaveTextContent("Timer hours can't be edited — request a change")
@@ -263,13 +263,13 @@ describe("the employee's own warnings", () => {
 })
 
 describe('the stop dialog', () => {
-  test("says the hours go to that day's cell and wait for Save week", async () => {
+  test("says the hours go to that day's cell and wait for Submit", async () => {
     server.use(http.get(`${API}/timers/current`, () => HttpResponse.json({ timer: { ...myTimer,
       started_at: new Date(Date.now() - 20 * 60_000).toISOString() }, now: new Date().toISOString(), stopped: null,
     level: 'ok', limits: [], unsubmitted: [] })))
     renderAsUser(<TimerChip />, { user: users.employee })
     await userEvent.click(await screen.findByRole('button', { name: /timer running on schema mapping/i }))
     const dialog = await screen.findByRole('dialog', { name: /stop your timer/i })
-    expect(dialog).toHaveTextContent("Stopping now adds 0.25h to Tuesday's cell on your timesheet. It isn't submitted until you Save week there.")
+    expect(dialog).toHaveTextContent("Stopping now adds 0.25h to Tuesday's cell on your timesheet. It isn't submitted until you press Submit there.")
   })
 })

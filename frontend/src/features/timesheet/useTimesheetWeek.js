@@ -40,7 +40,8 @@ export function useTimesheetWeek(week) {
   const dayTotal = (d) => rows.reduce((s, r) => s + (countsToward(key(r.milestone.id, d)) ? num(valueOf(key(r.milestone.id, d))) : 0), 0)
   const overDays = allDays.filter((d) => dayTotal(d) > DAY_CAP)
   const tooMany = cellKeys.some((k) => num(valueOf(k)) > DAY_CAP) || overDays.length > 0
-  const tooFew = cellKeys.some((k) => k in drafts && tooLow(drafts[k]))
+  const tooFewKeys = cellKeys.filter((k) => k in drafts && tooLow(drafts[k]))
+  const tooFew = tooFewKeys.length > 0
   // A stop's note pre-fills a cell that has none.
   const noteOf = (k) => (k in notes ? notes[k] : entries[k]?.note || (hasDraft(k) ? timerNotes[k] ?? '' : ''))
   // A locked cell changes only by its timer draft, or by resubmitting it unchanged after a rejection.
@@ -91,7 +92,7 @@ export function useTimesheetWeek(week) {
   return {
     week, sheet, rows, groups, allDays, entries, locks,
     valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal,
-    total, overDays, tooMany, tooFew, changed,
+    total, overDays, tooMany, tooFew, tooFewKeys, changed,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, discard,
     nameOf, closedLabel,
   }

@@ -4,7 +4,7 @@ import {
   Alert, AlertTitle, Box, Button, FormControlLabel, IconButton, Link, Skeleton, Stack, Switch, ToggleButton,
   ToggleButtonGroup, Typography,
 } from '@mui/material'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
@@ -46,7 +46,7 @@ export default function TimesheetPage() {
   const [asking, setAsking] = useState(null)
   const [leaving, setLeaving] = useState({ open: false, week: null, count: 0 }) // the "discard your changes?" question
   const state = useTimesheetWeek(week)
-  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, changed, failure, saving, onSave, dayTotal, nameOf } = state
+  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, onSave, dayTotal, nameOf } = state
 
   const days = desktop || showWeekend ? allDays : allDays.slice(0, 5)
   const waitingDraft = Number(sheet.data?.totals?.draft ?? 0)
@@ -62,6 +62,11 @@ export default function TimesheetPage() {
   const goTo = (target) => (n ? setLeaving({ open: true, week: target, count: n }) : toWeek(target))
   const stay = () => setLeaving((l) => ({ ...l, open: false }))
   const chooseView = (next) => { setView(next); storeView(next) }
+  // A cell named in an error; in the day view it links to its day.
+  const cellRef = (milestoneId, date) => {
+    const text = `${nameOf(milestoneId)}, ${formatDayLabel(date)}`
+    return inDayView ? <DayLink week={week} date={date}>{text}</DayLink> : text
+  }
 
   return (
     <>
@@ -106,7 +111,17 @@ export default function TimesheetPage() {
         </Alert>
       ))}
       {tooMany && !overDays.length ? <Alert severity="error" sx={{ mb: 2 }}>A cell can't hold more than {DAY_CAP} hours.</Alert> : null}
-      {tooFew ? <Alert severity="error" sx={{ mb: 2 }}>Log at least {MIN_HOURS} hours, or leave the cell empty.</Alert> : null}
+      {tooFew ? (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          Log at least {MIN_HOURS} hours, or leave the cell empty.
+          <Box component="ul" sx={{ my: 0.5, pl: 3 }}>
+            {tooFewKeys.map((k) => {
+              const [milestoneId, date] = k.split('|')
+              return <li key={k}>{cellRef(milestoneId, date)}</li>
+            })}
+          </Box>
+        </Alert>
+      ) : null}
       {failure?.code === 'TIMER_HOURS_LOCKED' ? null : failure?.code === 'PROOF_REQUIRED' ? (
         <Alert severity="error" role="alert" sx={{ mb: 2 }}>
           <AlertTitle>Add a work note before saving</AlertTitle>
@@ -115,9 +130,7 @@ export default function TimesheetPage() {
           <Box component="ul" sx={{ my: 0.5, pl: 3 }}>
             {(failure.details?.cells ?? []).map((c) => (
               <li key={key(c.milestone_id, c.work_date)}>
-                {inDayView ? (
-                  <DayLink week={week} date={c.work_date}>{nameOf(c.milestone_id)}, {formatDayLabel(c.work_date)}</DayLink>
-                ) : <>{nameOf(c.milestone_id)}, {formatDayLabel(c.work_date)}</>}
+                {cellRef(c.milestone_id, c.work_date)}
                 {c.reason === 'note_too_short' ? ' (note too short)' : ''}
               </li>
             ))}
@@ -131,14 +144,16 @@ export default function TimesheetPage() {
       <TimerLimitBanner />
       {waitingDraft > 0 ? (
         <Alert severity="info" sx={{ mb: 2 }} data-testid="timer-draft-banner">
-          You have {formatHours(waitingDraft)} of timer time not submitted yet — Save week to submit.
+          You have {formatHours(waitingDraft)} of timer time not submitted yet — press Submit to send it.
           {' '}Cells with a timer mark are pre-filled from your timer and locked; use Request a change to fix their hours.
         </Alert>
       ) : null}
       {failure?.code === 'TIMER_HOURS_LOCKED' ? (
         <Alert severity="error" role="alert" sx={{ mb: 2 }}>
           <AlertTitle>Timer hours can&apos;t be edited</AlertTitle>
-          {(failure.details?.cells ?? []).map((c) => `${nameOf(c.milestone_id)}, ${formatDayLabel(c.work_date)}`).join('; ')}
+          {(failure.details?.cells ?? []).map((c, i) => (
+            <Fragment key={key(c.milestone_id, c.work_date)}>{i ? '; ' : ''}{cellRef(c.milestone_id, c.work_date)}</Fragment>
+          ))}
           {' '}— use Request a change on those cells instead.
         </Alert>
       ) : null}

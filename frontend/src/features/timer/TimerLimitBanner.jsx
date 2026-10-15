@@ -25,7 +25,7 @@ export default function TimerLimitBanner({ showUnsubmitted = false, sx }) {
         <Alert severity="info" sx={{ mb: 2, ...sx }}
           action={<Button component={RouterLink} to={`/timesheet?week=${oldest.week_start}`} color="inherit" size="small">
             Open timesheet</Button>}>
-          You have {formatHours(waiting)} of timer time not submitted yet — open your timesheet and Save week to submit it.
+          You have {formatHours(waiting)} of timer time not submitted yet — open your timesheet and press Submit to send it.
         </Alert>
       ) : null}
     </>
