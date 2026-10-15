@@ -17,6 +17,7 @@ export const ROUTE_ROLES = {
   people: ['admin'],
   'people/:id': ['admin'],
   departments: ['admin'],
+  skills: ['admin'], // the skills catalogue; everyone sees skills on people and milestones
   audit: ['admin', 'executive'],
   messages: ['admin', 'manager', 'employee', 'executive'], // everyone; employees write only to their managers
   'messages/:id': ['admin', 'manager', 'employee', 'executive'],

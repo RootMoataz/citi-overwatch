@@ -49,7 +49,7 @@ describe('Layout', () => {
     renderLayout(users.admin)
     const admin = screen.getByRole('list', { name: /^admin$/i })
     expect(within(admin).getAllByRole('link').map((a) => a.textContent))
-      .toEqual(['People', 'Departments', 'Project requests', 'Archive', 'Audit log'])
+      .toEqual(['People', 'Departments', 'Skills', 'Project requests', 'Archive', 'Audit log'])
     const work = screen.getByRole('list', { name: /^work$/i })
     expect(within(work).getAllByRole('link').map((a) => a.textContent))
       .toEqual(['Control centre', 'Messages', 'Projects', 'Timesheets', 'Allocation'])

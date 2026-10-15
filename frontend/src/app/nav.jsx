@@ -8,6 +8,7 @@ import History from '@mui/icons-material/HistoryOutlined'
 import Inventory from '@mui/icons-material/Inventory2Outlined'
 import ManageHistory from '@mui/icons-material/ManageHistoryOutlined'
 import PostAdd from '@mui/icons-material/PostAddOutlined'
+import Psychology from '@mui/icons-material/PsychologyOutlined'
 import Schedule from '@mui/icons-material/ScheduleOutlined'
 import ViewTimeline from '@mui/icons-material/ViewTimelineOutlined'
 
@@ -31,6 +32,7 @@ export const NAV = [
   { to: '/allocation', label: 'Allocation', icon: <ViewTimeline />, action: 'allocation.view' },
   { to: '/people', label: 'People', icon: <Groups />, action: 'people.view', admin: true },
   { to: '/departments', label: 'Departments', icon: <Apartment />, action: 'departments.manage', admin: true },
+  { to: '/skills', label: 'Skills', icon: <Psychology />, action: 'skills.manage', admin: true },
   { to: '/requests', label: 'Project requests', icon: <PostAdd />, action: 'requests.view', admin: true },
   { to: '/archive', label: 'Archive', icon: <Inventory />, action: 'archive.view', admin: true },
   { to: '/audit', label: 'Audit log', icon: <History />, action: 'audit.view', admin: true },

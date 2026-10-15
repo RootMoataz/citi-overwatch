@@ -119,7 +119,8 @@ describe('executives: read-only leadership', () => {
 
   test('they change nothing, approve nothing and keep no timesheet', () => {
     for (const action of ['user.manage', 'project.create', 'project.archive', 'request.decide', 'request.submit',
-      'people.view', 'milestone.restore', 'departments.manage', 'approvals.view', 'requests.view', 'timesheet.use',
+      'people.view', 'milestone.restore', 'departments.manage', 'skills.manage', 'approvals.view', 'requests.view',
+      'timesheet.use',
       'history.own']) {
       expect([action, can(executive, action)]).toEqual([action, false])
     }
@@ -152,4 +153,9 @@ describe('delegate approvers', () => {
     expect(can(manager, 'time.approve', { managerId: 'u-other-mgr', ownerId: employee.id })).toBe(false)
     expect(can(employee, 'time.approve', { ...delegated, ownerId: 'u-x' })).toBe(false)
   })
+})
+
+test('only admins manage the skills catalogue', () => {
+  expect(can(users.admin, 'skills.manage')).toBe(true)
+  for (const user of [users.manager, users.employee, users.executive]) expect(can(user, 'skills.manage')).toBe(false)
 })
