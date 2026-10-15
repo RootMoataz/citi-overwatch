@@ -53,7 +53,7 @@ describe('CreateUserWizard', () => {
     await user.click(within(dialog).getByRole('combobox', { name: /reports to/i }))
     await user.click(await screen.findByRole('option', { name: /morgan manager/i }))
     expect(within(dialog).getByRole('button', { name: /next/i })).toBeEnabled()
-  })
+  }, 15000) // Types a whole form step by step; under a full parallel run it sits close to the 5s default.
 
   test('username suggestions clickable and taken name shows ✗', async () => {
     server.use(managers, availability(['alovelace']))
