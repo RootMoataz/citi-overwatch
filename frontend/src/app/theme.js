@@ -2,19 +2,39 @@ import { alpha, createTheme } from '@mui/material/styles'
 
 export const BRAND = '#0B5CAD'
 
-/** One label + color per status, shared by chips, charts and the timeline. Never color alone. */
+// Lighter tones of the same hues for dark surfaces, where the light-theme colours are too dark to read.
+const TONE = { grey: '#9AA9BA', blue: '#6CB0F5', amber: '#F2A950', green: '#5DC78C', purple: '#B99AE8', red: '#F28B82' }
+
+/** One label + color per status, shared by chips, charts and the timeline; `dark` is the colour on dark surfaces.
+ * Never color alone. Pick the right one with statusColor(). */
 export const STATUS = {
-  planned: { label: 'Planned', color: '#5B6B7F' },
-  active: { label: 'Active', color: '#0B5CAD' },
-  on_hold: { label: 'On hold', color: '#B26A00' },
-  completed: { label: 'Completed', color: '#1E7D45' },
-  not_started: { label: 'Not started', color: '#5B6B7F' },
-  in_progress: { label: 'In progress', color: '#0B5CAD' },
-  ready_for_review: { label: 'Ready for review', color: '#6B3FA0' },
-  blocked: { label: 'Blocked', color: '#B3261E' },
-  pending: { label: 'Pending approval', color: '#B26A00' },
-  approved: { label: 'Approved', color: '#1E7D45' },
-  rejected: { label: 'Rejected', color: '#B3261E' },
+  planned: { label: 'Planned', color: '#5B6B7F', dark: TONE.grey },
+  active: { label: 'Active', color: '#0B5CAD', dark: TONE.blue },
+  on_hold: { label: 'On hold', color: '#B26A00', dark: TONE.amber },
+  completed: { label: 'Completed', color: '#1E7D45', dark: TONE.green },
+  not_started: { label: 'Not started', color: '#5B6B7F', dark: TONE.grey },
+  in_progress: { label: 'In progress', color: '#0B5CAD', dark: TONE.blue },
+  ready_for_review: { label: 'Ready for review', color: '#6B3FA0', dark: TONE.purple },
+  blocked: { label: 'Blocked', color: '#B3261E', dark: TONE.red },
+  pending: { label: 'Pending approval', color: '#B26A00', dark: TONE.amber },
+  approved: { label: 'Approved', color: '#1E7D45', dark: TONE.green },
+  rejected: { label: 'Rejected', color: '#B3261E', dark: TONE.red },
+}
+
+/** A status's colour for the current theme (`theme` or a palette mode). Unknown statuses are grey. */
+export function statusColor(meta, themeOrMode) {
+  const mode = typeof themeOrMode === 'string' ? themeOrMode : themeOrMode?.palette?.mode
+  const m = meta ?? STATUS.planned
+  return mode === 'dark' ? (m.dark ?? m.color) : m.color
+}
+
+/** Bar colours shared by the budget and allocation charts: planned (steel blue), actual (brand blue),
+ * forecast (amber) and over the line (red). Dark surfaces get lighter, still distinct tones. */
+export function chartColors(themeOrMode) {
+  const mode = typeof themeOrMode === 'string' ? themeOrMode : themeOrMode?.palette?.mode
+  return mode === 'dark'
+    ? { planned: '#5F7C9C', actual: TONE.blue, forecast: TONE.amber, over: TONE.red }
+    : { planned: '#9DB6D3', actual: BRAND, forecast: '#B26A00', over: '#C62828' }
 }
 
 export function buildTheme(mode = 'light') {
@@ -33,10 +53,11 @@ export function buildTheme(mode = 'light') {
     palette: {
       mode,
       primary: { main: primary },
-      secondary: { main: '#00897B' },
-      error: { main: '#B3261E' },
-      warning: { main: '#B26A00' },
-      success: { main: '#1E7D45' },
+      secondary: { main: dark ? '#4DB6AC' : '#00897B' },
+      // Text-coloured states (an overdue count, an over-budget note) need lighter tones on dark surfaces.
+      error: { main: dark ? TONE.red : '#B3261E' },
+      warning: { main: dark ? TONE.amber : '#B26A00' },
+      success: { main: dark ? TONE.green : '#1E7D45' },
       background: dark ? { default: '#0B121A', paper: '#16212C' } : { default: '#EEF2F6', paper: '#FFFFFF' },
       divider: dark ? 'rgba(255,255,255,0.12)' : '#E1E7EE',
       text: dark ? { primary: '#E8EEF5', secondary: '#AEBBCA' } : { primary: '#111C27', secondary: '#3F4D5D' },

@@ -1,7 +1,7 @@
 import { Box, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
-import { STATUS } from '../app/theme.js'
+import { STATUS, statusColor } from '../app/theme.js'
 import { formatDate } from '../lib/format.js'
 
 const DAY = 86400000
@@ -47,7 +47,7 @@ export default function Timeline({ items, range }) {
                 <Box aria-hidden sx={{ position: 'relative', height: 14, bgcolor: 'action.hover', borderRadius: 7 }}>
                   <Tooltip title={label}>
                     <Box className="bar" sx={{ position: 'absolute', left: `${left}%`, width: `${Math.min(width, 100 - left)}%`,
-                      top: 0, bottom: 0, borderRadius: 7, bgcolor: meta.color,
+                      top: 0, bottom: 0, borderRadius: 7, bgcolor: (t) => statusColor(meta, t),
                       backgroundImage: item.display_status === 'blocked'
                         ? 'repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px)' : 'none' }} />
                   </Tooltip>

@@ -73,7 +73,7 @@ describe('ProjectsPage', () => {
     await user.click(await screen.findByRole('option', { name: /pull/i }))
     await user.click(within(dialog).getByRole('button', { name: /create project/i }))
     await waitFor(() => expect(posted).toMatchObject({ name: 'Orion', department_id: 'd1', work_mode: 'pull' }))
-  })
+  }, 15000) // Types a whole form and picks three menus; under a full parallel run it sits just past the 5s default.
 
   test('projects filters sync to URL and refetch', async () => {
     const seen = []

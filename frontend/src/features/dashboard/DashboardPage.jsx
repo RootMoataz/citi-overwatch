@@ -2,12 +2,13 @@ import {
   Box, Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, MenuItem, Skeleton, Stack, Table, TableBody,
   TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { useId } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useAllocations, useDashboard, useDepartments } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
-import { STATUS } from '../../app/theme.js'
+import { chartColors, STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -25,7 +26,6 @@ const projectLink = (p, tab) => (
   <Link component={RouterLink} to={`/projects/${p.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{p.name}</Link>
 )
 
-const BUDGET_COLORS = { planned: '#9DB6D3', consumed: '#0B5CAD', forecast: '#B26A00', over: '#C62828' }
 // The over-40h and busiest lists only hold the viewer's own people (the server scopes them).
 const MANAGED = { managed: true }
 const overBudget = (b) => Number(b.budget) > 0 && Number(b.forecast) > Number(b.budget)
@@ -33,6 +33,7 @@ const overBudget = (b) => Number(b.budget) > 0 && Number(b.forecast) > Number(b.
 /** Q7: planned vs consumed vs forecast per project. Over-budget forecasts are red, marked ⚠ on the axis,
  * flagged in the tooltip and named in the note under the chart, so colour is never the only signal. */
 function BudgetChart({ budgets }) {
+  const colors = chartColors(useTheme())
   const over = budgets.filter(overBudget)
   const overNames = new Set(over.map((b) => b.name))
   const isOver = (i) => overBudget(budgets[i])
@@ -44,11 +45,11 @@ function BudgetChart({ budgets }) {
           valueFormatter: (name, ctx) => (ctx.location === 'tick' && overNames.has(name) ? `⚠ ${name}` : name) }]}
         yAxis={[{ label: 'US dollars', width: 90, valueFormatter: money }]}
         series={[
-          { data: budgets.map((b) => Number(b.budget)), label: 'Budget (planned)', color: BUDGET_COLORS.planned, valueFormatter: money },
-          { data: budgets.map((b) => Number(b.consumed)), label: 'Consumed (approved hours)', color: BUDGET_COLORS.consumed,
+          { data: budgets.map((b) => Number(b.budget)), label: 'Budget (planned)', color: colors.planned, valueFormatter: money },
+          { data: budgets.map((b) => Number(b.consumed)), label: 'Consumed (approved hours)', color: colors.actual,
             valueFormatter: money },
-          { data: budgets.map((b) => Number(b.forecast)), label: 'Forecast at end date', color: BUDGET_COLORS.forecast,
-            colorGetter: ({ dataIndex }) => (isOver(dataIndex) ? BUDGET_COLORS.over : BUDGET_COLORS.forecast),
+          { data: budgets.map((b) => Number(b.forecast)), label: 'Forecast at end date', color: colors.forecast,
+            colorGetter: ({ dataIndex }) => (isOver(dataIndex) ? colors.over : colors.forecast),
             valueFormatter: (v, { dataIndex }) => `${formatMoney(v)}${isOver(dataIndex) ? ' (over budget)' : ''}` },
         ]} />
       <Typography role="note" variant="body2" sx={{ mt: 1, color: over.length ? 'error.main' : 'text.secondary' }}>

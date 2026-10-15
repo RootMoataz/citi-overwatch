@@ -1,18 +1,21 @@
 import { Grid, Paper, Typography } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine'
 import { PieChart } from '@mui/x-charts/PieChart'
 import { Fragment } from 'react'
-import { BRAND } from '../../app/theme.js'
+import { chartColors } from '../../app/theme.js'
 import PersonLink from '../../components/PersonLink.jsx'
 import { formatHours } from '../../lib/format.js'
 
 const WEEKLY_CAP = 40
-const COLORS = { planned: '#9DB6D3', logged: BRAND, over: '#B26A00' }
 
 /** Planned vs logged hours per person this week, with the 40h line. People over 40 get an orange bar, a ⚠ on
  * the axis, "(over 40h)" in the tooltip and their name in the note under the chart, so colour is never the only signal. */
 function PeopleChart({ people }) {
+  const palette = chartColors(useTheme())
+  // Over 40h is a warning here (amber), not a red alarm.
+  const COLORS = { planned: palette.planned, logged: palette.actual, over: palette.forecast }
   const isOver = (i) => Number(people[i].logged_total) > WEEKLY_CAP
   const over = people.filter((p) => Number(p.logged_total) > WEEKLY_CAP)
   const overIds = new Set(over.map((p) => String(p.user.id)))

@@ -1,18 +1,19 @@
 import { Grid, LinearProgress, Paper, Stack, Typography } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { useProjectSummary } from '../../api/queries.js'
-import { BRAND } from '../../app/theme.js'
+import { chartColors } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatMoney, formatPct } from '../../lib/format.js'
 import MilestoneCostTable from './MilestoneCostTable.jsx'
 import StatTile from './StatTile.jsx'
 
-// Planned is a light steel blue, consumed the brand blue (red once it passes the budget).
-const BAR_COLORS = { planned: '#9DB6D3', consumed: BRAND, over: '#B3261E' }
 const compactMoney = (v) => `$${Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(v)}`
 
 export default function BudgetTab({ project }) {
   const summary = useProjectSummary(project.id)
+  // Planned is a steel blue, consumed the brand blue (red once it passes the budget).
+  const colors = chartColors(useTheme())
   if (summary.error) return <ErrorAlert error={summary.error} onRetry={() => summary.refetch()} />
   const s = summary.data ?? { budget: project.budget, consumed: project.consumed, remaining: project.budget - project.consumed,
     budget_pct: project.budget_pct }
@@ -33,7 +34,7 @@ export default function BudgetTab({ project }) {
           yAxis={[{ scaleType: 'band', data: ['Planned budget', 'Consumed'], width: 120 }]}
           xAxis={[{ tickNumber: 6, valueFormatter: (v, ctx) => (ctx.location === 'tick' ? compactMoney(v) : formatMoney(v)) }]}
           series={[{ data: [Number(s.budget), Number(s.consumed)], label: 'Amount', valueFormatter: (v) => formatMoney(v),
-            colorGetter: ({ dataIndex }) => BAR_COLORS[dataIndex === 0 ? 'planned' : over ? 'over' : 'consumed'] }]}
+            colorGetter: ({ dataIndex }) => colors[dataIndex === 0 ? 'planned' : over ? 'over' : 'actual'] }]}
           hideLegend margin={{ right: 32 }} />
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           Consumed counts approved hours only, at each person's hourly rate (salary ÷ 2,080) when the hours were approved.

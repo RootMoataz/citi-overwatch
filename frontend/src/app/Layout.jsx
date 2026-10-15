@@ -1,5 +1,9 @@
+import Check from '@mui/icons-material/Check'
+import DarkMode from '@mui/icons-material/DarkModeOutlined'
 import FactCheck from '@mui/icons-material/FactCheckOutlined'
+import LightMode from '@mui/icons-material/LightModeOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
+import SettingsBrightness from '@mui/icons-material/SettingsBrightnessOutlined'
 import {
   AppBar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu,
   MenuItem, Stack, Toolbar, Typography,
@@ -13,10 +17,17 @@ import AvatarDialog from '../features/avatar/AvatarDialog.jsx'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { can } from '../lib/permissions.js'
+import { useColorMode } from './colorMode.js'
 import { DRAWER_WIDTH, NAV } from './nav.jsx'
 import { AVATAR_SIZE } from '../lib/avatarLook.js'
 
 const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
+
+const THEMES = [
+  { value: 'light', label: 'Light', icon: <LightMode fontSize="small" /> },
+  { value: 'dark', label: 'Dark', icon: <DarkMode fontSize="small" /> },
+  { value: 'system', label: 'System', hint: 'Match this device', icon: <SettingsBrightness fontSize="small" /> },
+]
 
 const resolve = (value, user) => (typeof value === 'function' ? value(user) : value)
 
@@ -75,6 +86,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
   const [menuAnchor, setMenuAnchor] = useState(null)
   const [photoOpen, setPhotoOpen] = useState(false)
   const location = useLocation()
+  const colorMode = useColorMode()
 
   const brand = (
     <Toolbar sx={{ gap: 1 }}>
@@ -113,6 +125,21 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
             <Divider />
             <MenuItem component={NavLink} to="/profile" onClick={() => setMenuAnchor(null)}>My profile</MenuItem>
             <MenuItem onClick={() => { setMenuAnchor(null); setPhotoOpen(true) }}>Profile photo</MenuItem>
+            <Divider />
+            <ListSubheader disableSticky sx={{ lineHeight: '32px', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em',
+              textTransform: 'uppercase', color: 'text.secondary', bgcolor: 'transparent' }}>Theme</ListSubheader>
+            {THEMES.map((t) => {
+              const chosen = colorMode.preference === t.value
+              return (
+                <MenuItem key={t.value} role="menuitemradio" aria-checked={chosen} selected={chosen}
+                  onClick={() => colorMode.setPreference(t.value)}>
+                  <ListItemIcon>{t.icon}</ListItemIcon>
+                  <ListItemText primary={t.label} secondary={t.hint} />
+                  {chosen ? <Check fontSize="small" sx={{ ml: 2, color: 'primary.main' }} aria-hidden /> : null}
+                </MenuItem>
+              )
+            })}
+            <Divider />
             <MenuItem onClick={() => { setMenuAnchor(null); onLogout?.() }}>Sign out</MenuItem>
           </Menu>
         </Toolbar>

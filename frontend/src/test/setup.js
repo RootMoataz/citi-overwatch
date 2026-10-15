@@ -10,7 +10,15 @@ export function setViewport(width) {
   window.dispatchEvent(new Event('resize'))
 }
 
+// The OS colour scheme the "System" theme follows; light unless a test asks for dark.
+let prefersDark = false
+export function setPrefersDark(value) {
+  prefersDark = value
+}
+
 function matches(query) {
+  if (/prefers-color-scheme:\s*dark/.test(query)) return prefersDark
+  if (/prefers-color-scheme/.test(query)) return !prefersDark
   const min = /min-width:\s*(\d+)px/.exec(query)
   const max = /max-width:\s*(\d+)px/.exec(query)
   return (!min || viewportWidth >= Number(min[1])) && (!max || viewportWidth <= Number(max[1]))
@@ -49,5 +57,7 @@ afterEach(() => {
   cleanup()
   server.resetHandlers()
   setViewport(1280)
+  prefersDark = false
+  try { localStorage.clear() } catch { /* nothing stored */ }
 })
 afterAll(() => server.close())

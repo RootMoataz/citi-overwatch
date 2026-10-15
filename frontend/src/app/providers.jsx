@@ -5,6 +5,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
 import { makeQueryClient } from './queryClient.js'
+import { ColorModeContext, readPreference, resolveMode, storePreference, useSystemDark } from './colorMode.js'
 import { buildTheme } from './theme.js'
 import { ToastContext } from './toast.js'
 
@@ -32,17 +33,26 @@ function ToastProvider({ children }) {
   )
 }
 
-export function AppProviders({ children, queryClient, mode = 'light' }) {
+/** `mode` pins the theme (light or dark); without it the viewer's choice applies, "system" by default. */
+export function AppProviders({ children, queryClient, mode: pinned }) {
+  const [preference, setChoice] = useState(readPreference)
+  const systemDark = useSystemDark()
+  const mode = pinned ?? resolveMode(preference, systemDark)
+  const setPreference = useCallback((next) => { storePreference(next); setChoice(next) }, [])
+  const colorMode = useMemo(() => ({ preference, mode, setPreference }), [preference, mode, setPreference])
   const theme = useMemo(() => buildTheme(mode), [mode])
   const [client] = useState(() => queryClient ?? makeQueryClient())
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <QueryClientProvider client={client}>
-          <ToastProvider>{children}</ToastProvider>
-        </QueryClientProvider>
-      </LocalizationProvider>
-    </ThemeProvider>
+    <ColorModeContext.Provider value={colorMode}>
+      <ThemeProvider theme={theme}>
+        {/* enableColorScheme tells the browser too, so scrollbars, inputs and date pickers match. */}
+        <CssBaseline enableColorScheme />
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <QueryClientProvider client={client}>
+            <ToastProvider>{children}</ToastProvider>
+          </QueryClientProvider>
+        </LocalizationProvider>
+      </ThemeProvider>
+    </ColorModeContext.Provider>
   )
 }

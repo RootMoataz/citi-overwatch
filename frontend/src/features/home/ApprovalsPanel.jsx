@@ -27,7 +27,7 @@ export default function ApprovalsPanel() {
             {items.slice(0, SHOWN).map((item) => (
               <Box component="li" key={item.entry.id}
                 sx={{ py: 1, borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0, pt: 0 } }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}>
                   <UserAvatar userId={item.user.id} name={item.user.name}
                     sx={{ display: 'inline-flex', verticalAlign: 'middle', mr: 1 }} />
                   <PersonLink person={item.user} context={{ managed: true }} /> · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}

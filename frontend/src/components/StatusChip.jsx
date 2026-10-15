@@ -1,12 +1,15 @@
 import { Chip } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { STATUS } from '../app/theme.js'
+import { STATUS, statusColor } from '../app/theme.js'
 
 /** Status as text plus a tinted background; the label carries the meaning, never color alone. */
 export default function StatusChip({ status, label, size = 'small' }) {
-  const meta = STATUS[status] ?? { label: status, color: '#5B6B7F' }
+  const meta = STATUS[status] ?? { ...STATUS.planned, label: status }
   return (
     <Chip size={size} label={label ?? meta.label}
-      sx={{ bgcolor: alpha(meta.color, 0.12), color: meta.color, border: `1px solid ${alpha(meta.color, 0.35)}` }} />
+      sx={(t) => {
+        const color = statusColor(meta, t)
+        return { bgcolor: alpha(color, t.palette.mode === 'dark' ? 0.16 : 0.12), color, border: `1px solid ${alpha(color, 0.4)}` }
+      }} />
   )
 }

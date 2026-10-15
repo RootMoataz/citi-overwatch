@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { useSearchParams } from 'react-router-dom'
 import { useSaveWeek, useWeek } from '../../api/queries.js'
-import { STATUS } from '../../app/theme.js'
+import { STATUS, statusColor } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -44,7 +44,7 @@ function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed }) {
   if (!entry) return null
   const meta = STATUS[entry.status] ?? STATUS.pending
   const label = (
-    <Typography variant="caption" sx={{ display: 'block', color: meta.color, lineHeight: 1.2, mt: 0.5 }}>{entry.label}</Typography>
+    <Typography variant="caption" sx={{ display: 'block', color: (t) => statusColor(meta, t), lineHeight: 1.2, mt: 0.5 }}>{entry.label}</Typography>
   )
   return (
     <>

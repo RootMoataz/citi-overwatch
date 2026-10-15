@@ -1,7 +1,7 @@
 import { Box, Button, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material'
 import { useId, useState } from 'react'
 import { useApproveEntry, useRejectEntry } from '../../api/queries.js'
-import { STATUS } from '../../app/theme.js'
+import { STATUS, statusColor } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -43,18 +43,18 @@ export default function ApprovalRow({ item, showContext = true }) {
   const [open, setOpen] = useState(false)
   const [rejecting, setRejecting] = useState(false)
   const [failure, setFailure] = useState(null)
-  const color = item.entry.over_40 ? STATUS.on_hold.color : STATUS.pending.color
+  const tone = item.entry.over_40 ? STATUS.on_hold : STATUS.pending
   return (
     <Box sx={{ py: 1.5, borderTop: 1, borderColor: 'divider' }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' } }}>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}>
             <UserAvatar userId={item.user.id} name={item.user.name}
               sx={{ display: 'inline-flex', verticalAlign: 'middle', mr: 1 }} />
             <PersonLink person={item.user} context={{ managed: true }} /> · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}
             {showContext ? <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}> · {item.project.name} › {item.milestone.name}</Typography> : null}
           </Typography>
-          <Typography variant="caption" sx={{ color }}>{item.label}</Typography>
+          <Typography variant="caption" sx={{ color: (t) => statusColor(tone, t) }}>{item.label}</Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', ml: 1 }}>{formatHours(item.week_logged_total)} this week</Typography>
           {item.entry.edited_after_decision ? <Typography variant="caption" sx={{ ml: 1 }}>· Edited</Typography> : null}
         </Box>
