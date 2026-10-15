@@ -10,6 +10,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useAddMember, useMembers, usePeoplePicker, useRemoveMember, useUpdateMember } from '../../api/queries.js'
+import SkillChips from '../../components/SkillChips.jsx'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -110,7 +111,11 @@ export default function TeamTab({ project, manage }) {
               ) : <MessageButton person={{ id: m.user.id, name: fullName(m.user) }} variant="icon" />}>
                 <ListItemAvatar sx={{ minWidth: 52 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={AVATAR_SIZE.row} /></ListItemAvatar>
                 <ListItemText primary={<PersonLink person={{ id: m.user.id, name: fullName(m.user) }} context={{ project }} />}
-                  secondary={`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`} />
+                  secondary={<>
+                    {`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`}
+                    <SkillChips skills={m.user.skills ?? []} label={`Skills of ${fullName(m.user)}`} sx={{ mt: 0.5 }} />
+                  </>}
+                  slotProps={{ secondary: { component: 'div' } }} />
               </ListItem>
             ))}
           </List>

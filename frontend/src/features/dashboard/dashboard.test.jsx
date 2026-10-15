@@ -99,7 +99,8 @@ describe('DashboardPage', () => {
     const risk = await screen.findByRole('region', { name: /^risk$/i })
     expect(screen.getAllByRole('heading', { level: 2 })[0]).toHaveTextContent(/^Risk$/)
     const counts = within(within(risk).getByRole('list', { name: /at-risk projects by reason/i })).getAllByRole('listitem').map((li) => li.textContent)
-    expect(counts).toEqual(['At-risk projects3', 'Overdue milestone3', 'Past due date1', 'Budget burning faster than progress1'])
+    expect(counts).toEqual(['At-risk projects3', 'Overdue milestone3', 'Past due date1', 'Budget burning faster than progress1',
+      'Kicked back – needs review0'])
     const list = within(risk).getByRole('region', { name: /at risk of missing/i })
     expect(within(list).getAllByRole('link').map((a) => a.textContent)).toEqual(['Atlas', 'Zephyr', 'Orion'])
     const order = screen.getAllByRole('region').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')).textContent)
@@ -112,7 +113,8 @@ describe('DashboardPage', () => {
     renderAsUser(<DashboardPage />, { user: users.employee, route: '/dashboard-under-test' })
     const risk = await screen.findByRole('region', { name: /^risk$/i })
     expect(within(within(risk).getByRole('list', { name: /at-risk projects by reason/i })).getAllByRole('listitem').map((li) => li.textContent))
-      .toEqual(['At-risk projects0', 'Overdue milestone0', 'Past due date0', 'Budget burning faster than progress0'])
+      .toEqual(['At-risk projects0', 'Overdue milestone0', 'Past due date0', 'Budget burning faster than progress0',
+        'Kicked back – needs review0'])
     expect(within(risk).getByText('Nothing at risk')).toBeInTheDocument()
   })
 

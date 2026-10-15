@@ -13,6 +13,7 @@ import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import ResponsiveTable from '../../components/ResponsiveTable.jsx'
 import { num } from '../../lib/csv.js'
 import { formatMoney, fullName } from '../../lib/format.js'
+import SkillChips from '../../components/SkillChips.jsx'
 import CreateUserWizard from './CreateUserWizard.jsx'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 
@@ -24,6 +25,7 @@ const CSV_COLUMNS = [
   { header: 'Email', value: (u) => u.email },
   { header: 'Role', value: (u) => ROLE[u.role] ?? u.role },
   { header: 'Job title', value: (u) => u.job_title },
+  { header: 'Skills', value: (u) => (u.skills ?? []).map((s) => s.name).join('; ') },
   { header: 'Salary (USD)', value: (u) => num(u.salary) },
   { header: 'Archived', value: (u) => Boolean(u.is_archived) },
 ]
@@ -46,6 +48,9 @@ export default function PeoplePage() {
     { field: 'email', headerName: 'Email', flex: 1.4, minWidth: 180 },
     { field: 'role', headerName: 'Role', width: 110, valueFormatter: (v) => ROLE[v] ?? v },
     { field: 'job_title', headerName: 'Job title', flex: 1, minWidth: 140 },
+    { field: 'skills', headerName: 'Skills', flex: 1.4, minWidth: 180, sortable: false,
+      valueGetter: (_, row) => (row.skills ?? []).map((s) => s.name).join(', '),
+      renderCell: ({ row }) => <SkillChips skills={row.skills ?? []} label={`Skills of ${fullName(row)}`} sx={{ py: 1 }} /> },
     { field: 'salary', headerName: 'Salary', width: 120, valueFormatter: (v) => (v == null ? '—' : formatMoney(v)) },
   ]
   if (leaving) return null
@@ -75,6 +80,7 @@ export default function PeoplePage() {
           <Stack sx={{ gap: 0.5 }}>
             <Typography variant="subtitle1" component="div"><PersonWithAvatar person={{ id: row.id, name: fullName(row) }} size={AVATAR_SIZE.row} link={false} /></Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>{row.username} · {ROLE[row.role]} · {row.job_title || 'No title'}</Typography>
+            <SkillChips skills={row.skills ?? []} label={`Skills of ${fullName(row)}`} />
           </Stack>
         )} />
       {creating ? <CreateUserWizard onClose={() => setCreating(false)} onCreated={(u) => navigate(`/people/${u.id}`)} /> : null}

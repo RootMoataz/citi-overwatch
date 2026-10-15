@@ -6,6 +6,8 @@ import { formatDate } from '../lib/format.js'
 import { PRIORITY } from '../lib/labels.js'
 
 const DAY = 86400000
+// Striped bars: waiting on a predecessor, or kicked back and waiting for the manager.
+const STRIPED = new Set(['waiting', 'blocked'])
 const toTime = (iso) => Date.UTC(...String(iso).slice(0, 10).split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
 
 /** Horizontal date bars scaled to the project's dates, with a "today" marker and the dependency chain. */
@@ -52,7 +54,7 @@ export default function Timeline({ items, range }) {
                   <Tooltip title={label}>
                     <Box className="bar" sx={{ position: 'absolute', left: `${left}%`, width: `${Math.min(width, 100 - left)}%`,
                       top: 0, bottom: 0, borderRadius: 7, bgcolor: (t) => statusColor(meta, t),
-                      backgroundImage: item.display_status === 'blocked'
+                      backgroundImage: STRIPED.has(item.display_status)
                         ? 'repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 6px, transparent 6px 12px)' : 'none' }} />
                   </Tooltip>
                 </Box>
@@ -67,7 +69,7 @@ export default function Timeline({ items, range }) {
           {shown.map((status) => (
             <Stack component="li" key={status} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
               <Box aria-hidden sx={{ width: 16, height: 8, borderRadius: 4, bgcolor: (t) => statusColor(STATUS[status], t),
-                backgroundImage: status === 'blocked' ? 'repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 3px, transparent 3px 6px)' : 'none' }} />
+                backgroundImage: STRIPED.has(status) ? 'repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 3px, transparent 3px 6px)' : 'none' }} />
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>{STATUS[status].label}</Typography>
             </Stack>
           ))}

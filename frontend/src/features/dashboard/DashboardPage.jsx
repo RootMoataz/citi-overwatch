@@ -2,6 +2,7 @@ import {
   Box, Button, Chip, Grid, Link, List, ListItem, ListItemText, MenuItem, Skeleton, Stack, Table, TableBody,
   TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
+import PanTool from '@mui/icons-material/PanToolOutlined'
 import WarningAmber from '@mui/icons-material/WarningAmberRounded'
 import EventBusy from '@mui/icons-material/EventBusyOutlined'
 import TrendingUp from '@mui/icons-material/TrendingUpRounded'
@@ -38,7 +39,8 @@ import LiveActivityCard from '../activity/LiveActivityCard.jsx'
 import EmailReportButton from '../report/EmailReportButton.jsx'
 
 // One icon per risk tile (in RISK_LABELS order, after the total) and per status tile.
-const RISK_ICONS = [<WarningAmber key="all" />, <EventBusy key="a" />, <HourglassBottom key="b" />, <TrendingUp key="c" />]
+const RISK_ICONS = [<WarningAmber key="all" />, <EventBusy key="a" />, <HourglassBottom key="b" />, <TrendingUp key="c" />,
+  <PanTool key="d" />]
 const STATUS_ICONS = { planned: <EventNote />, active: <PlayCircle />, on_hold: <PauseCircle />, completed: <CheckCircle /> }
 
 const projectLink = (p, tab) => (
@@ -111,11 +113,14 @@ function Milestones({ title, items, tone }) {
 function Risk({ atRisk }) {
   const id = useId()
   const counts = [['At-risk projects', atRisk.length],
-    ...Object.entries(RISK_LABELS).map(([code, label]) => [label, atRisk.filter((p) => p.reasons.includes(code)).length])]
+    ...Object.entries(RISK_LABELS).map(([code, label]) => [label, code === 'BLOCKED_MILESTONE'
+      // Kicked-back milestones are counted one by one, not by project.
+      ? atRisk.reduce((n, p) => n + (p.blocked_count ?? 0), 0)
+      : atRisk.filter((p) => p.reasons.includes(code)).length])]
   return (
     <Box component="section" aria-labelledby={id}>
       <Typography id={id} variant="h3" component="h2" sx={{ mb: 1.5 }}>Risk</Typography>
-      <Box component="ul" aria-label="At-risk projects by reason" sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2,
+      <Box component="ul" aria-label="At-risk projects by reason" sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2,
         listStyle: 'none', p: 0, m: 0, mb: 2 }}>
         {counts.map(([label, count], i) => (
           <Reveal as="li" key={label} index={i}>
@@ -129,7 +134,7 @@ function Risk({ atRisk }) {
             {atRisk.map((p) => (
               <ListItem key={p.id} disableGutters sx={{ display: 'block' }}>
                 <Typography variant="subtitle2">{projectLink(p)}</Typography>
-                <RiskBadges reasons={p.reasons} />
+                <RiskBadges reasons={p.reasons} counts={{ BLOCKED_MILESTONE: p.blocked_count }} />
               </ListItem>
             ))}
           </List>

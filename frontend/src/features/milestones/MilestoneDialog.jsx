@@ -6,6 +6,7 @@ import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useMediaQuery } from 'react-responsive'
 import { useSaveMilestone } from '../../api/queries.js'
+import { useSkills } from '../../api/workflow.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDate, fullName } from '../../lib/format.js'
 import { DIFFICULTY, PRIORITY, PRIORITY_HELP, PROGRESS_WEIGHTING } from '../../lib/labels.js'
@@ -13,7 +14,8 @@ import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { milestoneSchema } from '../../lib/schemas.js'
 
 const FORM_CODES = ['OUT_OF_PROJECT_RANGE']
-const FIELDS = ['name', 'description', 'start_date', 'end_date', 'difficulty', 'priority']
+const FIELDS = ['name', 'description', 'start_date', 'end_date', 'difficulty', 'priority', 'objective',
+  'completion_criteria']
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 
 /** Create or edit a milestone, its dependencies and its assignees. */
@@ -21,20 +23,27 @@ export default function MilestoneDialog({ project, milestone, milestones, member
   const titleId = useId()
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const save = useSaveMilestone(project.id)
+  const skills = useSkills()
   const [failure, setFailure] = useState(null)
   const initialPreds = (milestone?.predecessors ?? []).map(String)
   const initialPeople = (milestone?.assignees ?? []).map((a) => String(a.id))
+  const initialSkills = (milestone?.required_skills ?? []).map((s) => String(s.id))
   const initial = {
     name: milestone?.name ?? '', description: milestone?.description ?? '', start_date: milestone?.start_date ?? '',
     end_date: milestone?.end_date ?? '', difficulty: milestone?.difficulty ?? 'medium', priority: milestone?.priority ?? 'medium',
+    objective: milestone?.objective ?? '', completion_criteria: milestone?.completion_criteria ?? '',
   }
   const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(milestoneSchema),
-    defaultValues: { ...initial, predecessor_ids: initialPreds, assignee_ids: initialPeople },
+    defaultValues: { ...initial, predecessor_ids: initialPreds, assignee_ids: initialPeople, required_skill_ids: initialSkills },
   })
   const others = milestones.filter((m) => String(m.id) !== String(milestone?.id))
   const nameOf = (id) => others.find((m) => String(m.id) === id)?.name ?? id
   const personOf = (id) => fullName(members.find((m) => String(m.user.id) === id)?.user) || id
+  // Skills already on the milestone stay pickable even if archived since.
+  const skillOptions = [...(skills.data?.items ?? []), ...(milestone?.required_skills ?? [])]
+    .filter((s, i, all) => all.findIndex((x) => String(x.id) === String(s.id)) === i)
+  const skillOf = (id) => skillOptions.find((s) => String(s.id) === id)?.name ?? id
 
   const onSubmit = async (values) => {
     setFailure(null)
@@ -42,6 +51,7 @@ export default function MilestoneDialog({ project, milestone, milestones, member
     for (const key of FIELDS) {
       if (!milestone || values[key] !== initial[key]) fields[key] = values[key]
     }
+    if (!milestone || !sameSet(values.required_skill_ids, initialSkills)) fields.required_skill_ids = values.required_skill_ids
     try {
       const saved = await save.mutateAsync({
         id: milestone?.id, fields,
@@ -93,6 +103,16 @@ export default function MilestoneDialog({ project, milestone, milestones, member
               <TextField label="Description" multiline minRows={2} {...register('description')} disabled={isSubmitting}
                 helperText="The goal, e.g. “Decommission 200 servers”." />
             </Grid>
+            <Grid size={12}>
+              <TextField label="Objective" {...register('objective')} disabled={isSubmitting} error={Boolean(errors.objective)}
+                helperText={errors.objective?.message ?? 'One line: what this milestone achieves.'}
+                slotProps={{ htmlInput: { maxLength: 300 } }} />
+            </Grid>
+            <Grid size={12}>
+              <TextField label="Completion criteria" multiline minRows={3} {...register('completion_criteria')}
+                disabled={isSubmitting} error={Boolean(errors.completion_criteria)}
+                helperText={errors.completion_criteria?.message ?? 'One checklist item per line: how everyone knows it’s done.'} />
+            </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField label="Start date" type="date" required {...register('start_date')} disabled={isSubmitting}
                 slotProps={{ inputLabel: { shrink: true } }} error={Boolean(errors.start_date)}
@@ -117,6 +137,10 @@ export default function MilestoneDialog({ project, milestone, milestones, member
                   {Object.entries(DIFFICULTY).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                 </TextField>
               )} />
+            </Grid>
+            <Grid size={12}>
+              {multi('required_skill_ids', 'Skills needed', skillOptions.map((s) => ({ value: String(s.id), label: s.name })),
+                skillOf, 'Auto-routing only hands it to someone with at least one of these. None: anyone on the team.')}
             </Grid>
             <Grid size={12}>
               {multi('predecessor_ids', 'Depends on', others.map((m) => ({ value: String(m.id), label: m.name,

@@ -15,6 +15,7 @@ import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
 import StatTile from '../../components/StatTile.jsx'
 import MessageButton from '../messages/MessageButton.jsx'
+import SkillsCard from './SkillsCard.jsx'
 
 const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
 
@@ -56,7 +57,7 @@ export default function PersonProfilePage() {
   if (leaving) return null
   if (profile.isLoading) return <Skeleton variant="rounded" height={320} />
   if (profile.error) return <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} />
-  const { user: p, this_week: week, all_time: total, projects, milestones } = profile.data
+  const { user: p, this_week: week, all_time: total, projects, milestones, skills, can_edit_skills: canEditSkills } = profile.data
   const overtime = Number(week.overtime) > 0
   const own = viewer?.id != null && String(viewer.id) === String(p.id)
 
@@ -76,6 +77,7 @@ export default function PersonProfilePage() {
           {'salary' in p ? <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Annual salary" value={formatMoney(p.salary)} /></Grid> : null}
         </Grid>
       </Paper>
+      <SkillsCard person={p} skills={skills ?? []} canEdit={Boolean(canEditSkills)} />
       <Typography variant="subtitle1" component="h2" sx={{ mb: 1 }}>Week of {formatDate(week.week_start)}</Typography>
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Logged this week" value={Number(week.logged)} format={formatHours} hint="Pending and approved" /></Grid>

@@ -91,6 +91,9 @@ export const milestoneSchema = z.object({
   end_date: isoDate('end date'),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   priority: z.enum(['low', 'medium', 'high', 'critical']),
+  objective: z.string().trim().max(300, { message: 'Keep the objective under 300 characters' }).optional().default(''),
+  completion_criteria: z.string().max(4000, { message: 'Keep the criteria under 4000 characters' }).optional().default(''),
+  required_skill_ids: z.array(z.string()),
   predecessor_ids: z.array(z.string()),
   assignee_ids: z.array(z.string()),
 }).superRefine(endAfterStart('start_date', 'end_date'))
