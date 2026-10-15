@@ -20,6 +20,7 @@ import AuditPage from '../features/audit/AuditPage.jsx'
 import DepartmentsPage from '../features/departments/DepartmentsPage.jsx'
 import MessagesPage from '../features/messages/MessagesPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
+import Puppy from '../features/puppy/Puppy.jsx'
 import { useApprovals } from '../api/queries.js'
 import { useUnreadMessages } from '../api/messages.js'
 import { can } from '../lib/permissions.js'
@@ -37,7 +38,7 @@ function Shell() {
   const unread = useUnreadMessages({ fast: onMessages }).data?.unread ?? 0
   const badges = { ...(waiting ? { '/approvals': waiting } : {}), ...(unread ? { '/messages': unread } : {}) }
   // Everyone gets the bell: managers hear about overtime and routing, employees about rejected hours and support work.
-  return <Layout user={user} onLogout={logout} topBarExtras={<NotificationBell />} badges={badges} />
+  return <Layout user={user} onLogout={logout} topBarExtras={<><Puppy /><NotificationBell /></>} badges={badges} />
 }
 
 export default function App() {
