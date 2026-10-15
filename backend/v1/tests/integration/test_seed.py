@@ -461,6 +461,43 @@ def test_executive_demo_login_from_the_seed_and_the_backfill(client, conn):
     assert (status, body["error"]["code"]) == (403, "DEMO_ACCOUNT")
 
 
+def executive_name(conn) -> tuple:
+    row = query_one(conn, "SELECT first_name, last_name, job_title FROM users WHERE username = 'executive.demo'")
+    return row["first_name"], row["last_name"], row["job_title"]
+
+
+def test_the_seeds_executive_is_moataz_hikal(conn):
+    seed(conn)
+    assert executive_name(conn) == ("Moataz", "Hikal", "Executive Sponsor")
+
+
+def test_demo_backfill_renames_the_old_seeds_executive_once(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    conn.run("""UPDATE users SET first_name = 'Eve', last_name = 'Executive', job_title = 'Chief Delivery Officer'
+                WHERE username = 'executive.demo'""")
+    result = demo_backfill(conn)
+    assert result["users_renamed"] == ["executive.demo"] and result["users_created"] == []
+    assert executive_name(conn) == ("Moataz", "Hikal", "Executive Sponsor")
+    again = demo_backfill(conn)
+    assert again["users_renamed"] == [] and executive_name(conn) == ("Moataz", "Hikal", "Executive Sponsor")
+
+
+def test_demo_backfill_keeps_an_executive_name_or_title_someone_chose(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    conn.run("UPDATE users SET first_name = 'Eve', last_name = 'Adams' WHERE username = 'executive.demo'")
+    assert demo_backfill(conn)["users_renamed"] == []
+    assert executive_name(conn) == ("Eve", "Adams", "Executive Sponsor")
+    # The old name with a title an admin set: the name follows the seed, the title stays.
+    conn.run("""UPDATE users SET first_name = 'Eve', last_name = 'Executive', job_title = 'Chief Operating Officer'
+                WHERE username = 'executive.demo'""")
+    assert demo_backfill(conn)["users_renamed"] == ["executive.demo"]
+    assert executive_name(conn) == ("Moataz", "Hikal", "Chief Operating Officer")
+
+
 DEMO_CONVERSATIONS = ["Morgan Manager and Eli Employee", "Schema Mapping · Apollo Data Migration"]
 
 

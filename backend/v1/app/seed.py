@@ -1,4 +1,4 @@
-"""Demo data so every dashboard section has something to show (spec §11).
+"""Demo data so every dashboard section has something to show (spec §11). Demo data by Moataz Hikal.
 
 Dates are relative to today, so the demo stays realistic whenever it is loaded.
 Running seed() again is a no-op once admin.demo exists.
@@ -44,9 +44,12 @@ PEOPLE = [
     ("leo.martin", "Leo", "Martin", "employee", "Risk Analyst", 92000, "manager.demo"),
 ]
 
-# The read-only leadership login. Kept out of PEOPLE: it was added after the live demo was seeded, so
-# demo_backfill creates it there, and it has no reporting line or project work.
-EXECUTIVE = ("executive.demo", "Eve", "Executive", "Chief Delivery Officer", 180000, "Operations")
+# The read-only leadership login: the project's owner, Moataz Hikal, as executive sponsor. Kept out of PEOPLE: it
+# was added after the live demo was seeded, so demo_backfill creates it there, and it has no reporting line or
+# project work.
+EXECUTIVE = ("executive.demo", "Moataz", "Hikal", "Executive Sponsor", 180000, "Operations")
+# What earlier seeds called it. demo_backfill renames executive.demo only while it still has this name.
+EXECUTIVE_OLD_NAME = ("Eve", "Executive", "Chief Delivery Officer")
 
 # Department -> the demo people in it.
 DEPARTMENTS = {
@@ -492,7 +495,8 @@ def demo_backfill(conn) -> dict:
     Departments are reused (any case) or created; a demo person or project gets the seed's department only while
     it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
     seed's difficulty and priority, each only while it's still 'medium'; executive.demo is created (published demo password) only
-    if that username doesn't exist yet, and so is the public demo admin demo.admin (published password,
+    if that username doesn't exist yet, or renamed to today's seed name (Moataz Hikal, Executive Sponsor) only while it
+    still has the old seed name Eve Executive (its job title too, only while it's still the old one), and so is the public demo admin demo.admin (published password,
     is_public_demo; an existing demo.admin that isn't flagged is left alone and listed under skipped); the demo
     message thread and Schema Mapping discussion are added only while there are no conversations at all; Beacon's
     planning board is laid out as BEACON_BOARD only while Beacon is still planned, its plan isn't finalized and
@@ -505,6 +509,7 @@ def demo_backfill(conn) -> dict:
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
            "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "plan_board_arranged": [],
            "conversations_created": [], **{key: [] for key in WORKFLOW_KEYS}, "hr_submissions_created": [], "requests_updated": [],
+           "users_renamed": [],
            "already_set": 0, "skipped": []}
 
     def skip(item: str, reason: str) -> None:
@@ -546,8 +551,16 @@ def demo_backfill(conn) -> dict:
         for name, department in PROJECT_DEPARTMENTS.items():
             fill_department("projects", "name", name, f"project {name}", department, out["projects_updated"])
 
-        if query_one(conn, "SELECT 1 AS ok FROM users WHERE lower(username) = lower(:u)", u=EXECUTIVE[0]):
-            skip(f"user {EXECUTIVE[0]}", "already_set")  # whatever its role or password now, it stays as it is
+        executive = query_one(conn, """SELECT id, first_name, last_name, job_title FROM users
+                                       WHERE lower(username) = lower(:u)""", u=EXECUTIVE[0])
+        if executive and (executive["first_name"], executive["last_name"]) == EXECUTIVE_OLD_NAME[:2]:
+            # Still the old seed's name: give it today's. A name or title anyone chose stays; role and password too.
+            title = EXECUTIVE[3] if executive["job_title"] in ("", EXECUTIVE_OLD_NAME[2]) else executive["job_title"]
+            conn.run("""UPDATE users SET first_name = :f, last_name = :l, job_title = :t, updated_at = now()
+                        WHERE id = :i""", f=EXECUTIVE[1], l=EXECUTIVE[2], t=title, i=executive["id"])
+            out["users_renamed"].append(EXECUTIVE[0])
+        elif executive:
+            skip(f"user {EXECUTIVE[0]}", "already_set")  # whatever its name, role or password now, it stays as it is
         else:
             _insert_executive(conn, hash_password(DEMO_PASSWORD), departments.get(EXECUTIVE[5]))
             out["users_created"].append(EXECUTIVE[0])

@@ -1,4 +1,4 @@
-"""demo_curate: round the demo projects out into their department's plan (app/presets.py).
+"""demo_curate: round the demo projects out into their department's plan (app/presets.py). Demo data by Moataz Hikal.
 
 Additive and archive-only. For each demo project it keeps every milestone that is there (with its hours, people and
 status) and adds the preset steps that are missing around them, with dependencies, people from the project's team
