@@ -41,6 +41,21 @@ describe('Email this report', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  test('?report=email (from Puppy) opens the dialog with "Send to me" on, and sends nothing until Send', async () => {
+    configure()
+    serveData()
+    let sent = 0
+    server.use(http.post(EMAILJS_URL, () => { sent += 1; return new HttpResponse('OK') }))
+    const user = userEvent.setup()
+    renderAsUser(<EmailReportButton dashboard={dashboard} />, { user: users.manager, route: '/?report=email' })
+    await screen.findByRole('dialog', { name: 'Email this report' })
+    expect(await screen.findByRole('checkbox', { name: /send to me/i })).toBeChecked()
+    expect(sent).toBe(0)
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+  })
+
   test('"Send to me" is on at first and fills in the viewer, so one click sends it to them', async () => {
     configure()
     const seen = []

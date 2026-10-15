@@ -21,6 +21,7 @@ import DepartmentsPage from '../features/departments/DepartmentsPage.jsx'
 import SkillsPage from '../features/skills/SkillsPage.jsx'
 import MessagesPage from '../features/messages/MessagesPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
+import Puppy from '../features/puppy/Puppy.jsx'
 import { useApprovals } from '../api/queries.js'
 import { useUnreadMessages } from '../api/messages.js'
 import { can } from '../lib/permissions.js'
@@ -38,7 +39,7 @@ function Shell() {
   const unread = useUnreadMessages({ fast: onMessages }).data?.unread ?? 0
   const badges = { ...(waiting ? { '/timesheets': waiting } : {}), ...(unread ? { '/messages': unread } : {}) }
   // Everyone gets the bell: managers hear about overtime and routing, employees about rejected hours and support work.
-  return <Layout user={user} onLogout={logout} topBarExtras={<NotificationBell />} badges={badges} />
+  return <Layout user={user} onLogout={logout} topBarExtras={<><Puppy /><NotificationBell /></>} badges={badges} />
 }
 
 /** The old Approvals address (bookmarks, older alerts) opens Timesheets with the same filters. */

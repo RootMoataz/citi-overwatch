@@ -841,3 +841,90 @@ only explains it.
 
 **Creating it.** `seed` creates it with the rest of the demo data; on an existing database `demo_backfill` adds it only
 if no `demo.admin` exists, and never flags an existing ordinary account of that name.
+## 22. Puppy, the rule-based assistant
+
+Puppy is the small dog next to the bell (`frontend/src/features/puppy/`). It's labelled **"Puppy · your rule-based
+assistant"** and its panel says "Puppy follows rules from your data — no AI service involved." The Lambda has no
+internet access, so everything is fixed rules running in the browser. Puppy adds no backend endpoint and no new
+polling: it reuses the bell's `GET /notifications` query and the caches the pages already use.
+
+```mermaid
+flowchart TD
+  P[bell's notifications poll] --> D{"detectNew()<br/>first load? → silent"}
+  D -- "new id + created_at,<br/>not about you within 5 s of your own save" --> G{"alert gate:<br/>last alert ≥ 5 s ago?"}
+  G -- no --> W[wait, add the counts together] --> G
+  G -- yes --> A[toast + aria-live 'Puppy: N new notifications'<br/>+ Puppy hops]
+  A --> S{muted, 'None', or 'only in the background'<br/>while the tab is visible?}
+  S -- yes --> Q[no sound]
+  S -- no --> U{page interacted with yet?}
+  U -- no --> H["no sound; the toast adds<br/>'Click anywhere to enable sounds.' (once)"]
+  U -- yes --> PL[Web Audio plays the chosen sound]
+```
+
+- **What counts as new** (`detector.js`): the first load is silent. After that, a notification is new the first time its
+  `id` + `created_at` is seen, so reading notifications never alerts, one read plus one arrival in the same poll still
+  alerts, and a refreshed message alert (someone wrote again) alerts. An alert about you (`subject_user` = you) that
+  shows up within 5 seconds of a save you made is treated as your own action and stays silent.
+- **At most one alert per 5 seconds** (`createAlertGate`): a burst is added up and announced once when the gap ends.
+- **Sound is never the only signal:** the bell's badge, Puppy's dot and raised ears, a toast and a polite screen-reader
+  announcement always come, with or without sound. The tab title shows "(3) Scout" while notifications are unread
+  (this can be switched off).
+- **Sounds** (`sounds.js`) are made in code with the Web Audio API, with no files and no external URLs. *Puppy bark*
+  (the default) is two quick woofs, each a sawtooth voice through a closing low-pass filter with a falling pitch plus a
+  burst of band-passed noise; the second woof is lower and softer. *Soft chime* is two sine partials (C6, G6) with a
+  long fade. *Ping* is a bright sine with a slight bend. *Pop* is a sine that drops two octaves in 70 ms. *None* is
+  silent. Volume scales each envelope's peak.
+- **Autoplay rules:** the `AudioContext` is created on the first click, key press or tap (or right away when the
+  browser reports the page was already interacted with, such as the sign-in click), or by a ▶ preview.
+- **Settings** (Sound tab: sound with a preview each, volume, mute, "Only when the tab is in the background", tab-title
+  count) are stored per browser under `overwatch.puppy.sound`; reading never throws and bad values fall back field by field.
+
+**The panel** has four tabs:
+
+- **Summary:** up to 3 dismissible tips, then "What needs you" as plain sentences (`summary.js`). Examples: "2
+  timesheets are waiting for your approval" (one per person-week, approvers only), "Your timesheet for this week is
+  empty", "1 of your time entries was rejected", "2 unread messages from Morgan", "Eli Employee went over 40 hours this
+  week", "2 of your people haven't logged hours for last week" (managers and admins). Notification types Puppy doesn't
+  know get a generic sentence (the server's own message, or "3 new plan finalized notifications"), never an error.
+  Below that are quick links and the top 3 smart insights.
+- **Do it:** actions Puppy runs for you (`actions.js`). Each shows exactly what will happen ("Puppy will mark 5
+  notifications as read.") and runs only after **Confirm**, as you, through the normal hooks and pages, so the server's
+  role checks and the audit log apply as usual. The actions are: mark all read; open this week's timesheet; message my
+  manager (employees: opens compose with them filled in, and you press Send); open pending approvals (approvers:
+  approving stays a human decision); open the at-risk project; email this report to me (opens the dashboard's dialog
+  with Send to me on, via `?report=email`, and you press Send); switch theme; change the alert sound. Puppy never
+  approves, rejects, archives, deletes, or changes roles or money.
+- **Ask:** a question box (`ask.js`), matched in the browser and never sent, stored or logged. In order, it checks:
+  1. Do-it-for-me requests, shown with the same confirmation.
+  2. Requests for pay or private details, which are refused: "I keep pay and private details out of reach — ask an
+     admin through the proper page."
+  3. "Why is *Atlas* at risk?", answered with that project's own `at_risk_reasons` from the project list you already get.
+  4. The help library (`help.js`): the at-risk rule, weighted progress, priority, overtime and the 40-hour rule, 24
+     hours a day, approvals, the Friday reminder, who can message whom, delegate approvers, executives being read-only,
+     and auto-routing and work sent back.
+  5. The command palette's phrase rules ("what's at risk?", "who is over 40?", "show critical milestones").
+
+  A question about a person the palette's role rules hide gets "I can't share that."
+- **Sound:** the settings above.
+
+**Tips** (`tips.js`), at most 3:
+
+- "Your timesheet for this week is empty — want me to open it?"
+- "3 entries logged 3+ days ago are still waiting — open Approvals?" (approvers)
+- "*Cutover* is critical and due in 2 days"
+
+Dismissed tips are remembered per browser (`overwatch.puppy.dismissedTips`). Tip ids carry the week or day, so next
+week's reminder shows again.
+
+**Safeguards** (`privacy.js`, explained in the panel under "What Puppy can see"):
+
+- **Only role-scoped data:** Puppy reads only the viewer's normal role-scoped endpoints (`/notifications`, `/approvals`,
+  `/messages/unread-count`, `/messages/contacts`, `/timesheet-reminders`, `/insights/smart`, `/projects`, milestones
+  and the palette's people lists). The server is the final guard.
+- **Allow-list and redaction:** `puppyView()` cuts every response to an allow-list of fields before any rule sees it.
+  `redact()` drops salary, hourly rate, cost, passwords, codes, tokens, email, phone, message body, notes, subjects and
+  audit `changes` at any depth. `redactText()` masks email addresses, passwords, one-time codes and long digit runs
+  inside free text.
+- **Tests:** they seed every one of those keys into every response, for every role, and check that nothing reaches
+  Puppy's sentences, tips, actions, answers or the screen. Other tests check that a question never appears in any
+  request or in storage, and that every action waits for Confirm.
