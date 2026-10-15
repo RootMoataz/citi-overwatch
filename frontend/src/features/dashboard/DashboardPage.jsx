@@ -57,6 +57,9 @@ function BudgetChart({ budgets }) {
   )
 }
 
+/** Tables scroll inside their card instead of pushing it wider on narrow screens. */
+const TableScroll = ({ children }) => <Box sx={{ overflowX: 'auto', mx: -2, px: 2 }}>{children}</Box>
+
 function Milestones({ title, items, tone }) {
   return (
     <>
@@ -111,14 +114,18 @@ function DepartmentFilter({ value, onChange }) {
   const items = departments.data?.items ?? []
   if (!items.length) return null
   return (
-    <TextField select size="small" label="Department" value={value} onChange={(e) => onChange(e.target.value)} sx={{ minWidth: 200 }}>
+    <TextField select size="small" label="Department" value={value} onChange={(e) => onChange(e.target.value)} sx={{ minWidth: 220, width: { xs: '100%', sm: 'auto' } }}
+      slotProps={{ select: { displayEmpty: true }, inputLabel: { shrink: true } }}>
       <MenuItem value="">All departments</MenuItem>
       {items.map((d) => <MenuItem key={d.id} value={String(d.id)}>{d.name}</MenuItem>)}
     </TextField>
   )
 }
 
-export default function DashboardPage() {
+/** The delivery dashboard. Role homes reuse it: `intro` sits under the page title (an admin's control centre), `top` is
+ * pinned above Risk (a manager's approvals queue) and `approvalsButton` can go when that queue is already on the page. */
+export default function DashboardPage({ title, subtitle = 'Live view of delivery health. Refreshes every 30 seconds.', intro,
+  top, approvalsButton = true }) {
   const { user } = useSession()
   const approver = can(user, 'approvals.view')
   const [params, setParams] = useSearchParams()
@@ -137,15 +144,18 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader title={`Hello, ${user.first_name}`} subtitle="Live view of delivery health. Refreshes every 30 seconds."
-        actions={<>
-          <DepartmentFilter value={department} onChange={pickDepartment} />
-          {approver && d.pending_approvals ? (
-            <Button component={RouterLink} to="/approvals" variant="contained" color="warning">
-              {d.pending_approvals} waiting for your approval
-            </Button>) : null}
-        </>} />
+      <PageHeader title={title ?? `Hello, ${user.first_name}`} subtitle={subtitle} />
+      {intro}
+      <Stack direction={{ xs: 'column', sm: 'row' }} useFlexGap role="toolbar" aria-label="Dashboard filters"
+        sx={{ gap: 1.5, mt: -1.5, mb: 3, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}>
+        <DepartmentFilter value={department} onChange={pickDepartment} />
+        {approvalsButton && approver && d.pending_approvals ? (
+          <Button component={RouterLink} to="/approvals" variant="contained" color="warning">
+            {d.pending_approvals} waiting for your approval
+          </Button>) : null}
+      </Stack>
       <Grid container spacing={2}>
+        {top ? <Grid size={12}>{top}</Grid> : null}
         <Grid size={12}>
           <Risk atRisk={d.at_risk} />
         </Grid>
@@ -162,7 +172,7 @@ export default function DashboardPage() {
               ))}
             </Grid>
             {active.length ? (
-              <Table size="small" aria-label="Active projects">
+              <TableScroll><Table size="small" aria-label="Active projects">
                 <TableHead><TableRow><TableCell>Project</TableCell><TableCell>Progress (weighted by difficulty)</TableCell>
                   <TableCell>Budget used</TableCell><TableCell>Due</TableCell></TableRow></TableHead>
                 <TableBody>
@@ -179,12 +189,12 @@ export default function DashboardPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </Table></TableScroll>
             ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No active projects right now.</Typography>}
           </Section>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6 }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="Which team members are over-allocated across multiple projects?" hint="More than 40 logged hours this week">
             {d.over_allocated.length ? (
               <List dense disablePadding>
@@ -199,11 +209,11 @@ export default function DashboardPage() {
           </Section>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6 }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="How are resources allocated across projects?"
             action={approver ? <Link component={RouterLink} to="/allocation">Full view</Link> : null}>
             {approver ? (busiest.length ? (
-              <Table size="small" aria-label="Busiest people this week">
+              <TableScroll><Table size="small" aria-label="Busiest people this week">
                 <TableHead><TableRow><TableCell>Person</TableCell><TableCell align="right">Planned</TableCell>
                   <TableCell align="right">Logged</TableCell><TableCell align="right">Utilization</TableCell></TableRow></TableHead>
                 <TableBody>
@@ -215,21 +225,21 @@ export default function DashboardPage() {
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+              </Table></TableScroll>
             ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No allocations yet.</Typography>) : (
               <Typography variant="body2">Your own planned and logged hours are on <Link component={RouterLink} to="/timesheet">My timesheet</Link>.</Typography>
             )}
           </Section>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 6 }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="What are the key deliverables and their completion status?">
             <Milestones title="Overdue" items={d.milestones.overdue} tone="error.main" />
             <Milestones title="Due in the next 14 days" items={d.milestones.due_soon} />
           </Section>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 5 }}>
+        <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="What is the dependency chain between deliverables?" hint="Each project's timeline shows what waits on what.">
             <Stack sx={{ gap: 1 }}>
               {d.projects.filter((p) => p.status !== 'completed').map((p) => (
@@ -242,7 +252,7 @@ export default function DashboardPage() {
           </Section>
         </Grid>
 
-        <Grid size={{ xs: 12, md: 7 }}>
+        <Grid size={12}>
           <Section question="How much budget has been consumed versus planned for each project?"
             hint="Consumed counts approved hours; the forecast projects the last 4 weeks' pace to the end date.">
             {d.budgets.length ? <BudgetChart budgets={d.budgets} /> : <EmptyState title="No budgets yet" />}

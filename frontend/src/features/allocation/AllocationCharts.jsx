@@ -29,7 +29,8 @@ function PeopleChart({ people }) {
           { data: people.map((p) => Number(p.logged_total)), label: 'Logged', color: COLORS.logged,
             colorGetter: ({ dataIndex }) => (isOver(dataIndex) ? COLORS.over : COLORS.logged),
             valueFormatter: (v, { dataIndex }) => `${formatHours(v)}${isOver(dataIndex) ? ' (over 40h)' : ''}` },
-        ]}>
+        ]}
+        margin={{ right: 40 }}>
         <ChartsReferenceLine x={WEEKLY_CAP} label="40h" labelAlign="start"
           lineStyle={{ strokeDasharray: '6 4', strokeWidth: 2 }} />
       </BarChart>
