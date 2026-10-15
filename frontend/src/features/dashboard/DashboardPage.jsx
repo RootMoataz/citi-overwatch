@@ -23,6 +23,8 @@ import StatTile from '../../components/StatTile.jsx'
 import MissingTimesheets from './MissingTimesheets.jsx'
 import Section from './Section.jsx'
 import SmartInsightsPanel from './SmartInsightsPanel.jsx'
+import LiveActivityCard from '../activity/LiveActivityCard.jsx'
+import EmailReportButton from '../report/EmailReportButton.jsx'
 
 const projectLink = (p, tab) => (
   <Link component={RouterLink} to={`/projects/${p.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{p.name}</Link>
@@ -154,7 +156,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
   return (
     <>
       <PrintHeader title={title ?? 'Delivery dashboard'} />
-      <PageHeader title={heading} subtitle={subtitle} actions={<PrintButton />} />
+      <PageHeader title={heading} subtitle={subtitle} actions={<><EmailReportButton dashboard={d} department={department} /><PrintButton /></>} />
       {intro}
       <Stack direction={{ xs: 'column', sm: 'row' }} useFlexGap role="toolbar" aria-label="Dashboard filters"
         sx={{ gap: 1.5, mt: -1.5, mb: 3, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}>
@@ -203,6 +205,8 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
             ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No active projects right now.</Typography>}
           </Section>
         </Grid>
+
+        <Grid size={12}><LiveActivityCard department={department} /></Grid>
 
         <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="Which team members are over-allocated across multiple projects?" hint="More than 40 logged hours this week">

@@ -1,12 +1,14 @@
 // TanStack Query hooks for every API resource. Mutations invalidate what they change and toast success.
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../app/toast.js'
+import { celebrate } from '../lib/celebrate.js'
 import { api } from './client.js'
 
 // Errors that mean "what you're looking at is out of date": refetch so the screen shows the current state.
 const STALE_CODES = new Set(['STALE_ENTRY', 'NOT_PENDING'])
 
-function useApiMutation(mutationFn, { invalidate = [], success } = {}) {
+// `after(data, variables, queryClient)` runs once the refreshed data is in (e.g. to celebrate an emptied queue).
+function useApiMutation(mutationFn, { invalidate = [], success, after } = {}) {
   const queryClient = useQueryClient()
   const toast = useToast()
   const refresh = (data, variables) => {
@@ -19,6 +21,7 @@ function useApiMutation(mutationFn, { invalidate = [], success } = {}) {
       await refresh(data, variables)
       const message = typeof success === 'function' ? success(data, variables) : success
       if (message) toast.success(message)
+      after?.(data, variables, queryClient)
     },
     onError: (err, variables) => { if (STALE_CODES.has(err?.code)) refresh(undefined, variables) },
   })
@@ -37,8 +40,15 @@ export const useMilestoneCosts = (id) =>
 
 export const useCreateProject = () => useApiMutation((body) => api.post('/projects', body),
   { invalidate: [['projects'], ['dashboard']], success: (p) => `Created ${p.name}` })
-export const useUpdateProject = (id) => useApiMutation((body) => api.put(`/projects/${id}`, body),
-  { invalidate: [['projects'], ['project', id], ['project-summary', id], ['dashboard']], success: 'Project saved' })
+// Marking a project completed (it wasn't before) earns a confetti burst.
+export const useUpdateProject = (id) => {
+  const queryClient = useQueryClient()
+  return useApiMutation(async (body) => {
+    const wasCompleted = queryClient.getQueryData(['project', id])?.status === 'completed'
+    return { saved: await api.put(`/projects/${id}`, body), completedNow: body?.status === 'completed' && !wasCompleted }
+  }, { invalidate: [['projects'], ['project', id], ['project-summary', id], ['dashboard']], success: 'Project saved',
+    after: (data) => { if (data.completedNow) celebrate() } })
+}
 export const useArchiveProject = (id) => useApiMutation(() => api.del(`/projects/${id}`),
   { invalidate: [['projects'], ['project', id], ['dashboard']], success: 'Project archived' })
 export const useRestoreProject = (id) => useApiMutation(() => api.post(`/projects/${id}/restore`),
@@ -120,7 +130,8 @@ export const useMilestoneStatus = (projectId) => useApiMutation(
   { invalidate: [...milestoneKeys(projectId), ['milestones'], ['time'], ['notifications']],
     success: (data) => (data?.routed_to
       ? `Status updated. You're now supporting ${data.routed_to.milestone.name} (${data.routed_to.project.name})`
-      : 'Status updated') })
+      : 'Status updated'),
+    after: (_, variables) => { if (variables.status === 'completed') celebrate() } })
 // Pull mode: a team member takes a ready, unassigned milestone; 409 means someone else got there first.
 export const useClaimMilestone = (projectId) => useApiMutation((id) => api.post(`/milestones/${id}/claim`),
   { invalidate: [...milestoneKeys(projectId), ['milestones'], ['profile']], success: (m) => `You're on ${m.name}` })
@@ -147,7 +158,12 @@ export const useBreakdown = (entryId, enabled = true) =>
 // expected_hours: the hours the manager saw; the server refuses (409 STALE_ENTRY) if the entry changed since.
 export const useApproveEntry = () => useApiMutation(({ id, expectedHours }) =>
   api.post(`/time-entries/${id}/approve`, { expected_hours: expectedHours }),
-{ invalidate: timeKeys, success: 'Hours approved' })
+{ invalidate: timeKeys, success: 'Hours approved', after: (_, __, queryClient) => { if (approvalsCleared(queryClient)) celebrate() } })
+/** True when every approvals list on screen came back empty after a decision: the queue is cleared. */
+export function approvalsCleared(queryClient) {
+  const lists = queryClient.getQueriesData({ queryKey: ['approvals'] }).map(([, data]) => data).filter(Array.isArray)
+  return lists.length > 0 && lists.every((list) => list.length === 0)
+}
 export const useRejectEntry = () => useApiMutation(({ id, reason, expectedHours }) =>
   api.post(`/time-entries/${id}/reject`, { reason, expected_hours: expectedHours }),
   { invalidate: timeKeys, success: 'Hours rejected' })
@@ -199,6 +215,11 @@ export const useEveryone = () => useQuery({
       api.get('/users', { page_size: 100 }), api.get('/users', { archived: 'true', page_size: 100 })])
     return dedupe([...active.items, ...archived.items])
   },
+})
+// Recent events in the viewer's scope as sentences (Live activity); polls with the app's normal interval.
+export const useActivity = (department = '', limit = 12) => useQuery({
+  queryKey: ['activity', department, limit], queryFn: () => api.get('/activity', { limit, department }),
+  placeholderData: keepPreviousData,
 })
 export const useAuditLog = (filters) => useQuery({
   queryKey: ['audit', filters], queryFn: () => api.get('/audit-log', filters), placeholderData: keepPreviousData,
