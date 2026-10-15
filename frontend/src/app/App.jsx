@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import RequireAuth from '../auth/RequireAuth.jsx'
 import SessionProvider from '../auth/SessionProvider.jsx'
 import { useSession } from '../auth/sessionContext.js'
@@ -18,8 +18,10 @@ import ProfilePage from '../features/profile/ProfilePage.jsx'
 import ArchivePage from '../features/archive/ArchivePage.jsx'
 import AuditPage from '../features/audit/AuditPage.jsx'
 import DepartmentsPage from '../features/departments/DepartmentsPage.jsx'
+import MessagesPage from '../features/messages/MessagesPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
 import { useApprovals } from '../api/queries.js'
+import { useUnreadMessages } from '../api/messages.js'
 import { can } from '../lib/permissions.js'
 import { ROUTE_ROLES } from './access.js'
 import Layout from './Layout.jsx'
@@ -30,9 +32,12 @@ function Shell() {
   const approver = can(user, 'approvals.view')
   const approvals = useApprovals({}, approver)
   const waiting = approvals.data?.length ?? 0
+  // Unread messages refresh every few seconds while Messages is open, at the normal pace elsewhere.
+  const onMessages = useLocation().pathname.startsWith('/messages')
+  const unread = useUnreadMessages({ fast: onMessages }).data?.unread ?? 0
+  const badges = { ...(waiting ? { '/approvals': waiting } : {}), ...(unread ? { '/messages': unread } : {}) }
   // Everyone gets the bell: managers hear about overtime and routing, employees about rejected hours and support work.
-  return <Layout user={user} onLogout={logout} topBarExtras={<NotificationBell />}
-    badges={waiting ? { '/approvals': waiting } : undefined} />
+  return <Layout user={user} onLogout={logout} topBarExtras={<NotificationBell />} badges={badges} />
 }
 
 export default function App() {
@@ -43,6 +48,8 @@ export default function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route element={<RequireAuth><Shell /></RequireAuth>}>
           <Route index element={<HomePage />} />
+          <Route path="messages" element={<RequireAuth roles={ROUTE_ROLES.messages}><MessagesPage /></RequireAuth>} />
+          <Route path="messages/:id" element={<RequireAuth roles={ROUTE_ROLES['messages/:id']}><MessagesPage /></RequireAuth>} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="timesheet" element={<RequireAuth roles={ROUTE_ROLES.timesheet}><TimesheetPage /></RequireAuth>} />

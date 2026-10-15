@@ -13,6 +13,7 @@ import DifficultyChip from '../../components/DifficultyChip.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
 import StatTile from '../../components/StatTile.jsx'
+import MessageButton from '../messages/MessageButton.jsx'
 
 const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
 
@@ -60,12 +61,16 @@ export default function PersonProfilePage() {
 
   return (
     <>
-      <PageHeader title={p.name} avatar={<UserAvatar userId={p.id} name={p.name} size={56} />} subtitle={<>{p.job_title || ROLE[p.role]}{p.is_archived ? ' · Archived' : ''}</>} />
+      <PageHeader title={p.name} avatar={<UserAvatar userId={p.id} name={p.name} size={56} />} subtitle={<>{p.job_title || ROLE[p.role]}{p.is_archived ? ' · Archived' : ''}</>}
+        actions={own ? null : <MessageButton person={p} />} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Job title" value={p.job_title} /></Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Role" value={ROLE[p.role]} /></Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Reports to" value={p.manager ? <PersonLink person={p.manager} /> : null} /></Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Reports to" value={p.manager ? (
+            <Stack direction="row" component="span" sx={{ alignItems: 'center', gap: 0.5 }}>
+              <PersonLink person={p.manager} /><MessageButton person={p.manager} variant="icon" size="small" />
+            </Stack>) : null} /></Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Department" value={p.department?.name} /></Grid>
           {'salary' in p ? <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Annual salary" value={formatMoney(p.salary)} /></Grid> : null}
         </Grid>

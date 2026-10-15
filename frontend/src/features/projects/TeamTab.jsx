@@ -18,6 +18,7 @@ import PersonLink from '../../components/PersonLink.jsx'
 import { formatHours, fullName } from '../../lib/format.js'
 import { memberSchema } from '../../lib/schemas.js'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
+import MessageButton from '../messages/MessageButton.jsx'
 
 function capMessage(name, err) {
   return `${name} is already planned for ${err.details.current_total}h of ${err.details.cap}h per week.`
@@ -100,12 +101,13 @@ export default function TeamTab({ project, manage }) {
             {(members.data ?? []).map((m) => (
               <ListItem key={m.user.id} divider secondaryAction={manage ? (
                 <Stack direction="row">
+                  <MessageButton person={{ id: m.user.id, name: fullName(m.user) }} variant="icon" />
                   <Tooltip title="Change planned hours"><IconButton aria-label={`Change hours for ${fullName(m.user)}`}
                     onClick={() => setDialog({ member: m })}><EditIcon /></IconButton></Tooltip>
                   <Tooltip title="Remove from project"><IconButton aria-label={`Remove ${fullName(m.user)}`}
                     onClick={() => setRemoving(m)}><Delete /></IconButton></Tooltip>
                 </Stack>
-              ) : null}>
+              ) : <MessageButton person={{ id: m.user.id, name: fullName(m.user) }} variant="icon" />}>
                 <ListItemAvatar sx={{ minWidth: 52 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={AVATAR_SIZE.row} /></ListItemAvatar>
                 <ListItemText primary={<PersonLink person={{ id: m.user.id, name: fullName(m.user) }} context={{ project }} />}
                   secondary={`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`} />

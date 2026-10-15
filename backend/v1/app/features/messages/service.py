@@ -1,4 +1,4 @@
-"""In-app messages (LOGIC_WALKTHROUGH §14): one-to-one conversations, group threads and a milestone's discussion.
+"""In-app messages (LOGIC_WALKTHROUGH §21): one-to-one conversations, group threads and a milestone's discussion.
 
 Who may start a conversation with whom is decided by app.rules.messaging; this module loads the facts, stores
 conversations and messages, keeps read receipts and unread counts, and rings the bell (one unread

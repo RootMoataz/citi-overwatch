@@ -40,11 +40,16 @@ const THEMES = [
 
 const resolve = (value, user) => (typeof value === 'function' ? value(user) : value)
 
+// Messages keeps one page instance while moving between conversations, so the inbox doesn't flash on every click.
+const pageKey = (pathname) => (pathname.startsWith('/messages') ? '/messages' : pathname)
+
 function NavItem({ item, user, onNavigate, badge, collapsed }) {
   const label = resolve(item.label, user)
+  const meaning = item.badge?.label ?? 'waiting'
+  const colour = item.badge?.color ?? 'warning'
   const link = (
     <ListItemButton component={NavLink} to={resolve(item.to, user)} end={item.end} onClick={onNavigate}
-      aria-label={collapsed && badge ? `${label} (${badge} waiting)` : undefined}
+      aria-label={collapsed && badge ? `${label} (${badge} ${meaning})` : undefined}
       sx={{ borderRadius: 1.5, mb: 0.5, minHeight: 42, color: 'text.secondary', overflow: 'hidden',
         '& .MuiListItemIcon-root': { color: 'inherit' },
         '&:hover': { color: 'text.primary' },
@@ -54,12 +59,12 @@ function NavItem({ item, user, onNavigate, badge, collapsed }) {
             bgcolor: 'primary.main' } } }}>
       <ListItemIcon sx={{ minWidth: 36 }}>
         {collapsed && badge ? (
-          <Badge variant="dot" color="warning" overlap="circular">{item.icon}</Badge>
+          <Badge variant="dot" color={colour} overlap="circular">{item.icon}</Badge>
         ) : item.icon}
       </ListItemIcon>
       <ListItemText primary={label} sx={{ m: 0, whiteSpace: 'nowrap', ...fade(collapsed) }}
         slotProps={{ primary: { sx: { fontWeight: 'inherit' } } }} />
-      {badge && !collapsed ? <Chip size="small" color="warning" label={badge} aria-label={`${badge} waiting`} /> : null}
+      {badge && !collapsed ? <Chip size="small" color={colour} label={badge} aria-label={`${badge} ${meaning}`} /> : null}
     </ListItemButton>
   )
   return collapsed ? <Tooltip title={label} placement="right">{link}</Tooltip> : link
@@ -207,12 +212,12 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
         </Drawer>
       )}
 
-      <Box component="main" key={location.pathname}
+      <Box component="main" key={pageKey(location.pathname)}
         sx={{ flexGrow: 1, minWidth: 0, px: { xs: 2, md: 4 }, pt: { xs: 10, md: 11 }, pb: 6, maxWidth: 1440 }}>
         {/* Each page fades and rises in; nothing waits for it, and reduced motion skips it. */}
         <motion.div initial={calm ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: EASE }}>
-          <ErrorBoundary key={location.pathname}><Outlet /></ErrorBoundary>
+          <ErrorBoundary key={pageKey(location.pathname)}><Outlet /></ErrorBoundary>
         </motion.div>
       </Box>
     </Box>

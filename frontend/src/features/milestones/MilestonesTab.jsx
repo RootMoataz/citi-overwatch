@@ -9,6 +9,7 @@ import { Fragment, useState } from 'react'
 import {
   useArchiveMilestone, useClaimMilestone, useMembers, useMilestones, useMilestoneStatus,
 } from '../../api/queries.js'
+import { useConversations } from '../../api/messages.js'
 import AvatarStack from '../../components/AvatarStack.jsx'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
@@ -20,10 +21,11 @@ import SupportingChip from '../../components/SupportingChip.jsx'
 import Timeline from '../../components/Timeline.jsx'
 import { formatDate } from '../../lib/format.js'
 import { statusActions } from '../../lib/milestoneActions.js'
+import DiscussButton from '../messages/DiscussButton.jsx'
 import MilestoneDialog from './MilestoneDialog.jsx'
 import MilestoneNotes from './MilestoneNotes.jsx'
 
-function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra }) {
+function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, conversations }) {
   const status = useMilestoneStatus(m.project_id)
   const claim = useClaimMilestone(m.project_id)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -109,6 +111,7 @@ function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra }) 
             ) : button
           })}
           <Box sx={{ flexGrow: 1 }} />
+          <DiscussButton milestone={m} manage={manage} conversations={conversations} />
           <Button size="small" startIcon={<ChatBubble />} aria-expanded={notesOpen} onClick={() => setNotesOpen((o) => !o)}>
             Notes
           </Button>
@@ -126,6 +129,7 @@ export default function MilestonesTab({ project, manage, extra }) {
   const milestones = useMilestones(project.id)
   const members = useMembers(project.id)
   const archive = useArchiveMilestone(project.id)
+  const conversations = useConversations()  // which milestones already have a discussion the viewer is in
   const [editing, setEditing] = useState(null)
   const [archiving, setArchiving] = useState(null)
   const [warning, setWarning] = useState('')
@@ -155,6 +159,7 @@ export default function MilestonesTab({ project, manage, extra }) {
       {items.length ? <Timeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }} /> : null}
       {items.map((m) => (
         <MilestoneCard key={m.id} m={m} project={project} names={names} manage={manage} extra={extra}
+          conversations={conversations.data?.items}
           onEdit={(milestone) => setEditing({ milestone })} onArchive={setArchiving} />
       ))}
       {editing ? (

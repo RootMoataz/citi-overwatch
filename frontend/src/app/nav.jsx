@@ -1,5 +1,6 @@
 import AssignmentTurnedIn from '@mui/icons-material/AssignmentTurnedIn'
 import Apartment from '@mui/icons-material/ApartmentOutlined'
+import Chat from '@mui/icons-material/ChatOutlined'
 import Dashboard from '@mui/icons-material/DashboardOutlined'
 import Folder from '@mui/icons-material/FolderOutlined'
 import Groups from '@mui/icons-material/GroupsOutlined'
@@ -16,9 +17,11 @@ export const COLLAPSED_WIDTH = 72
 const HOME_LABEL = { employee: 'My week', admin: 'Control centre' }
 
 // `to` and `label` can depend on who's signed in. Items marked `admin: true` sit in their own "Admin" group for admins;
-// executives get the read-only ones (Archive, Audit log) with their work items.
+// executives get the read-only ones (Archive, Audit log) with their work items. `badge` says what a count means
+// (read aloud, e.g. "3 unread") and its colour; the default is "waiting" in the warning colour.
 export const NAV = [
   { to: '/', label: (user) => HOME_LABEL[user?.role] ?? 'Dashboard', icon: <Dashboard />, end: true },
+  { to: '/messages', label: 'Messages', icon: <Chat />, action: 'messages.use', badge: { label: 'unread', color: 'primary' } },
   { to: '/projects', label: 'Projects', icon: <Folder /> },
   { to: '/timesheet', label: 'My timesheet', icon: <Schedule />, action: 'timesheet.use' },
   { to: (user) => `/people/${user.id}/profile`, label: 'My history', icon: <ManageHistory />, action: 'history.own' },

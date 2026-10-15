@@ -52,7 +52,7 @@ describe('Layout', () => {
       .toEqual(['People', 'Departments', 'Project requests', 'Archive', 'Audit log'])
     const work = screen.getByRole('list', { name: /^work$/i })
     expect(within(work).getAllByRole('link').map((a) => a.textContent))
-      .toEqual(['Control centre', 'Projects', 'My timesheet', 'Approvals', 'Allocation'])
+      .toEqual(['Control centre', 'Messages', 'Projects', 'My timesheet', 'Approvals', 'Allocation'])
   })
 
   test('managers have no Admin group and keep Project requests and Archive with their work', () => {
@@ -60,7 +60,7 @@ describe('Layout', () => {
     expect(screen.queryByRole('list', { name: /^admin$/i })).not.toBeInTheDocument()
     const work = screen.getByRole('list', { name: /^work$/i })
     expect(within(work).getAllByRole('link').map((a) => a.textContent))
-      .toEqual(['Dashboard', 'Projects', 'My timesheet', 'Approvals', 'Allocation', 'Project requests', 'Archive'])
+      .toEqual(['Dashboard', 'Messages', 'Projects', 'My timesheet', 'Approvals', 'Allocation', 'Project requests', 'Archive'])
   })
 
   test('the current page is marked in the navigation', () => {

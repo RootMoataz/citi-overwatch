@@ -1,4 +1,4 @@
-"""Who may message whom (LOGIC_WALKTHROUGH §14), as pure checks of facts the service has already loaded.
+"""Who may message whom (LOGIC_WALKTHROUGH §21), as pure checks of facts the service has already loaded.
 
 Admins, executives and managers may start a conversation with any active person and start group threads.
 An employee may only start a one-to-one conversation with their own managers: the person they report to, the

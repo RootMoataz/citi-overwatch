@@ -506,3 +506,37 @@ Without the template id the button explains that email isn't set up instead of f
 Confetti (`lib/celebrate.js`, canvas-confetti loaded on first use, skipped under reduced motion) fires in the browser
 of the person who marks a milestone Completed, who approves the entry that empties every approvals list on screen, or
 who moves a project to Completed (not when re-saving a project that already was).
+
+## 21. Messages: who may message whom
+
+`app/rules/messaging.py` decides, from facts the service loads; the server enforces it on every request and the
+screen only offers what `GET /messages/contacts` returns.
+
+| Sender | May start a one-to-one with | May start a group | May reply |
+|---|---|---|---|
+| Admin | Any active person | Yes | In any conversation they're in |
+| Executive | Any active person (messaging is a personal action, so these routes opt in to `allow_executive`) | Yes | In any conversation they're in |
+| Manager | Any active person | Yes | In any conversation they're in |
+| Employee | Only their managers: the person they report to (`users.manager_id`), the manager of every live project they're on (not archived, not completed, still on the team) and that project's delegate approver while the delegation runs | No | In any conversation they're in, e.g. a group or Discuss thread a manager started |
+
+Nobody may message themselves (`400`) or an archived person (`403 MESSAGING_NOT_ALLOWED`). An employee naming anyone
+else (an admin, an executive, another employee, an unrelated manager) gets `403 MESSAGING_NOT_ALLOWED` "You can only
+message your managers."; a group request is refused whole if any one recipient is refused. Someone who isn't a
+participant gets `404` for the conversation, so ids reveal nothing. Replying to a one-to-one whose other person has
+been archived is refused; the screen shows that thread read-only.
+
+One-to-one conversations are unique per pair (`pair_key`): starting one again posts into the existing one. A
+milestone's **Discuss** thread is a group with its active assignees, the project's manager and whoever opened it
+(the project's manager or an admin), subject "*Milestone* · *Project*"; opening it again adds anyone assigned since.
+Assignees open it from the milestone card ("Open discussion") once it exists but can't start it.
+
+Unread counts are messages from others newer than your `last_read_at`; viewing a thread marks it read, and sending
+counts as reading. "Seen" shows under your last message once every other participant's `last_read_at` is at or after
+it. A new message gives each other active participant one `MESSAGE_RECEIVED` bell alert per conversation (refreshed,
+not repeated, until they read it), and never includes the text. Sending is limited to 20 messages per person per
+rolling minute (`429`). The inbox and unread badge poll every 5 seconds on Messages (30 elsewhere) and an open thread
+every 3 seconds. Bodies are plain text: React escapes them and `white-space: pre-wrap` keeps line breaks; nothing is
+turned into links or markup.
+
+The seed (and `demo_backfill`, only while no conversation exists) adds a three-message thread between Morgan
+Manager and Eli Employee and the Schema Mapping discussion with Eli, Ana and Ben, each leaving Eli one unread message.

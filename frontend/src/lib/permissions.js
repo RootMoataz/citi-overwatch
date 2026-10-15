@@ -32,6 +32,8 @@ export function can(user, action, resource = {}) {
       return isManager(user)
     case 'history.own':
       return user.role === 'employee'
+    case 'messages.use':
+      return true // every role; who they may write to is the server's contact list (backend rules/messaging.py)
     case 'timesheet.use':
       return !isExecutive(user)
     case 'audit.view':

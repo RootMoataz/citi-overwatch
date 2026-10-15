@@ -30,6 +30,11 @@ erDiagram
   users ||--o{ project_requests : submits
   project_requests |o--o| projects : "becomes"
   users ||--o{ notifications : receives
+  users ||--o{ conversation_participants : "takes part in"
+  conversations ||--o{ conversation_participants : has
+  conversations ||--o{ messages : holds
+  users ||--o{ messages : sends
+  milestones |o--o| conversations : "discussed in"
   users ||--o{ refresh_tokens : has
   users ||--o{ password_reset_codes : has
   users ||--o{ audit_log : "acts in"
@@ -125,7 +130,15 @@ erDiagram
 | Table | Purpose and notes |
 |---|---|
 | `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget. |
-| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY` or `DELEGATE_ASSIGNED`.<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
+| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY`, `DELEGATE_ASSIGNED` or `MESSAGE_RECEIVED` (`payload.conversation_id`; at most one unread per conversation and recipient, refreshed by each new message).<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
+
+### Messages (migration 007)
+
+| Table | Purpose and notes |
+|---|---|
+| `conversations` | `created_by`, `created_at`, optional `subject` (≤ 120 characters), `is_group`.<br>• `pair_key` (the two user ids sorted, joined with `:`) is `UNIQUE` and set only on one-to-one conversations, so each pair has exactly one, even if both start it at once.<br>• `milestone_id` is `UNIQUE`: a milestone has at most one discussion.<br>• `last_message_at` orders the inbox (indexed). |
+| `conversation_participants` | `PRIMARY KEY (conversation_id, user_id)`, `joined_at`, `last_read_at` (the read receipt and the unread cut-off). Indexed on `user_id` for "my conversations". |
+| `messages` | `conversation_id`, `sender_id`, `body` (`CHECK` 1 to 2000 characters), `created_at`. Indexed on `(conversation_id, created_at DESC, id DESC)` for thread pages and `(sender_id, created_at DESC)` for the rate limit. Never edited or deleted. |
 
 ### Audit
 

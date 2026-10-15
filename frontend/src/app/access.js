@@ -17,6 +17,8 @@ export const ROUTE_ROLES = {
   'people/:id': ['admin'],
   departments: ['admin'],
   audit: ['admin', 'executive'],
+  messages: ['admin', 'manager', 'employee', 'executive'], // everyone; employees write only to their managers
+  'messages/:id': ['admin', 'manager', 'employee', 'executive'],
 }
 
 export const NO_ACCESS = "You don't have access to that page."

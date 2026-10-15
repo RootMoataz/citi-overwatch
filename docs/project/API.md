@@ -50,7 +50,7 @@ Success codes: `200` OK, `201` created, `204` archived or no content.
 
 `role: "executive"` is read-only leadership. Executives read what an admin reads for delivery oversight: `/dashboard`, `/insights/smart`, `/allocations`, `/projects` (all, archived ones included) and every project tab, `/milestones/…`, `/archive` (every type, `can_restore` always `false`), `/audit-log`, `/departments`, `/users` (names only, like a manager) and anyone's `/users/{id}/profile`. They have no timesheet and no approvals queue (`/approvals`, `/project-requests` and someone else's `/time-entries` are `403`).
 
-- **No writes.** The router refuses every `POST`, `PUT`, `PATCH` and `DELETE` for an executive with `403 READ_ONLY` before the handler runs. A route opts in with `allow_executive=True`; only their own account does: `POST /auth/change-password`, `PUT /me`, `PUT /me/avatar`, `DELETE /me/avatar`, `POST /notifications/read-all`, `POST /notifications/{id}/read` (sign-in, refresh and logout need no token). A test walks every registered write route and checks this list.
+- **No writes.** The router refuses every `POST`, `PUT`, `PATCH` and `DELETE` for an executive with `403 READ_ONLY` before the handler runs. A route opts in with `allow_executive=True`; only their own account does: `POST /auth/change-password`, `PUT /me`, `PUT /me/avatar`, `DELETE /me/avatar`, `POST /notifications/read-all`, `POST /notifications/{id}/read`, and sending their own messages: `POST /conversations`, `POST /conversations/{id}/messages`, `POST /conversations/{id}/read` (sign-in, refresh and logout need no token). A test walks every registered write route and checks this list.
 - **No pay.** Every JSON response to an executive has every `salary` and `hourly_rate` field removed, at any depth, including the audit log's `changes` and their own `/me` and profile.
 
 ---
@@ -330,11 +330,39 @@ As an admin (managers get the same without `hourly_rate`):
 | `MILESTONE_CLAIMED` | The project's manager (not when they claim it themselves) | "*Name* claimed *milestone* (*project*)" | `name`, `milestone {id, name}`, `project {id, name}` |
 | `DELEGATE_ASSIGNED` | The newly named delegate approver (not when the same delegate is saved again) | "*Name* made you the delegate approver for *project*: you can approve hours for *manager* until *date*" (or "until further notice") | `project {id, name}`, `manager {id, name}`, `until` |
 
+| `MESSAGE_RECEIVED` | Every other active participant of a conversation when a message arrives; at most one unread per conversation per person (a newer message refreshes it, reading the conversation marks it read) | "*Name* sent you a message" | `conversation_id`, `name`, `subject`, `is_group` (never the text) |
 | `TIMESHEET_EMPTY` | An active employee or manager on at least one active project with no pending or approved hours this week, from Friday 14:00 to the end of Sunday, New York time | "Your timesheet for the week of Mon 12 Oct is empty" | `week_start` |
 
 For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, so the bell can open that week's timesheet; `TIMESHEET_EMPTY` links to `/timesheet?week=<week_start>` the same way.
 
 `TIMESHEET_EMPTY` is never scheduled: `GET /notifications` creates it for the caller when it is due (and `GET /timesheet-reminders` does the same for a manager), at most once per person-week (the `(type, subject_user_id, week_start)` unique key). Once the caller has logged hours that week, an unread one is marked read. See [the Friday reminder](LOGIC_WALKTHROUGH.md#14-the-friday-timesheet-reminder).
+
+## Messages
+
+One-to-one conversations, group threads and a milestone's discussion. Who may start a conversation with whom is
+[the messaging rule](LOGIC_WALKTHROUGH.md#21-messages-who-may-message-whom). Only participants see a conversation:
+anyone else gets `404` for its id. Bodies are plain text, trimmed, 1 to 2000 characters (`400 VALIDATION_ERROR` with
+`{"body": "required" | "must be text" | "max_length:2000"}`); sending more than 20 messages in a rolling minute is
+`429 RATE_LIMITED`. Starting a conversation is audited (`create` on `conversation`, participants and subject only);
+message bodies are never audited.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/messages/contacts` | Who you may start a conversation with: `{"items": [{id, name, first_name, last_name, role, job_title, avatar_url, is_archived, relation}], "can_group": bool}`. Employees get only their managers, each with a `relation` ("Your manager", "Manages Apollo Data Migration", "Delegate approver for …"); everyone else gets every active person but themselves (`relation` null) |
+| GET | `/messages/unread-count` | `{"unread": messages from others after your last read, "conversations": how many conversations have any}` |
+| GET | `/conversations` | Your conversations, latest activity first: `{"items": [conversation]}` (below) |
+| POST | `/conversations` | `{participant_ids: [uuid, …], subject?, milestone_id?, body}` → the conversation. One participant: the one-to-one with them, created (`201`) or reused (`200`, the message is added). Several: a new group (`201`; `subject` up to 120 characters). With `milestone_id`: that milestone's discussion (as `POST /milestones/{id}/discussion`) plus the message. `403 MESSAGING_NOT_ALLOWED` "You can only message your managers." when an employee names anyone else; `403 MESSAGING_NOT_ALLOWED` for an archived or unknown person or an employee starting a group; `400` for yourself |
+| GET | `/conversations/{id}/messages?before=<message id>&limit=50` | A page of the thread, oldest first: `{"items": [{id, conversation_id, body, created_at, sender {id, name}}], "has_more": bool, "conversation": conversation}`. Without `before`, the newest `limit` (max 100) messages |
+| POST | `/conversations/{id}/messages` | `{body}` → the message (`201`). Any participant may reply, whatever their role. `403 MESSAGING_NOT_ALLOWED` when every other participant is archived |
+| POST | `/conversations/{id}/read` | Marks everything so far read for you (and clears that conversation's `MESSAGE_RECEIVED` alert) → `{conversation_id, last_read_at}` |
+| GET | `/milestones/{id}/discussion` | The milestone's discussion if you're in it, else `404` |
+| POST | `/milestones/{id}/discussion` | The project's manager or an admin opens it: created (`201`) as a group with the milestone's active assignees, the project's manager and the caller, subject "*Milestone* · *Project*"; or returned (`200`) with anyone assigned since added. `403` for others who can see the milestone, `409 NOBODY_TO_DISCUSS` when nobody is assigned |
+
+A conversation: `{id, subject, is_group, milestone: {id, name, project {id, name}} | null, created_by, created_at,
+last_activity_at, last_read_at (yours), participants: [{id, name, role, job_title, avatar_url, is_archived,
+last_read_at}], last_message: {id, body (first 140 characters), created_at, sender {id, name}} | null, unread_count}`.
+A participant's `last_read_at` is the read receipt: a message is seen by everyone whose `last_read_at` is at or after
+its `created_at`. Sending a message counts as reading the conversation.
 
 ### Missing timesheets
 

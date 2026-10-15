@@ -13,10 +13,12 @@ const TARGETS = {
   MILESTONE_CLAIMED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   DELEGATE_ASSIGNED: (n) => [`/approvals?project=${n.payload.project.id}`, "Review the project's hours in Approvals"],
   TIMESHEET_EMPTY: (n) => [`/timesheet?week=${n.week_start}`, 'Log your hours for that week'],
+  MESSAGE_RECEIVED: (n) => [`/messages/${n.payload.conversation_id}`, 'Open the conversation'],
 }
 const target = (n) => (TARGETS[n.type] ?? TARGETS.OVER_40H)(n)
 
-/** Unread alerts (overtime, rejected hours, auto-routed support, claimed milestones, Friday's empty-timesheet reminder); opening one marks it read and goes to the page it's about. */
+/** Unread alerts (overtime, rejected hours, auto-routed support, claimed milestones, Friday's empty-timesheet reminder,
+ * new messages); opening one marks it read and goes to the page it's about. */
 export default function NotificationBell() {
   const navigate = useNavigate()
   const notifications = useNotifications()
