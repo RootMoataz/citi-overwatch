@@ -326,3 +326,25 @@ def test_a_fresh_seed_is_curated_the_same_way(conn):
     assert again["projects"]["Apollo Data Migration"]["after"]["at_risk"] == []  # today's seed: Apollo is healthy
     assert 70 <= again["projects"]["Delta Compliance Audit"]["after"]["budget_pct"] <= 90
     assert query_one(conn, "SELECT count(*) AS n FROM audit_log")["n"] == 0  # the seed writes no audit
+
+
+def test_every_demo_milestone_gets_an_estimate_that_fits_its_hours_and_set_ones_stay(live):
+    cutover = query_one(live, "SELECT id FROM milestones WHERE name = 'Cutover'")
+    live.run("UPDATE milestones SET estimated_hours = 999 WHERE id = :i", i=cutover["id"])
+    result = demo_curate(live, dry_run=False, today=TODAY)
+    rows = query(live, """
+        SELECT m.name, m.status::text AS status, m.estimated_hours,
+               (SELECT coalesce(sum(t.hours), 0) FROM time_entries t WHERE t.milestone_id = m.id
+                  AND t.status IN ('pending', 'approved')) AS logged
+        FROM milestones m JOIN projects p ON p.id = m.project_id
+        WHERE p.name = ANY(:names) AND NOT m.is_archived""", names=list(PROJECT_DEPARTMENTS))
+    assert rows and all(r["estimated_hours"] is not None for r in rows)
+    for r in rows:
+        if r["status"] == "completed" and r["logged"] > 0:
+            assert abs(r["estimated_hours"] - r["logged"]) <= r["logged"] * Decimal("0.2"), r["name"]
+        elif r["logged"] > 0:
+            assert r["estimated_hours"] > r["logged"], r["name"]
+    assert query_one(live, "SELECT estimated_hours FROM milestones WHERE id = :i", i=cutover["id"])["estimated_hours"] == 999
+    listed = [e["name"] for p in result["projects"].values() for e in p["estimates_set"]]
+    assert "Cutover" not in listed and "Schema Mapping" in listed
+    assert all(p["estimates_set"] == [] for p in demo_curate(live, dry_run=False, today=TODAY)["projects"].values())

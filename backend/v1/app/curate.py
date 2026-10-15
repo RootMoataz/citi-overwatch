@@ -12,6 +12,7 @@ The rules, in short (LOGIC_WALKTHROUGH has the full version):
 - its status follows its dates and today: done in the past, under way today, not started later; never ahead of a
   step before it that isn't done; a step that would end up overdue is not added (a warning says so);
 - in pull mode nobody is assigned, so the team can claim the work;
+- every milestone without an estimate gets one that fits its logged hours (see _estimates);
 - hours: 4-8h on most weekdays up to the person's planned hours on the project, never over 40h in a week or 8h in a
   day across all their entries, trimmed from the latest day back until the project's spend stays plausible.
 For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
@@ -25,9 +26,10 @@ from decimal import Decimal
 
 from app.audit import record
 from app.db import query, query_one
-from app.presets import department_key, distribute, match_step, normalize, preset_for, stages
+from app.presets import department_key, distribute, match_step, normalize, preset_for, scaled_estimate, stages
 from app.rules.at_risk import at_risk_reasons, weighted_progress
 from app.rules.cycles import creates_cycle
+from app.rules.estimates import duration_days, working_days
 from app.rules.overtime import FORECAST_WEEKS, hourly_rate, overtime_ids
 from app.seed import PROJECT_DEPARTMENTS as DEMO_PROJECTS
 
@@ -72,6 +74,7 @@ def curate(conn, today: date, *, audit: bool = True, archive_test_items: bool = 
         out["archived"] = _archive_test_items(conn, out["warnings"], audit)
     load = _Load(conn)
     ids: dict[str, str] = {}
+    departments: dict[str, str] = {}
     for name, department in DEMO_PROJECTS.items():
         project = query_one(conn, """SELECT p.*, d.name AS department_name FROM projects p
                                      LEFT JOIN departments d ON d.id = p.department_id
@@ -88,17 +91,21 @@ def curate(conn, today: date, *, audit: bool = True, archive_test_items: bool = 
         curation = _ProjectCuration(conn, load, project, own or department, today, out["warnings"])
         out["projects"][name] = curation.run()
         ids[name] = curation.pid
+        departments[name] = own or department
     out["timesheets"] = _timesheets(conn, today, out["warnings"])
     for name, result in out["projects"].items():
+        result["estimates_set"] = _estimates(conn, ids[name], departments[name])  # after the hours are in
         result["pending_added"] = out["timesheets"]["by_project"].get(name, {}).get("pending", 0)
         result["rejected_added"] = out["timesheets"]["by_project"].get(name, {}).get("rejected", 0)
-        changed = result["added"] or result["team_added"] or result["pending_added"] or result["rejected_added"]
+        changed = result["added"] or result["team_added"] or result["pending_added"] or result["rejected_added"] \
+            or result["estimates_set"]
         if audit and changed:  # one summary entry per project, by System
             record(conn, None, "curate_demo_plan", "project", ids[name], after={
                 "note": NOTE, "milestones_added": [r["name"] for r in result["added"]],
                 "dependencies_added": len(result["dependencies_added"]),
                 "team_added": [t["name"] for t in result["team_added"]], "hours_added": result["hours_added"],
-                "pending_added": result["pending_added"], "rejected_added": result["rejected_added"]})
+                "pending_added": result["pending_added"], "rejected_added": result["rejected_added"],
+                "estimates_set": len(result["estimates_set"])})
     return out
 
 
@@ -811,3 +818,41 @@ def _write_timesheet(conn, uid: str, week: date, pending: list[dict], rejected: 
                      p=json.dumps({"name": f"{person['first_name']} {person['last_name']}",
                                    "week_total": float(running), "project_id": str(p["work"]["project_id"])}))
             out["notifications"] += 1
+
+
+# ---------- expected effort on every demo milestone ----------
+
+def _estimates(conn, project_id: str, department: str) -> list[dict]:
+    """Set estimated_hours on the project's milestones that have none, consistent with what is logged (pending
+    and approved): a completed milestone's estimate is within 15% of its logged hours, an open one's stays above
+    them; without hours it's the preset step's estimate for the milestone's dates (or about 4h a working day for
+    each person on a milestone that isn't a preset step). Never changes an estimate someone set."""
+    rows = query(conn, """
+        SELECT m.id, m.name, m.start_date, m.end_date, m.status::text AS status,
+               (SELECT count(*) FROM milestone_assignees a WHERE a.milestone_id = m.id) AS people,
+               (SELECT coalesce(sum(t.hours), 0) FROM time_entries t WHERE t.milestone_id = m.id
+                  AND t.status IN ('pending', 'approved')) AS logged
+        FROM milestones m WHERE m.project_id = :p AND NOT m.is_archived AND m.estimated_hours IS NULL
+        ORDER BY m.start_date, m.name""", p=project_id)
+    out = []
+    for r in rows:
+        logged = Decimal(r["logged"])
+        step = match_step(department, r["name"])
+        if step:
+            plan = scaled_estimate(step, duration_days(r["start_date"], r["end_date"]))
+        else:
+            plan = Decimal(4 * max(1, r["people"]) * max(1, working_days(r["start_date"], r["end_date"])))
+        if r["status"] == "completed" and logged > 0:
+            # Within 15% either way of what it took, so the estimate looks like a real one.
+            factor = Decimal(85 + zlib.crc32(r["name"].encode()) % 31) / 100
+            estimate = logged * factor
+        elif logged > 0:
+            estimate = max(plan, logged * Decimal("1.25"))  # still open: more to come
+        else:
+            estimate = plan
+        estimate = min(Decimal(10000), max(Decimal(1), estimate.quantize(Decimal(1))))
+        conn.run("UPDATE milestones SET estimated_hours = :e, updated_at = now() WHERE id = :i",
+                 e=estimate, i=r["id"])
+        out.append({"name": r["name"], "status": r["status"], "estimated_hours": float(estimate),
+                    "logged_hours": float(logged)})
+    return out

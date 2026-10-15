@@ -91,6 +91,9 @@ export const milestoneSchema = z.object({
   end_date: isoDate('end date'),
   difficulty: z.enum(['easy', 'medium', 'hard']),
   priority: z.enum(['low', 'medium', 'high', 'critical']),
+  // Optional person-hours: empty, or more than 0 and at most 10,000 with one decimal at most (the server's rule).
+  estimated_hours: z.string().trim().refine((v) => v === '' || (/^\d+(\.\d)?$/.test(v) && Number(v) > 0 && Number(v) <= 10000),
+    { message: 'Enter hours from 0.1 to 10,000, with one decimal at most' }).optional().default(''),
   predecessor_ids: z.array(z.string()),
   assignee_ids: z.array(z.string()),
 }).superRefine(endAfterStart('start_date', 'end_date'))

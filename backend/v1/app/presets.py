@@ -1,7 +1,8 @@
 """Department presets: a realistic milestone plan per department, used by the project template and the demo
 curation. Pure data and pure functions, no database.
 
-Each step has a weight (its share of the project timeline), a difficulty, a priority, the steps it waits for
+Each step has a weight (its share of the project timeline), an effort estimate in person-hours for a
+six-month project (scaled to the dates it actually gets), a difficulty, a priority, the steps it waits for
 (`after`) and the skills it needs (job titles, matched against people's titles when someone is picked for it).
 Steps that wait for the same steps run in parallel and share their dates.
 """
@@ -9,6 +10,9 @@ Steps that wait for the same steps run in parallel and share their dates.
 import re
 from dataclasses import dataclass
 from datetime import date, timedelta
+from decimal import Decimal
+
+REFERENCE_DAYS = 182  # the project length the step estimates are written for (26 weeks)
 
 
 @dataclass(frozen=True)
@@ -16,6 +20,7 @@ class Step:
     name: str
     description: str
     weight: int
+    hours: int  # expected person-hours when the project runs REFERENCE_DAYS
     difficulty: str
     priority: str
     after: tuple[str, ...]
@@ -26,49 +31,49 @@ PRESETS: dict[str, tuple[Step, ...]] = {
     # Software delivery, with the backend and frontend built side by side.
     "Technology": (
         Step("Discovery & requirements", "Agree the scope, user needs and acceptance criteria with the business.",
-             12, "easy", "medium", (), ("Business Analyst", "Software Engineer")),
+             12, 80, "easy", "medium", (), ("Business Analyst", "Software Engineer")),
         Step("Solution architecture", "Design the target architecture, data model and integration approach.",
-             13, "medium", "high", ("Discovery & requirements",), ("Backend Engineer", "Data Engineer", "Software Engineer")),
+             13, 120, "medium", "high", ("Discovery & requirements",), ("Backend Engineer", "Data Engineer", "Software Engineer")),
         Step("Build: backend services", "Deliver the services, data pipelines and integrations behind the solution.",
-             35, "hard", "high", ("Solution architecture",), ("Backend Engineer", "Data Engineer", "Software Engineer")),
+             35, 320, "hard", "high", ("Solution architecture",), ("Backend Engineer", "Data Engineer", "Software Engineer")),
         Step("Build: frontend", "Deliver the screens people use, built against the agreed designs.",
-             35, "medium", "medium", ("Solution architecture",), ("Frontend Engineer", "UX Designer", "Mobile Engineer")),
+             35, 240, "medium", "medium", ("Solution architecture",), ("Frontend Engineer", "UX Designer", "Mobile Engineer")),
         Step("QA & user acceptance testing", "Prove the solution works end to end and get the business to sign it off.",
-             15, "medium", "high", ("Build: backend services", "Build: frontend"), ("QA Engineer", "Business Analyst")),
+             15, 160, "medium", "high", ("Build: backend services", "Build: frontend"), ("QA Engineer", "Business Analyst")),
         Step("Release & cutover", "Deploy to production and move users across with a rollback plan ready.",
-             10, "hard", "critical", ("QA & user acceptance testing",), ("DevOps Engineer", "Backend Engineer", "Software Engineer")),
+             10, 80, "hard", "critical", ("QA & user acceptance testing",), ("DevOps Engineer", "Backend Engineer", "Software Engineer")),
         Step("Hypercare", "Support users closely after go-live and fix early issues fast.",
-             15, "easy", "medium", ("Release & cutover",), ("Software Engineer", "QA Engineer")),
+             15, 80, "easy", "medium", ("Release & cutover",), ("Software Engineer", "QA Engineer")),
     ),
     # An operational rollout: assess, choose, pilot, train, roll out, review.
     "Operations": (
         Step("Current-state assessment", "Map today's processes, tools and pain points with the teams involved.",
-             15, "easy", "medium", (), ("Business Analyst", "Cloud Engineer", "Network Engineer")),
+             15, 80, "easy", "medium", (), ("Business Analyst", "Cloud Engineer", "Network Engineer")),
         Step("Vendor & tool selection", "Shortlist, evaluate and choose the vendor or tool that fits the requirements.",
-             15, "medium", "high", ("Current-state assessment",), ("Cloud Engineer", "DevOps Engineer", "Business Analyst")),
+             15, 100, "medium", "high", ("Current-state assessment",), ("Cloud Engineer", "DevOps Engineer", "Business Analyst")),
         Step("Pilot rollout", "Run the change with one team first and measure the results.",
-             20, "hard", "high", ("Vendor & tool selection",), ("DevOps Engineer", "Frontend Engineer", "Cloud Engineer")),
+             20, 200, "hard", "high", ("Vendor & tool selection",), ("DevOps Engineer", "Frontend Engineer", "Cloud Engineer")),
         Step("Training & change management", "Prepare guides and train every affected team before the full rollout.",
-             15, "medium", "medium", ("Pilot rollout",), ("QA Engineer", "Business Analyst", "Frontend Engineer")),
+             15, 120, "medium", "medium", ("Pilot rollout",), ("QA Engineer", "Business Analyst", "Frontend Engineer")),
         Step("Full rollout", "Roll the change out to every team and retire the old way of working.",
-             25, "hard", "critical", ("Training & change management",), ("DevOps Engineer", "Network Engineer", "Cloud Engineer")),
+             25, 280, "hard", "critical", ("Training & change management",), ("DevOps Engineer", "Network Engineer", "Cloud Engineer")),
         Step("Post-implementation review", "Check the benefits against the business case and record lessons learned.",
-             10, "easy", "low", ("Full rollout",), ("Business Analyst", "QA Engineer")),
+             10, 40, "easy", "low", ("Full rollout",), ("Business Analyst", "QA Engineer")),
     ),
     # An audit cycle, from scoping to the regulator's sign-off.
     "Risk & Compliance": (
         Step("Scoping & risk assessment", "Set the audit scope and rank the risks that matter most.",
-             15, "medium", "high", (), ("Risk Analyst", "Compliance Analyst")),
+             15, 60, "medium", "high", (), ("Risk Analyst", "Compliance Analyst")),
         Step("Control testing (fieldwork)", "Test the key controls and collect evidence for each one.",
-             30, "hard", "high", ("Scoping & risk assessment",), ("Compliance Analyst", "Risk Analyst")),
+             30, 240, "hard", "high", ("Scoping & risk assessment",), ("Compliance Analyst", "Risk Analyst")),
         Step("Findings & draft report", "Write up the findings with ratings and agree the facts with control owners.",
-             15, "medium", "medium", ("Control testing (fieldwork)",), ("Compliance Analyst", "Risk Analyst")),
+             15, 100, "medium", "medium", ("Control testing (fieldwork)",), ("Compliance Analyst", "Risk Analyst")),
         Step("Remediation planning", "Agree an owner, actions and a deadline for every finding.",
-             15, "medium", "medium", ("Findings & draft report",), ("Risk Analyst", "Compliance Analyst")),
+             15, 80, "medium", "medium", ("Findings & draft report",), ("Risk Analyst", "Compliance Analyst")),
         Step("Remediation verification", "Re-test the fixed controls to confirm each finding is closed.",
-             15, "medium", "high", ("Remediation planning",), ("Compliance Analyst", "Risk Analyst")),
+             15, 100, "medium", "high", ("Remediation planning",), ("Compliance Analyst", "Risk Analyst")),
         Step("Regulatory sign-off", "Present the final report and get sign-off from the regulator and the board.",
-             10, "easy", "critical", ("Remediation verification",), ("Compliance Analyst", "Risk Analyst")),
+             10, 40, "easy", "critical", ("Remediation verification",), ("Compliance Analyst", "Risk Analyst")),
     ),
 }
 
@@ -170,6 +175,13 @@ def distribute(start: date, end: date, weights: list[int]) -> list[tuple[date, d
     return spans
 
 
+def scaled_estimate(step: Step, days: int) -> Decimal:
+    """The step's estimate for `days` calendar days, against the days it gets in a REFERENCE_DAYS project;
+    whole hours, at least 1, at most 10,000."""
+    reference = REFERENCE_DAYS * step.weight / 100
+    return Decimal(min(10000, max(1, round(step.hours * days / reference))))
+
+
 def plan_for(department: str, start_date: date, end_date: date) -> list[dict]:
     """The department's plan laid over the project's dates: stages back to back, parallel steps sharing dates.
     Raises KeyError for a department without a preset, ValueError when the project is shorter than the stages."""
@@ -185,6 +197,7 @@ def plan_for(department: str, start_date: date, end_date: date) -> list[dict]:
         for step in group:
             out.append({"name": step.name, "description": step.description, "start_date": start, "end_date": end,
                         "difficulty": step.difficulty, "priority": step.priority, "status": "not_started",
+                        "estimated_hours": scaled_estimate(step, (end - start).days + 1),
                         "after": list(step.after), "skills": list(step.skills)})
     return out
 
@@ -193,6 +206,7 @@ def templates() -> list[dict]:
     """Every department's plan for GET /project-templates."""
     return [{"department": department,
              "milestones": [{"name": s.name, "description": s.description, "weight": s.weight,
+                             "estimated_hours": s.hours,
                              "difficulty": s.difficulty, "priority": s.priority, "after": list(s.after),
                              "skills": list(s.skills)} for s in steps]}
             for department, steps in PRESETS.items()]

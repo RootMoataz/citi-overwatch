@@ -60,6 +60,7 @@ def test_plan_for_fills_the_project_dates_without_gaps_or_zero_length_steps(depa
     for m in plan:
         assert start <= m["start_date"] <= m["end_date"] <= end
         assert m["status"] == "not_started"
+        assert 1 <= m["estimated_hours"] <= 10000
         for pred in m["after"]:
             # Every step starts the day after the steps it depends on end.
             assert by_name[pred]["end_date"] < m["start_date"]
@@ -112,4 +113,15 @@ def test_templates_lists_every_department_for_the_api():
     out = templates()
     assert [t["department"] for t in out] == ["Technology", "Operations", "Risk & Compliance"]
     first = out[0]["milestones"][0]
-    assert set(first) == {"name", "description", "weight", "difficulty", "priority", "after", "skills"}
+    assert set(first) == {"name", "description", "weight", "estimated_hours", "difficulty", "priority", "after",
+                          "skills"}
+
+
+def test_estimates_scale_with_the_time_each_step_gets():
+    six_months = {m["name"]: m["estimated_hours"] for m in plan_for("Technology", date(2026, 1, 1), date(2026, 7, 1))}
+    for name, hours in (("Discovery & requirements", 80), ("Build: backend services", 320),
+                        ("QA & user acceptance testing", 160)):
+        assert abs(six_months[name] - hours) <= hours * 0.05, name  # whole days round a little
+    year = {m["name"]: m["estimated_hours"] for m in plan_for("Technology", date(2026, 1, 1), date(2026, 12, 31))}
+    assert all(year[n] > six_months[n] for n in year)
+    assert all(s.hours > 0 for steps in PRESETS.values() for s in steps)

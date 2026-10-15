@@ -17,6 +17,7 @@ from app.features.departments.service import check_department
 from app.http import ApiError
 from app.presets import department_key, plan_for, templates
 from app.rules.at_risk import at_risk_reasons, weighted_progress
+from app.rules.estimates import duration_days, used_pct, working_days
 from app.rules.overtime import forecast_total
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
 
@@ -60,12 +61,29 @@ def _milestones_by_project(conn, ids: list[str]) -> dict[str, list[dict]]:
     out: dict[str, list[dict]] = {i: [] for i in ids}
     if not ids:
         return out
-    rows = query(conn, """SELECT project_id, end_date, status, difficulty FROM milestones
-                          WHERE project_id = ANY(CAST(:ids AS uuid[])) AND NOT is_archived""", ids=ids)
+    rows = query(conn, """SELECT m.project_id, m.end_date, m.status, m.difficulty, m.estimated_hours,
+                                 (SELECT coalesce(sum(t.hours), 0) FROM time_entries t WHERE t.milestone_id = m.id
+                                    AND t.status IN ('pending', 'approved')) AS logged
+                          FROM milestones m
+                          WHERE m.project_id = ANY(CAST(:ids AS uuid[])) AND NOT m.is_archived""", ids=ids)
     for r in rows:
         out[str(r["project_id"])].append({"end_date": r["end_date"], "status": r["status"],
-                                          "difficulty": r["difficulty"]})
+                                          "difficulty": r["difficulty"], "estimated_hours": r["estimated_hours"],
+                                          "logged": Decimal(r["logged"])})
     return out
+
+
+def _time_frame(project: dict, milestones: list[dict]) -> dict:
+    """Expected time frame: the project's days, its milestones' total estimate and how much of it is logged
+    (pending and approved hours on the milestones that have an estimate)."""
+    estimated = [m for m in milestones if m.get("estimated_hours") is not None]
+    total = sum((Decimal(m["estimated_hours"]) for m in estimated), Decimal(0)) if estimated else None
+    logged = sum((m.get("logged", Decimal(0)) for m in milestones), Decimal(0))
+    on_estimated = sum((m.get("logged", Decimal(0)) for m in estimated), Decimal(0))
+    return {"total_estimated_hours": total, "logged_hours": logged,
+            "duration_days": duration_days(project["start_date"], project["predicted_end_date"]),
+            "working_days": working_days(project["start_date"], project["predicted_end_date"]),
+            "estimate_used_pct": used_pct(on_estimated, total)}
 
 
 def _pct(part: Decimal, whole: Decimal) -> float:
@@ -94,6 +112,7 @@ def decorate(project: dict, milestones: list[dict], consumed: Decimal) -> dict:
         "delegate": _delegate(project),
         "is_archived": project["is_archived"], "completed_at": project["completed_at"],
         "created_at": project["created_at"],
+        **_time_frame(project, milestones),
     }
 
 
@@ -233,15 +252,15 @@ def _template_plan(conn, body: dict, data: dict) -> tuple[str, list[dict]] | Non
 
 
 def add_planned_milestones(conn, project_id: str, plan: list[dict]) -> list[dict]:
-    """Insert a plan's milestones (not started, nobody assigned) and their dependencies. Runs inside the caller's
+    """Insert a plan's milestones (not started, nobody assigned, with their effort estimate) and their dependencies. Runs inside the caller's
     transaction. Returns the new rows."""
     ids, rows = {}, []
     for m in plan:
         row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty,
-                                                         priority)
-                                 VALUES (CAST(:p AS uuid), :n, :d, :s, :e, :dif, :pr) RETURNING *""",
+                                                         priority, estimated_hours)
+                                 VALUES (CAST(:p AS uuid), :n, :d, :s, :e, :dif, :pr, :est) RETURNING *""",
                         p=str(project_id), n=m["name"], d=m["description"], s=m["start_date"], e=m["end_date"],
-                        dif=m["difficulty"], pr=m["priority"])
+                        dif=m["difficulty"], pr=m["priority"], est=m.get("estimated_hours"))
         ids[m["name"]] = row["id"]
         rows.append(row)
     for m in plan:

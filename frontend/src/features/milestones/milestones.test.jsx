@@ -310,6 +310,50 @@ describe('MilestonesTab', () => {
     await waitFor(() => expect(sent).toEqual([{ priority: 'high' }]))
   })
 
+  test('each card shows the expected time frame and how much of the estimate is logged, in words as well as colour', async () => {
+    server.use(...handlers([
+      { ...discovery, estimated_hours: 120, duration_days: 55, working_days: 40, logged_hours: 86, estimate_used_pct: 71.7 },
+      { ...mapping, estimated_hours: 100, duration_days: 122, working_days: 88, logged_hours: 130, estimate_used_pct: 130 },
+      { ...cutover, estimated_hours: null, duration_days: 92, working_days: 66, logged_hours: 0, estimate_used_pct: null }]))
+    renderTab(users.manager, true)
+    const disc = await card('Discovery')
+    expect(within(disc).getByText(/Est\. 120h · 55 days \(40 working days\)/)).toBeInTheDocument()
+    expect(within(disc).getByText('86h logged · 72% of estimate')).toBeInTheDocument()
+    expect(within(await card('Schema Mapping')).getByText('130h logged · 130% of estimate · over estimate')).toBeInTheDocument()
+    const cut = await card('Cutover')
+    expect(within(cut).getByText('92 days (66 working days)')).toBeInTheDocument()
+    expect(within(cut).queryByText(/logged/)).not.toBeInTheDocument()
+  })
+
+  test('the manager sets, checks and clears the estimated effort', async () => {
+    const sent = []
+    server.use(...handlers([{ ...discovery, estimated_hours: 80 }, mapping, cutover], [
+      http.put(`${API}/milestones/m1`, async ({ request }) => {
+        sent.push(await request.json())
+        return HttpResponse.json({ ...discovery, ...sent.at(-1) })
+      })]))
+    renderTab(users.manager, true)
+    const user = userEvent.setup()
+    await user.click(within(await card('Discovery')).getByRole('button', { name: /edit discovery/i }))
+    let dialog = await screen.findByRole('dialog', { name: /edit milestone/i })
+    const field = within(dialog).getByLabelText(/estimated effort/i)
+    expect(field).toHaveValue(80)
+    expect(within(dialog).getByText('Total person-hours expected')).toBeInTheDocument()
+    await user.clear(field)
+    await user.type(field, '12.25')
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    expect(await within(dialog).findByText(/one decimal at most/i)).toBeInTheDocument()
+    await user.clear(field)
+    await user.type(field, '120.5')
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(sent).toEqual([{ estimated_hours: 120.5 }]))
+    await user.click(within(await card('Discovery')).getByRole('button', { name: /edit discovery/i }))
+    dialog = await screen.findByRole('dialog', { name: /edit milestone/i })
+    await user.clear(within(dialog).getByLabelText(/estimated effort/i))
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(sent.at(-1)).toEqual({ estimated_hours: null }))
+  }, 15000)
+
   test('in a pull project, team members claim ready milestones and see what pull mode means', async () => {
     let claimed = null
     const open = { ...cutover, claimable: true, can_claim: true }

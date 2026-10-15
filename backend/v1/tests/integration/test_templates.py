@@ -44,6 +44,9 @@ def test_creating_a_project_from_the_template_adds_the_preset_milestones_in_one_
     assert sorted((r["name"], r["start_date"], r["end_date"], r["difficulty"], r["priority"]) for r in rows) == sorted(
         (m["name"], m["start_date"], m["end_date"], m["difficulty"], m["priority"]) for m in expected)
     assert {r["status"] for r in rows} == {"not_started"}
+    estimates = {r["name"]: r["estimated_hours"] for r in query(conn, """SELECT name, estimated_hours FROM milestones
+                                                                  WHERE project_id = CAST(:p AS uuid)""", p=body["id"])}
+    assert estimates == {m["name"]: m["estimated_hours"] for m in expected}
     assert all(r["description"] for r in rows)
     assert query_one(conn, """SELECT count(*) AS n FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id
                               WHERE m.project_id = CAST(:p AS uuid)""", p=body["id"])["n"] == 0

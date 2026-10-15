@@ -13,7 +13,7 @@ import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { milestoneSchema } from '../../lib/schemas.js'
 
 const FORM_CODES = ['OUT_OF_PROJECT_RANGE']
-const FIELDS = ['name', 'description', 'start_date', 'end_date', 'difficulty', 'priority']
+const FIELDS = ['name', 'description', 'start_date', 'end_date', 'difficulty', 'priority', 'estimated_hours']
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 
 /** Create or edit a milestone, its dependencies and its assignees. */
@@ -27,6 +27,7 @@ export default function MilestoneDialog({ project, milestone, milestones, member
   const initial = {
     name: milestone?.name ?? '', description: milestone?.description ?? '', start_date: milestone?.start_date ?? '',
     end_date: milestone?.end_date ?? '', difficulty: milestone?.difficulty ?? 'medium', priority: milestone?.priority ?? 'medium',
+    estimated_hours: milestone?.estimated_hours != null ? String(milestone.estimated_hours) : '',
   }
   const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(milestoneSchema),
@@ -42,6 +43,7 @@ export default function MilestoneDialog({ project, milestone, milestones, member
     for (const key of FIELDS) {
       if (!milestone || values[key] !== initial[key]) fields[key] = values[key]
     }
+    if ('estimated_hours' in fields) fields.estimated_hours = fields.estimated_hours === '' ? null : Number(fields.estimated_hours)
     try {
       const saved = await save.mutateAsync({
         id: milestone?.id, fields,
@@ -117,6 +119,11 @@ export default function MilestoneDialog({ project, milestone, milestones, member
                   {Object.entries(DIFFICULTY).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
                 </TextField>
               )} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <TextField label="Estimated effort (hours)" type="number" {...register('estimated_hours')} disabled={isSubmitting}
+                error={Boolean(errors.estimated_hours)} helperText={errors.estimated_hours?.message ?? 'Total person-hours expected'}
+                slotProps={{ htmlInput: { min: 0.1, max: 10000, step: 0.5 } }} />
             </Grid>
             <Grid size={12}>
               {multi('predecessor_ids', 'Depends on', others.map((m) => ({ value: String(m.id), label: m.name,

@@ -20,6 +20,7 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import Timeline from '../../components/Timeline.jsx'
+import EstimateLine from '../../components/EstimateLine.jsx'
 import { formatDate } from '../../lib/format.js'
 import { statusActions } from '../../lib/milestoneActions.js'
 import DiscussButton from '../messages/DiscussButton.jsx'
@@ -68,6 +69,7 @@ function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, co
               {formatDate(m.start_date)} – {formatDate(m.end_date)}
               {waitingOn.length ? ` · after ${waitingOn.join(', ')}` : ''}
             </Typography>
+            <EstimateLine milestone={m} />
             <Stack direction="row" useFlexGap
               sx={{ mt: 1.25, gap: 1, alignItems: 'center' }}>
               {people.length ? (

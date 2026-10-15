@@ -236,6 +236,14 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByText(/^manager:/i)).toHaveTextContent('Manager: MMMorgan Manager')
   })
 
+  test('overview shows the estimated effort over the project days and how much is used', async () => {
+    server.use(...detailHandlers(project({ total_estimated_hours: 640, duration_days: 120, working_days: 86,
+      logged_hours: 333, estimate_used_pct: 52 })))
+    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1', path: '/projects/:id' })
+    expect(await screen.findByText('Estimated effort')).toBeInTheDocument()
+    expect(await screen.findByText('over 120 days · 52% used')).toBeInTheDocument()
+  })
+
   test('team tab rows show each person with an avatar', async () => {
     server.use(...detailHandlers())
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=team', path: '/projects/:id' })
