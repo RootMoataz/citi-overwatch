@@ -1,4 +1,4 @@
-"""Planning board (LOGIC_WALKTHROUGH §22): while a project is 'planned', its manager (or an admin) arranges the
+"""Planning board (LOGIC_WALKTHROUGH §25): while a project is 'planned', its manager (or an admin) arranges the
 milestones in Backlog -> Ready -> Scheduled, then finalizes the plan, which checks it, moves the project to
 'active' and tells the team where they start."""
 

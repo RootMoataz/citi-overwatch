@@ -655,8 +655,13 @@ than its number of stages can't take the template.
 `GET /project-templates` lists the plans for anyone signed in. On **New project**, picking a department that has a
 plan shows **Start from the *Department* template** (ticked by default); with it, `POST /projects` gets
 `template: true` and the server adds the plan's milestones (not started, nobody assigned, with dependencies,
-difficulty, priority and estimate) in the same transaction as the project, audited as `apply_template`. Approving
-a request can do the same with `{department_id, template: true}`. Department names match in any case.
+difficulty, priority, estimate, and for the milestone workflow the step's description as the objective, its three
+completion criteria and its required catalogue skills) in the same transaction as the project, audited as
+`apply_template`. A project with a template always starts **Planned**, so its plan is arranged and finalized on the
+Plan tab ([section 25](#25-the-planning-board-and-finalizing-a-plan)). Approving a request offers the same: the confirm
+dialog shows **Start from the *Department* template** (ticked by default) when the request's department has a plan,
+and sends `{template: true}` (an optional `department_id` overrides the request's department). Department names match
+in any case.
 
 ```mermaid
 flowchart LR
@@ -708,7 +713,7 @@ be filled in on them is a missing estimate). A second run adds nothing.
    overtime request just over 40h (with the `OVER_40H` alert the app sends), one entry rejected for the wrong day
    with its corrected resubmission (and the `ENTRY_REJECTED` alert), one normal 32–38h week, and everyone else's
    hours so far this week, with short notes. A person's week is left alone once it has pending or rejected hours.
-8. **Estimates** on every demo milestone that has none (step 24).
+8. **Estimates** on every demo milestone that has none ([section 24](#24-expected-time-frame)).
 9. One `curate_demo_plan` audit entry per changed project, by System, and a JSON summary per project (`added`,
    `dependencies_added`, `team_added`, `hours_added`, `pending_added`, `rejected_added`, `estimates_set`,
    `before`/`after` risk, budget and progress) plus `archived`, `timesheets` and `warnings`.
@@ -728,7 +733,7 @@ project overview has an **Estimated effort** tile.
 `demo_curate` fills in estimates only where there are none: a completed milestone's estimate lands within 15% of
 its logged hours, an open one's stays above them (at least 1.25 × logged), and one without hours gets the plan
 step's estimate for its dates (or about 4h per working day per person for a milestone that isn't a plan step).
-## 22. The planning board and finalizing a plan
+## 25. The planning board and finalizing a plan
 
 A new project starts **Planned** (always, when it starts from a department template: its milestones are a plan to finalize). While it is planned and its plan isn't finalized, the project page opens on a **Plan** tab: a Kanban board of the project's milestones in three columns, **Backlog → Ready → Scheduled**. The project's manager or an admin shapes the plan there; everyone else who can see the project (team members, executives) sees it read-only. Finalizing the plan checks it, moves the project to **Active** ("into execution") and locks the board.
 
@@ -774,7 +779,7 @@ The cards show the same problems before anyone presses Finalize (`cardWarnings()
 - **Who:** the project's manager or an admin edit and finalize (`load_project(manage=True)`; executives are refused by the router like every write). Team members and executives see the board read-only.
 - **UI:** [`frontend/src/features/planning/`](../../frontend/src/features/planning/): `PlanTab.jsx` (the board, built on `@dnd-kit` with pointer and keyboard sensors), `PlanColumn.jsx`, `PlanCard.jsx`, `FinalizeDialog.jsx` (the checklist) and `planningApi.js`. Cards read the same milestone list as the Milestones tab, so edits in the milestone dialog show on the board at once. On a phone the columns scroll sideways inside the board, one column at a time.
 - **Example (demo data):** *Beacon Mobile App* is planned, and its board holds the Technology department plan. Discovery & requirements, Design, Prototype and Build: backend services are scheduled in that order (Hugo on Prototype; the pull project's other steps have nobody yet); QA & user acceptance testing is in Ready, Release & cutover and Hypercare in Backlog. Finalizing shows two failing checks: cards left outside Scheduled, and nobody on Discovery, Design or Build: backend services. Scheduling every card and assigning someone to each makes the plan pass. `demo_curate` numbers the steps it adds to the other projects' Scheduled column by date, as migration 010 does for existing milestones.
-## 22. The public demo admin
+## 26. The public demo admin
 
 The sign-in page's **Admin** button signs in as `demo.admin` (Dana Demo-Admin) with the published password `Demo123!`.
 Anyone can use it, so the account is flagged `users.is_public_demo` (migration `012_demo_accounts.sql`) and the server
@@ -841,7 +846,7 @@ only explains it.
 
 **Creating it.** `seed` creates it with the rest of the demo data; on an existing database `demo_backfill` adds it only
 if no `demo.admin` exists, and never flags an existing ordinary account of that name.
-## 22. Puppy, the rule-based assistant
+## 27. Puppy, the rule-based assistant
 
 Puppy is the small dog next to the bell (`frontend/src/features/puppy/`). It's labelled **"Puppy · your rule-based
 assistant"** and its panel says "Puppy follows rules from your data — no AI service involved." The Lambda has no
