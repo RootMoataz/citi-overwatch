@@ -31,6 +31,16 @@ def db():
     yield conn
 
 
+@pytest.fixture(autouse=True)
+def reminder_clock_midweek(monkeypatch):
+    """Pin the Friday-reminder clock to a Wednesday, so tests that read notifications behave the same on any day.
+    Reminder tests move it with their own `clock` fixture."""
+    from datetime import datetime, timezone
+
+    from app.features.reminders import service as reminders
+    monkeypatch.setattr(reminders, "_now", lambda: datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc))
+
+
 @pytest.fixture
 def conn(db):
     yield db

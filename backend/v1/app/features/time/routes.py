@@ -1,3 +1,4 @@
+from app.features.reminders import service as reminders
 from app.features.time import service
 from app.http import json_response
 from app.router import router
@@ -35,6 +36,7 @@ def reject(req, ctx, conn):
 
 @router.route("GET", "/notifications")
 def list_notifications(req, ctx, conn):
+    reminders.ensure_own_reminder(conn, ctx)  # the Friday "timesheet is empty" reminder is created lazily, here
     return json_response(200, service.list_notifications(conn, ctx, req.query))
 
 

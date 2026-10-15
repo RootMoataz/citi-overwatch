@@ -11,3 +11,4 @@ from app.features.insights import routes as _insights  # noqa: F401
 from app.features.archive import routes as _archive  # noqa: F401
 from app.features.departments import routes as _departments  # noqa: F401
 from app.features.avatars import routes as _avatars  # noqa: F401
+from app.features.reminders import routes as _reminders  # noqa: F401

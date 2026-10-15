@@ -459,6 +459,8 @@ def _message(r: dict, who: str) -> str:
         return f"{who} was auto-routed to support {p['milestone']['name']}"
     if r["type"] == "MILESTONE_CLAIMED":
         return f"{who} claimed {p['milestone']['name']} ({p['project']['name']})"
+    if r["type"] == "TIMESHEET_EMPTY":
+        return f"Your timesheet for the week of {short_day(r['week_start'])} is empty"
     return f"{who} passed 40h for the week of {r['week_start']}"
 
 
