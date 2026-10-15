@@ -8,7 +8,9 @@ they point an approver at entries worth a second look.
   OVER_PLAN         warn  the person-week on one project is over 150% of their planned hours there (none planned: skip)
   NO_ACTIVITY       info  no sign-in and no other activity in Scout (any audit entry, progress update, message or
                           timer) by the person on that day
-  NO_PROOF          warn  timer hours saved without a work note, and no progress update on that milestone that day
+  NO_PROOF          warn  timer hours saved without a work note, and no progress update on that milestone that day.
+                          Only entries from before timer drafts (migration 015) can carry it: a stop used to save
+                          hours straight away; now timer hours go through Save week, where proof of work is required
 
 BACKDATED and NO_ACTIVITY judge only entries created once the flags went live (Context.live_since), because hours
 logged before then (the demo history, say) have no sign-in trail to judge them by. Without a go-live time they
@@ -46,7 +48,7 @@ class Entry:
     work_date: date
     hours: Decimal
     created_at: datetime  # timezone-aware
-    needs_note: bool = False     # timer hours saved without a work note
+    needs_note: bool = False     # timer hours saved without a work note (only before timer drafts existed)
     proof_update: bool = False   # the person posted a progress update on the milestone that day
 
 

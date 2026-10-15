@@ -62,7 +62,11 @@ DENIED = {
     ("PUT", "/users/{id}/skills"): "changing a person's skills",
     # Timers: the demo admin keeps no timesheet, and a timer left running would log hours for whoever signs in next.
     ("POST", "/timers"): "starting a timer",
-    ("POST", "/timers/stop"): "stopping a timer (it logs hours)",
+    ("POST", "/timers/stop"): "stopping a timer (it records hours)",
+    # Stopping someone else's timer messages a real person (and changes their hours): not from a published login.
+    ("POST", "/timers/{id}/stop-remote"): "stopping someone's timer with a message",
+    # Asking to change locked timer hours is an employee's action on their own timesheet; the demo admin keeps none.
+    ("POST", "/time-edit-requests"): "asking to change timer hours",
     # Payroll: sending approved hours to HR (also refused by name).
     ("POST", "/hr-submissions"): "submitting approved hours to HR",
 }
@@ -106,6 +110,8 @@ ALLOWED = {
     ("POST", "/time-entries/{id}/approve"): "approving hours",
     ("POST", "/time-entries/{id}/reject"): "rejecting hours",
     ("POST", "/approvals/approve-week"): "approving a person's week of hours",
+    ("POST", "/time-edit-requests/{id}/approve"): "approving a change to timer hours (the demo workflow)",
+    ("POST", "/time-edit-requests/{id}/reject"): "rejecting a change to timer hours",
 }
 
 

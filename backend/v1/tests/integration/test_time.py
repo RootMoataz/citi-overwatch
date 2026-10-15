@@ -54,7 +54,7 @@ def test_new_entry_is_pending_and_not_in_budget(client, conn):
     entry = body["entries"][0]
     assert (entry["status"], entry["label"], entry["hours"], entry["note"]) == \
         ("pending", "Pending approval", 8.0, "Schema work")
-    assert body["totals"] == {"logged": 8.0, "approved": 0.0}
+    assert body["totals"] == {"logged": 8.0, "approved": 0.0, "draft": 0.0}
     assert [r["milestone"]["name"] for r in body["rows"]] == ["Build"]
     summary = client.request("GET", f"/projects/{project['id']}/summary", token=token_for(conn, mgr))[1]
     assert summary["consumed"] == 0.0

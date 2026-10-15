@@ -19,7 +19,10 @@ from app.features.projects.service import project_consumed
 from app.features.time.flags import person_week_flags
 from app.http import ApiError
 from app.rules.overtime import approval_breakdown, forecast_total, hourly_rate, overtime_ids, week_flags
-from app.rules.time_tracking import NOTE_MAX, NOTE_MIN, clean_note, entry_source, is_proof_note, tracked_after_edit
+from app.rules.time_tracking import (
+    NOTE_MAX, NOTE_MIN, clean_note, entry_source, is_locked, is_proof_note, timer_cell, tracked_after_edit,
+    tracked_on_submit,
+)
 from app.rules.timesheets import keeps_timesheet
 from app.validation import as_date, as_decimal, as_str, as_uuid, require
 
@@ -147,6 +150,7 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
     overtime = _overtime(conn, user_id, start)
     updates = _proof_updates(conn, user_id, start, end)
     entries = [_settled(_live(e, overtime), updates) for e in entries]
+    drafts = drafts_by_cell(conn, user_id, start, project_filter=project_filter, **args)
     return {
         "week_start": start,
         "user": {"id": user["id"], "name": name},
@@ -155,8 +159,103 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
                   "role": r["role"], "open": r["project_status"] in OPEN_STATUSES} for r in rows],
         "entries": [_entry_view(e, name, show_rate=ctx.is_admin or str(user_id) == ctx.user_id) for e in entries],
         "totals": {"logged": sum((e["hours"] for e in entries if e["status"] in COUNTED), Decimal(0)),
-                   "approved": sum((e["hours"] for e in entries if e["status"] == "approved"), Decimal(0))},
+                   "approved": sum((e["hours"] for e in entries if e["status"] == "approved"), Decimal(0)),
+                   "draft": sum((d["hours"] for d in drafts.values()), Decimal(0))},
+        # Timer hours stopped but not submitted yet: each pre-fills its cell (saved hours + these) until Save week.
+        "drafts": [{"milestone_id": mid, "work_date": d, "hours": v["hours"], "note": v["note"]}
+                   for (mid, d), v in sorted(drafts.items(), key=lambda kv: (kv[0][1], kv[0][0]))],
+        # Cells holding timer hours (draft or submitted): their hours change only through a change request.
+        "locks": _locks(conn, user_id, entries, drafts),
     }
+
+
+# ---------- timer drafts and locked cells ----------
+
+def drafts_by_cell(conn, user_id, start: date, *, end: date | None = None, project_filter: str = "",
+                   milestone_id=None, **args) -> dict[tuple[str, date], dict]:
+    """(milestone id, work date) -> {hours, note, ids}: the person's stopped timers whose hours aren't submitted yet,
+    in the week of `start` (or start..end). note: the latest note given at a stop, if any."""
+    one = " AND t.milestone_id = CAST(:mid AS uuid)" if milestone_id else ""
+    rows = query(conn, f"""
+        SELECT t.id, t.milestone_id, t.work_date, t.tracked_hours, t.note FROM time_timers t
+        JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
+        JOIN projects p ON p.id = m.project_id AND NOT p.is_archived
+        WHERE t.user_id = CAST(:u AS uuid) AND t.submitted_at IS NULL AND t.tracked_hours > 0
+          AND t.stopped_at IS NOT NULL AND t.work_date BETWEEN :a AND :b{one}{project_filter}
+        ORDER BY t.stopped_at""", u=str(user_id), a=start, b=end or start + timedelta(days=6),
+        **({"mid": str(milestone_id)} if milestone_id else {}), **args)
+    out: dict[tuple[str, date], dict] = {}
+    for r in rows:
+        cell = out.setdefault((str(r["milestone_id"]), r["work_date"]), {"hours": Decimal(0), "note": "", "ids": []})
+        cell["hours"] += r["tracked_hours"]
+        cell["ids"].append(str(r["id"]))
+        if r["note"]:
+            cell["note"] = r["note"]
+    return out
+
+
+def _pending_requests(conn, user_id, cells: list[tuple[str, date]]) -> dict[tuple[str, date], dict]:
+    if not cells:
+        return {}
+    rows = query(conn, """SELECT id, milestone_id, work_date, current_hours, requested_hours, reason, status, created_at
+                          FROM time_edit_requests WHERE user_id = CAST(:u AS uuid) AND status = 'pending'
+                            AND work_date BETWEEN :a AND :b""",
+                 u=str(user_id), a=min(d for _, d in cells), b=max(d for _, d in cells))
+    return {(str(r["milestone_id"]), r["work_date"]): {k: r[k] for k in (
+        "id", "current_hours", "requested_hours", "reason", "status", "created_at")} for r in rows}
+
+
+def _locks(conn, user_id, entries: list[dict], drafts: dict) -> list[dict]:
+    by_cell = {(str(e["milestone_id"]), e["work_date"]): e for e in entries}
+    keys = sorted({k for k, e in by_cell.items() if e["tracked_hours"] > 0} | set(drafts), key=lambda k: (k[1], k[0]))
+    requests = _pending_requests(conn, user_id, keys)
+    out = []
+    for k in keys:
+        e, draft = by_cell.get(k), drafts.get(k, {}).get("hours", Decimal(0))
+        out.append({"milestone_id": k[0], "work_date": k[1], "hours": timer_cell(e["hours"] if e else None, draft),
+                    "draft_hours": draft, "tracked_hours": e["tracked_hours"] if e else Decimal(0),
+                    "request": requests.get(k)})
+    return out
+
+
+def cell_state(conn, user_id, milestone_id, work_date: date) -> dict:
+    """One cell as the lock rules see it: the saved entry (or None), its hours (base), the draft timer hours and their
+    timers, the tracked hours, whether it's locked and the hours it shows (base + draft)."""
+    existing = query_one(conn, """SELECT * FROM time_entries WHERE user_id = CAST(:u AS uuid)
+                                  AND milestone_id = CAST(:m AS uuid) AND work_date = :d""",
+                         u=str(user_id), m=str(milestone_id), d=work_date)
+    draft = drafts_by_cell(conn, user_id, work_date, end=work_date, milestone_id=milestone_id).get(
+        (str(milestone_id), work_date), {"hours": Decimal(0), "note": "", "ids": []})
+    base = existing["hours"] if existing else Decimal(0)
+    tracked = existing["tracked_hours"] if existing else Decimal(0)
+    return {"existing": existing, "base": base, "draft": draft["hours"], "draft_note": draft["note"],
+            "timer_ids": draft["ids"], "tracked": tracked, "locked": is_locked(tracked, draft["hours"]),
+            "hours": timer_cell(base, draft["hours"])}
+
+
+def mark_submitted(conn, timer_ids: list[str], entry_id: str) -> None:
+    """Timer drafts now part of an entry: they stop pre-filling the cell."""
+    if timer_ids:
+        conn.run("""UPDATE time_timers SET submitted_at = now(), entry_id = CAST(:e AS uuid)
+                    WHERE id = ANY(CAST(:ids AS uuid[])) AND submitted_at IS NULL""", e=entry_id, ids=timer_ids)
+
+
+def _lock_violations(conn, ctx: Ctx, cells: list[dict]) -> tuple[list[dict], dict]:
+    """Cells whose hours differ from what their timer hours fix them at, and each cell's state."""
+    states, bad = {}, []
+    for c in cells:
+        state = cell_state(conn, ctx.user_id, c["milestone"]["id"], c["work_date"])
+        states[(str(c["milestone"]["id"]), c["work_date"])] = state
+        if state["locked"] and c["hours"] != state["hours"]:
+            bad.append({"milestone_id": str(c["milestone"]["id"]), "milestone": c["milestone"]["name"],
+                        "work_date": str(c["work_date"]), "hours": state["hours"], "sent": c["hours"]})
+    return bad, states
+
+
+def locked_error(bad: list[dict]) -> ApiError:
+    names = ", ".join(f"{b['milestone']} on {short_day(b['work_date'])}" for b in bad)
+    return ApiError(409, "TIMER_HOURS_LOCKED",
+                    f"Timer hours can't be edited — request a change instead: {names}", {"cells": bad})
 
 
 # ---------- saving a week ----------
@@ -324,10 +423,12 @@ def proof_error(missing: list[dict]) -> ApiError:
 
 
 def write_entry(conn, ctx: Ctx, me: dict, start: date, ms: dict, work_date: date, hours: Decimal, note: str,
-                existing: dict | None, *, tracked: Decimal | None = None, needs_note: bool = False) -> str:
+                existing: dict | None, *, tracked: Decimal | None = None, needs_note: bool = False,
+                audit_as: tuple[Ctx, str] | None = None) -> str:
     """Write one person's hours on a milestone and day (new or changed; the caller has validated and locked), the
     way every save does: back to pending, overtime flag and the one-time 40h alert, HR-changed flag, audit.
-    tracked: the hours that now came from timers; None for a hand edit, which keeps at most the new hours."""
+    ctx is the hours' owner. tracked: the hours that now came from timers; None for a hand edit, which keeps at most
+    the new hours. audit_as: (who, action) when someone else writes them (an approved change request)."""
     before = _week_logged(conn, ctx.user_id, start)
     counted_before = existing["hours"] if existing and existing["status"] in COUNTED else Decimal(0)
     after = before - counted_before + hours
@@ -352,9 +453,11 @@ def write_entry(conn, ctx: Ctx, me: dict, start: date, ms: dict, work_date: date
             VALUES (CAST(:u AS uuid), :m, :p, :d, :h, :n, :o, :t, :nn) RETURNING id""",
             u=ctx.user_id, m=ms["id"], p=ms["project_id"], d=work_date, h=hours, n=note, o=over_40, t=tracked,
             nn=needs_note)["id"]
-    record(conn, ctx, "log" if not existing else "edit", "time_entry", str(entry_id),
+    actor, action = audit_as or (ctx, "log" if not existing else "edit")
+    record(conn, actor, action, "time_entry", str(entry_id),
            before={"hours": existing["hours"], "status": existing["status"]} if existing else None,
-           after={"hours": hours, "over_40": over_40, "tracked_hours": tracked})
+           after={"hours": hours, "over_40": over_40, "tracked_hours": tracked}
+           | ({"user_id": ctx.user_id} if audit_as else {}))
     if crossed:
         recipient = _alert_recipient(conn, ctx, ms["manager_id"])
         if recipient:
@@ -378,6 +481,14 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
     cells.sort(key=lambda c: (c["work_date"], str(c["milestone"]["id"])))
     with transaction(conn):
         me = lock_person(conn, ctx)
+        bad, states = _lock_violations(conn, ctx, cells)
+        if bad:
+            raise locked_error(bad)
+        for c in cells:  # a stop's note pre-fills a cell that has none
+            state = states[(str(c["milestone"]["id"]), c["work_date"])]
+            had = c["note"] if c["note"] is not None else (state["existing"]["note"] if state["existing"] else "")
+            if state["draft"] > 0 and not had and state["draft_note"]:
+                c["note"] = state["draft_note"]
         _check_daily_cap(conn, ctx, cells)
         missing = _missing_proof(conn, ctx, cells)
         if missing:
@@ -399,7 +510,14 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
                     and existing["status"] != "rejected":
                 continue  # unchanged cell: keep its status (re-saving the grid mustn't reset approvals)
             # An unchanged re-save of a rejected cell is a resubmission: it goes back for approval.
-            write_entry(conn, ctx, me, start, ms, c["work_date"], c["hours"], note, existing)
+            state = states[(str(ms["id"]), c["work_date"])]
+            if state["draft"] > 0:  # submitting timer hours: they become the entry's tracked hours
+                tracked = tracked_on_submit(existing["tracked_hours"] if existing else None, state["draft"], c["hours"])
+                entry_id = write_entry(conn, ctx, me, start, ms, c["work_date"], c["hours"], note, existing,
+                                       tracked=tracked)
+                mark_submitted(conn, state["timer_ids"], entry_id)
+            else:
+                write_entry(conn, ctx, me, start, ms, c["work_date"], c["hours"], note, existing)
         _sync_stored_flags(conn, ctx.user_id, start)
     return get_week(conn, ctx, {"week": str(start)})
 
@@ -663,6 +781,16 @@ def short_day(value) -> str:
     return f"{d:%a} {d.day} {d:%b}"
 
 
+def weekday(value) -> str:
+    """2026-10-13 → "Tuesday"."""
+    return f"{date.fromisoformat(str(value)):%A}"
+
+
+def hours_text(value) -> str:
+    """Hours for a sentence: 4, 1.5, 0.25."""
+    return f"{Decimal(str(value)).normalize():f}"
+
+
 def _clip(text: str, limit: int = 140) -> str:
     """A long reason or note cut to fit the bell, on a word boundary."""
     return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
@@ -710,7 +838,28 @@ def _message(r: dict, who: str) -> str:
     if r["type"] == "MESSAGE_RECEIVED":
         return f"{who} sent you a message"
     if r["type"] == "TIMER_AUTO_STOPPED":
-        return f"Your timer on {p['milestone']['name']} stopped at midnight — check your hours"
+        if "added_hours" not in p:  # stopped before timer drafts existed: its hours were logged straight away
+            return f"Your timer on {p['milestone']['name']} stopped at midnight — check your hours"
+        if not p["added_hours"]:
+            return f"Your timer on {p['milestone']['name']} stopped at midnight — nothing was added"
+        return (f"Your timer on {p['milestone']['name']} stopped at midnight — {hours_text(p['added_hours'])}h added "
+                f"to {weekday(p['work_date'])}'s cell, not submitted yet")
+    if r["type"] == "TIMER_STOPPED_BY_MANAGER":
+        return f"{p['by']['first_name']} stopped your timer on {p['milestone']['name']}: {_clip(p['message'])}"
+    if r["type"] == "TIMER_OVER_LIMIT":
+        return p["message"]
+    if r["type"] == "TIME_EDIT_REQUESTED":
+        return (f"{p['first_name']} asked to change {short_day(p['work_date'])[:3]}'s {p['milestone']['name']} hours "
+                f"from {hours_text(p['current_hours'])}h to {hours_text(p['requested_hours'])}h: {_clip(p['reason'])}")
+    if r["type"] == "TIME_EDIT_APPROVED":
+        comment = f". {_clip(p['comment'])}" if p.get("comment") else ""
+        return (f"{p['by']['first_name']} approved your change: {p['milestone']['name']} on "
+                f"{short_day(p['work_date'])[:3]} is now {hours_text(p['requested_hours'])}h (waiting for approval)"
+                f"{comment}")
+    if r["type"] == "TIME_EDIT_REJECTED":
+        comment = f": {_clip(p['comment'])}" if p.get("comment") else ""
+        return (f"{p['by']['first_name']} declined your change to {p['milestone']['name']} on "
+                f"{short_day(p['work_date'])[:3]}{comment}")
     if r["type"] == "TIMESHEET_EMPTY":
         return f"Your timesheet for the week of {short_day(r['week_start'])} is empty"
     return f"{who} passed 40h for the week of {r['week_start']}"

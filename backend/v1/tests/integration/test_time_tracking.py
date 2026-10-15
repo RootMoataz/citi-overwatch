@@ -130,20 +130,33 @@ def test_executives_have_no_timer(client, conn, clock):
         assert (status, resp["error"]["code"]) == (403, "READ_ONLY")
 
 
-# ---------- timers: stopping logs hours ----------
+# ---------- timers: stopping records a draft; Save week submits it (more in test_timer_workflow.py) ----------
 
-def test_stop_logs_rounded_hours_as_tracked(client, conn, clock):
+def submit(client, conn, user, ms, d=TODAY, note=NOTE):
+    """Save the cell as the timesheet pre-fills it: saved hours plus the timer's draft."""
+    week = call(client, conn, user, "GET", f"/time-entries?week={d - timedelta(days=d.weekday())}")[1]
+    lock = next(lk for lk in week["locks"] if lk["milestone_id"] == str(ms["id"]) and lk["work_date"] == str(d))
+    status, body, _, _ = call(client, conn, user, "PUT", "/time-entries", {
+        "week": str(d - timedelta(days=d.weekday())),
+        "entries": [{"milestone_id": str(ms["id"]), "work_date": str(d), "hours": lock["hours"], "note": note}]})
+    assert status == 200, body
+    return body
+
+
+def test_stop_then_save_week_logs_rounded_hours_as_tracked(client, conn, clock):
     _, emp, _, ms, _ = world(conn)
     body = run_timer(client, conn, clock, emp, ms, 127, note=NOTE)  # 2h07 -> 2h
-    assert (body["logged_hours"], body["auto_stopped"], body["needs_note"], body["not_logged"]) == (2.0, False, False, None)
-    assert body["message"] == f"Logged 2h on Schema Mapping ({TODAY:%a} {TODAY.day} {TODAY:%b})"
+    assert (body["added_hours"], body["auto_stopped"], body["not_logged"]) == (2.0, False, None)
+    assert body["message"] == f"Added 2h to {TODAY:%A}'s cell — open your timesheet to submit."
+    assert entry_of(conn, emp, ms) is None
+    submit(client, conn, emp, ms)
     e = entry_of(conn, emp, ms)
     assert (e["hours"], e["tracked_hours"], e["status"], e["note"], e["needs_note"]) == \
         (Decimal(2), Decimal(2), "pending", NOTE, False)
     week = call(client, conn, emp, "GET", "/time-entries")[1]
     assert (week["entries"][0]["source"], week["entries"][0]["tracked_hours"]) == ("tracked", 2.0)
     timer = query_one(conn, "SELECT * FROM time_timers")
-    assert (timer["logged_hours"], str(timer["entry_id"]), timer["auto_stopped"]) == (Decimal(2), str(e["id"]), False)
+    assert (timer["tracked_hours"], str(timer["entry_id"]), timer["auto_stopped"]) == (Decimal(2), str(e["id"]), False)
     assert call(client, conn, emp, "GET", "/timers/current")[1]["timer"] is None
 
 
@@ -152,65 +165,56 @@ def test_stop_logs_rounded_hours_as_tracked(client, conn, clock):
 def test_stop_rounds_to_the_nearest_quarter_hour(client, conn, clock, minutes, hours):
     _, emp, _, ms, _ = world(conn)
     body = run_timer(client, conn, clock, emp, ms, minutes, note=NOTE)
-    e = entry_of(conn, emp, ms)
+    timer = query_one(conn, "SELECT * FROM time_timers")
+    assert timer["stopped_at"] is not None and entry_of(conn, emp, ms) is None
     if hours is None:
-        assert e is None and body["logged_hours"] == 0
-        assert body["message"] == "Timer stopped after less than 7.5 minutes, so nothing was logged"
-        assert query_one(conn, "SELECT stopped_at FROM time_timers")["stopped_at"] is not None
+        assert body["added_hours"] == 0 and timer["tracked_hours"] == 0
+        assert body["message"] == "Timer stopped after less than 7.5 minutes, so nothing was added"
     else:
-        assert e["hours"] == hours and body["logged_hours"] == float(hours)
+        assert timer["tracked_hours"] == hours and body["added_hours"] == float(hours)
 
 
-def test_stop_adds_to_the_days_entry_and_reopens_a_decided_one(client, conn, clock):
+def test_submitting_adds_to_the_days_entry_and_reopens_a_decided_one(client, conn, clock):
     _, emp, _, ms, _ = world(conn)
     log_entry(conn, emp, ms, TODAY, 3)  # approved, typed by hand
     conn.run("UPDATE time_entries SET note = :n", n=NOTE)
     run_timer(client, conn, clock, emp, ms, 90)
+    assert entry_of(conn, emp, ms)["status"] == "approved"  # the stop alone changes nothing
+    submit(client, conn, emp, ms)
     e = entry_of(conn, emp, ms)
     assert (e["hours"], e["tracked_hours"], e["status"], e["edited_after_decision"], e["hourly_rate"]) == \
         (Decimal("4.5"), Decimal("1.5"), "pending", True, None)
-    assert e["needs_note"] is False  # the entry's own note still proves the work
     week = call(client, conn, emp, "GET", "/time-entries")[1]
     assert week["entries"][0]["source"] == "mixed"
 
 
-def test_stop_replaces_rejected_hours(client, conn, clock):
+def test_submitting_into_a_rejected_cell_resubmits_it(client, conn, clock):
     _, emp, _, ms, _ = world(conn)
     log_entry(conn, emp, ms, TODAY, 5, status="rejected")
     run_timer(client, conn, clock, emp, ms, 60, note=NOTE)
+    submit(client, conn, emp, ms)
     e = entry_of(conn, emp, ms)
     assert (e["hours"], e["tracked_hours"], e["status"], e["rejection_reason"]) == \
-        (Decimal(1), Decimal(1), "pending", None)
+        (Decimal(6), Decimal(1), "pending", None)
 
 
 def test_stop_respects_the_24h_day_and_still_stops(client, conn, clock):
     _, emp, _, ms, other = world(conn)
-    log_entry(conn, emp, other, TODAY, 23, status="pending")
+    log_entry(conn, emp, other, TODAY, 24, status="pending")
     body = run_timer(client, conn, clock, emp, ms, 120, note=NOTE)
-    assert body["not_logged"]["code"] == "DAY_OVER_24H" and body["logged_hours"] == 0
-    assert body["message"].startswith("Timer stopped, but no hours were logged: More than 24h")
-    assert entry_of(conn, emp, ms) is None
+    assert body["added_hours"] == 0 and body["message"] == f"Timer stopped, but nothing was added: {TODAY:%A} already has 24h"
     timer = query_one(conn, "SELECT * FROM time_timers")
-    assert timer["stopped_at"] is not None and timer["logged_hours"] == 0 and timer["entry_id"] is None
+    assert timer["stopped_at"] is not None and timer["tracked_hours"] == 0 and timer["entry_id"] is None
 
 
-def test_stop_on_a_project_closed_meanwhile_logs_nothing(client, conn, clock):
-    _, emp, project, ms, _ = world(conn)
-    clock.set(ny(TODAY, 9))
-    call(client, conn, emp, "POST", "/timers", {"milestone_id": str(ms["id"])})
-    conn.run("UPDATE projects SET status = 'completed' WHERE id = :p", p=project["id"])
-    clock.set(ny(TODAY, 11))
-    body = call(client, conn, emp, "POST", "/timers/stop", {"note": NOTE})[1]
-    assert body["not_logged"]["code"] == "PROJECT_NOT_OPEN" and entry_of(conn, emp, ms) is None
-    assert call(client, conn, emp, "GET", "/timers/current")[1]["timer"] is None
-
-
-def test_stop_recomputes_overtime_and_alerts_once(client, conn, clock):
+def test_submitting_timer_hours_recomputes_overtime_and_alerts_once(client, conn, clock):
     mgr, emp, _, ms, other = world(conn)
     friday = LAST_MONDAY + timedelta(days=4)
     for n in range(4):
         log_entry(conn, emp, other, LAST_MONDAY + timedelta(days=n), 9.5, status="pending")  # 38h
     run_timer(client, conn, clock, emp, ms, 180, note=NOTE, start=ny(friday, 9))  # +3h on Friday: 41h
+    assert query(conn, "SELECT * FROM notifications WHERE type = 'OVER_40H'") == []  # drafts aren't logged hours
+    submit(client, conn, emp, ms, friday)
     e = entry_of(conn, emp, ms, friday)
     assert (e["hours"], e["over_40"]) == (Decimal(3), True)
     alerts = query(conn, "SELECT * FROM notifications WHERE type = 'OVER_40H'")
@@ -220,7 +224,7 @@ def test_stop_recomputes_overtime_and_alerts_once(client, conn, clock):
 
 # ---------- timers: the midnight stop ----------
 
-def test_a_timer_past_midnight_stops_at_23_59_59_with_an_alert(client, conn, clock):
+def test_a_timer_past_midnight_stops_at_23_59_59_into_a_draft_with_an_alert(client, conn, clock):
     _, emp, _, ms, _ = world(conn)
     yesterday = TODAY - timedelta(days=1)
     clock.set(ny(yesterday, 20))
@@ -229,19 +233,26 @@ def test_a_timer_past_midnight_stops_at_23_59_59_with_an_alert(client, conn, clo
     body = call(client, conn, emp, "GET", "/timers/current")[1]
     assert body["timer"] is None
     stopped = body["stopped"]
-    assert (stopped["auto_stopped"], stopped["logged_hours"], stopped["needs_note"]) == (True, 4.0, True)
+    assert (stopped["auto_stopped"], stopped["added_hours"]) == (True, 4.0)
     assert stopped["message"].startswith("Your timer on Schema Mapping stopped at midnight.")
     timer = query_one(conn, "SELECT * FROM time_timers")
     assert timer["auto_stopped"] and timer["stopped_at"] == ny(yesterday, 23, 59) + timedelta(seconds=59)
-    e = entry_of(conn, emp, ms, yesterday)
-    assert (e["hours"], e["tracked_hours"], e["needs_note"]) == (Decimal(4), Decimal(4), True)
+    assert timer["tracked_hours"] == 4 and entry_of(conn, emp, ms, yesterday) is None
     bell = call(client, conn, emp, "GET", "/notifications")[1]
     alert = next(n for n in bell if n["type"] == "TIMER_AUTO_STOPPED")
-    assert alert["message"] == "Your timer on Schema Mapping stopped at midnight — check your hours"
-    assert alert["payload"]["work_date"] == str(yesterday)
+    assert alert["payload"]["work_date"] == str(yesterday) and alert["payload"]["added_hours"] == 4.0
     # A second read changes nothing.
     call(client, conn, emp, "GET", "/timers/current")
     assert query_one(conn, "SELECT count(*) AS n FROM notifications WHERE type = 'TIMER_AUTO_STOPPED'")["n"] == 1
+
+
+def test_an_old_auto_stop_alert_keeps_its_old_sentence(client, conn):
+    _, emp, _, _, _ = world(conn)
+    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
+                VALUES (:u, 'TIMER_AUTO_STOPPED', :u, CAST(:p AS jsonb))""", u=emp["id"],
+             p='{"logged_hours": 4, "milestone": {"id": "x", "name": "Schema Mapping"}, "work_date": "2026-10-12"}')
+    alert = call(client, conn, emp, "GET", "/notifications")[1][0]
+    assert alert["message"] == "Your timer on Schema Mapping stopped at midnight — check your hours"
 
 
 def test_starting_or_stopping_also_closes_a_timer_left_overnight(client, conn, clock):
@@ -251,26 +262,24 @@ def test_starting_or_stopping_also_closes_a_timer_left_overnight(client, conn, c
     call(client, conn, emp, "POST", "/timers", {"milestone_id": str(ms["id"])})
     clock.set(ny(TODAY, 9))
     status, body, _, _ = call(client, conn, emp, "POST", "/timers", {"milestone_id": str(other["id"])})
-    assert status == 201 and body["stopped"]["auto_stopped"] and body["stopped"]["logged_hours"] == 1.0
+    assert status == 201 and body["stopped"]["auto_stopped"] and body["stopped"]["added_hours"] == 1.0
     assert body["timer"]["milestone"]["name"] == "Cutover"
     clock.set(ny(TODAY + timedelta(days=1), 9))
     body = call(client, conn, emp, "POST", "/timers/stop", {"note": NOTE})[1]
     assert body["auto_stopped"] is True and body["timer"]["work_date"] == str(TODAY)
 
 
-# ---------- tracked hours under manual edits ----------
+# ---------- tracked hours are locked ----------
 
-def test_a_manual_edit_keeps_at_most_the_new_hours_as_tracked(client, conn, clock):
+def test_tracked_hours_logged_before_drafts_existed_are_locked_too(client, conn, clock):
     _, emp, _, ms, _ = world(conn)
-    run_timer(client, conn, clock, emp, ms, 180, note=NOTE)
+    e = log_entry(conn, emp, ms, TODAY, 3, status="pending")
+    conn.run("UPDATE time_entries SET tracked_hours = 3, note = :n WHERE id = :i", n=NOTE, i=e["id"])
     cell = {"milestone_id": str(ms["id"]), "work_date": str(TODAY), "note": NOTE}
-    call(client, conn, emp, "PUT", "/time-entries", {"week": str(MONDAY), "entries": [{**cell, "hours": 2}]})
-    e = entry_of(conn, emp, ms)
-    assert (e["hours"], e["tracked_hours"]) == (Decimal(2), Decimal(2))
-    body = call(client, conn, emp, "PUT", "/time-entries", {"week": str(MONDAY), "entries": [{**cell, "hours": 5}]})[1]
-    e = entry_of(conn, emp, ms)
-    assert (e["hours"], e["tracked_hours"]) == (Decimal(5), Decimal(2))
-    assert body["entries"][0]["source"] == "mixed"
+    status, body, _, _ = call(client, conn, emp, "PUT", "/time-entries", {"week": str(MONDAY),
+                                                                         "entries": [{**cell, "hours": 2}]})
+    assert (status, body["error"]["code"]) == (409, "TIMER_HOURS_LOCKED")
+    assert entry_of(conn, emp, ms)["hours"] == 3
 
 
 # ---------- proof of work ----------
@@ -347,23 +356,36 @@ def test_a_resubmitted_rejection_needs_proof(client, conn):
     assert save(client, conn, emp, [cell(ms, MONDAY, 6, NOTE)])[0] == 200
 
 
-def test_timer_hours_without_proof_are_saved_but_need_a_note(client, conn, clock):
+def legacy_timer_entry(conn, emp, ms, d=TODAY, hours=1):
+    """Timer hours saved without a note by the old stop (before drafts): needs_note, flagged NO_PROOF."""
+    e = log_entry(conn, emp, ms, d, hours, status="pending")
+    conn.run("UPDATE time_entries SET tracked_hours = hours, needs_note = true WHERE id = :i", i=e["id"])
+    return e
+
+
+def test_legacy_timer_hours_without_proof_need_a_note(client, conn):
     mgr, emp, _, ms, _ = world(conn)
-    body = run_timer(client, conn, clock, emp, ms, 60)
-    assert body["needs_note"] is True and body["message"].endswith("Add a work note so your manager can see what you did")
+    legacy_timer_entry(conn, emp, ms)
     week = call(client, conn, emp, "GET", "/time-entries")[1]
     assert week["entries"][0]["needs_note"] is True
     item = call(client, conn, mgr, "GET", "/approvals")[1][0]
     assert "NO_PROOF" in [f["code"] for f in item["flags"]]
-    # Adding the note settles it.
+    # Adding the note (same hours: the cell is locked) settles it.
     assert save(client, conn, emp, [cell(ms, TODAY, 1, NOTE)])[0] == 200
     assert entry_of(conn, emp, ms)["needs_note"] is False
     assert "NO_PROOF" not in [f["code"] for f in call(client, conn, mgr, "GET", "/approvals")[1][0]["flags"]]
 
 
-def test_a_progress_update_later_that_day_settles_a_needed_note(client, conn, clock):
+def test_new_timer_hours_never_need_a_note_after_saving(client, conn, clock):
+    _, emp, _, ms, _ = world(conn)
+    run_timer(client, conn, clock, emp, ms, 60, note=NOTE)
+    assert save(client, conn, emp, [cell(ms, TODAY, 1)])[0] == 200  # the stop's note goes with it
+    assert entry_of(conn, emp, ms)["needs_note"] is False
+
+
+def test_a_progress_update_later_that_day_settles_a_needed_note(client, conn):
     mgr, emp, _, ms, _ = world(conn)
-    run_timer(client, conn, clock, emp, ms, 60)
+    legacy_timer_entry(conn, emp, ms)
     status, _, _, _ = call(client, conn, emp, "POST", f"/milestones/{ms['id']}/updates",
                            {"body": "Finished the address mapping"})
     assert status in (200, 201)
@@ -468,6 +490,8 @@ def test_the_migration_records_when_the_flags_went_live(db):
 def test_review_items_carry_source_note_and_flags_without_pay_for_managers(client, conn, clock):
     mgr, emp, _, ms, _ = world(conn)
     run_timer(client, conn, clock, emp, ms, 90, note=NOTE)
+    assert call(client, conn, mgr, "GET", "/approvals")[1] == []  # a draft isn't waiting for approval
+    assert save(client, conn, emp, [cell(ms, TODAY, "1.5")])[0] == 200
     item = call(client, conn, mgr, "GET", "/approvals")[1][0]
     assert (item["entry"]["source"], item["entry"]["tracked_hours"], item["entry"]["note"]) == ("tracked", 1.5, NOTE)
     assert "hourly_rate" not in item["entry"] and isinstance(item["flags"], list)
@@ -476,6 +500,7 @@ def test_review_items_carry_source_note_and_flags_without_pay_for_managers(clien
 def test_approved_weeks_carry_tracked_hours(client, conn, clock):
     mgr, emp, _, ms, other = world(conn)
     run_timer(client, conn, clock, emp, ms, 120, note=NOTE)
+    assert save(client, conn, emp, [cell(ms, TODAY, 2)])[0] == 200
     log_entry(conn, emp, other, TODAY, 2, status="approved")
     entry = entry_of(conn, emp, ms)
     assert call(client, conn, mgr, "POST", f"/time-entries/{entry['id']}/approve", {})[0] == 200
