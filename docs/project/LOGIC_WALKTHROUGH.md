@@ -159,9 +159,33 @@ flowchart TD
 - **24 hours a day:** `_check_daily_cap()` runs after every cell is valid and before anything is written. A day counts what the server would hold after the save: the person's pending and approved hours on live work that day, with each saved cell replacing its old value. Rejected hours and archived work don't count (spec §3.1). The grid adds up the same way and, before saving, marks that day's cells, header and total and shows "More than 24h on <day>"; Save stays disabled until it's fixed.
 - **Over 40 is a warning, not a block:** the overtime request is the point of the 40-hour rule, so the grid shows "This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request." and turns the week total amber, and the save goes through.
 - **Closed projects:** logging is open on `planned` and `active` projects. On hold pauses it, completed closes it, and archived projects or milestones can't change. `_validate_cell()` refuses a cell there with `409 PROJECT_NOT_OPEN` only when it would write something (new hours, changed hours or note, a clear, or a resubmission); an unchanged cell is skipped. The week rows carry the project's `status` and `open`, so the grid greys those rows out, disables their cells (existing hours stay visible), hides **Resubmit**, and labels them "Project on hold — logging paused" or "Project completed — logging closed".
-- **UI:** [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx), [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx), [`BreakdownPanel.jsx`](../../frontend/src/features/approvals/BreakdownPanel.jsx) and [`NotificationBell.jsx`](../../frontend/src/components/NotificationBell.jsx).
+- **Who saves a week:** employees, and managers or admins whose `tracks_own_hours` an admin turned on ([`app/rules/timesheets.py`](../../backend/v1/app/rules/timesheets.py) `keeps_timesheet`). Anyone else gets `403 TIMESHEET_DISABLED` before any cell is read. The Friday reminder and the "Missing timesheets" list follow the same rule.
+- **Approve week:** `POST /approvals/approve-week` checks every entry exactly like a single approval, then writes them all in one transaction; one stale or already-decided entry stops the batch.
+- **UI:** [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx), the Timesheets area ([`TimesheetsPage.jsx`](../../frontend/src/features/timesheets/TimesheetsPage.jsx): To review, Approved, HR submission), [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx), [`BreakdownPanel.jsx`](../../frontend/src/features/approvals/BreakdownPanel.jsx) and [`NotificationBell.jsx`](../../frontend/src/components/NotificationBell.jsx).
 
-## 5a. Archive and restore permissions
+## 5a. Timesheet lifecycle: draft → pending → approved → submitted to HR
+
+```mermaid
+stateDiagram-v2
+  [*] --> Draft: typed in the grid, not saved
+  Draft --> Pending: PUT /time-entries
+  Pending --> Approved: manager / admin / delegate (one entry or Approve week)
+  Pending --> Rejected: with a reason
+  Rejected --> Pending: employee edits or resubmits
+  Approved --> Pending: employee edits (edited_after_decision)
+  Approved --> SubmittedToHR: admin submits the pay period
+  SubmittedToHR --> ChangedAfterHR: employee edits (back to pending, flagged)
+  ChangedAfterHR --> ChangedAfterHR: approved or rejected again (still flagged)
+  ChangedAfterHR --> SubmittedToHR: next HR submission re-sends it as a correction
+```
+
+- **Draft** is only in the browser: nothing exists on the server until the week is saved. Saving makes every new or changed cell **pending**.
+- **Submitted to HR** is an admin action per pay period (a week up to 31 days) in [`app/features/hr/service.py`](../../backend/v1/app/features/hr/service.py). It takes every approved entry in the period not yet sent, in one transaction, locking the rows (`FOR UPDATE`) so two admins can't send the same entry. Each entry is sent once. What was sent is copied row by row into `hr_submission_entries`, so the payroll CSV of a submission never changes afterwards. There's no HR system: the submission row says "Submitted to HR (export ready)" and its **Payroll CSV** is built in the browser from `GET /hr-submissions/{id}/entries` through `lib/csv.js` (formula-injection safe): one line per person per type, Regular or Correction.
+- **Not locked (owner's decision).** Sent hours follow the normal rules: an employee can still edit them (they go back to pending) and the manager approves or rejects them again. Any edit to a sent entry sets `changed_after_hr_submission` and `hr_changed_at` and keeps `hr_submission_id`. The Timesheets area shows "Changed after HR submission — re-send" on the entry (To review) and on its week (Approved), and the admin's HR tab lists them under **Needs re-submission (N)**.
+- **Corrections:** once a changed entry is approved or rejected again it's *ready*. The next submission (any period; the admin can untick "include corrections") re-sends it as a correction row with the hours sent before (`previous_hours`): its current hours, or 0 if it was rejected. The submission's `resubmission_of` points at the submission it corrects, and the flag clears. A changed entry still pending waits.
+- **Who sees what:** admins submit, see every approved week with its cost, the corrections and the per-person payroll rows. Managers see their people's approved weeks (no cost: cost ÷ hours is a rate). Executives see the list of submissions with totals only.
+
+## 5b. Archive and restore permissions
 
 | | Archive | Restore | Sees it on the Archive page |
 |---|---|---|---|
@@ -393,12 +417,15 @@ No scheduler and no new AWS pieces: the reminder is created **lazily** when its 
 |---|---|---|---|---|
 | Home | Control centre + organisation dashboard | Dashboard with their approvals on top | My week | Organisation dashboard, marked **Read-only view** |
 | Projects | All, edit, archive | Theirs (edit), others they're on | The ones they're on | All, every tab (hours included), no edits |
-| Timesheet | Yes | Yes | Yes | No (they don't log hours) |
-| Approvals | Everything | Their projects + delegated ones | No | No |
+| My timesheet | Only with "Tracks own hours" | Only with "Tracks own hours" | Yes | No (they don't log hours) |
+| Timesheets: To review, Approved | Everything | Their projects + delegated ones | No | No |
+| Timesheets: HR submission | Submit, corrections, payroll CSV | No | No | The list of submissions, read-only |
 | Allocation, smart insights | Everyone | Their people | Themselves only (insights) | Everyone |
 | Archive | Everything, restores | Their projects' items, restores milestones | No | Everything, restores nothing |
 | Audit log | Yes | No | No | Yes (no pay fields) |
 | People, departments, project requests | Manage | Requests only | No | No (departments list only) |
+
+The navigation follows the same table: **Timesheets** (`/timesheets`; `/approvals` redirects there, filters kept) for admins, managers and executives, and **My timesheet** (`/timesheet`) only for people who log hours. The sidebar's waiting count sits on Timesheets.
 | Profiles | Anyone, with salary | Their people, no salary | Themselves | Anyone, never a salary (not even their own) |
 
 ```mermaid
@@ -440,7 +467,7 @@ flowchart TD
 - **Active** means a delegate is set, today (UTC) is on or before `delegate_until` or there is none, the project isn't archived, and the delegate is still a manager or admin. `acts_as_delegate()` and `APPROVER_SQL` in [`app/authz.py`](../../backend/v1/app/authz.py) are that one rule, used by the queue and decisions ([`app/features/time/service.py`](../../backend/v1/app/features/time/service.py)), the dashboard's pending count, smart insights and which profiles a manager may open.
 - **What a delegate gets:** the project's pending hours in their Approvals queue, labelled **Delegated from *manager***, the budget impact (cost, never an hourly rate unless they're an admin), approve and reject. Not other projects of the same manager, not their own hours, not the project's settings.
 - **The manager keeps every right**; delegation adds an approver, it doesn't move the queue.
-- **UI:** the project dialog's **Delegate approver** and **Delegate until** fields ([`ProjectForm.jsx`](../../frontend/src/features/projects/ProjectForm.jsx), sent only when changed), "Approvals delegated to *X* until *date*" on the project's Overview, and the label in [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx). The bell's `DELEGATE_ASSIGNED` alert opens `/approvals?project=…`.
+- **UI:** the project dialog's **Delegate approver** and **Delegate until** fields ([`ProjectForm.jsx`](../../frontend/src/features/projects/ProjectForm.jsx), sent only when changed), "Approvals delegated to *X* until *date*" on the project's Overview, and the label in [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx). The bell's `DELEGATE_ASSIGNED` alert opens `/timesheets?project=…`.
 
 ## 18. Live activity and readable audit entries
 
@@ -482,7 +509,7 @@ is open and share the pages' react-query caches.
 | "dark mode", "light", "switch to light mode" | switches the theme | everyone |
 | "sign out", "log out" | signs out | everyone |
 | "new project", "create a project" | `/projects?new=1` (admins) or `/requests?new=1` (managers) | admins, managers |
-| "approvals", "pending approvals" | `/approvals` | admins, managers |
+| "approvals", "pending approvals" | `/timesheets` (To review) | admins, managers |
 | "who is over 40", "over-allocated", "overtime" | `/allocation` | admins, managers, executives |
 | "overdue milestones" | dashboard (`/`), palette lists only the overdue milestones; employees `/projects?at_risk=true` | everyone |
 | "budget of Apollo", "Apollo's budget" | `/projects/<id>?tab=budget` (best name match) | anyone who sees the project |

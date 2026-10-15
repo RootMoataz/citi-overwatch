@@ -29,6 +29,10 @@ erDiagram
   projects ||--o{ time_entries : "charged to"
   users ||--o{ project_requests : submits
   project_requests |o--o| projects : "becomes"
+  users ||--o{ hr_submissions : "submits (admin)"
+  hr_submissions ||--o{ hr_submission_entries : "sent, row by row"
+  time_entries ||--o{ hr_submission_entries : "sent in"
+  hr_submissions |o--o{ hr_submissions : "corrects (resubmission_of)"
   users ||--o{ notifications : receives
   users ||--o{ conversation_participants : "takes part in"
   conversations ||--o{ conversation_participants : has
@@ -93,6 +97,17 @@ erDiagram
     bool over_40
     bool edited_after_decision
     numeric hourly_rate "copied on approval"
+    uuid hr_submission_id FK "latest HR submission that sent it"
+    bool changed_after_hr_submission "needs re-sending"
+  }
+  hr_submissions {
+    uuid id PK
+    date period_start
+    date period_end "at most 31 days"
+    uuid submitted_by FK
+    int entry_count
+    int correction_count
+    uuid resubmission_of FK
   }
 ```
 
@@ -102,7 +117,7 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `users` | Every account. `role` is `admin`, `manager`, `employee` or `executive` (read-only leadership, added by migration 006 with `ALTER TYPE … ADD VALUE`, so existing rows are untouched).<br>• Usernames and emails are unique **regardless of case**, through unique indexes on `lower(…)`.<br>• `manager_id` is the reporting manager. The service requires it for employees.<br>• `must_change_password` and `temp_password_expires_at` (72 h) drive the forced change.<br>• `failed_login_count` and `locked_until` drive the 15-minute lockout.<br>• `department_id` (optional) is set by an admin.<br>• `avatar_updated_at` is set while the person has a profile photo; it's the photo's version in `avatar_url`.<br>• Indexed on `manager_id` and `department_id`. |
+| `users` | Every account. `role` is `admin`, `manager`, `employee` or `executive` (read-only leadership, added by migration 006 with `ALTER TYPE … ADD VALUE`, so existing rows are untouched).<br>• Usernames and emails are unique **regardless of case**, through unique indexes on `lower(…)`.<br>• `manager_id` is the reporting manager. The service requires it for employees.<br>• `must_change_password` and `temp_password_expires_at` (72 h) drive the forced change.<br>• `failed_login_count` and `locked_until` drive the 15-minute lockout.<br>• `department_id` (optional) is set by an admin.<br>• `tracks_own_hours` (migration 011): whether the person keeps a personal timesheet. Employees always log (it's `true` for them); a manager or admin logs only when an admin turns it on; executives never. Migration 011 set it for every employee and for managers and admins who had already logged hours.<br>• `avatar_updated_at` is set while the person has a profile photo; it's the photo's version in `avatar_url`.<br>• Indexed on `manager_id` and `department_id`. |
 | `user_avatars` | One profile photo per person (`user_id` is the primary key, deleted with the user). `png` is the sanitised PNG the server rebuilt, never the uploaded bytes; a `CHECK` caps it at 1 MB. Kept out of `users` so the many `SELECT * FROM users` reads never carry image bytes. Added by migration `005_user_avatars.sql`. |
 | `departments` | Admin-managed groups for people and projects. The name is unique **regardless of case** (unique index on `lower(name)`, archived ones included). Archiving hides a department from the pickers and the dashboard filter; people and projects already in it keep it until someone changes them. |
 | `refresh_tokens` | One row per session. Only `token_hash` (unique) is stored. `revoked_at` is set on rotation, logout, password change and reset. |
@@ -114,7 +129,7 @@ erDiagram
 | Table | Purpose and notes |
 |---|---|
 | `projects` | The project's name (unique among non-archived projects, by a partial unique index on `lower(name)`), dates, budget, status and its one manager. `completed_at` is set when the project is completed.<br>• `department_id` (optional) is set by the project's manager or an admin.<br>• `work_mode` is `push` (the default: the manager assigns milestones) or `pull` (team members claim ready milestones, see [LOGIC_WALKTHROUGH §11](LOGIC_WALKTHROUGH.md#11-pull-mode-claiming-a-milestone)); a `CHECK` allows only those two.<br>• `delegate_approver_id` and `delegate_until` (migration 006, both optional): one other active manager or admin who may decide the project's pending hours while `delegate_until` is empty or today or later. A `CHECK` forbids an end date without a delegate; the service checks the delegate's role and that it isn't the project's manager. Partial index on `delegate_approver_id`. See [LOGIC_WALKTHROUGH §17](LOGIC_WALKTHROUGH.md#17-delegate-approver). |
-| `project_requests` | A manager's proposal: name, description, proposed dates and budget, and a reason. `status` is `pending`, `approved` or `rejected`, and the row records `decided_by`, `decided_at` and `decision_comment`. On approval, `project_id` links to the project it created. |
+| `project_requests` | A manager's proposal: name, description, proposed dates and budget, `department_id` (optional) and `work_mode` (`push`/`pull`), which the project starts with. `reason` is nullable since migration 011 and no longer asked for (older requests keep theirs). `status` is `pending`, `approved` or `rejected`, and the row records `decided_by`, `decided_at` and `decision_comment`. On approval, `project_id` links to the project it created. |
 | `project_members` | Staffing. `(project_id, user_id)` is unique, and `planned_hours_per_week` must be more than 0 and at most 40. The cross-project 40-hour cap is checked in the service, because it depends on which projects' dates overlap. |
 
 ### Milestones
@@ -130,7 +145,9 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget. |
+| `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget.<br>• HR (migration 011): `hr_submission_id` and `hr_submitted_at` point at the latest HR submission that sent the entry. Sent entries aren't locked; changing one sets `changed_after_hr_submission` and `hr_changed_at` until a later submission re-sends it (`CHECK`: the flag needs `hr_submission_id`). |
+| `hr_submissions` | A pay period an admin handed to HR (migration 011): `period_start`–`period_end` (at most 31 days), `submitted_by`, `submitted_at`, snapshot totals `entry_count`, `correction_count`, `total_hours`, `total_cost`, and `resubmission_of`: the earlier submission its corrections re-send (`NULL` when it has none). |
+| `hr_submission_entries` | What each submission sent, row by row and as it was then (`PRIMARY KEY (submission_id, entry_id)`): `hours`, `hourly_rate`, `cost`, `is_correction`, and for corrections `previous_submission_id` and `previous_hours` (`CHECK`: a correction always names the submission it corrects). The payroll CSV is rebuilt from these rows, so a later edit never changes an earlier export. The foreign key also keeps a sent entry from being deleted. |
 | `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY`, `DELEGATE_ASSIGNED` or `MESSAGE_RECEIVED` (`payload.conversation_id`; at most one unread per conversation and recipient, refreshed by each new message).<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
 
 ### Messages (migration 007)
