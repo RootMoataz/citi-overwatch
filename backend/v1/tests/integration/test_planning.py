@@ -1,4 +1,4 @@
-"""Planning board: reorder cards, check the plan and finalize it (LOGIC_WALKTHROUGH §12)."""
+"""Planning board: reorder cards, check the plan and finalize it (LOGIC_WALKTHROUGH §22)."""
 
 from datetime import date
 

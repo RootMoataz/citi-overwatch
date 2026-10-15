@@ -1,4 +1,4 @@
-"""Planning board: the checks a plan must pass before it is finalized (LOGIC_WALKTHROUGH §12).
+"""Planning board: the checks a plan must pass before it is finalized (LOGIC_WALKTHROUGH §22).
 
 Pure functions over plain dicts, so the rules are tested without a database. A milestone here has id, name,
 plan_column, sequence, start_date, end_date and assignee_count; edges map a milestone id to its predecessors."""

@@ -1,4 +1,4 @@
--- Planning board (LOGIC_WALKTHROUGH §12): while a project is 'planned', its milestones sit in planning columns
+-- Planning board (LOGIC_WALKTHROUGH §22): while a project is 'planned', its milestones sit in planning columns
 -- (backlog -> ready -> scheduled) in an order the manager sets; finalizing the plan stamps plan_finalized_at
 -- and moves the project to 'active'.
 -- Additive only. Existing milestones count as already scheduled, numbered 1, 2, 3... per project by end date.
