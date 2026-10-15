@@ -4,6 +4,7 @@
 """
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -53,7 +54,9 @@ def make_handler(lambda_handler):
                 self.send_header(key, value)
             for cookie in resp.get("cookies") or []:
                 self.send_header("Set-Cookie", cookie)
-            body = (resp.get("body") or "").encode("utf-8")
+            # Like a Function URL: binary responses (profile photos) arrive base64-encoded and leave as bytes.
+            raw = resp.get("body") or ""
+            body = base64.b64decode(raw) if resp.get("isBase64Encoded") else raw.encode("utf-8")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
