@@ -133,7 +133,7 @@ function projectFilters(text, { departments }) {
   if (status) { params.set('status', status[1]); chips.push(status[2]) }
   if (department) { params.set('department', String(department.id)); chips.push(department.name) }
   const qs = params.toString()
-  return navigate(`/projects${qs ? `?${qs}` : ''}`, chips, `Show ${chips.slice(1).join(', ').toLowerCase() || 'all'} projects`)
+  return navigate(`/projects${qs ? `?${qs}` : ''}`, chips, `Open the projects list filtered to ${chips.slice(1).join(', ')}`)
 }
 
 const RULES = [theme, signOut, newProject, approvals, overAllocated, overdue, budgetOf, personHours, projectFilters]

@@ -79,6 +79,8 @@ function Entry({ entry, last }) {
   const [raw, setRaw] = useState(false)
   const { Icon, color } = lookFor(entry)
   const project = entry.summary?.project
+  // A sign-in records nothing ({before: null, after: null}): no raw JSON to show.
+  const recorded = Boolean(entry.changes?.before || entry.changes?.after)
   return (
     <Box component="li" sx={{ display: 'grid', gridTemplateColumns: '40px 1fr', columnGap: { xs: 1, sm: 1.5 }, position: 'relative' }}>
       {/* The rail: an icon per action, joined to the next entry by a line. */}
@@ -90,7 +92,7 @@ function Entry({ entry, last }) {
           <Icon fontSize="small" />
         </Box>
       </Box>
-      <Paper variant="outlined" sx={{ p: 1.5, mb: 1.5, minWidth: 0 }}>
+      <Paper variant="outlined" sx={{ px: 1.5, py: 1.25, mb: 1.25, minWidth: 0 }}>
         <Stack direction="row" sx={{ gap: 1.25, alignItems: 'flex-start' }}>
           <Actor actor={entry.actor} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -106,20 +108,20 @@ function Entry({ entry, last }) {
                 <Chip size="small" variant="outlined" color="primary" clickable component={RouterLink} to={`/projects/${project.id}`}
                   label={project.name} />
               ) : null}
-            </Stack>
-            <ChangeList changes={entry.changes} />
-            {entry.changes ? (
-              <>
-                <Button size="small" aria-expanded={raw} onClick={() => setRaw(!raw)} sx={{ mt: 0.5, ml: -1 }}>
+              {recorded ? (
+                <Button size="small" aria-expanded={raw} onClick={() => setRaw(!raw)} sx={{ py: 0, minHeight: 0 }}>
                   {raw ? 'Hide raw JSON' : 'Show raw JSON'}
                 </Button>
-                <Collapse in={raw} unmountOnExit>
-                  <Typography variant="caption" component="p" sx={{ color: 'text.secondary' }}>request id: {entry.request_id}</Typography>
-                  <Box component="pre" sx={{ m: 0, mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'action.hover', fontSize: 12, overflowX: 'auto' }}>
-                    {JSON.stringify(entry.changes, null, 2)}
-                  </Box>
-                </Collapse>
-              </>
+              ) : null}
+            </Stack>
+            <ChangeList changes={entry.changes} />
+            {recorded ? (
+              <Collapse in={raw} unmountOnExit>
+                <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1 }}>request id: {entry.request_id}</Typography>
+                <Box component="pre" sx={{ m: 0, mt: 0.5, p: 1.5, borderRadius: 1, bgcolor: 'action.hover', fontSize: 12, overflowX: 'auto' }}>
+                  {JSON.stringify(entry.changes, null, 2)}
+                </Box>
+              </Collapse>
             ) : null}
           </Box>
           <Typography component="time" dateTime={entry.created_at} title={new Date(entry.created_at).toLocaleString()}
@@ -132,7 +134,7 @@ function Entry({ entry, last }) {
   )
 }
 
-function Timeline({ items }) {
+function Timeline({ items, pages }) {
   return (
     <Stack sx={{ gap: 2 }}>
       {groupByDay(items).map((day) => (
@@ -140,7 +142,7 @@ function Timeline({ items }) {
           <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, mb: 1 }}>
             <Typography variant="h3" component="h2">{day.label}</Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-              {day.items.length} {day.items.length === 1 ? 'entry' : 'entries'}
+              {day.items.length} {day.items.length === 1 ? 'entry' : 'entries'}{pages > 1 ? ' on this page' : ''}
             </Typography>
           </Stack>
           <Box component="ol" aria-label={`Entries for ${day.label}`} sx={{ listStyle: 'none', p: 0, m: 0 }}>
@@ -189,7 +191,7 @@ export default function AuditPage() {
       <ErrorAlert error={audit.error} onRetry={() => audit.refetch()} sx={{ mb: 2 }} />
       {audit.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
       {!audit.isLoading && !items.length ? <EmptyState title="No entries for these filters" /> : null}
-      {items.length ? <Timeline items={items} /> : null}
+      {items.length ? <Timeline items={items} pages={pages} /> : null}
       {pages > 1 ? (
         <Stack sx={{ alignItems: 'center', mt: 2, gap: 1 }}>
           <Pagination count={pages} page={page} onChange={(_, p) => setPage(p)} color="primary" shape="rounded"
