@@ -29,7 +29,7 @@ export default function PriorityChip({ priority, sx, hideDefault = false }) {
   if (!PRIORITY[priority] || (hideDefault && priority === 'medium')) return null
   const Icon = ICONS[priority]
   return (
-    <Chip size="small" variant="outlined" icon={<Icon aria-hidden />} label={PRIORITY[priority]}
+    <Chip size="small" variant="outlined" icon={<Icon aria-hidden />} label={`${PRIORITY[priority]} Priority`}
       aria-label={`Priority: ${PRIORITY[priority]}`}
       sx={[(t) => {
         const [chip, icon] = tone(priority, t)
