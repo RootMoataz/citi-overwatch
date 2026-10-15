@@ -98,7 +98,7 @@ describe('Ask Puppy: the help library', () => {
     expect(ask('why is Atlas at risk?')).toMatchObject({ kind: 'help', topic: 'project-risk', to: '/projects/p2',
       text: 'Atlas Customer Portal is at risk because: Past due date; Overdue milestone.' })
     expect(ask('why is Apollo at risk?').text).toBe("Apollo isn't at risk right now.")
-    expect(ask('why is Zeus at risk?').text).toMatch(/can't find a project called "zeus" that you can see/)
+    expect(ask('why is Zeus at risk?').text).toMatch(/can't find a project called "Zeus" that you can see/)
   })
 
   test('plain filter phrases still navigate rather than explain', () => {

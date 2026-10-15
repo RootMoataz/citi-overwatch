@@ -42,14 +42,17 @@ const PRIVATE = new RegExp([
 const PERSON = /(?:'s|s')\s+(?:hours|timesheet|history|profile|time)$|^(?:hours|timesheet|history|time)\s+(?:of|for|by)\s+\S/
 const WHY_AT_RISK = /^why\s+(?:is|are|'s)?\s*(?:the\s+)?(.+?)(?:\s+project)?\s+(?:at[\s-]?risk|risky|in trouble|flagged)$/
 
-function projectRisk(text, projects) {
+function projectRisk(text, projects, question) {
   const match = WHY_AT_RISK.exec(text.replace(/^why's\s+/, 'why is '))
   if (!match) return null
   const name = match[1].trim()
   const project = findByName(projects, name)
   if (!project) {
+    // Echo the name as it was typed (the matching above works on lower case).
+    const at = String(question).toLowerCase().indexOf(name)
+    const typed = at >= 0 ? String(question).slice(at, at + name.length) : name
     return { kind: 'help', topic: 'project-risk', to: null,
-      text: `I can't find a project called "${name}" that you can see. Projects are at risk when a milestone is overdue, `
+      text: `I can't find a project called "${typed}" that you can see. Projects are at risk when a milestone is overdue, `
         + 'the predicted end date has passed, or budget runs 20 points ahead of progress.' }
   }
   const reasons = (project.at_risk_reasons ?? []).map((r) => RISK_LABELS[r] ?? r)
@@ -72,7 +75,7 @@ export function askPuppy(question, context = {}) {
   const action = ACTIONS.find(([, re]) => re.test(whole))
   if (action) return { kind: 'action', action: action[0] }
   if (PRIVATE.test(whole)) return { kind: 'refuse', text: REFUSE_PRIVATE }
-  const risk = projectRisk(whole, context.projects ?? [])
+  const risk = projectRisk(whole, context.projects ?? [], question)
   if (risk) return risk
   const help = findHelp(whole, context.user)
   if (help) return help

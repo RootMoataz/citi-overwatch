@@ -19,7 +19,7 @@ const SPRING = { type: 'spring', stiffness: 320, damping: 16 }
  */
 export default function PuppyFace({ size = 30, perked = false, excitedAt = 0, title }) {
   const calm = useCalmMotion()
-  const earTurn = perked ? 52 : 0
+  const earTurn = perked ? 118 : 0
   const ear = (side) => ({
     style: { transformBox: 'view-box', transformOrigin: side === 'left' ? '15px 14px' : '33px 14px' },
     initial: false,
