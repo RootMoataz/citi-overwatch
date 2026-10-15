@@ -76,12 +76,17 @@ def submit(conn, ctx: Ctx, body: dict) -> dict:
     return _view(_get(conn, str(row["id"])))
 
 
-def approve(conn, ctx: Ctx, request_id: str) -> dict:
+def approve(conn, ctx: Ctx, request_id: str, body: dict | None = None) -> dict:
+    """Create the project from the request. The admin may put it in a department (`department_id`) and start it
+    from that department's template (`template: true`)."""
+    body = body or {}
     req = _pending(conn, request_id)
     project = create_project(conn, ctx, {
         "name": req["name"], "description": req["description"], "start_date": str(req["proposed_start"]),
         "predicted_end_date": str(req["proposed_end"]), "budget": str(req["proposed_budget"]),
-        "manager_id": str(req["requested_by"]), "status": "planned"}, audit_action="create_from_request")
+        "manager_id": str(req["requested_by"]), "status": "planned",
+        "department_id": body.get("department_id"), "template": body.get("template", False)},
+        audit_action="create_from_request")
     with transaction(conn):
         conn.run("""UPDATE project_requests SET status = 'approved', decided_by = CAST(:me AS uuid),
                     decided_at = now(), project_id = CAST(:p AS uuid), updated_at = now() WHERE id = :i""",

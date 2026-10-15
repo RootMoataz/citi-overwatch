@@ -15,7 +15,7 @@ def submit_request(req, ctx, conn):
 
 @router.route("POST", "/project-requests/{id}/approve", roles={"admin"})
 def approve_request(req, ctx, conn):
-    return json_response(200, service.approve(conn, ctx, req.path_params["id"]))
+    return json_response(200, service.approve(conn, ctx, req.path_params["id"], req.json()))
 
 
 @router.route("POST", "/project-requests/{id}/reject", roles={"admin"})

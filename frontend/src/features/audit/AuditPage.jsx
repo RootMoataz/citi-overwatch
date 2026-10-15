@@ -21,7 +21,7 @@ const TYPES = ['user', 'project', 'project_request', 'milestone', 'time_entry', 
 // Every action the backend records (see audit.record calls), most common first.
 const ACTIONS = ['create', 'update', 'archive', 'restore', 'approve', 'reject', 'complete', 'status_change', 'log', 'edit',
   'delete_draft', 'claim', 'add_member', 'update_member', 'remove_member', 'set_assignees', 'set_dependencies',
-  'auto_assign_support', 'add_note', 'create_from_request', 'avatar_set', 'avatar_remove', 'login', 'password_change',
+  'auto_assign_support', 'add_note', 'create_from_request', 'apply_template', 'curate_demo_plan', 'avatar_set', 'avatar_remove', 'login', 'password_change',
   'password_reset', 'password_reset_by_admin']
 const PAGE_SIZE = 50
 const personLabel = (p) => `${p.first_name} ${p.last_name}${p.is_archived ? ' (archived)' : ''}`

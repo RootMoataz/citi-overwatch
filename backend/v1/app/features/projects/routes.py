@@ -13,6 +13,11 @@ def create_project(req, ctx, conn):
     return json_response(201, service.create_project(conn, ctx, req.json()))
 
 
+@router.route("GET", "/project-templates")
+def list_templates(req, ctx, conn):
+    return json_response(200, service.list_templates())
+
+
 @router.route("GET", "/projects/{id}")
 def get_project(req, ctx, conn):
     return json_response(200, service.get_project(conn, ctx, req.path_params["id"]))

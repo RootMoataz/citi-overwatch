@@ -23,6 +23,8 @@ import { STATUS } from '../../app/theme.js'
 const LOOK = {
   create: { Icon: Add, color: 'success' },
   create_from_request: { Icon: Add, color: 'success' },
+  apply_template: { Icon: Add, color: 'success' },
+  curate_demo_plan: { Icon: Hub, color: 'secondary' },
   update: { Icon: Edit, color: 'info' },
   edit: { Icon: Edit, color: 'info' },
   update_member: { Icon: Edit, color: 'info' },

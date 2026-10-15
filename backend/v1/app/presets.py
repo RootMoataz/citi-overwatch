@@ -116,20 +116,21 @@ def normalize(name: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).split())
 
 
-def _department_key(department: str | None) -> str | None:
+def department_key(department: str | None) -> str | None:
+    """The preset's own spelling of a department name given in any case, or None."""
     wanted = normalize(department or "")
     return next((key for key in PRESETS if normalize(key) == wanted), None) if wanted else None
 
 
 def preset_for(department: str | None) -> tuple[Step, ...] | None:
     """The department's steps (any case), or None when it has no preset."""
-    key = _department_key(department)
+    key = department_key(department)
     return PRESETS[key] if key else None
 
 
 def match_step(department: str, milestone_name: str) -> Step | None:
     """The preset step an existing milestone stands for: same name, or a known alias. None if neither."""
-    key = _department_key(department)
+    key = department_key(department)
     if not key:
         return None
     wanted = normalize(milestone_name)

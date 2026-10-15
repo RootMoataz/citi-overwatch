@@ -1,11 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Grid, InputAdornment, MenuItem, TextField,
+  Alert, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, FormHelperText, Grid,
+  InputAdornment, MenuItem, TextField,
 } from '@mui/material'
 import { useId, useState } from 'react'
 import { Controller, useForm, useWatch } from 'react-hook-form'
 import { useMediaQuery } from 'react-responsive'
-import { useDepartments, useManagers } from '../../api/queries.js'
+import { useDepartments, useManagers, useProjectTemplates } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -26,7 +27,8 @@ const FIELD_MESSAGES = {
 const FORM_CODES = ['MILESTONES_OUT_OF_RANGE', 'MILESTONES_INCOMPLETE', 'INVALID_TRANSITION']
 
 /** Create (admin) or edit (manager/admin) a project. Editing also sets the delegate approver: another active manager
- * or admin who may approve the project's hours, optionally until a date. */
+ * or admin who may approve the project's hours, optionally until a date. A new project in a department with a
+ * template can start from it (on by default): the server adds the department's milestone plan in the same step. */
 export default function ProjectForm({ open, project, onClose, onSave }) {
   const { user } = useSession()
   const desktop = useMediaQuery(DESKTOP_QUERY)
@@ -40,6 +42,8 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
   if (project?.department && !departmentOptions.some((d) => String(d.id) === String(project.department.id))) {
     departmentOptions.push(project.department)
   }
+  const templates = useProjectTemplates({ enabled: open && !editing })
+  const [useTemplate, setUseTemplate] = useState(true)
   const [failure, setFailure] = useState(null)
   const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(projectSchema),
@@ -51,7 +55,11 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
       delegate_approver_id: project?.delegate ? String(project.delegate.id) : '', delegate_until: project?.delegate?.until ?? '',
     },
   })
-  const [managerId, delegateId] = useWatch({ control, name: ['manager_id', 'delegate_approver_id'] })
+  const [managerId, delegateId, departmentId] = useWatch({ control, name: ['manager_id', 'delegate_approver_id', 'department_id'] })
+  const departmentName = departmentOptions.find((d) => String(d.id) === String(departmentId))?.name
+  const template = !editing && departmentName
+    ? (templates.data?.items ?? []).find((t) => t.department.toLowerCase() === departmentName.trim().toLowerCase())
+    : null
   // Anyone who can approve except the project's own manager (they approve anyway).
   const delegateOptions = (managers.data ?? []).filter((m) => String(m.id) !== String(managerId))
   if (project?.delegate && !delegateOptions.some((m) => String(m.id) === String(project.delegate.id))) {
@@ -75,6 +83,7 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
       }
     }
     if (!editing) body.status = 'planned'
+    if (template && useTemplate) body.template = true
     try {
       await onSave(body)
     } catch (err) {
@@ -154,6 +163,16 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
                 </TextField>
               )} />
             </Grid>
+            {template ? (
+              <Grid size={12}>
+                <FormControlLabel label={`Start from the ${template.department} template`} control={
+                  <Checkbox checked={useTemplate} onChange={(e) => setUseTemplate(e.target.checked)} disabled={isSubmitting} />} />
+                <FormHelperText sx={{ mt: 0 }}>
+                  Adds {template.milestones.length} milestones across the project dates, not started and unassigned:{' '}
+                  {template.milestones.map((m) => m.name).join(', ')}.
+                </FormHelperText>
+              </Grid>
+            ) : null}
             {editing ? (
               <>
                 <Grid size={{ xs: 12, sm: 6 }}>

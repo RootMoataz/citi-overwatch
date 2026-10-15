@@ -75,6 +75,58 @@ describe('ProjectsPage', () => {
     await waitFor(() => expect(posted).toMatchObject({ name: 'Orion', department_id: 'd1', work_mode: 'pull' }))
   }, 15000) // Types a whole form and picks three menus; under a full parallel run it sits just past the 5s default.
 
+  test('a new project in a department with a template starts from it unless the admin unticks it', async () => {
+    const posted = []
+    server.use(listHandler([]), managersHandler(),
+      http.get(`${API}/departments`, () => HttpResponse.json({ items: [
+        { id: 'd1', name: 'Technology', is_archived: false }, { id: 'd3', name: 'Marketing', is_archived: false }] })),
+      http.post(`${API}/projects`, async ({ request }) => { posted.push(await request.json()); return HttpResponse.json(project(), { status: 201 }) }))
+    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /new project/i }))
+    const dialog = await screen.findByRole('dialog', { name: /new project/i })
+    expect(within(dialog).queryByRole('checkbox', { name: /template/i })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('combobox', { name: /department/i }))
+    await user.click(await screen.findByRole('option', { name: 'Marketing' }))
+    expect(within(dialog).queryByRole('checkbox', { name: /template/i })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('combobox', { name: /department/i }))
+    await user.click(await screen.findByRole('option', { name: 'Technology' }))
+    const box = await within(dialog).findByRole('checkbox', { name: 'Start from the Technology template' })
+    expect(box).toBeChecked()
+    expect(within(dialog).getByText(/adds 7 milestones/i)).toHaveTextContent(/Discovery & requirements.*Hypercare/)
+    await user.type(within(dialog).getByLabelText(/^name/i), 'Orion')
+    await user.type(within(dialog).getByLabelText(/start date/i), '2026-06-01')
+    await user.type(within(dialog).getByLabelText(/predicted end date/i), '2026-12-01')
+    await user.click(within(dialog).getByRole('combobox', { name: /manager/i }))
+    await user.click(await screen.findByRole('option', { name: /morgan manager/i }))
+    await user.click(box)
+    expect(box).not.toBeChecked()
+    await user.click(within(dialog).getByRole('button', { name: /create project/i }))
+    await waitFor(() => expect(posted).toHaveLength(1))
+    expect(posted[0]).toMatchObject({ name: 'Orion', department_id: 'd1' })
+    expect(posted[0]).not.toHaveProperty('template')
+  }, 15000)
+
+  test('the template is sent when the box stays ticked', async () => {
+    let posted = null
+    server.use(listHandler([]), managersHandler(),
+      http.post(`${API}/projects`, async ({ request }) => { posted = await request.json(); return HttpResponse.json(project(), { status: 201 }) }))
+    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /new project/i }))
+    const dialog = await screen.findByRole('dialog', { name: /new project/i })
+    await user.type(within(dialog).getByLabelText(/^name/i), 'Orion')
+    await user.type(within(dialog).getByLabelText(/start date/i), '2026-06-01')
+    await user.type(within(dialog).getByLabelText(/predicted end date/i), '2026-12-01')
+    await user.click(within(dialog).getByRole('combobox', { name: /manager/i }))
+    await user.click(await screen.findByRole('option', { name: /morgan manager/i }))
+    await user.click(within(dialog).getByRole('combobox', { name: /department/i }))
+    await user.click(await screen.findByRole('option', { name: 'Operations' }))
+    expect(await within(dialog).findByRole('checkbox', { name: 'Start from the Operations template' })).toBeChecked()
+    await user.click(within(dialog).getByRole('button', { name: /create project/i }))
+    await waitFor(() => expect(posted).toMatchObject({ name: 'Orion', department_id: 'd2', template: true }))
+  }, 15000)
+
   test('projects filters sync to URL and refetch', async () => {
     const seen = []
     server.use(listHandler([project()], seen), managersHandler())

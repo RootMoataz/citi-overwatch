@@ -38,6 +38,10 @@ export const useProjectSummary = (id) =>
 export const useMilestoneCosts = (id) =>
   useQuery({ queryKey: ['milestone-costs', id], queryFn: () => api.get(`/projects/${id}/milestone-costs`) })
 
+// Department milestone plans a new project can start from (GET /project-templates); they only change on a deploy.
+export const useProjectTemplates = ({ enabled = true } = {}) => useQuery({
+  queryKey: ['project-templates'], enabled, staleTime: Infinity, queryFn: () => api.get('/project-templates'),
+})
 export const useCreateProject = () => useApiMutation((body) => api.post('/projects', body),
   { invalidate: [['projects'], ['dashboard']], success: (p) => `Created ${p.name}` })
 // Marking a project completed (it wasn't before) earns a confetti burst.

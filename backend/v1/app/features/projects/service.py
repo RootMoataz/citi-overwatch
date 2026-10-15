@@ -15,6 +15,7 @@ from app.db import query, query_one, transaction
 from app.features.common import conflict_from
 from app.features.departments.service import check_department
 from app.http import ApiError
+from app.presets import department_key, plan_for, templates
 from app.rules.at_risk import at_risk_reasons, weighted_progress
 from app.rules.overtime import forecast_total
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
@@ -206,6 +207,50 @@ def _clean(body: dict, *, partial: bool) -> dict:
 
 # ---------- operations ----------
 
+def list_templates() -> dict:
+    """The department milestone plans a new project can start from."""
+    return {"items": templates()}
+
+
+def _template_plan(conn, body: dict, data: dict) -> tuple[str, list[dict]] | None:
+    """(department, milestones) when the body asks for `template: true`, checked before anything is written."""
+    flag = body.get("template", False)
+    if not isinstance(flag, bool):
+        raise ApiError(400, "VALIDATION_ERROR", "template must be true or false", {"template": "invalid"})
+    if not flag:
+        return None
+    if not data["department_id"]:
+        raise ApiError(400, "VALIDATION_ERROR", "Pick a department to start from its template",
+                       {"template": "no_department"})
+    name = query_one(conn, "SELECT name FROM departments WHERE id = CAST(:i AS uuid)", i=data["department_id"])["name"]
+    if department_key(name) is None:
+        raise ApiError(400, "VALIDATION_ERROR", f"{name} has no template", {"template": "no_preset"})
+    try:
+        return department_key(name), plan_for(name, data["start_date"], data["predicted_end_date"])
+    except ValueError:
+        raise ApiError(400, "VALIDATION_ERROR", "The project is too short for every step of the template",
+                       {"template": "too_short"})
+
+
+def add_planned_milestones(conn, project_id: str, plan: list[dict]) -> list[dict]:
+    """Insert a plan's milestones (not started, nobody assigned) and their dependencies. Runs inside the caller's
+    transaction. Returns the new rows."""
+    ids, rows = {}, []
+    for m in plan:
+        row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty,
+                                                         priority)
+                                 VALUES (CAST(:p AS uuid), :n, :d, :s, :e, :dif, :pr) RETURNING *""",
+                        p=str(project_id), n=m["name"], d=m["description"], s=m["start_date"], e=m["end_date"],
+                        dif=m["difficulty"], pr=m["priority"])
+        ids[m["name"]] = row["id"]
+        rows.append(row)
+    for m in plan:
+        for pred in m["after"]:
+            conn.run("INSERT INTO milestone_dependencies (milestone_id, depends_on_id) VALUES (:m, :p)",
+                     m=ids[m["name"]], p=ids[pred])
+    return rows
+
+
 def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") -> dict:
     data = _clean(body, partial=False)
     data.setdefault("description", "")
@@ -215,6 +260,7 @@ def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") 
     data["status"] = as_enum(body.get("status", "planned"), "status", CREATE_STATUSES)
     data["manager_id"] = _check_manager(conn, body["manager_id"])
     _check_dates(data["start_date"], data["predicted_end_date"])
+    template = _template_plan(conn, body, data)
     try:
         with transaction(conn):
             row = query_one(conn, """
@@ -225,6 +271,12 @@ def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") 
                         CAST(:department_id AS uuid), :work_mode)
                 RETURNING *""", by=ctx.user_id, **data)
             record(conn, ctx, audit_action, "project", str(row["id"]), after=data)
+            if template:
+                department, plan = template
+                add_planned_milestones(conn, row["id"], plan)
+                record(conn, ctx, "apply_template", "project", str(row["id"]), after={
+                    "template": department,
+                    "milestones": [f"{m['name']} ({m['start_date']} to {m['end_date']})" for m in plan]})
     except DatabaseError as exc:
         raise conflict_from(exc) or exc
     return project_view(conn, row["id"])
