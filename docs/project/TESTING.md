@@ -9,11 +9,13 @@ The tests are built for **debugging**, not only for a green tick:
 
 | Layer | Tool | Count | What a failure here means |
 |---|---|---|---|
-| Rules (unit) | pytest | part of 102 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, or the password policy. No database is involved |
-| Core (unit) | pytest | part of 102 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
-| API (integration) | pytest + real PostgreSQL 17 | 189 | An endpoint is wrong: permissions (401/403/404), validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 84 | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Rules (unit) | pytest | part of 307 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, or the password policy. No database is involved |
+| Core (unit) | pytest | part of 307 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
+| API (integration) | pytest + real PostgreSQL 17 | 651 | An endpoint is wrong: permissions (401/403/404), validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
+| Frontend (component) | Vitest + React Testing Library + MSW | 688 | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
+
+Counts as of 2026-10-15 (958 backend, 688 frontend). The dated results further down are the snapshot taken at the time.
 
 Development was test-first: each rule and endpoint started as a failing test.
 

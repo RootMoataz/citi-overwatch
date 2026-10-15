@@ -1,4 +1,8 @@
-# ACME Scout
+# ACME Scout (Moataz Hikal Project)
+
+*See every project, person and dollar — before it slips.*
+
+**Author:** Built by Moataz Hikal
 
 Scout is a project tracking platform for ACME Inc. It gives admins, project managers and employees one place to manage projects, milestones, people, hours and budgets, and it answers the seven questions in the [workshop brief](docs/project/REQUIREMENTS.md) on a single live dashboard.
 
@@ -8,7 +12,8 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 291 backend (97% coverage, business rules 100%) · 84 frontend component · 6 end-to-end (desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 958 backend (307 unit · 651 integration, 97% coverage) · 688 frontend component · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
 
@@ -73,7 +78,7 @@ Open http://localhost:3000 and sign in with a demo login. Locally, emails aren't
 | Admin | `admin.demo2`, `admin.demo3`, `admin.demo4` | Private, held by the owner (live site) |
 | Manager | `manager.demo` | `Demo123!` |
 | Employee | `employee.demo` | `Demo123!` |
-| Executive (read-only) | `executive.demo` | `Demo123!` |
+| Executive (read-only): Moataz Hikal (Executive sponsor) | `executive.demo` | `Demo123!` |
 | Admin demo (public, 5-minute limit) | `demo.admin` | `Demo123!` |
 
 The **Admin demo** (the sign-in page's "Admin" button) is a separate public account, Dana Demo-Admin, not the real admin login, whose password stays private. Because its password is published, the server limits it:
@@ -85,7 +90,7 @@ The **Admin demo** (the sign-in page's "Admin" button) is a separate public acco
 
 The full allow and deny lists are in `backend/v1/app/public_demo.py`; [Logic walkthrough §26](docs/project/LOGIC_WALKTHROUGH.md#26-the-public-demo-admin) explains them. Seed creates it; on an existing database run the `demo_backfill` operation (it adds `demo.admin` only if missing).
 
-The published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation. On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
+The published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation, which also renames an existing `executive.demo` from the earlier seed's "Eve Executive" to Moataz Hikal, Executive Sponsor (only while it still has that old name). On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
 
 Other useful commands:
 
@@ -101,14 +106,22 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 291 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 84 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 958 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 688 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint
 ```
 
 The end-to-end run starts its own API on a fresh `overwatch_e2e` database. Results, coverage and known gaps are recorded in [TESTING.md](docs/project/TESTING.md).
+
+## About the demo data
+
+Demo data by Moataz Hikal. The seed (`backend/v1/app/seed.py`) and the `demo_curate` operation (`backend/v1/app/curate.py`) build a curated demo dataset by Moataz Hikal: ACME's three departments (Technology, Operations, Risk & Compliance), their people and skills, and projects with milestones, dependencies, hours history, approvals, a kickback, messages and an HR submission, so every dashboard question has something real to show.
+
+- **Department presets.** Each department has its own milestone plan in `backend/v1/app/presets.py` (Technology: discovery → architecture → build → QA → release → hypercare; Operations: assessment → vendor selection → pilot → training → rollout → review; Risk & Compliance: scoping → control testing → findings → remediation → verification → sign-off). A new project can start from its department's template, and `demo_curate` rounds the demo projects out into the same plans. See [Logic walkthrough §22](docs/project/LOGIC_WALKTHROUGH.md#22-department-presets-and-project-templates) and [§23](docs/project/LOGIC_WALKTHROUGH.md#23-curating-the-demo-data-demo_curate).
+- **Demo people.** Everyone is fictional except the executive login, `executive.demo`, which is Moataz Hikal as Executive sponsor.
+- **Dates are relative to today**, so the demo always looks current whenever it is loaded.
 
 ## Deploy to AWS
 

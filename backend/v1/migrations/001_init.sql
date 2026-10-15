@@ -1,4 +1,4 @@
--- Citi Overwatch initial schema (spec §6).
+-- ACME Scout initial schema (spec §6).
 -- Statements end with ";" at the end of a line; app/migrate.py splits on that.
 
 CREATE TYPE user_role AS ENUM ('admin', 'manager', 'employee');
