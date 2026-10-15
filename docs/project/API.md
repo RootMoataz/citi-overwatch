@@ -48,7 +48,7 @@ Success codes: `200` OK, `201` created, `204` archived or no content.
 
 ## Executives (read-only)
 
-`role: "executive"` is read-only leadership. Executives read what an admin reads for delivery oversight: `/dashboard`, `/insights/smart`, `/allocations`, `/projects` (all, archived ones included) and every project tab, `/milestones/…`, `/archive` (every type, `can_restore` always `false`), `/audit-log`, `/departments`, `/users` (names only, like a manager) and anyone's `/users/{id}/profile`. They have no timesheet and no approvals queue (`/approvals`, `/project-requests` and someone else's `/time-entries` are `403`).
+`role: "executive"` is read-only leadership. Executives read what an admin reads for delivery oversight: `/dashboard`, `/insights/smart`, `/allocations`, `/projects` (all, archived ones included) and every project tab, `/milestones/…`, `/archive` (every type, `can_restore` always `false`), `/audit-log`, `/departments`, `/users` (names only, like a manager) and anyone's `/users/{id}/profile`. They have no timesheet and no approvals queue (`/approvals`, `/timesheets/approved`, `/project-requests` and someone else's `/time-entries` are `403`). They read the list of HR submissions (`GET /hr-submissions`, totals only) but not its per-person rows, and can't submit.
 
 - **No writes.** The router refuses every `POST`, `PUT`, `PATCH` and `DELETE` for an executive with `403 READ_ONLY` before the handler runs. A route opts in with `allow_executive=True`; only their own account does: `POST /auth/change-password`, `PUT /me`, `PUT /me/avatar`, `DELETE /me/avatar`, `POST /notifications/read-all`, `POST /notifications/{id}/read`, and sending their own messages: `POST /conversations`, `POST /conversations/{id}/messages`, `POST /conversations/{id}/read` (sign-in, refresh and logout need no token). A test walks every registered write route and checks this list.
 - **No pay.** Every JSON response to an executive has every `salary` and `hourly_rate` field removed, at any depth, including the audit log's `changes` and their own `/me` and profile.
@@ -94,10 +94,10 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/users?q=&role=&archived=&page=&page_size=` | Admins, managers and executives. Managers and executives get only `id`, `username`, names and `job_title`. `role` is `admin`, `manager`, `employee` or `executive` |
-| POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, department_id?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent |
+| POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, department_id?, tracks_own_hours?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent. `tracks_own_hours` defaults to `true` for employees and `false` for managers, admins and executives |
 | GET | `/users/{id}` | |
 | GET | `/users/{id}/profile?week=` | Every role. Admins and executives see anyone; managers see themselves, their reports, people on a project they manage and anyone whose hours wait for them (delegated projects included); employees see only themselves. Anyone else gets `404`. `salary` is only included for admins and the person themselves, never for an executive |
-| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary`, `manager_id` and `department_id` (an active department, or `null` to clear it; anything else is `400`). You can't change your own role or salary. Moving a manager or admin to `employee` or `executive` is `409 HAS_DEPENDENTS` while they manage projects or have reports |
+| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary`, `manager_id`, `department_id` (an active department, or `null` to clear it; anything else is `400`) and `tracks_own_hours` (`true`/`false`, else `400 {"tracks_own_hours": "must_be_boolean"}`): whether a manager or admin keeps a personal timesheet. Changing `role` without sending `tracks_own_hours` resets it to the new role's default. You can't change your own role or salary. Moving a manager or admin to `employee` or `executive` is `409 HAS_DEPENDENTS` while they manage projects or have reports |
 | DELETE | `/users/{id}` | Archives the account → `204`. Returns `409 HAS_DEPENDENTS` if they manage projects or have reports |
 | POST | `/users/{id}/restore` | |
 | POST | `/users/{id}/reset-password` | Issues a new temporary password, forces a change at the next sign-in and ends their sessions → `{email_sent, temp_password?}` |
@@ -180,14 +180,14 @@ Every change is in the audit log (`entity_type` `department`).
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/project-requests?status=` | Admins see all requests; managers see their own |
-| POST | `/project-requests` | Managers only. `{name, description, proposed_start, proposed_end, proposed_budget, reason}` → `201` |
-| POST | `/project-requests/{id}/approve` | Admin. Creates the project, with the requester as its manager. Optional body `{department_id?, template?}` puts it in a department and starts it from that department's template (same rules as `POST /projects`) |
-| POST | `/project-requests/{id}/reject` | Admin. `{comment}` |
+| POST | `/project-requests` | Managers only. `{name, description?, proposed_start, proposed_end, proposed_budget?, department_id?, work_mode?}` → `201`. No reason is asked for any more; a `reason` sent by an older client is ignored. `work_mode` is `push` (default) or `pull`; `department_id` an active department |
+| POST | `/project-requests/{id}/approve` | Admin. One step: creates the project (`planned`, the requester as its manager, the request's dates, budget, department and work mode; a department archived since is left off) and closes the request → `{request, project}`. Optional body `{department_id?, template?}`: `department_id` overrides the request's department, `template: true` starts the project from that department's template (same rules as `POST /projects`) |
+| POST | `/project-requests/{id}/reject` | Admin. `{comment?}`: an optional note for the requester, at most 500 characters (`400 {"comment": "max_length:500"}`); empty means none |
 
 ```json
 {"id": "2cb5b5e5-c871-42af-88d7-f7c62061c97a", "name": "Docs Demo", "description": "d",
- "proposed_start": "2026-11-01", "proposed_end": "2026-12-01", "proposed_budget": 10000.0, "reason": "r",
- "status": "pending", "requested_by": {"id": "9315bbc9-…", "name": "Morgan Manager"},
+ "proposed_start": "2026-11-01", "proposed_end": "2026-12-01", "proposed_budget": 10000.0, "reason": null,
+ "department": {"id": "4f1c…", "name": "Technology"}, "work_mode": "push", "status": "pending", "requested_by": {"id": "9315bbc9-…", "name": "Morgan Manager"},
  "decided_at": null, "decision_comment": null, "project_id": null, "created_at": "2026-10-13T18:06:34.468429-04:00"}
 ```
 
@@ -260,7 +260,11 @@ A missing field:
  "is_assignee": false, "completed_at": "2026-10-13T18:00:15.020027-04:00", "is_archived": false}
 ```
 
+`reason` is `null` for new requests; requests made before it was dropped keep theirs (read-only, not shown in the app).
+
 ## Time entries and approvals
+
+Who logs hours: employees always; managers and admins only when `tracks_own_hours` is on (an admin sets it per person); executives never. Anyone else saving a week gets `403 TIMESHEET_DISABLED`. Reading your own week (`GET /time-entries`) is always allowed.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -270,6 +274,10 @@ A missing field:
 | GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry, for whoever may decide it (the project's manager, an admin, or its active delegate). `hourly_rate` is included for admins only, because a rate reveals a salary; managers and delegates get the cost |
 | POST | `/time-entries/{id}/approve` | `{expected_hours?}`: the hours you saw. Copies the hourly rate onto the entry, which then counts toward the budget. Returns `409 STALE_ENTRY` if the entry changed since you loaded it |
 | POST | `/time-entries/{id}/reject` | `{reason, expected_hours?}`. Same `409 STALE_ENTRY` guard. Sends the employee an `ENTRY_REJECTED` alert |
+| POST | `/approvals/approve-week` | Admins and managers. `{entries: [{id, expected_hours}]}`: approves one person's week in one step, all or nothing (at most 100 entries). Each entry gets the same checks as a single approval (`403 SELF_APPROVAL`, `404`, `400 NOT_PENDING`, `409 STALE_ENTRY`); entries of more than one person or week are `400 MIXED_WEEKS` → `{approved, user_id, week_start}` |
+| GET | `/timesheets/approved?from=&to=` | Admins and managers. Approved hours per person and week (default: the last 8 weeks; at most a year): admins everyone, managers the projects they manage plus anything they approved themselves. Each row: `user {id, name, username}`, `week_start`, `entry_count`, `hours`, `projects`, `hr_submitted` (every entry sent to HR and unchanged since), `hr_submitted_count`, `hr_submitted_at`, `hr_changed_count` (entries changed after they were sent), and `cost` for admins only (cost ÷ hours would reveal a rate) |
+
+Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)).
 
 ```http
 GET /api/v1/time-entries          (as employee.demo, this week)
@@ -307,6 +315,24 @@ As an admin (managers get the same without `hourly_rate`):
  "budget": 250000.0, "consumed": 13465.92, "remaining": 236534.08,
  "remaining_before": 236534.08, "remaining_after": 236084.08, "pct_of_remaining": 0.2,
  "forecast": 50497.2, "forecast_over_budget": false, "weeks_remaining": 11}
+```
+
+## HR submissions
+
+Admins hand the approved hours of a pay period (a week, up to 31 days) to HR. There is no HR system, so a submission is a record plus a payroll CSV the app builds from its rows ("Submitted to HR (export ready)"). Each approved entry is sent once. Submitted hours are **not locked**: the normal rules still apply (an employee's edit sends the entry back to `pending`; the manager approves or rejects it again). An entry changed after it was sent keeps `hr_submission_id` and is flagged `changed_after_hr_submission` (with `hr_changed_at`) until a later submission re-sends it as a **correction**.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/hr-submissions/preview?period_start=&period_end=` | Admin. What a submission would send: `entry_count`, `total_hours`, `total_cost`, `people` (approved, not yet sent, in the period), `pending_count` (still waiting for approval in the period), `corrections_ready` (changed entries decided again) and `corrections_waiting` (changed entries back in `pending`) |
+| POST | `/hr-submissions` | Admin. `{period_start, period_end, include_corrections?}` (default `true`) → `201`: sends the period's approved, unsent entries plus every correction that's ready (any date). A correction is the entry's current hours, or `0` when it was rejected since. Nothing to send is `409 NOTHING_TO_SUBMIT`; a bad period is `400` (`before_start`, `max_31_days`). Audited as `submit` on `hr_submission` |
+| GET | `/hr-submissions` | Admins and executives. Newest first: `id`, `period_start`, `period_end`, `submitted_by {id, name}`, `submitted_at`, `entry_count`, `correction_count`, `people`, `total_hours`, `total_cost`, `resubmission_of` (`{id, period_start, period_end}` of the latest submission it corrects, or `null`) |
+| GET | `/hr-submissions/changes` | Admin. "Needs re-submission": every entry changed after it was sent: `entry_id`, `user {id, name, username}`, `work_date`, `hours` now, `status`, `ready` (approved or rejected again), `previous_hours`, `previous_submission`, `changed_at`, `project`, `milestone` |
+| GET | `/hr-submissions/{id}/entries` | Admin only (per-person cost reveals pay). Every row the submission sent, as sent: `id`, `user {id, name, username}`, `work_date`, `hours`, `hourly_rate`, `cost`, `is_correction`, `previous_hours`, `corrects` (`{id, period_start, period_end}` or `null`), `project`, `milestone`. The app turns it into the payroll CSV: one line per person per type (Regular / Correction) with hours, previously submitted hours and cost |
+
+```json
+{"id": "5b0e…", "period_start": "2026-10-05", "period_end": "2026-10-11", "submitted_at": "2026-10-13T10:02:11+00:00",
+ "submitted_by": {"id": "1d2c…", "name": "Avery Admin"}, "entry_count": 26, "correction_count": 1, "people": 6,
+ "total_hours": 180.0, "total_cost": 9512.4, "resubmission_of": {"id": "77aa…", "period_start": "2026-09-28", "period_end": "2026-10-04"}}
 ```
 
 ## Notifications

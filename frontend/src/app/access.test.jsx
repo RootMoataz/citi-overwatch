@@ -8,7 +8,7 @@ import ProjectDetailPage from '../features/projects/ProjectDetailPage.jsx'
 import { can } from '../lib/permissions.js'
 import { API, HttpResponse, http, server } from '../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
-import { NO_ACCESS, NOT_FOUND, ROUTE_ROLES } from './access.js'
+import { NO_ACCESS, NOT_FOUND, ROUTE_CHECKS, ROUTE_ROLES, mayOpenRoute } from './access.js'
 import { NAV } from './nav.jsx'
 import NotFound from './NotFound.jsx'
 
@@ -26,7 +26,8 @@ function renderGuarded(user, route) {
       <Routes>
         <Route path="/" element={<p>Home page</p>} />
         {Object.entries(ROUTE_ROLES).map(([path, roles]) => (
-          <Route key={path} path={`/${path}`} element={<RequireAuth roles={roles}><p>Guarded page</p></RequireAuth>} />
+          <Route key={path} path={`/${path}`}
+            element={<RequireAuth roles={roles} allow={ROUTE_CHECKS[path]}><p>Guarded page</p></RequireAuth>} />
         ))}
         <Route path="*" element={<NotFound />} />
       </Routes>
@@ -36,10 +37,15 @@ function renderGuarded(user, route) {
   )
 }
 
+// Managers and admins have no personal timesheet unless an admin turned on "Tracks own hours" for them.
+const handsOn = (user) => ({ ...user, tracks_own_hours: true })
+const roles = { ...users, handsOnManager: handsOn(users.manager), handsOnAdmin: handsOn(users.admin) }
+
 const denied = {
-  employee: ['/approvals', '/allocation', '/people', '/people/u-ada', '/archive', '/audit', '/departments', '/requests'],
-  manager: ['/people', '/people/u-ada', '/audit', '/departments'],
-  executive: ['/approvals', '/requests', '/people', '/people/u-ada', '/departments', '/timesheet'],
+  employee: ['/timesheets', '/allocation', '/people', '/people/u-ada', '/archive', '/audit', '/departments', '/requests'],
+  manager: ['/people', '/people/u-ada', '/audit', '/departments', '/timesheet'],
+  admin: ['/timesheet'],
+  executive: ['/requests', '/people', '/people/u-ada', '/departments', '/timesheet'],
 }
 
 describe('route guard', () => {
@@ -52,33 +58,36 @@ describe('route guard', () => {
       expect(screen.queryByText('Guarded page')).not.toBeInTheDocument()
     })
 
-  test.each(['/approvals', '/allocation', '/archive', '/requests'])('managers open %s', (path) => {
+  test.each(['/timesheets', '/allocation', '/archive', '/requests'])('managers open %s', (path) => {
     renderGuarded(users.manager, path)
     expect(screen.getByText('Guarded page')).toBeInTheDocument()
   })
 
-  test.each(['/allocation', '/archive', '/audit'])('executives open %s', (path) => {
+  test.each(['/allocation', '/archive', '/audit', '/timesheets'])('executives open %s', (path) => {
     renderGuarded(users.executive, path)
     expect(screen.getByText('Guarded page')).toBeInTheDocument()
   })
 
-  test.each(['admin', 'manager', 'employee'])('%s keeps a timesheet', (role) => {
-    renderGuarded(users[role], '/timesheet')
+  test.each(['handsOnAdmin', 'handsOnManager', 'employee'])('%s keeps a timesheet', (role) => {
+    renderGuarded(roles[role], '/timesheet')
     expect(screen.getByText('Guarded page')).toBeInTheDocument()
   })
 
-  test.each(Object.keys(ROUTE_ROLES))('admins open /%s', (path) => {
-    renderGuarded(users.admin, `/${path.replace(':id', 'u-ada')}`)
+  test.each(Object.keys(ROUTE_ROLES))('admins (who track their hours) open /%s', (path) => {
+    renderGuarded(roles.handsOnAdmin, `/${path.replace(':id', 'u-ada')}`)
     expect(screen.getByText('Guarded page')).toBeInTheDocument()
   })
 
   test("the role table agrees with the navigation: nobody is shown a link they can't open", () => {
-    for (const user of Object.values(users)) {
+    for (const [who, user] of Object.entries(roles)) {
       for (const item of NAV.filter((i) => i.action && typeof i.to === 'string')) {
-        const roles = ROUTE_ROLES[item.to.slice(1)]
-        expect([item.to, user.role, roles?.includes(user.role)]).toEqual([item.to, user.role, can(user, item.action)])
+        expect([item.to, who, mayOpenRoute(user, item.to.slice(1))]).toEqual([item.to, who, can(user, item.action)])
       }
     }
+  })
+
+  test('the old /approvals address is gone from the role table (App.jsx redirects it to /timesheets)', () => {
+    expect(ROUTE_ROLES).not.toHaveProperty('approvals')
   })
 
   test("an address that doesn't exist goes home and says so", async () => {

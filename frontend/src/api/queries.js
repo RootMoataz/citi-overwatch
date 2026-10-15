@@ -148,7 +148,7 @@ export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/m
 
 // ---------- time, approvals, notifications ----------
 const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['milestone-costs'], ['projects'], ['allocations'],
-  ['notifications'], ['profile'], ['timesheet-reminders']]
+  ['notifications'], ['profile'], ['timesheet-reminders'], ['approved-weeks'], ['hr']]
 export const useWeek = (week, userId) => useQuery({
   queryKey: ['time', week, userId ?? 'me'], queryFn: () => api.get('/time-entries', { week, user: userId }),
   placeholderData: keepPreviousData,
@@ -171,6 +171,31 @@ export function approvalsCleared(queryClient) {
 export const useRejectEntry = () => useApiMutation(({ id, reason, expectedHours }) =>
   api.post(`/time-entries/${id}/reject`, { reason, expected_hours: expectedHours }),
   { invalidate: timeKeys, success: 'Hours rejected' })
+// One person's week in one step: every entry with the hours the approver saw; all or nothing on the server.
+export const useApproveWeek = () => useApiMutation((items) => api.post('/approvals/approve-week', {
+  entries: items.map((i) => ({ id: i.entry.id, expected_hours: i.entry.hours })) }),
+{ invalidate: timeKeys, success: (d) => `Approved the week (${d.approved} ${d.approved === 1 ? 'entry' : 'entries'})`,
+  after: (_, __, queryClient) => { if (approvalsCleared(queryClient)) celebrate() } })
+// Approved hours per person-week; range = { from, to } (ISO dates).
+export const useApprovedWeeks = (range, enabled = true) => useQuery({
+  queryKey: ['approved-weeks', range], enabled, queryFn: () => api.get('/timesheets/approved', range),
+  placeholderData: keepPreviousData,
+})
+
+// ---------- HR submissions (admins submit; executives read the list) ----------
+export const useHrSubmissions = (enabled = true) =>
+  useQuery({ queryKey: ['hr', 'submissions'], enabled, queryFn: () => api.get('/hr-submissions') })
+export const useHrPreview = (period, enabled = true) => useQuery({
+  queryKey: ['hr', 'preview', period], enabled, queryFn: () => api.get('/hr-submissions/preview', period),
+  placeholderData: keepPreviousData,
+})
+export const useHrChanges = (enabled = true) =>
+  useQuery({ queryKey: ['hr', 'changes'], enabled, queryFn: () => api.get('/hr-submissions/changes') })
+export const useSubmitHr = () => useApiMutation((body) => api.post('/hr-submissions', body),
+  { invalidate: [['hr'], ['approved-weeks']], success: 'Submitted to HR (export ready)' })
+/** Every row a submission sent (for the payroll CSV); fetched on demand, not cached. */
+export const fetchHrSubmissionEntries = (id) => api.get(`/hr-submissions/${id}/entries`)
+
 export const useNotifications = () =>
   useQuery({ queryKey: ['notifications'], queryFn: () => api.get('/notifications', { unread: 'true' }) })
 export const useMarkRead = () => useApiMutation((id) => api.post(`/notifications/${id}/read`), { invalidate: [['notifications']] })

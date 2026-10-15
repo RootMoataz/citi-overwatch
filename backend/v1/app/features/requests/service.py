@@ -1,15 +1,20 @@
-"""Project requests: managers propose, admins approve (creating the project) or reject."""
+"""Project requests: managers propose, admins approve (creating the project) or reject.
+
+A request holds only what the project starts with: name, description, dates, budget, department and work mode.
+It no longer asks for a reason; older requests keep theirs (read-only, `reason`). A rejection may carry a short note."""
 
 from decimal import Decimal
 
 from app.audit import record
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
-from app.features.projects.service import create_project
+from app.features.departments.service import check_department
+from app.features.projects.service import WORK_MODES, create_project
 from app.http import ApiError
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, require
 
 STATUSES = ("pending", "approved", "rejected")
+NOTE_MAX = 500  # the optional note an admin may add when rejecting
 
 
 def _view(row: dict) -> dict:
@@ -17,14 +22,17 @@ def _view(row: dict) -> dict:
         "id": row["id"], "name": row["name"], "description": row["description"],
         "proposed_start": row["proposed_start"], "proposed_end": row["proposed_end"],
         "proposed_budget": row["proposed_budget"], "reason": row["reason"], "status": row["status"],
+        "department": ({"id": row["department_id"], "name": row["department_name"]} if row["department_id"] else None),
+        "work_mode": row["work_mode"],
         "requested_by": {"id": row["requested_by"], "name": f"{row['req_first']} {row['req_last']}"},
         "decided_at": row["decided_at"], "decision_comment": row["decision_comment"],
         "project_id": row["project_id"], "created_at": row["created_at"],
     }
 
 
-SELECT = """SELECT r.*, u.first_name AS req_first, u.last_name AS req_last
-            FROM project_requests r JOIN users u ON u.id = r.requested_by"""
+SELECT = """SELECT r.*, u.first_name AS req_first, u.last_name AS req_last, d.name AS department_name
+            FROM project_requests r JOIN users u ON u.id = r.requested_by
+            LEFT JOIN departments d ON d.id = r.department_id"""
 
 
 def _get(conn, request_id: str) -> dict:
@@ -55,37 +63,50 @@ def list_requests(conn, ctx: Ctx, params: dict) -> list[dict]:
 
 
 def submit(conn, ctx: Ctx, body: dict) -> dict:
-    require(body, "name", "proposed_start", "proposed_end", "reason")
+    require(body, "name", "proposed_start", "proposed_end")  # a "reason" from an older client is ignored
     data = {
         "name": as_str(body["name"], "name", max_len=120),
         "description": as_str(body.get("description") or "", "description", min_len=0, max_len=4000),
         "start": as_date(body["proposed_start"], "proposed_start"),
         "end": as_date(body["proposed_end"], "proposed_end"),
         "budget": as_decimal(body.get("proposed_budget", 0), "proposed_budget", min=Decimal(0)),
-        "reason": as_str(body["reason"], "reason", max_len=2000),
+        "work_mode": as_enum(body.get("work_mode") or "push", "work_mode", WORK_MODES),
+        "department_id": check_department(conn, body.get("department_id")),
     }
     if data["end"] < data["start"]:
         raise ApiError(400, "VALIDATION_ERROR", "The end date must be on or after the start date",
                        {"proposed_end": "before_start"})
     with transaction(conn):
         row = query_one(conn, """INSERT INTO project_requests (requested_by, name, description, proposed_start,
-                                     proposed_end, proposed_budget, reason)
-                                 VALUES (CAST(:me AS uuid), :name, :description, :start, :end, :budget, :reason)
+                                     proposed_end, proposed_budget, work_mode, department_id)
+                                 VALUES (CAST(:me AS uuid), :name, :description, :start, :end, :budget, :work_mode,
+                                         CAST(:department_id AS uuid))
                                  RETURNING id""", me=ctx.user_id, **data)
         record(conn, ctx, "create", "project_request", str(row["id"]), after=data)
     return _view(_get(conn, str(row["id"])))
 
 
+def _live_department(conn, department_id) -> str | None:
+    """The request's department, unless it was archived since: the project then starts without one."""
+    if department_id is None:
+        return None
+    row = query_one(conn, "SELECT 1 AS ok FROM departments WHERE id = :i AND NOT is_archived", i=department_id)
+    return str(department_id) if row else None
+
+
 def approve(conn, ctx: Ctx, request_id: str, body: dict | None = None) -> dict:
-    """Create the project from the request. The admin may put it in a department (`department_id`) and start it
-    from that department's template (`template: true`)."""
+    """One step: the project is created from the request (its manager in charge) and the request is closed.
+    It goes into the request's department unless the admin names another (`department_id`), and may start from
+    that department's template (`template: true`)."""
     body = body or {}
     req = _pending(conn, request_id)
     project = create_project(conn, ctx, {
         "name": req["name"], "description": req["description"], "start_date": str(req["proposed_start"]),
         "predicted_end_date": str(req["proposed_end"]), "budget": str(req["proposed_budget"]),
-        "manager_id": str(req["requested_by"]), "status": "planned",
-        "department_id": body.get("department_id"), "template": body.get("template", False)},
+        "manager_id": str(req["requested_by"]), "status": "planned", "work_mode": req["work_mode"],
+        "department_id": (body["department_id"] if "department_id" in body
+                          else _live_department(conn, req["department_id"])),
+        "template": body.get("template", False)},
         audit_action="create_from_request")
     with transaction(conn):
         conn.run("""UPDATE project_requests SET status = 'approved', decided_by = CAST(:me AS uuid),
@@ -95,9 +116,10 @@ def approve(conn, ctx: Ctx, request_id: str, body: dict | None = None) -> dict:
     return {"request": _view(_get(conn, request_id)), "project": project}
 
 
-def reject(conn, ctx: Ctx, request_id: str, body: dict) -> dict:
-    require(body, "comment")
-    comment = as_str(body["comment"], "comment", max_len=2000)
+def reject(conn, ctx: Ctx, request_id: str, body: dict | None) -> dict:
+    """Close a pending request. The note for the requester is optional; an empty one is stored as none."""
+    raw = (body or {}).get("comment")
+    comment = None if raw is None else (as_str(raw, "comment", min_len=0, max_len=NOTE_MAX) or None)
     req = _pending(conn, request_id)
     with transaction(conn):
         conn.run("""UPDATE project_requests SET status = 'rejected', decided_by = CAST(:me AS uuid),

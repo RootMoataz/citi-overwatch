@@ -35,7 +35,7 @@ describe('SmartInsightsPanel', () => {
     expect(within(rows[1]).getByText('Medium')).toBeInTheDocument()
     expect(within(rows[3]).getByText('Low')).toBeInTheDocument()
     const hrefs = rows.map((row) => within(row).getByRole('link').getAttribute('href'))
-    expect(hrefs).toEqual(['/projects/p1', '/projects/p1?tab=milestones', '/approvals', '/people/u-ana/profile'])
+    expect(hrefs).toEqual(['/projects/p1', '/projects/p1?tab=milestones', '/timesheets', '/people/u-ana/profile'])
     expect(within(rows[2]).getByRole('link')).toHaveAccessibleName('Review approvals')
   })
 

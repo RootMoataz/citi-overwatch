@@ -57,6 +57,28 @@ describe('permissions mirror spec §2', () => {
   })
 })
 
+describe('timesheets and HR (mirrors app/rules/timesheets.py and the HR routes)', () => {
+  const { executive } = users
+  const handsOn = (user) => ({ ...user, tracks_own_hours: true })
+
+  test('employees keep a timesheet; managers and admins only when tracks_own_hours is on; executives never', () => {
+    expect(can(employee, 'timesheet.use')).toBe(true)
+    expect(can({ ...employee, tracks_own_hours: false }, 'timesheet.use')).toBe(true)
+    expect(can(manager, 'timesheet.use')).toBe(false)
+    expect(can(admin, 'timesheet.use')).toBe(false)
+    expect(can(handsOn(manager), 'timesheet.use')).toBe(true)
+    expect(can(handsOn(admin), 'timesheet.use')).toBe(true)
+    expect(can(handsOn(executive), 'timesheet.use')).toBe(false)
+  })
+
+  test('the Timesheets area: managers and admins review, executives only read HR submissions', () => {
+    expect([admin, manager, executive, employee].map((u) => can(u, 'timesheets.view'))).toEqual([true, true, true, false])
+    expect([admin, manager, executive, employee].map((u) => can(u, 'approvals.view'))).toEqual([true, true, false, false])
+    expect([admin, manager, executive, employee].map((u) => can(u, 'hr.view'))).toEqual([true, false, true, false])
+    expect([admin, manager, executive, employee].map((u) => can(u, 'hr.submit'))).toEqual([true, false, false, false])
+  })
+})
+
 describe('canViewProfile mirrors the server rule (users/profile.py)', () => {
   const managed = { id: 'p1', manager: { id: manager.id }, is_archived: false }
   const someoneElses = { id: 'p2', manager: { id: 'u-other-mgr' }, is_archived: false }
@@ -108,8 +130,12 @@ describe('executives: read-only leadership', () => {
     for (const user of [users.admin, users.manager, users.employee]) expect(isReadOnly(user)).toBe(false)
   })
 
-  test('everyone else keeps a timesheet', () => {
-    for (const user of [users.admin, users.manager, users.employee]) expect(can(user, 'timesheet.use')).toBe(true)
+  test('employees keep a timesheet; managers and admins only with tracks_own_hours', () => {
+    expect(can(users.employee, 'timesheet.use')).toBe(true)
+    for (const user of [users.admin, users.manager]) {
+      expect(can(user, 'timesheet.use')).toBe(false)
+      expect(can({ ...user, tracks_own_hours: true }, 'timesheet.use')).toBe(true)
+    }
   })
 
   test('they open anyone\'s profile', () => {

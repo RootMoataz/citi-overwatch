@@ -191,6 +191,7 @@ def test_cannot_approve_own_entry(client, conn):
     add_member(conn, make_project(conn, mgr), mgr)  # mgr is also a contributor elsewhere
     conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=ms["id"], u=mgr["id"])
     add_member(conn, project, mgr)
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=mgr["id"])  # a hands-on manager logs hours
     entry_id = save(client, conn, mgr, [cell(ms, 0, 4)])[1]["entries"][0]["id"]
     status, body, _, _ = client.request("POST", f"/time-entries/{entry_id}/approve", token=token_for(conn, mgr))
     assert (status, body["error"]["code"]) == (403, "SELF_APPROVAL")

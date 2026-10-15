@@ -1,4 +1,4 @@
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import RequireAuth from '../auth/RequireAuth.jsx'
 import SessionProvider from '../auth/SessionProvider.jsx'
 import { useSession } from '../auth/sessionContext.js'
@@ -7,8 +7,8 @@ import LoginPage from '../features/login/LoginPage.jsx'
 import ProjectDetailPage from '../features/projects/ProjectDetailPage.jsx'
 import ProjectsPage from '../features/projects/ProjectsPage.jsx'
 import RequestsPage from '../features/requests/RequestsPage.jsx'
-import ApprovalsPage from '../features/approvals/ApprovalsPage.jsx'
 import TimesheetPage from '../features/timesheet/TimesheetPage.jsx'
+import TimesheetsPage from '../features/timesheets/TimesheetsPage.jsx'
 import HomePage from '../features/home/HomePage.jsx'
 import AllocationPage from '../features/allocation/AllocationPage.jsx'
 import PeoplePage from '../features/people/PeoplePage.jsx'
@@ -23,7 +23,7 @@ import NotificationBell from '../components/NotificationBell.jsx'
 import { useApprovals } from '../api/queries.js'
 import { useUnreadMessages } from '../api/messages.js'
 import { can } from '../lib/permissions.js'
-import { ROUTE_ROLES } from './access.js'
+import { ROUTE_CHECKS, ROUTE_ROLES } from './access.js'
 import Layout from './Layout.jsx'
 import NotFound from './NotFound.jsx'
 
@@ -35,9 +35,15 @@ function Shell() {
   // Unread messages refresh every few seconds while Messages is open, at the normal pace elsewhere.
   const onMessages = useLocation().pathname.startsWith('/messages')
   const unread = useUnreadMessages({ fast: onMessages }).data?.unread ?? 0
-  const badges = { ...(waiting ? { '/approvals': waiting } : {}), ...(unread ? { '/messages': unread } : {}) }
+  const badges = { ...(waiting ? { '/timesheets': waiting } : {}), ...(unread ? { '/messages': unread } : {}) }
   // Everyone gets the bell: managers hear about overtime and routing, employees about rejected hours and support work.
   return <Layout user={user} onLogout={logout} topBarExtras={<NotificationBell />} badges={badges} />
+}
+
+/** The old Approvals address (bookmarks, older alerts) opens Timesheets with the same filters. */
+export function ApprovalsRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/timesheets${search}`} replace />
 }
 
 export default function App() {
@@ -52,8 +58,9 @@ export default function App() {
           <Route path="messages/:id" element={<RequireAuth roles={ROUTE_ROLES['messages/:id']}><MessagesPage /></RequireAuth>} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
-          <Route path="timesheet" element={<RequireAuth roles={ROUTE_ROLES.timesheet}><TimesheetPage /></RequireAuth>} />
-          <Route path="approvals" element={<RequireAuth roles={ROUTE_ROLES.approvals}><ApprovalsPage /></RequireAuth>} />
+          <Route path="timesheet" element={<RequireAuth roles={ROUTE_ROLES.timesheet} allow={ROUTE_CHECKS.timesheet}><TimesheetPage /></RequireAuth>} />
+          <Route path="timesheets" element={<RequireAuth roles={ROUTE_ROLES.timesheets}><TimesheetsPage /></RequireAuth>} />
+          <Route path="approvals" element={<ApprovalsRedirect />} />
           <Route path="requests" element={<RequireAuth roles={ROUTE_ROLES.requests}><RequestsPage /></RequireAuth>} />
           <Route path="allocation" element={<RequireAuth roles={ROUTE_ROLES.allocation}><AllocationPage /></RequireAuth>} />
           <Route path="people" element={<RequireAuth roles={ROUTE_ROLES.people}><PeoplePage /></RequireAuth>} />

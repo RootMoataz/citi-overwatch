@@ -80,8 +80,8 @@ function newProject(text, { user }) {
 
 function approvals(text, { user }) {
   if (!/\bapprovals?\b|\bto approve\b|\bapprove hours\b|\bwaiting for (?:my )?approval\b/.test(text)) return null
-  return mayOpen(user, 'approvals')
-    ? navigate('/approvals', ['Approvals', 'Pending'], 'Open the hours waiting for approval') : null
+  return can(user, 'approvals.view')
+    ? navigate('/timesheets', ['Timesheets', 'To review'], 'Open the hours waiting for approval') : null
 }
 
 function overAllocated(text, { user }) {
@@ -170,7 +170,7 @@ export function examplePhrases(user) {
   const list = ['at-risk projects', 'on hold projects']
   if (user?.role !== 'employee') list.push('overdue milestones')
   list.push('critical milestones')
-  if (mayOpen(user, 'approvals')) list.push('pending approvals')
+  if (can(user, 'approvals.view')) list.push('pending approvals')
   if (mayOpen(user, 'allocation')) list.push('who is over 40')
   list.push('dark mode')
   return list

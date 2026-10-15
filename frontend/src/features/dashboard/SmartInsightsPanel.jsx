@@ -24,7 +24,7 @@ const SEVERITY = {
 function target(link) {
   if (link.to === 'project') return { to: `/projects/${link.id}${link.tab ? `?tab=${link.tab}` : ''}`, label: 'Open project' }
   if (link.to === 'person') return { to: `/people/${link.id}/profile`, label: 'View profile' }
-  return { to: '/approvals', label: 'Review approvals' }
+  return { to: '/timesheets', label: 'Review approvals' }
 }
 
 function InsightRow({ insight }) {

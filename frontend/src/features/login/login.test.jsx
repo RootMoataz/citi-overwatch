@@ -83,7 +83,7 @@ describe('login', () => {
     server.use(http.post(`${API}/auth/refresh`, () =>
       HttpResponse.json({ access_token: 't', user: { ...users.manager, must_change_password: false } })), dashboardStub())
     renderWithProviders(<App />, { route: '/' })
-    expect(await screen.findByRole('navigation', { name: /main/i })).toHaveTextContent('Approvals')
+    expect(await screen.findByRole('navigation', { name: /main/i })).toHaveTextContent('Timesheets')
   })
 })
 

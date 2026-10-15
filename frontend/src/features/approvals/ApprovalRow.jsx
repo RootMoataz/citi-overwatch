@@ -6,6 +6,7 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatDayLabel, formatHours } from '../../lib/format.js'
+import { HR_CHANGED } from '../../lib/labels.js'
 import BreakdownPanel from './BreakdownPanel.jsx'
 
 function RejectDialog({ item, onClose }) {
@@ -57,6 +58,9 @@ export default function ApprovalRow({ item, showContext = true }) {
           <Typography variant="caption" sx={{ color: (t) => statusColor(tone, t) }}>{item.label}</Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', ml: 1 }}>{formatHours(item.week_logged_total)} this week</Typography>
           {item.entry.edited_after_decision ? <Typography variant="caption" sx={{ ml: 1 }}>· Edited</Typography> : null}
+          {item.entry.changed_after_hr_submission ? (
+            <Chip size="small" variant="outlined" color="warning" label={HR_CHANGED} sx={{ ml: 1, height: 20 }} />
+          ) : null}
           {item.delegated_from ? (
             <Chip size="small" variant="outlined" color="info" label={`Delegated from ${item.delegated_from.name}`}
               sx={{ ml: 1, height: 20 }} />

@@ -19,6 +19,16 @@ def list_approvals(req, ctx, conn):
     return json_response(200, service.list_approvals(conn, ctx, req.query))
 
 
+@router.route("POST", "/approvals/approve-week", roles={"admin", "manager"})
+def approve_week(req, ctx, conn):
+    return json_response(200, service.approve_week(conn, ctx, req.json()))
+
+
+@router.route("GET", "/timesheets/approved", roles={"admin", "manager"})
+def approved_weeks(req, ctx, conn):
+    return json_response(200, service.approved_weeks(conn, ctx, req.query))
+
+
 @router.route("GET", "/time-entries/{id}/breakdown")
 def breakdown(req, ctx, conn):
     return json_response(200, service.breakdown(conn, ctx, req.path_params["id"]))

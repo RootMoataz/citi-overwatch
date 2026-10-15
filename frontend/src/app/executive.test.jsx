@@ -61,7 +61,7 @@ describe('executive: read-only leadership view', () => {
     expect(screen.queryByRole('list', { name: /^admin$/i })).not.toBeInTheDocument()
     const work = screen.getByRole('list', { name: /^work$/i })
     expect(within(work).getAllByRole('link').map((a) => a.textContent))
-      .toEqual(['Dashboard', 'Messages', 'Projects', 'Allocation', 'Archive', 'Audit log'])
+      .toEqual(['Dashboard', 'Messages', 'Projects', 'Timesheets', 'Allocation', 'Archive', 'Audit log'])
   })
 
   test('the account menu names the role', async () => {

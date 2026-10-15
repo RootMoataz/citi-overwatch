@@ -104,8 +104,8 @@ describe('budget', () => {
 
 describe('pages and actions by role', () => {
   test('pending approvals for approvers only', () => {
-    expect(parse('pending approvals', 'manager')).toMatchObject({ to: '/approvals', chips: ['Approvals', 'Pending'] })
-    expect(parse('approvals', 'admin')).toMatchObject({ to: '/approvals' })
+    expect(parse('pending approvals', 'manager')).toMatchObject({ to: '/timesheets', chips: ['Timesheets', 'To review'] })
+    expect(parse('approvals', 'admin')).toMatchObject({ to: '/timesheets' })
     expect(parse('approvals', 'employee')).toBeNull()
     expect(parse('approvals', 'executive')).toBeNull()
   })
@@ -182,9 +182,9 @@ describe('search', () => {
   test('pages follow the route roles', () => {
     const labels = (role) => pagesFor(users[role]).map((p) => p.label)
     expect(labels('employee')).toEqual(expect.arrayContaining(['My week', 'Projects', 'My timesheet', 'My history']))
-    expect(labels('employee')).not.toEqual(expect.arrayContaining(['Approvals']))
+    expect(labels('employee')).not.toEqual(expect.arrayContaining(['Timesheets']))
     expect(labels('employee')).not.toContain('Audit log')
-    expect(labels('manager')).toEqual(expect.arrayContaining(['Approvals', 'Allocation', 'Project requests', 'Archive']))
+    expect(labels('manager')).toEqual(expect.arrayContaining(['Timesheets', 'Allocation', 'Project requests', 'Archive']))
     expect(labels('manager')).not.toContain('People')
     expect(labels('executive')).toEqual(expect.arrayContaining(['Audit log', 'Allocation']))
     expect(labels('executive')).not.toContain('My timesheet')
@@ -193,7 +193,8 @@ describe('search', () => {
 
   test('actions follow permissions and the current theme', () => {
     const ids = (role, mode) => actionsFor(users[role], mode).map((a) => a.label)
-    expect(ids('admin', 'light')).toEqual(['New project', 'Log my hours', 'Switch to dark mode', 'Sign out'])
+    expect(ids('admin', 'light')).toEqual(['New project', 'Switch to dark mode', 'Sign out'])
+    expect(actionsFor({ ...users.admin, tracks_own_hours: true }, 'light').map((a) => a.label)).toContain('Log my hours')
     expect(ids('manager', 'dark')).toContain('Request a new project')
     expect(ids('executive', 'dark')).toEqual(['Switch to light mode', 'Sign out'])
   })

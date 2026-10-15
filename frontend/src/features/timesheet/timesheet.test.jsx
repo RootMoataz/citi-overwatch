@@ -6,7 +6,7 @@ import Layout from '../../app/Layout.jsx'
 import NotificationBell from '../../components/NotificationBell.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../../test/render.jsx'
-import ApprovalsPage from '../approvals/ApprovalsPage.jsx'
+import TimesheetsPage from '../timesheets/TimesheetsPage.jsx'
 import BreakdownPanel from '../approvals/BreakdownPanel.jsx'
 import TimesheetPage from './TimesheetPage.jsx'
 
@@ -174,12 +174,12 @@ const pending = {
   milestone: { id: 'm1', name: 'Schema Mapping' }, project: { id: 'p1', name: 'Apollo' }, week_logged_total: 45,
 }
 
-describe('ApprovalsPage', () => {
+describe('Timesheets To review', () => {
   test('reject requires a reason', async () => {
     let body = null
     server.use(http.get(`${API}/approvals`, () => HttpResponse.json([pending])),
       http.post(`${API}/time-entries/e9/reject`, async ({ request }) => { body = await request.json(); return HttpResponse.json({}) }))
-    renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
+    renderAsUser(<TimesheetsPage />, { user: users.manager, route: '/timesheets', path: '/timesheets' })
     const user = userEvent.setup()
     expect(await screen.findByText('Pending (Overtime requested from Eli Employee)')).toBeInTheDocument()
     expect(screen.getByText('45h this week')).toBeInTheDocument()
@@ -196,19 +196,19 @@ describe('ApprovalsPage', () => {
     let list = [pending]
     server.use(http.get(`${API}/approvals`, () => HttpResponse.json(list)),
       http.post(`${API}/time-entries/e9/approve`, () => { list = []; return HttpResponse.json({}) }))
-    renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
-    await userEvent.click(await screen.findByRole('button', { name: /^approve/i }))
+    renderAsUser(<TimesheetsPage />, { user: users.manager, route: '/timesheets', path: '/timesheets' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     expect(await screen.findByText(/nothing waiting/i)).toBeInTheDocument()
   })
 })
 
-describe('ApprovalsPage decisions', () => {
+describe('Timesheets To review decisions', () => {
   test('approve sends the hours the manager saw', async () => {
     let body = null
     server.use(http.get(`${API}/approvals`, () => HttpResponse.json([pending])),
       http.post(`${API}/time-entries/e9/approve`, async ({ request }) => { body = await request.json(); return HttpResponse.json({}) }))
-    renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
-    await userEvent.click(await screen.findByRole('button', { name: /^approve/i }))
+    renderAsUser(<TimesheetsPage />, { user: users.manager, route: '/timesheets', path: '/timesheets' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     await waitFor(() => expect(body).toEqual({ expected_hours: 9 }))
   })
 
@@ -217,8 +217,8 @@ describe('ApprovalsPage decisions', () => {
     server.use(http.get(`${API}/approvals`, () => { gets += 1; return HttpResponse.json([pending]) }),
       http.post(`${API}/time-entries/e9/approve`, () => HttpResponse.json({ error: { code: 'STALE_ENTRY',
         message: 'These hours changed since you loaded them. Refresh and check again.', request_id: 'r1' } }, { status: 409 })))
-    renderAsUser(<ApprovalsPage />, { user: users.manager, route: '/approvals', path: '/approvals' })
-    await userEvent.click(await screen.findByRole('button', { name: /^approve/i }))
+    renderAsUser(<TimesheetsPage />, { user: users.manager, route: '/timesheets', path: '/timesheets' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Approve' }))
     expect(await screen.findByText(/hours changed since you loaded them/i)).toBeInTheDocument()
     await waitFor(() => expect(gets).toBeGreaterThan(1))
   })
@@ -266,7 +266,7 @@ describe('NotificationBell', () => {
     await userEvent.click(bell)
     await userEvent.click(await screen.findByRole('menuitem', { name: /eli employee passed 40h/i }))
     await waitFor(() => expect(read).toBe('n1'))
-    expect(screen.getByTestId('location')).toHaveTextContent(`/approvals?user=${users.employee.id}`)
+    expect(screen.getByTestId('location')).toHaveTextContent(`/timesheets?user=${users.employee.id}`)
   })
 
   test('a rejection alert opens the timesheet for that week', async () => {
@@ -317,7 +317,7 @@ describe('NotificationBell', () => {
   })
 })
 
-test('employee does not see Approvals in navigation', () => {
+test('employee does not see Timesheets in navigation', () => {
   renderWithProviders(<Routes><Route path="*" element={<Layout user={users.employee} />} /></Routes>)
-  expect(screen.getByRole('navigation', { name: /main/i })).not.toHaveTextContent('Approvals')
+  expect(screen.getByRole('navigation', { name: /main/i })).not.toHaveTextContent('Timesheets')
 })

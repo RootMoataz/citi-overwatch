@@ -16,7 +16,7 @@ export default function ApprovalsPanel() {
   const items = approvals.data ?? []
   const count = items.length
   return (
-    <Section question="Approvals" action={<Link component={RouterLink} to="/approvals">Review all</Link>}>
+    <Section question="Approvals" action={<Link component={RouterLink} to="/timesheets">Review all</Link>}>
       <ErrorAlert error={approvals.error} onRetry={() => approvals.refetch()} />
       {approvals.isLoading ? <Skeleton variant="rounded" height={72} /> : count ? (
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: { xs: 1.5, md: 3 }, alignItems: { md: 'flex-start' } }}>
@@ -40,7 +40,7 @@ export default function ApprovalsPanel() {
             ))}
             {count > SHOWN ? (
               <Typography component="li" variant="body2" sx={{ pt: 1, color: 'text.secondary' }}>
-                and {count - SHOWN} more on the <Link component={RouterLink} to="/approvals">approvals page</Link>
+                and {count - SHOWN} more on the <Link component={RouterLink} to="/timesheets">Timesheets page</Link>
               </Typography>
             ) : null}
           </Box>

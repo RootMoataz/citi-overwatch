@@ -75,7 +75,8 @@ export const requestSchema = z.object({
   proposed_start: isoDate('start date'),
   proposed_end: isoDate('end date'),
   proposed_budget: money,
-  reason: z.string().trim().min(1, { message: 'Say why this project is needed' }).max(2000),
+  department_id: z.string().optional().default(''),
+  work_mode: z.enum(['push', 'pull']),
 }).superRefine(endAfterStart('proposed_start', 'proposed_end'))
 
 export const memberSchema = z.object({

@@ -125,7 +125,7 @@ describe('HomePage by role', () => {
     expect(await within(approvals).findByText('4 entries waiting')).toBeInTheDocument()
     expect(within(approvals).getByText(/Eli Employee/)).toBeInTheDocument()
     expect(within(approvals).queryByText(/Cy Coder/)).not.toBeInTheDocument()
-    expect(within(approvals).getByRole('link', { name: /review all/i })).toHaveAttribute('href', '/approvals')
+    expect(within(approvals).getByRole('link', { name: /review all/i })).toHaveAttribute('href', '/timesheets')
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(headings.slice(0, 3)).toEqual(['Approvals', 'Risk', 'Which projects are at risk of missing their deadlines?'])
     expect(screen.getByRole('region', { name: /smart insights/i })).toBeInTheDocument()

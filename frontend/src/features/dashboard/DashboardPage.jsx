@@ -185,7 +185,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
         sx={{ gap: 1.5, mt: -1.5, mb: 3, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}>
         <DepartmentFilter value={department} onChange={pickDepartment} />
         {approvalsButton && approver && d.pending_approvals ? (
-          <Button component={RouterLink} to="/approvals" variant="contained" color="warning">
+          <Button component={RouterLink} to="/timesheets" variant="contained" color="warning">
             {d.pending_approvals} waiting for your approval
           </Button>) : null}
       </Stack>

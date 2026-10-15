@@ -23,9 +23,11 @@ export const NAV = [
   { to: '/', label: (user) => HOME_LABEL[user?.role] ?? 'Dashboard', icon: <Dashboard />, end: true },
   { to: '/messages', label: 'Messages', icon: <Chat />, action: 'messages.use', badge: { label: 'unread', color: 'primary' } },
   { to: '/projects', label: 'Projects', icon: <Folder /> },
+  // Employees; managers and admins only with "Tracks own hours" on.
   { to: '/timesheet', label: 'My timesheet', icon: <Schedule />, action: 'timesheet.use' },
   { to: (user) => `/people/${user.id}/profile`, label: 'My history', icon: <ManageHistory />, action: 'history.own' },
-  { to: '/approvals', label: 'Approvals', icon: <AssignmentTurnedIn />, action: 'approvals.view' },
+  // Managers and admins review and approve hours here; admins also send them to HR; executives read HR submissions.
+  { to: '/timesheets', label: 'Timesheets', icon: <AssignmentTurnedIn />, action: 'timesheets.view' },
   { to: '/allocation', label: 'Allocation', icon: <ViewTimeline />, action: 'allocation.view' },
   { to: '/people', label: 'People', icon: <Groups />, action: 'people.view', admin: true },
   { to: '/departments', label: 'Departments', icon: <Apartment />, action: 'departments.manage', admin: true },

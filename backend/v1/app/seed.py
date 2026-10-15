@@ -349,11 +349,11 @@ def _load(conn) -> None:
     for username, first, last, role, title, salary, reports_to in PEOPLE:
         people[username] = query_one(conn, """
             INSERT INTO users (username, email, first_name, last_name, job_title, role, salary,
-                               manager_id, password_hash, must_change_password, department_id)
-            VALUES (:u, :e, :f, :l, :t, CAST(:r AS user_role), :s, CAST(:m AS uuid), :h, false, :dept)
+                               manager_id, password_hash, must_change_password, department_id, tracks_own_hours)
+            VALUES (:u, :e, :f, :l, :t, CAST(:r AS user_role), :s, CAST(:m AS uuid), :h, false, :dept, :tracks)
             RETURNING *""", u=username, e=f"{username}@acme.example", f=first, l=last, t=title, r=role,
             s=salary, m=str(people[reports_to]["id"]) if reports_to else None, h=pw_hash,
-            dept=department_of[username])
+            dept=department_of[username], tracks=role == "employee")  # no demo manager or admin logs hours
     people[EXECUTIVE[0]] = _insert_executive(conn, pw_hash, departments[EXECUTIVE[5]])
 
     def d(days: int) -> date:
@@ -496,11 +496,29 @@ def _load(conn) -> None:
                      p=f'{{"name": "{eli["first_name"]} {eli["last_name"]}", "week_total": {total}}}')
     log("ben.okafor", apollo, mapping, monday, 4, "pending")
 
+    # The oldest approved week already went to HR for payroll; the three after it are ready to submit.
+    paid_from = monday - timedelta(weeks=4)
+    paid_to = paid_from + timedelta(days=6)
+    totals = query_one(conn, """SELECT count(*) AS n, sum(hours) AS h, sum(hours * hourly_rate) AS c FROM time_entries
+                                WHERE status = 'approved' AND work_date BETWEEN :a AND :b""", a=paid_from, b=paid_to)
+    submission = query_one(conn, """
+        INSERT INTO hr_submissions (period_start, period_end, submitted_by, submitted_at, entry_count, total_hours,
+                                    total_cost)
+        VALUES (:a, :b, :by, now() - interval '20 days', :n, :h, :c) RETURNING id, submitted_at""",
+        a=paid_from, b=paid_to, by=people["admin.demo"]["id"], n=totals["n"], h=totals["h"], c=totals["c"])
+    conn.run("""INSERT INTO hr_submission_entries (submission_id, entry_id, hours, hourly_rate, cost)
+                SELECT :s, id, hours, hourly_rate, round(hours * hourly_rate, 2) FROM time_entries
+                WHERE status = 'approved' AND work_date BETWEEN :a AND :b""",
+             s=submission["id"], a=paid_from, b=paid_to)
+    conn.run("""UPDATE time_entries SET hr_submission_id = :s, hr_submitted_at = :at
+                WHERE status = 'approved' AND work_date BETWEEN :a AND :b""",
+             s=submission["id"], at=submission["submitted_at"], a=paid_from, b=paid_to)
+
     # A project request waiting for an admin.
     conn.run("""INSERT INTO project_requests (requested_by, name, description, proposed_start, proposed_end,
-                                              proposed_budget, reason)
+                                              proposed_budget)
                 VALUES (:u, 'Orion Analytics Dashboard', 'Executive reporting on delivery health.',
-                        :s, :e, 75000, 'Leadership needs a weekly view of delivery risk.')""",
+                        :s, :e, 75000)""",
              u=people["manager.demo"]["id"], s=d(30), e=d(150))
 
     _demo_messages(conn)
