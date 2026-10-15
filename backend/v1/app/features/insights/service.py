@@ -7,6 +7,7 @@ from decimal import Decimal
 from app.authz import APPROVER_SQL
 from app.ctx import Ctx
 from app.db import query, query_one
+from app.features.activity.service import summarize
 from app.features.projects.service import decorated, visible_projects
 from app.features.time.service import _today, _weekly_costs, week_start
 from app.rules.overtime import WEEKLY_CAP, forecast_total
@@ -175,8 +176,10 @@ def audit_log(conn, params: dict) -> dict:
                            LEFT JOIN users u ON u.id = a.actor_id{clause}
                            ORDER BY a.created_at DESC LIMIT :lim OFFSET :off""",
                  lim=size, off=(page - 1) * size, **args)
+    # summary: the entry as a sentence ("Morgan Manager approved 9h for Eli Employee on Schema Mapping").
     return {"total": total, "items": [
         {"id": r["id"], "action": r["action"], "entity_type": r["entity_type"], "entity_id": r["entity_id"],
          "changes": r["changes"], "request_id": r["request_id"], "created_at": r["created_at"],
-         "actor": {"id": r["actor_id"], "name": f"{r['first_name']} {r['last_name']}" if r["first_name"] else "System"}}
-        for r in rows]}
+         "actor": {"id": r["actor_id"], "name": f"{r['first_name']} {r['last_name']}" if r["first_name"] else "System"},
+         "summary": summary}
+        for r, summary in zip(rows, summarize(conn, rows))]}
