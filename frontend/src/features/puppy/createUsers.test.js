@@ -157,6 +157,12 @@ describe('the closing line', () => {
       .toBe("Done! 1 account created, 1 email sent. They'll be asked to choose a password when they first sign in.")
   })
 
+  test('a local copy says the emails went to the outbox, not an inbox', () => {
+    expect(doneMessage({ total: 2, created: 2, emailed: 0, outboxed: 2, mode: 'email' }))
+      .toBe('Done! 2 accounts created, 0 emails sent. This is a local copy, so 2 emails went to the local outbox folder '
+        + "instead of an inbox. They'll be asked to choose a password when they first sign in.")
+  })
+
   test('partial failures say what is left', () => {
     expect(doneMessage({ total: 4, created: 3, emailed: 2, mode: 'email' }))
       .toBe("3 of 4 accounts created, 2 emails sent. 1 couldn't be created — fix it and press Retry failed. "

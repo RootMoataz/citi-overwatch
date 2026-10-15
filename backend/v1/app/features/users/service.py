@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from pg8000.exceptions import DatabaseError
 
+from app import config
 from app.audit import record
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
@@ -167,7 +168,9 @@ def create_user(conn, ctx: Ctx, body: dict) -> dict:
     except DatabaseError as exc:
         raise conflict_from(exc) or exc
     sent = send_welcome(conn, user, str(password))
-    return {"user": user_public(user, include_salary=True), "email_sent": sent,
+    # Locally "sent" means written to the .outbox folder, not delivered: say so, so no screen claims an inbox got it.
+    delivery = ("outbox" if config.is_local() else "sent") if sent else "not_sent"
+    return {"user": user_public(user, include_salary=True), "email_sent": sent, "email_delivery": delivery,
             "temp_password": None if sent else str(password)}
 
 

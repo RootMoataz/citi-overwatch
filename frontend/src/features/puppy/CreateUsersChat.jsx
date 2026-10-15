@@ -50,6 +50,7 @@ const row = (p) => ({ key: p.key, first: p.first, last: p.last, typedUsername: p
 const STATUS = {
   ready: 'Waiting', creating: 'Creating…', emailing: 'Created ✓ · Emailing…', created: 'Created ✓',
   emailed: 'Created ✓ · Emailed ✓', 'email-failed': 'Created ✓ · Email failed',
+  outboxed: 'Created ✓ · Saved to the local outbox (not sent)',
 }
 
 function PuppyBubble({ children, id, focusRef, label }) {
@@ -463,9 +464,11 @@ export default function CreateUsersChat({ guardRef, onExit, onLeave, onClosePane
         continue
       }
       const secret = { username: result.user.username, password: result.temp_password ?? password, name: nameOf(p) }
-      const created = { userId: result.user.id, username: result.user.username, emailedBy: result.email_sent ? 'server' : null }
+      // Locally the server only writes the email to its .outbox folder: never call that 'Emailed'.
+      const outboxed = result.email_delivery === 'outbox'
+      const created = { userId: result.user.id, username: result.user.username, emailedBy: result.email_sent ? (outboxed ? 'outbox' : 'server') : null }
       if (chosenMode === 'email') {
-        if (result.email_sent) { update(p.key, { ...created, status: 'emailed' }); continue }
+        if (result.email_sent) { update(p.key, { ...created, status: outboxed ? 'outboxed' : 'emailed' }); continue }
         update(p.key, { ...created, status: 'emailing' })
         const sent = await relayCredentials({ to: p.email, name: nameOf(p), username: secret.username, password: secret.password,
           kind: 'welcome' })
@@ -476,7 +479,7 @@ export default function CreateUsersChat({ guardRef, onExit, onLeave, onClosePane
         }
       } else {
         if (chosenMode === 'show') holdSecrets((m) => m.set(p.key, secret))
-        update(p.key, { ...created, status: result.email_sent ? 'emailed' : 'created' })
+        update(p.key, { ...created, status: result.email_sent ? (outboxed ? 'outboxed' : 'emailed') : 'created' })
       }
     }
     queryClient.invalidateQueries({ queryKey: ['users'] })
@@ -546,6 +549,7 @@ export default function CreateUsersChat({ guardRef, onExit, onLeave, onClosePane
     created: people.filter((p) => p.userId).length,
     emailed: people.filter((p) => p.status === 'emailed').length,
     serverEmailed: people.filter((p) => p.emailedBy === 'server').length,
+    outboxed: people.filter((p) => p.status === 'outboxed').length,
   }
 
   const choiceChips = []

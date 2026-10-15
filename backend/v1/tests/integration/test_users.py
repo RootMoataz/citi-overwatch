@@ -22,7 +22,7 @@ def test_create_user_generates_username_and_password(client, conn, outbox):
     user = body["user"]
     assert user["username"] == "alovelace"
     assert user["must_change_password"] is True
-    assert body == {"user": user, "email_sent": True, "temp_password": None}
+    assert body == {"user": user, "email_sent": True, "email_delivery": "outbox", "temp_password": None}
     mail = outbox()
     assert "Username: alovelace" in mail and "http://localhost:3000/login" in mail
     assert "Subject: Your ACME Scout account" in mail and "set up for you on ACME Scout" in mail
@@ -34,6 +34,20 @@ def test_create_user_generates_username_and_password(client, conn, outbox):
     row = query_one(conn, "SELECT temp_password_expires_at > now() + interval '71 hours' AS fresh "
                           "FROM users WHERE username = 'alovelace'")
     assert row["fresh"] is True
+
+
+def test_create_user_says_how_the_email_went(client, conn, outbox, monkeypatch):
+    from app import config
+    from app.features.users import service as users_service
+    _, token = admin_token(conn)
+    monkeypatch.setattr(config, "is_local", lambda: False)
+    monkeypatch.setattr(users_service, "send_welcome", lambda *a, **k: True)
+    body = client.request("POST", "/users", token=token, json=new_user_body(email="a@example.com"))[1]
+    assert (body["email_sent"], body["email_delivery"]) == (True, "sent")
+    monkeypatch.setattr(users_service, "send_welcome", lambda *a, **k: False)
+    body = client.request("POST", "/users", token=token,
+                          json=new_user_body(first_name="Bea", email="b@example.com"))[1]
+    assert (body["email_sent"], body["email_delivery"]) == (False, "not_sent") and body["temp_password"]
 
 
 def test_create_user_with_chosen_username_and_password(client, conn, outbox):

@@ -194,14 +194,14 @@ export function matchChoice(text, options) {
 }
 
 /** Puppy's closing line. mode: 'email' (Yes), 'show' (show each password once) or 'none' (send nothing). */
-export function doneMessage({ total, created, emailed = 0, mode, serverEmailed = 0 }) {
+export function doneMessage({ total, created, emailed = 0, mode, serverEmailed = 0, outboxed = 0 }) {
   const failed = total - created
   const parts = [failed ? `${created} of ${plural(total, 'account')} created` : `Done! ${plural(created, 'account')} created`]
   let text
   if (mode === 'email') {
     text = `${parts[0]}, ${plural(emailed, 'email')} sent.`
     if (failed) text += ` ${failed} couldn't be created — fix ${failed === 1 ? 'it' : 'them'} and press Retry failed.`
-    const unsent = created - emailed
+    const unsent = created - emailed - outboxed
     if (unsent) {
       text += ` ${plural(unsent, 'email')} didn't go out — show the ${unsent === 1 ? 'password' : 'passwords'} once or `
         + `retry the ${unsent === 1 ? 'email' : 'emails'}.`
@@ -214,6 +214,9 @@ export function doneMessage({ total, created, emailed = 0, mode, serverEmailed =
     else {
       text += " No sign-in details were sent: when you're ready, open each profile and use Reset password to email them."
     }
+  }
+  if (outboxed) {
+    text += ` This is a local copy, so ${plural(outboxed, 'email')} went to the local outbox folder instead of an inbox.`
   }
   return `${text} They'll be asked to choose a password when they first sign in.`
 }
