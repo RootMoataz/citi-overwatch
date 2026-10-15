@@ -122,6 +122,12 @@ aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-for
 # Safe to run again; it never overwrites what an admin set and never touches assignees or hours.
 aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-format raw-in-base64-out --payload '{"op":"demo_backfill"}' out.json && cat out.json
 
+# Round the demo projects out into their department plans (milestones, people, hours history, submitted
+# timesheets, estimates) and archive the two leftover test items. A DRY RUN unless "dry_run" is false: read the
+# summary first, then run it for real. Additive and archive-only, never deletes; a second run adds nothing.
+aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-format raw-in-base64-out --payload '{"op":"demo_curate"}' out.json && cat out.json
+aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-format raw-in-base64-out --payload '{"op":"demo_curate","dry_run":false}' out.json && cat out.json
+
 ./bin/deploy-frontend.sh                 # builds the React app and syncs it to S3 + invalidates CloudFront
 ```
 

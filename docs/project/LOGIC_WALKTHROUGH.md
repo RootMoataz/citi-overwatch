@@ -543,3 +543,98 @@ turned into links or markup.
 
 The seed (and `demo_backfill`, only while no conversation exists) adds a three-message thread between Morgan
 Manager and Eli Employee and the Schema Mapping discussion with Eli, Ana and Ben, each leaving Eli one unread message.
+
+## 22. Department presets and project templates
+
+[`backend/v1/app/presets.py`](../../backend/v1/app/presets.py) holds one milestone plan per department, as pure
+data and pure functions. Each step has a short objective, a weight (its share of the timeline), an effort estimate
+in person-hours for a 26-week project, a difficulty, a priority, the steps it waits for and the job titles it needs.
+Steps waiting for the same steps run in parallel and share dates.
+
+| Department | Plan (→ waits for the previous step; ‖ runs alongside) |
+|---|---|
+| Technology | Discovery & requirements → Solution architecture → Build: backend services ‖ Build: frontend → QA & user acceptance testing → Release & cutover → Hypercare |
+| Operations | Current-state assessment → Vendor & tool selection → Pilot rollout → Training & change management → Full rollout → Post-implementation review |
+| Risk & Compliance | Scoping & risk assessment → Control testing (fieldwork) → Findings & draft report → Remediation planning → Remediation verification → Regulatory sign-off |
+
+`plan_for(department, start, end)` lays a plan over the project's dates: the stages go back to back from the first
+day to the last (largest-remainder split by weight, at least one day each), so every step starts the day after the
+steps it waits for end. Each step's estimate scales with the days it gets (`scaled_estimate`). A project shorter
+than its number of stages can't take the template.
+
+`GET /project-templates` lists the plans for anyone signed in. On **New project**, picking a department that has a
+plan shows **Start from the *Department* template** (ticked by default); with it, `POST /projects` gets
+`template: true` and the server adds the plan's milestones (not started, nobody assigned, with dependencies,
+difficulty, priority and estimate) in the same transaction as the project, audited as `apply_template`. Approving
+a request can do the same with `{department_id, template: true}`. Department names match in any case.
+
+```mermaid
+flowchart LR
+  A[POST /projects template:true] --> B{department has a plan?}
+  B -- no --> E[400 template: no_department / no_preset]
+  B -- yes --> C{days >= stages?}
+  C -- no --> F[400 template: too_short]
+  C -- yes --> D[one transaction: project + plan milestones + dependencies + audit]
+```
+
+## 23. Curating the demo data (`demo_curate`)
+
+[`backend/v1/app/curate.py`](../../backend/v1/app/curate.py), an operator-only Lambda operation (never HTTP). It is a
+**dry run unless the event says `"dry_run": false`**: the dry run does all the same work inside a transaction and
+rolls it back, so its summary is exactly what a real run would do. The seed runs the same code (without the audit
+entries), so a fresh database and the curated live one match.
+
+Safety rules: additive and archive-only. Nothing is deleted; no existing time entry, password, role, salary or
+planned hours change; existing milestones keep their names, dates, status, hours and people (the only thing that may
+be filled in on them is a missing estimate). A second run adds nothing.
+
+1. **Leftover test items.** "Test milestone 2" in Apollo is archived if it exists and isn't a plan step; "Test
+   project" is archived only if it has no team and no milestones. Archiving is the app's own soft archive, audited
+   by System; their hours stay in the database.
+2. **Merge the plan.** Existing milestones that stand for a plan step (same name or a known alias: Discovery →
+   Discovery & requirements, Schema Mapping → Build: backend services, Prototype → Build: frontend, Design →
+   Solution architecture, Cutover → Release & cutover, Requirements → Current-state assessment, Launch → Full
+   rollout, Assessment → Current-state assessment, Audit Fieldwork → Control testing (fieldwork)) anchor it. A
+   missing step goes in the gap between the steps around it; with no room there it starts the day after the step
+   before ends and runs alongside the next one; with nothing left after the last step it finishes with the project.
+   A step named in the plan that exists archived is never re-added.
+3. **Status from today.** Completed project: completed. Active: in the past → completed, spanning today →
+   in progress, later → not started, but never ahead of an earlier step that isn't done. Planned or on hold:
+   not started. A step that would end up overdue is **not added** (a warning says so), so no project gets a new
+   risk (Atlas's review is skipped this way).
+4. **Dependencies.** A new step waits for its plan predecessors that end before it starts (otherwise for theirs, and
+   so on back); an existing step waits for a new one before it when the dates allow and nothing gets blocked.
+   Every edge is checked with `creates_cycle` first.
+5. **People.** Push projects: a primary assignee (best job-title match among the team's people in the project's
+   department) and a supporting one when a second person matches. If nobody on the team has the skill, one
+   department colleague who has it joins with 10 planned hours a week, only if their 40-hour planned cap allows
+   (Gia Rossi on Apollo). Pull projects (Beacon) stay unassigned so the team can claim; Design stays claimable.
+6. **Approved hours history** for new steps that are done or under way on active and completed projects, up to the
+   week before last: 4–8h on most weekdays, up to the person's planned hours on the project, never over 40h in a
+   week or 8h in a day across all their entries; rate = salary ÷ 2,080, decided by the project's manager in the
+   past. The latest days are dropped until spend stays at most 10 points ahead of progress and the forecast under
+   90% of the budget; a completed project ends at 70–85% of its budget (Delta).
+7. **Submitted timesheets** for last week and this week (up to yesterday), on active demo projects only: one
+   overtime request just over 40h (with the `OVER_40H` alert the app sends), one entry rejected for the wrong day
+   with its corrected resubmission (and the `ENTRY_REJECTED` alert), one normal 32–38h week, and everyone else's
+   hours so far this week, with short notes. A person's week is left alone once it has pending or rejected hours.
+8. **Estimates** on every demo milestone that has none (step 24).
+9. One `curate_demo_plan` audit entry per changed project, by System, and a JSON summary per project (`added`,
+   `dependencies_added`, `team_added`, `hours_added`, `pending_added`, `rejected_added`, `estimates_set`,
+   `before`/`after` risk, budget and progress) plus `archived`, `timesheets` and `warnings`.
+
+## 24. Expected time frame
+
+`milestones.estimated_hours` (migration 013, optional, more than 0 and at most 10,000, one decimal) is the total
+person-hours a milestone should take; the project's manager or an admin sets it, like priority (audited as
+`update`). Nothing else is stored: [`app/rules/estimates.py`](../../backend/v1/app/rules/estimates.py) derives
+`duration_days` (calendar days, both ends included), `working_days` (Monday to Friday) and `estimate_used_pct`
+(counted hours, pending and approved, ÷ estimate). A project adds up its non-archived milestones:
+`total_estimated_hours`, `logged_hours`, its own `duration_days`/`working_days`, and `estimate_used_pct` over the
+milestones that have an estimate. Milestone cards read "Est. 120h · 30 days (22 working days)" and, once hours
+exist, "86h logged · 72% of estimate", amber above 90% ("nearly used") and red above 100% ("over estimate"). The
+project overview has an **Estimated effort** tile.
+
+`demo_curate` fills in estimates only where there are none: a completed milestone's estimate lands within 15% of
+its logged hours, an open one's stays above them (at least 1.25 × logged), and one without hours gets the plan
+step's estimate for its dates (or about 4h per working day per person for a milestone that isn't a plan step).
