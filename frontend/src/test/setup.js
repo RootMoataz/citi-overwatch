@@ -34,6 +34,11 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 }
 
+// jsdom has no object URLs; profile photos and previews use them.
+let objectUrls = 0
+URL.createObjectURL ??= () => `blob:test/${(objectUrls += 1)}`
+URL.revokeObjectURL ??= () => {}
+
 // Relative fetch URLs need an origin under Node.
 const realFetch = globalThis.fetch
 globalThis.fetch = (input, init) =>

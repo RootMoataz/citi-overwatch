@@ -9,6 +9,7 @@ import { Fragment, useState } from 'react'
 import {
   useArchiveMilestone, useClaimMilestone, useMembers, useMilestones, useMilestoneStatus,
 } from '../../api/queries.js'
+import AvatarStack from '../../components/AvatarStack.jsx'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -29,6 +30,13 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
   const waitingOn = m.predecessors.map((id) => names[String(id)]).filter(Boolean)
   const supporting = new Set((m.supporting_ids ?? []).map(String))
   const actions = statusActions(m, { manager: manage, assignee: m.is_assignee })
+  // Primary assignees first, ringed; people there as support follow.
+  const people = [...m.assignees]
+    .sort((a, b) => supporting.has(String(a.id)) - supporting.has(String(b.id)))
+    .map((a) => {
+      const helper = supporting.has(String(a.id))
+      return { id: a.id, name: a.name, detail: helper ? 'Supporting' : 'Primary', highlight: !helper }
+    })
 
   const move = async (target) => {
     setFailure(null)
@@ -50,6 +58,7 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
               <StatusChip status={m.display_status} />
               <DifficultyChip difficulty={m.difficulty} />
               {m.is_assignee ? <Chip size="small" variant="outlined" label="Assigned to you" /> : null}
+              <AvatarStack people={people} max={4} label={`People on ${m.name}`} />
             </Stack>
             <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>
               {formatDate(m.start_date)} – {formatDate(m.end_date)}

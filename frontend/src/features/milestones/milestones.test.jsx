@@ -161,6 +161,16 @@ describe('MilestonesTab', () => {
     expect(within(cut).queryByLabelText('Ada Lovelace is supporting')).not.toBeInTheDocument()
   })
 
+  test('assignees appear as an avatar group, primary first with the role in each tooltip label', async () => {
+    const ada = { id: 'u-ada', name: 'Ada Lovelace' }
+    server.use(...handlers([{ ...cutover, assignees: [me, ada], supporting_ids: [me.id] }]))
+    renderTab(users.manager, true)
+    const group = within(await card('Cutover')).getByRole('group', { name: 'People on Cutover' })
+    // MUI's AvatarGroup reverses the DOM and lays it out row-reverse, so on screen the first person is leftmost.
+    expect(within(group).getAllByRole('img').map((el) => el.getAttribute('aria-label')).reverse())
+      .toEqual(['Ada Lovelace · Primary', 'Eli Employee · Supporting'])
+  })
+
   test('each milestone card shows its difficulty', async () => {
     server.use(...handlers())
     renderTab(users.employee, false)

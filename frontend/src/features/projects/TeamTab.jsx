@@ -1,6 +1,7 @@
 import PersonAdd from '@mui/icons-material/PersonAddAlt'
 import {
-  Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItem, ListItemText, MenuItem,
+  Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItem, ListItemAvatar, ListItemText,
+  MenuItem,
   Paper, Stack, TextField, Tooltip,
 } from '@mui/material'
 import Delete from '@mui/icons-material/DeleteOutlined'
@@ -11,6 +12,7 @@ import { Controller, useForm } from 'react-hook-form'
 import { useAddMember, useMembers, usePeoplePicker, useRemoveMember, useUpdateMember } from '../../api/queries.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatHours, fullName } from '../../lib/format.js'
 import { memberSchema } from '../../lib/schemas.js'
@@ -102,6 +104,7 @@ export default function TeamTab({ project, manage }) {
                     onClick={() => setRemoving(m)}><Delete /></IconButton></Tooltip>
                 </Stack>
               ) : null}>
+                <ListItemAvatar sx={{ minWidth: 48 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={32} /></ListItemAvatar>
                 <ListItemText primary={fullName(m.user)}
                   secondary={`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`} />
               </ListItem>

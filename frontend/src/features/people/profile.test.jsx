@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
@@ -45,6 +45,17 @@ describe('PersonProfilePage', () => {
     expect(within(row).getByText('Supporting')).toBeInTheDocument()
     expect(within(row).getByText('12h')).toBeInTheDocument()
     expect(within(row).getByLabelText('Difficulty: Easy')).toBeInTheDocument()
+  })
+
+  test("the header shows the person's photo when they have one", async () => {
+    server.use(
+      http.get(`${API}/avatars`, () => HttpResponse.json({ items: { 'u-ada': '42' } })),
+      http.get(`${API}/users/u-ada/avatar`, () => new HttpResponse(new Uint8Array([137, 80, 78, 71]),
+        { headers: { 'content-type': 'image/png' } })),
+    )
+    renderProfile(users.admin, profile())
+    await screen.findByRole('heading', { name: 'Ada Lovelace', level: 1 })
+    await waitFor(() => expect(document.querySelector('.MuiAvatar-img')).toHaveAttribute('src', expect.stringMatching(/^blob:/)))
   })
 
   test('managers never see a salary', async () => {

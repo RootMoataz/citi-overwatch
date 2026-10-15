@@ -60,6 +60,8 @@ Success codes: `200` OK, `201` created, `204` archived or no content.
 | POST | `/auth/reset-password` | — | `{reset_token, new_password}` → `204`; ends every session |
 | GET | `/me` | Bearer | → your profile, including your own salary |
 | PUT | `/me` | Bearer | `{first_name?, last_name?, email?}` → the updated profile |
+| PUT | `/me/avatar` | Bearer | `{image}`: your profile photo as base64 PNG → the updated profile. See [Profile photos](#profile-photos) |
+| DELETE | `/me/avatar` | Bearer | Removes your photo → the updated profile (`200` even if you had none) |
 
 ```http
 POST /api/v1/auth/login
@@ -117,6 +119,37 @@ GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
  "suggestions": ["jsmith", "jane.smith", "smithj", "jane_smith", "janes"]}
 ```
 
+## Profile photos
+
+Every role can set and remove their own photo; admins can also remove anyone's. Any signed-in user can view photos. User JSON (`/me`, `/users`, `/users/{id}`) carries `avatar_url`: the photo's path under `/api/v1` with a version for cache busting, or `null`.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/avatars` | Every signed-in user. `{items: {user_id: version}}` for everyone who has a photo, so lists know whose photo to fetch without asking per person |
+| PUT | `/me/avatar` | `{image}`: base64 (standard alphabet, no `data:` prefix) of a PNG, at most 300 KB decoded and 16–512 px on each side. The server checks it and stores a rebuilt copy (see [LOGIC_WALKTHROUGH §13](LOGIC_WALKTHROUGH.md#13-avatar-upload-safety)) → the updated profile |
+| DELETE | `/me/avatar` | → the updated profile |
+| GET | `/users/{id}/avatar?v=` | Every signed-in user. The PNG bytes (not JSON), or `404` if they have no photo. The server ignores `v`; it only makes each version a new URL |
+| DELETE | `/users/{id}/avatar` | Admin. → `204`, or `404` for an unknown user |
+
+A refused upload is `400 VALIDATION_ERROR` with `details: {"image": reason}` and a message that says what's wrong. `reason` is one of `required`, `invalid_base64`, `too_large`, `not_png` (SVG, GIF, HTML, JPEG or anything else), `bad_dimensions`, `bad_header`, `bad_chunk`, `bad_crc`, `trailing_data`, `truncated` or `bad_image_data`.
+
+```json
+{"error": {"code": "VALIDATION_ERROR", "message": "That image has extra data hidden after it, so it was refused.",
+           "details": {"image": "trailing_data"}, "request_id": "…"}}
+```
+
+The photo itself comes back as a Function URL response with `isBase64Encoded: true` (Lambda decodes it, so the browser gets raw bytes; the CloudFront `/api` behaviour doesn't cache) and these headers:
+
+```http
+content-type: image/png
+x-content-type-options: nosniff
+content-disposition: inline
+content-security-policy: default-src 'none'
+cache-control: private, max-age=300
+```
+
+Setting and removing a photo are audited as `avatar_set` / `avatar_remove` on the `user`; the entry records the stored size, never the image.
+
 ## Departments
 
 | Method | Path | Notes |
@@ -154,7 +187,7 @@ Every change is in the audit log (`entity_type` `department`).
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects?q=&status=&manager=&department=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see. `archived` is admin only; `department` is a department ID |
+| GET | `/projects?q=&status=&manager=&department=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see. `archived` is admin only; `department` is a department ID. Each item has `team`: its active members as `[{id, name}]`, by last name (for the list's avatars) |
 | POST | `/projects` | Admin. `{name, description?, start_date, predicted_end_date, budget, manager_id, status?, department_id?, work_mode?}` → `201`. `work_mode` is `push` (default) or `pull` |
 | GET | `/projects/{id}` | `404` if you can't see it |
 | PUT | `/projects/{id}` | The project's manager or an admin, including `department_id` (an active department or `null`) and `work_mode`. Only admins can change the manager |

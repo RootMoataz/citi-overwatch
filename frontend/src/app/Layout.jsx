@@ -1,14 +1,15 @@
-import AccountCircle from '@mui/icons-material/AccountCircle'
 import FactCheck from '@mui/icons-material/FactCheckOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import {
   AppBar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu,
-  MenuItem, Toolbar, Typography,
+  MenuItem, Stack, Toolbar, Typography,
 } from '@mui/material'
 import { useId, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
+import UserAvatar from '../components/UserAvatar.jsx'
+import AvatarDialog from '../features/avatar/AvatarDialog.jsx'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { can } from '../lib/permissions.js'
@@ -71,6 +72,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [menuAnchor, setMenuAnchor] = useState(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
   const location = useLocation()
 
   const brand = (
@@ -94,22 +96,27 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           {!desktop ? <Typography variant="h3" component="span" sx={{ fontWeight: 800 }}>Citi Overwatch</Typography> : null}
           <Box sx={{ flexGrow: 1 }} />
           {topBarExtras}
-          <IconButton aria-label="Account menu" onClick={(e) => setMenuAnchor(e.currentTarget)}>
-            <AccountCircle />
+          <IconButton aria-label="Account menu" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
+            <UserAvatar userId={user?.id} name={fullName(user)} size={32} />
           </IconButton>
           <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="subtitle1">{fullName(user)}</Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {user?.username} · {ROLE_LABEL[user?.role] ?? user?.role}
-              </Typography>
-            </Box>
+            <Stack direction="row" sx={{ px: 2, py: 1, gap: 1.5, alignItems: 'center' }}>
+              <UserAvatar userId={user?.id} name={fullName(user)} size={40} />
+              <Box>
+                <Typography variant="subtitle1">{fullName(user)}</Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  {user?.username} · {ROLE_LABEL[user?.role] ?? user?.role}
+                </Typography>
+              </Box>
+            </Stack>
             <Divider />
             <MenuItem component={NavLink} to="/profile" onClick={() => setMenuAnchor(null)}>My profile</MenuItem>
+            <MenuItem onClick={() => { setMenuAnchor(null); setPhotoOpen(true) }}>Profile photo</MenuItem>
             <MenuItem onClick={() => { setMenuAnchor(null); onLogout?.() }}>Sign out</MenuItem>
           </Menu>
         </Toolbar>
       </AppBar>
+      {photoOpen ? <AvatarDialog open user={user} onClose={() => setPhotoOpen(false)} /> : null}
 
       {desktop ? (
         <Drawer variant="permanent"

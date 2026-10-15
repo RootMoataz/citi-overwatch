@@ -84,4 +84,16 @@ describe('Layout', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }))
     expect(onLogout).toHaveBeenCalled()
   })
+
+  test.each(['employee', 'manager', 'admin'])('every role (%s) can open the profile photo dialog from the account menu', async (role) => {
+    renderLayout(users[role])
+    const button = screen.getByRole('button', { name: /account menu/i })
+    const initials = `${users[role].first_name[0]}${users[role].last_name[0]}`
+    expect(button).toHaveTextContent(initials)
+    await userEvent.click(button)
+    await userEvent.click(await screen.findByRole('menuitem', { name: /profile photo/i }))
+    const dialog = await screen.findByRole('dialog', { name: /profile photo/i })
+    expect(within(dialog).getByRole('button', { name: /choose a photo/i })).toBeInTheDocument()
+  })
 })
+

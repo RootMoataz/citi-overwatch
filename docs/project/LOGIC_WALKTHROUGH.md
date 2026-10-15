@@ -325,3 +325,45 @@ Admins keep a list of departments (the **Departments** page); people (set by an 
 - **The choice is in the URL** (`/?department=<id>`), so a filtered dashboard can be shared or reloaded. "All departments" removes it. The filter only appears once there's at least one department.
 - **Smart insights follow it too:** the panel (section 10) sends `GET /insights/smart?department=<id>`, which uses the same `visible_projects(department=)` for the project, budget and milestone insights, keeps only that department's people for the hours and rejection insights, and counts only its projects' entries in the approval backlog.
 - **Code:** [`DashboardPage.jsx`](../../frontend/src/features/dashboard/DashboardPage.jsx), [`app/features/departments/`](../../backend/v1/app/features/departments/) and [`DepartmentsPage.jsx`](../../frontend/src/features/departments/DepartmentsPage.jsx).
+
+## 13. Avatar upload safety
+
+Anyone can upload a profile photo, and everyone else's browser then displays it, so an upload is the easiest way to try to plant something in the app. The rule is simple: **the server never stores or serves what was uploaded, only a PNG it rebuilt from validated pixels.**
+
+```mermaid
+flowchart TD
+  F["Browser: PNG, JPEG or WebP chosen"] --> C["Canvas: centre-crop, draw at 256x256,<br/>export a NEW PNG (metadata gone)"]
+  C --> B["PUT /me/avatar {image: base64}"]
+  B --> D["Strict base64 decode; 300 KB cap<br/>checked before decoding"]
+  D --> S["PNG signature, then every chunk:<br/>framing, type letters, CRC32"]
+  S --> H["IHDR first: 16-512 px a side,<br/>legal bit depth and colour type"]
+  H --> K["Keep only IHDR, PLTE, tRNS, IDAT, IEND;<br/>unknown critical chunk = refuse"]
+  K --> T["IEND last, nothing after it"]
+  T --> Z["Inflate IDAT with a bounded decompressor:<br/>exactly the size IHDR implies, filter bytes 0-4"]
+  Z --> R["Rebuild: signature + IHDR + PLTE/tRNS +<br/>one IDAT we compressed + IEND"]
+  R --> DB["Store in user_avatars; audit avatar_set (size only)"]
+  D & S & H & K & T & Z -- any failure --> E["400 VALIDATION_ERROR {image: reason}"]
+```
+
+Each safeguard and what it stops:
+
+| Safeguard | Where | What it stops |
+|---|---|---|
+| Re-encode in the browser (canvas → `toBlob('image/png')`) | [`lib/avatarImage.js`](../../frontend/src/lib/avatarImage.js) | EXIF/GPS and other metadata leaving the device; anything embedded in the original file. A convenience only: the server trusts none of it |
+| Only PNG, JPEG or WebP can be picked; 15 MB source limit | `avatarImage.js`, [`AvatarDialog.jsx`](../../frontend/src/features/avatar/AvatarDialog.jsx) | SVG (which can carry script), HTML and GIF never reach the canvas |
+| Strict base64, 300 KB cap checked on the text length before decoding | [`app/rules/png_sanitize.py`](../../backend/v1/app/rules/png_sanitize.py) `decode_base64()` | Oversized uploads costing memory; lenient decoding accepting junk |
+| PNG signature required | `sanitize_png()` | SVG, HTML, GIF, JPEG and every other format: `not_png` |
+| Every chunk's length, type letters and CRC32 checked | `_chunks()` | Corrupted or hand-crafted files |
+| IHDR first, 16–512 px a side, legal bit depth / colour type / methods | `_header()` | Decompression bombs (512 x 512 caps the image at about 1 MB raw) and malformed headers |
+| Only IHDR, PLTE, tRNS, IDAT, IEND kept; every other chunk dropped; an unknown *critical* chunk refused | `sanitize_png()` | Payloads and metadata in `tEXt`, `zTXt`, `iTXt`, `eXIf`, `iCCP` and private chunks |
+| IEND must be last and nothing may follow it | `_chunks()` | Polyglots: a valid PNG with HTML or JavaScript appended (`trailing_data`) |
+| IDAT inflated with `zlib.decompressobj().decompress(data, expected + 1)`; the result must be exactly the size IHDR implies, the stream must end cleanly and every row's filter byte must be 0–4 | `_inflate()` | Zip bombs (it stops after `expected + 1` bytes and never inflates the rest), truncated or padded image data, junk after the zlib stream |
+| The stored file is rebuilt: new IHDR, kept PLTE/tRNS, **one IDAT we compressed ourselves** from the checked scanlines, new IEND | `sanitize_png()` | Anything that survived the checks inside the original byte layout: what's stored is our bytes, not the uploader's |
+| Pure Python (`struct` + `zlib`), no image library | `png_sanitize.py` | Parser bugs in native image libraries; nothing native to ship in the Lambda package |
+| Served with `Content-Type: image/png`, `X-Content-Type-Options: nosniff`, `Content-Disposition: inline`, `Content-Security-Policy: default-src 'none'`, `Cache-Control: private, max-age=300` | [`app/http.py`](../../backend/v1/app/http.py) `binary_response()`, [`app/features/avatars/routes.py`](../../backend/v1/app/features/avatars/routes.py) | The browser guessing another type (MIME sniffing), the file running script if opened directly, shared caches keeping someone's photo |
+| Photos need a signed-in user; the browser fetches them with the bearer token as a Blob and shows an object URL | `api.blob()` in [`api/client.js`](../../frontend/src/api/client.js), `useAvatar()` in [`api/queries.js`](../../frontend/src/api/queries.js) | Photos being public URLs. A non-image answer (such as the CDN's HTML fallback) is treated as missing, never put in an `<img>` |
+| Only your own photo can be set; only admins remove someone else's | `routes.py` | One person replacing another's face |
+| Audited as `avatar_set` / `avatar_remove` with the stored size only | [`app/features/avatars/service.py`](../../backend/v1/app/features/avatars/service.py) | Image bytes ending up in the audit log, while keeping a trail of every change |
+
+- **Tests:** `tests/unit/test_png_sanitize.py` builds PNGs in pure Python (`zlib` + `struct`). It proves a valid PNG passes with its pixels intact and its `tEXt` gone, and that a bad CRC, a wrong signature, SVG text, HTML/JS appended after IEND, oversized or tiny dimensions, a too-large payload, a truncated file, a missing IEND, an unknown critical chunk, wrong-length or non-zlib image data, a bad filter byte and a 50 MB zip bomb are all refused. `tests/integration/test_avatars.py` covers the endpoints, headers, permissions and audit entries.
+- **No request storms:** `GET /avatars` returns `{user_id: version}` for the people who have a photo, so lists draw initials for everyone else without a request. Each photo is fetched once per user and version and cached by react-query; its object URL is revoked when react-query drops it (30 minutes unused, replaced by a newer version, or on sign-out).

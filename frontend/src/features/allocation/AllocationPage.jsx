@@ -10,7 +10,7 @@ import { useAllocations } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
-import PersonLink from '../../components/PersonLink.jsx'
+import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import { addDays, formatDate, formatHours, formatPct, mondayOf } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import AllocationCharts from './AllocationCharts.jsx'
@@ -63,7 +63,7 @@ export default function AllocationPage() {
               {people.map((person) => (
                 <TableRow key={person.user.id}>
                   <TableCell component="th" scope="row">
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}><PersonLink person={person.user} /></Typography>
+                    <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}><PersonWithAvatar person={person.user} link /></Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>{person.user.job_title}</Typography>
                   </TableCell>
                   {projects.map((p) => {
@@ -82,7 +82,7 @@ export default function AllocationPage() {
           {people.map((person) => (
             <Card key={person.user.id}>
               <CardContent>
-                <Typography variant="subtitle1"><PersonLink person={person.user} /></Typography>
+                <Typography variant="subtitle1" component="div"><PersonWithAvatar person={person.user} link /></Typography>
                 <Utilization value={person.utilization_pct} />
                 {person.projects.map((c) => (
                   <Typography key={c.id} variant="body2" sx={{ color: 'text.secondary' }}>

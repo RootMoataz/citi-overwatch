@@ -31,7 +31,7 @@ function buildUrl(path, query) {
   return `${BASE}${path}${qs ? `?${qs}` : ''}`
 }
 
-async function send(method, path, { body, query, signal } = {}) {
+async function send(method, path, { body, query, signal, responseType } = {}) {
   let res
   try {
     res = await fetch(buildUrl(path, query), {
@@ -51,6 +51,15 @@ async function send(method, path, { body, query, signal } = {}) {
       message: "Can't reach the server. Check your connection and try again." })
   }
   if (res.status === 204) return null
+  if (responseType === 'blob' && res.ok) {
+    // Images (profile photos) come back as bytes. Anything that isn't an image, such as the CDN's HTML
+    // fallback page, is treated as missing rather than handed to an <img>.
+    if (!(res.headers.get('content-type') ?? '').startsWith('image/')) {
+      throw new ApiError({ status: 404, code: 'NOT_FOUND', message: "This doesn't exist, or you don't have access to it.",
+        requestId: res.headers.get('x-request-id') })
+    }
+    return res.blob()
+  }
   const text = await res.text()
   let data
   try { data = text ? JSON.parse(text) : null } catch { data = null }
@@ -114,6 +123,8 @@ export const api = {
   post: (path, body, opts) => request('POST', path, { ...opts, body }),
   put: (path, body, opts) => request('PUT', path, { ...opts, body }),
   del: (path, opts) => request('DELETE', path, opts),
+  /** GET binary content (an image) as a Blob, with the same auth, refresh and error handling. */
+  blob: (path, query, opts) => request('GET', path, { ...opts, query, responseType: 'blob' }),
   /** Restore a session from the refresh cookie; resolves to the user or rejects. */
   refresh: () => refresh().then((data) => data.user),
   setToken(next) { token = next },

@@ -10,8 +10,10 @@ import { useCreateProject, useManagers, useProjects } from '../../api/queries.js
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
+import AvatarStack from '../../components/AvatarStack.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import ResponsiveTable from '../../components/ResponsiveTable.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -30,6 +32,10 @@ function Progress({ value }) {
       <Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right' }}>{formatPct(value)}</Typography>
     </Stack>
   )
+}
+
+function TeamAvatars({ project }) {
+  return <AvatarStack people={project.team ?? []} max={4} label={`${project.name} team`} />
 }
 
 export default function ProjectsPage() {
@@ -64,7 +70,10 @@ export default function ProjectsPage() {
     { field: 'name', headerName: 'Project', flex: 1.6, minWidth: 200,
       renderCell: ({ row }) => <Link component={RouterLink} to={`/projects/${row.id}`} underline="hover">{row.name}</Link> },
     { field: 'status', headerName: 'Status', width: 140, renderCell: ({ value }) => <StatusChip status={value} /> },
-    { field: 'manager', headerName: 'Manager', flex: 1, minWidth: 140, valueGetter: (value) => value?.name },
+    { field: 'manager', headerName: 'Manager', flex: 1, minWidth: 160, valueGetter: (value) => value?.name,
+      renderCell: ({ row }) => <PersonWithAvatar person={row.manager} /> },
+    { field: 'team', headerName: 'Team', width: 140, sortable: false,
+      renderCell: ({ row }) => <Box sx={{ py: 0.5 }}><TeamAvatars project={row} /></Box> },
     { field: 'progress_pct', headerName: 'Progress', description: `Milestones done, weighted by difficulty. ${PROGRESS_WEIGHTING}`,
       flex: 1, minWidth: 160,
       renderCell: ({ value }) => <Progress value={value} /> },
@@ -114,8 +123,12 @@ export default function ProjectsPage() {
               <Typography variant="subtitle1">{row.name}</Typography>
               <StatusChip status={row.status} />
             </Stack>
+            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+              <PersonWithAvatar person={row.manager} />
+              <TeamAvatars project={row} />
+            </Stack>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {row.manager?.name} · due {formatDate(row.predicted_end_date)} · {formatPct(row.budget_pct)} used
+              due {formatDate(row.predicted_end_date)} · {formatPct(row.budget_pct)} used
             </Typography>
             <Progress value={row.progress_pct} />
             <RiskBadges reasons={row.at_risk_reasons} />

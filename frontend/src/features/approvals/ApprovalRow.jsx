@@ -3,6 +3,7 @@ import { useId, useState } from 'react'
 import { useApproveEntry, useRejectEntry } from '../../api/queries.js'
 import { STATUS } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatDayLabel, formatHours } from '../../lib/format.js'
 import BreakdownPanel from './BreakdownPanel.jsx'
 
@@ -47,6 +48,8 @@ export default function ApprovalRow({ item, showContext = true }) {
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' } }}>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            <UserAvatar userId={item.user.id} name={item.user.name} size={24}
+              sx={{ display: 'inline-flex', verticalAlign: 'middle', mr: 1 }} />
             {item.user.name} · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}
             {showContext ? <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}> · {item.project.name} › {item.milestone.name}</Typography> : null}
           </Typography>

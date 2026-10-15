@@ -11,6 +11,7 @@ import { STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney, formatPct, mondayOf } from '../../lib/format.js'
@@ -201,7 +202,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
                 {d.over_allocated.map((o) => (
                   <ListItem key={o.user.id} disableGutters
                     secondaryAction={<Chip color="warning" size="small" label={formatHours(o.week_logged_total)} />}>
-                    <ListItemText primary={o.user.name} />
+                    <ListItemText primary={<PersonWithAvatar person={o.user} />} />
                   </ListItem>
                 ))}
               </List>
@@ -219,7 +220,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
                 <TableBody>
                   {busiest.map((r) => (
                     <TableRow key={r.user.id}>
-                      <TableCell>{r.user.name}</TableCell><TableCell align="right">{formatHours(r.planned_total)}</TableCell>
+                      <TableCell><PersonWithAvatar person={r.user} /></TableCell><TableCell align="right">{formatHours(r.planned_total)}</TableCell>
                       <TableCell align="right">{formatHours(r.logged_total)}</TableCell>
                       <TableCell align="right" sx={{ color: r.utilization_pct > 100 ? 'warning.main' : undefined }}>{formatPct(r.utilization_pct)}</TableCell>
                     </TableRow>

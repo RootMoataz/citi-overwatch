@@ -89,4 +89,25 @@ describe('api client', () => {
     expect(err).toMatchObject({ status: 0, code: 'NETWORK_ERROR' })
     expect(err.message).toMatch(/can't reach the server/i)
   })
+
+  test('blob() returns image bytes with the bearer token', async () => {
+    let auth
+    server.use(http.get(`${API}/users/u1/avatar`, ({ request }) => {
+      auth = request.headers.get('authorization')
+      return new HttpResponse(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } })
+    }))
+    const blob = await api.blob('/users/u1/avatar', { v: '5' })
+    expect(auth).toBe('Bearer old-token')
+    expect(blob.type).toBe('image/png')
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([137, 80, 78, 71]))
+  })
+
+  test('blob() treats a non-image answer as missing and passes API errors through', async () => {
+    server.use(http.get(`${API}/users/u1/avatar`, () =>
+      new HttpResponse('<!doctype html>', { status: 200, headers: { 'content-type': 'text/html' } })))
+    await expect(api.blob('/users/u1/avatar')).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' })
+    server.use(http.get(`${API}/users/u2/avatar`, () =>
+      HttpResponse.json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, { status: 404 })))
+    await expect(api.blob('/users/u2/avatar')).rejects.toMatchObject({ status: 404, code: 'NOT_FOUND' })
+  })
 })

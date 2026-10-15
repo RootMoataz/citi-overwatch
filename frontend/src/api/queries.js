@@ -222,3 +222,44 @@ export const useArchiveDepartment = () => useApiMutation((d) => api.del(`/depart
   { invalidate: departmentKeys, success: (_, d) => `Archived ${d.name}` })
 export const useRestoreDepartment = () => useApiMutation((d) => api.post(`/departments/${d.id}/restore`),
   { invalidate: departmentKeys, success: (d) => `Restored ${d.name}` })
+
+// ---------- profile photos ----------
+// One small index ({user id: version}) tells every list who has a photo, so people without one never cause a
+// request. Each photo is fetched once per user + version and cached; its object URL is revoked when react-query
+// drops the cache entry (unused for gcTime, a newer version, or sign-out clearing the cache).
+const AVATAR_GC_MS = 30 * 60 * 1000
+const revokerInstalled = new WeakSet()
+
+function installAvatarRevoker(queryClient) {
+  if (revokerInstalled.has(queryClient)) return
+  revokerInstalled.add(queryClient)
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type === 'removed' && event.query.queryKey[0] === 'avatar' && event.query.state.data) {
+      URL.revokeObjectURL(event.query.state.data)
+    }
+  })
+}
+
+export const useAvatarIndex = () => useQuery({
+  queryKey: ['avatars'], queryFn: () => api.get('/avatars'), staleTime: 60000, refetchInterval: false,
+  select: (data) => data?.items ?? {},
+})
+
+/** The photo of `userId` as an object URL, or undefined while loading / when they have none. */
+export function useAvatar(userId, version) {
+  const queryClient = useQueryClient()
+  installAvatarRevoker(queryClient)
+  return useQuery({
+    queryKey: ['avatar', String(userId), version], enabled: Boolean(userId && version),
+    queryFn: async () => URL.createObjectURL(await api.blob(`/users/${userId}/avatar`, { v: version })),
+    staleTime: Infinity, gcTime: AVATAR_GC_MS, refetchInterval: false, refetchOnWindowFocus: false, retry: false,
+  })
+}
+
+const avatarKeys = [['avatars'], ['me'], ['users'], ['user']]
+export const useSetAvatar = () => useApiMutation((image) => api.put('/me/avatar', { image }),
+  { invalidate: avatarKeys, success: 'Profile photo updated' })
+export const useRemoveAvatar = () => useApiMutation(() => api.del('/me/avatar'),
+  { invalidate: avatarKeys, success: 'Profile photo removed' })
+export const useRemoveUserAvatar = (id) => useApiMutation(() => api.del(`/users/${id}/avatar`),
+  { invalidate: avatarKeys, success: 'Profile photo removed' })

@@ -90,6 +90,16 @@ describe('ProjectsPage', () => {
     expect(screen.getByTestId('location')).toHaveTextContent('at_risk=true')
   })
 
+  test('rows show the manager with an avatar and the team as a compact avatar group', async () => {
+    const team = ['Ann Ames', 'Ben Bell', 'Cy Cole', 'Di Dunn', 'Ed Eve'].map((name, i) => ({ id: `t${i}`, name }))
+    server.use(listHandler([project({ team })]), managersHandler())
+    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
+    const group = await screen.findByRole('group', { name: 'Apollo Data Migration team' })
+    expect(within(group).getByRole('img', { name: 'Ann Ames' })).toHaveTextContent('AA')
+    expect(within(group).getByRole('img', { name: '2 more: Di Dunn, Ed Eve' })).toHaveTextContent('+2')
+    expect(screen.getByText('Morgan Manager').parentElement).toHaveTextContent('MMMorgan Manager')
+  })
+
   test('rows show progress, budget use and risk', async () => {
     server.use(listHandler([project({ at_risk_reasons: ['PAST_DUE'] })]), managersHandler())
     renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
@@ -169,6 +179,15 @@ describe('ProjectDetailPage', () => {
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1', path: '/projects/:id' })
     expect(await screen.findByText(/department: technology/i)).toBeInTheDocument()
     expect(screen.getByText(/pull mode/i)).toBeInTheDocument()
+    expect(screen.getByText(/^manager:/i)).toHaveTextContent('Manager: MMMorgan Manager')
+  })
+
+  test('team tab rows show each person with an avatar', async () => {
+    server.use(...detailHandlers())
+    renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=team', path: '/projects/:id' })
+    const list = await screen.findByRole('list', { name: /team members/i })
+    expect(await within(list).findByText('Ada Lovelace')).toBeInTheDocument()
+    expect(within(list).getByText('AL')).toBeInTheDocument()
   })
 
   test('the manager moves the project to another department and back to push mode', async () => {

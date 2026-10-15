@@ -176,6 +176,14 @@ describe('ProfilePage', () => {
     await user.click(screen.getByRole('button', { name: /save/i }))
     await waitFor(() => expect(put).toEqual({ first_name: 'Elias', last_name: 'Employee', email: 'eli@acme.example' }))
   })
+
+  test('the profile page opens the photo dialog', async () => {
+    server.use(http.get(`${API}/me`, () => HttpResponse.json({ id: 'u-emp', username: 'employee.demo', first_name: 'Eli',
+      last_name: 'Employee', email: 'eli@acme.example', role: 'employee', job_title: 'Engineer', salary: 104000 })))
+    renderAsUser(<ProfilePage />, { user: users.employee, route: '/profile', path: '/profile' })
+    await userEvent.click(await screen.findByRole('button', { name: /change photo/i }))
+    expect(await screen.findByRole('dialog', { name: /profile photo/i })).toBeInTheDocument()
+  })
 })
 
 describe('AuditPage', () => {

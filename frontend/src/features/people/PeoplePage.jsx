@@ -7,6 +7,7 @@ import { useUsers } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import ResponsiveTable from '../../components/ResponsiveTable.jsx'
 import { formatMoney, fullName } from '../../lib/format.js'
 import CreateUserWizard from './CreateUserWizard.jsx'
@@ -24,7 +25,8 @@ export default function PeoplePage() {
   const users = useUsers({ q, role, archived: archived ? 'true' : '' })
   const rows = users.data?.items ?? []
   const columns = [
-    { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 160, valueGetter: (_, row) => fullName(row) },
+    { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 160, valueGetter: (_, row) => fullName(row),
+      renderCell: ({ row }) => <PersonWithAvatar person={{ id: row.id, name: fullName(row) }} /> },
     { field: 'username', headerName: 'Username', flex: 1, minWidth: 120 },
     { field: 'email', headerName: 'Email', flex: 1.4, minWidth: 180 },
     { field: 'role', headerName: 'Role', width: 110, valueFormatter: (v) => ROLE[v] ?? v },
@@ -52,7 +54,7 @@ export default function PeoplePage() {
         emptyState={users.isError ? null : <EmptyState title={archived ? 'No archived accounts' : 'Nobody matches'} />}
         renderCard={(row) => (
           <Stack sx={{ gap: 0.5 }}>
-            <Typography variant="subtitle1">{fullName(row)}</Typography>
+            <Typography variant="subtitle1" component="div"><PersonWithAvatar person={{ id: row.id, name: fullName(row) }} size={32} /></Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>{row.username} · {ROLE[row.role]} · {row.job_title || 'No title'}</Typography>
           </Stack>
         )} />

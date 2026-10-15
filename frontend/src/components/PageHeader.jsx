@@ -1,14 +1,18 @@
 import { Box, Stack, Typography } from '@mui/material'
 
-export default function PageHeader({ title, subtitle, actions, breadcrumb }) {
+/** `avatar` (optional) sits left of the title, e.g. a person's photo on their profile. */
+export default function PageHeader({ title, subtitle, actions, breadcrumb, avatar }) {
   return (
     <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ mb: 3, gap: 2, alignItems: { sm: 'flex-end' },
       justifyContent: 'space-between' }}>
-      <Box sx={{ minWidth: 0 }}>
-        {breadcrumb}
-        <Typography variant="h1" component="h1">{title}</Typography>
-        {subtitle ? <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>{subtitle}</Typography> : null}
-      </Box>
+      <Stack direction="row" sx={{ minWidth: 0, gap: 2, alignItems: 'center' }}>
+        {avatar}
+        <Box sx={{ minWidth: 0 }}>
+          {breadcrumb}
+          <Typography variant="h1" component="h1">{title}</Typography>
+          {subtitle ? <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>{subtitle}</Typography> : null}
+        </Box>
+      </Stack>
       {actions ? <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap' }}>{actions}</Stack> : null}
     </Stack>
   )

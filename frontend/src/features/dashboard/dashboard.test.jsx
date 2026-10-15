@@ -129,6 +129,14 @@ describe('DashboardPage', () => {
     expect(within(section).getByRole('note')).toHaveTextContent('Every forecast is within budget.')
   })
 
+  test('people in the over-allocated list and the allocation table get an avatar beside their name', async () => {
+    server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),
+      http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    renderAsUser(<DashboardPage />, { user: users.manager, route: '/' })
+    const table = await screen.findByRole('table', { name: /busiest people this week/i })
+    expect(within(table).getByText('Eli Employee').parentElement).toHaveTextContent('EEEli Employee')
+  })
+
   test('employee dashboard skips the team allocation table', async () => {
     server.use(http.get(`${API}/dashboard`, () => HttpResponse.json({ ...dashboard, pending_approvals: 0, over_allocated: [] })))
     renderAsUser(<DashboardPage />, { user: users.employee, route: '/dashboard-under-test' })

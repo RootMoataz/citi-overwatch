@@ -5,6 +5,8 @@ import { useMe, useUpdateMe } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
+import AvatarDialog from '../avatar/AvatarDialog.jsx'
 import { formatMoney } from '../../lib/format.js'
 import { EMAIL_RE } from '../../lib/schemas.js'
 
@@ -26,6 +28,7 @@ export default function ProfilePage() {
   const { setUser } = useSession()
   const [draft, setDraft] = useState(null)
   const [failure, setFailure] = useState(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
   if (me.isLoading) return <Skeleton variant="rounded" height={280} />
   if (me.error) return <ErrorAlert error={me.error} onRetry={() => me.refetch()} />
   const p = me.data
@@ -47,6 +50,17 @@ export default function ProfilePage() {
       <PageHeader title="My profile" subtitle="You can change your name and email. An admin manages everything else."
         actions={<Button component={RouterLink} to={`/people/${p.id}/profile`}>My history</Button>} />
       <ErrorAlert error={failure} sx={{ mb: 2 }} />
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Stack direction="row" sx={{ gap: 2, alignItems: 'center' }}>
+          <UserAvatar userId={p.id} name={`${p.first_name} ${p.last_name}`} size={72} />
+          <Stack sx={{ gap: 0.5, alignItems: 'flex-start' }}>
+            <Typography variant="subtitle1">Profile photo</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>Shown next to your name across the app.</Typography>
+            <Button size="small" onClick={() => setPhotoOpen(true)}>Change photo</Button>
+          </Stack>
+        </Stack>
+      </Paper>
+      {photoOpen ? <AvatarDialog open user={p} onClose={() => setPhotoOpen(false)} /> : null}
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6 }}><TextField label="First name" value={form.first_name} onChange={set('first_name')} /></Grid>

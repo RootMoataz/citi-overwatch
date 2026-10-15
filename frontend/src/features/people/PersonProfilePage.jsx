@@ -7,6 +7,7 @@ import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
@@ -58,7 +59,7 @@ export default function PersonProfilePage() {
 
   return (
     <>
-      <PageHeader title={p.name} subtitle={<>{p.job_title || ROLE[p.role]}{p.is_archived ? ' · Archived' : ''}</>} />
+      <PageHeader title={p.name} avatar={<UserAvatar userId={p.id} name={p.name} size={56} />} subtitle={<>{p.job_title || ROLE[p.role]}{p.is_archived ? ' · Archived' : ''}</>} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Job title" value={p.job_title} /></Grid>
