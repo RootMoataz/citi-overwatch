@@ -1,6 +1,6 @@
-# Citi Overwatch
+# ACME Scout
 
-A project tracking platform for ACME Inc. It gives admins, project managers and employees one place to manage projects, milestones, people, hours and budgets, and it answers the seven questions in the [workshop brief](docs/project/REQUIREMENTS.md) on a single live dashboard.
+Scout is a project tracking platform for ACME Inc. It gives admins, project managers and employees one place to manage projects, milestones, people, hours and budgets, and it answers the seven questions in the [workshop brief](docs/project/REQUIREMENTS.md) on a single live dashboard.
 
 ![The dashboard, signed in as a manager](docs/images/dashboard.png)
 
@@ -12,7 +12,7 @@ A project tracking platform for ACME Inc. It gives admins, project managers and 
 
 ## What it does
 
-| The brief asks… | Where Citi Overwatch answers it |
+| The brief asks… | Where Scout answers it |
 |---|---|
 | Q1 What is the status of each active project? | Dashboard status counts and project table (progress, budget used, due date) |
 | Q2 Which projects are at risk of missing their deadlines? | Dashboard at-risk list; every reason is shown as a badge (overdue milestone, past due, budget burning faster than progress) |

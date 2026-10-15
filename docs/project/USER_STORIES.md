@@ -1,6 +1,6 @@
 # User stories
 
-The user stories behind every screen in Citi Overwatch, grouped by page.
+The user stories behind every screen in ACME Scout, grouped by page.
 
 Each story has acceptance criteria covering three outcomes: what the person sees while data **loads**, what happens on **success**, and what happens on **failure**.
 

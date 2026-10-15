@@ -24,7 +24,7 @@ export function PrintHeader({ title }) {
   return (
     <Box data-print="only" sx={{ display: 'none', mb: 2, pb: 1, borderBottom: '1px solid #D5DDE7', color: '#111C27' }}>
       <Typography variant="caption" component="p" sx={{ fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-        Citi Overwatch
+        ACME Scout
       </Typography>
       <Typography variant="h3" component="p">{title}</Typography>
       <Typography variant="caption" component="p">

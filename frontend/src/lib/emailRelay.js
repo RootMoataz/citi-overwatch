@@ -8,8 +8,8 @@
 export const EMAILJS_URL = 'https://api.emailjs.com/api/v1.0/email/send'
 
 const INTRO = {
-  welcome: 'An account has been set up for you on Citi Overwatch.',
-  reset: 'Your Citi Overwatch password has been reset by an admin.',
+  welcome: 'An account has been set up for you on ACME Scout.',
+  reset: 'Your ACME Scout password has been reset by an admin.',
 }
 
 function config() {

@@ -67,6 +67,7 @@ def test_full_reset_flow_reads_code_from_outbox(client, conn, outbox):
     forgot(client, "flow.user")
     mail = outbox()
     assert "To: flow@example.com" in mail
+    assert "Subject: Your ACME Scout password reset code" in mail and "Overwatch" not in mail
     status, body, _, _ = verify(client, "flow.user", code_from(mail))
     assert status == 200 and body["reset_token"]
     status, body, _, _ = reset(client, body["reset_token"], "short")

@@ -25,9 +25,9 @@ export function toCsv(columns, rows) {
 
 const pad = (n) => String(n).padStart(2, '0')
 
-/** "projects" → "overwatch-projects-2026-10-15.csv" (the viewer's local date). */
+/** "projects" → "scout-projects-2026-10-15.csv" (the viewer's local date). */
 export const csvFilename = (name, date = new Date()) =>
-  `overwatch-${name}-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.csv`
+  `scout-${name}-${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}.csv`
 
 /** Hand the file to the browser as a download. */
 export function downloadCsv(filename, csv) {

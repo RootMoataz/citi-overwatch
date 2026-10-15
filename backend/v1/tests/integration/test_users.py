@@ -25,6 +25,8 @@ def test_create_user_generates_username_and_password(client, conn, outbox):
     assert body == {"user": user, "email_sent": True, "temp_password": None}
     mail = outbox()
     assert "Username: alovelace" in mail and "http://localhost:3000/login" in mail
+    assert "Subject: Your ACME Scout account" in mail and "set up for you on ACME Scout" in mail
+    assert "Overwatch" not in mail
     temp = re.search(r"Temporary password: (\S+)", mail).group(1)
     status, login_body, _, _ = client.request("POST", "/auth/login",
                                               json={"username": "alovelace", "password": temp})

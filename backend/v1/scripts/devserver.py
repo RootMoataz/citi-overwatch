@@ -70,7 +70,7 @@ def make_handler(lambda_handler):
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Citi Overwatch local API server")
+    parser = argparse.ArgumentParser(description="ACME Scout local API server")
     parser.add_argument("--port", type=int, default=3001)
     parser.add_argument("--db", default="overwatch_dev")
     parser.add_argument("--reset", action="store_true", help="drop and re-migrate the database")

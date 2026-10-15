@@ -51,7 +51,7 @@ def forgot_password(conn, body: dict) -> dict:
     conn.run("""INSERT INTO password_reset_codes (user_id, code_hash, expires_at)
                 VALUES (:u, :h, now() + make_interval(mins => :m))""",
              u=user["id"], h=hash_token(code), m=CODE_MINUTES)
-    send_email(user["email"], "Your Citi Overwatch password reset code",
+    send_email(user["email"], "Your ACME Scout password reset code",
                f"Hello {user['first_name']},\n\nYour password reset code is {code}.\n"
                f"It expires in {CODE_MINUTES} minutes. If you didn't ask for this, ignore this email.\n")
     return GENERIC

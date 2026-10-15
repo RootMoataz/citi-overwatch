@@ -3,7 +3,7 @@ import { Button } from '@mui/material'
 import { csvFilename, downloadCsv, toCsv } from '../lib/csv.js'
 
 /**
- * Downloads `rows` (what the table shows, filters applied) as overwatch-<name>-<date>.csv.
+ * Downloads `rows` (what the table shows, filters applied) as scout-<name>-<date>.csv.
  * `columns` are [{ header, value: (row) => cell }]: readable headers, ISO dates and plain numbers (no $ or %).
  */
 export default function ExportCsvButton({ name, columns, rows, sx }) {

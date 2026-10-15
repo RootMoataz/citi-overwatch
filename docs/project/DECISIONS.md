@@ -1,6 +1,6 @@
 # Decisions
 
-Why Citi Overwatch is built the way it is. Each entry says what was decided, why, and what it costs.
+Why ACME Scout is built the way it is. Each entry says what was decided, why, and what it costs.
 
 ## Design decisions
 

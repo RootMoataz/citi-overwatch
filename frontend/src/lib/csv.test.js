@@ -55,6 +55,6 @@ describe('utcIso', () => {
 
 describe('csvFilename', () => {
   it('names the file after the table and the local date', () => {
-    expect(csvFilename('projects', new Date(2026, 9, 15, 23, 30))).toBe('overwatch-projects-2026-10-15.csv')
+    expect(csvFilename('projects', new Date(2026, 9, 15, 23, 30))).toBe('scout-projects-2026-10-15.csv')
   })
 })

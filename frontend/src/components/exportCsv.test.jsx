@@ -33,7 +33,7 @@ test('Export CSV downloads the projects the filters show, with readable headers,
   await screen.findByText('=Atlas, "beta"')
   await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
 
-  expect(clicked).toEqual([expect.stringMatching(/^overwatch-projects-\d{4}-\d{2}-\d{2}\.csv$/)])
+  expect(clicked).toEqual([expect.stringMatching(/^scout-projects-\d{4}-\d{2}-\d{2}\.csv$/)])
   const text = await blobs[0].text()
   expect(blobs[0].type).toBe('text/csv;charset=utf-8')
   expect(new Uint8Array(await blobs[0].arrayBuffer()).slice(0, 3)).toEqual(new Uint8Array([0xEF, 0xBB, 0xBF]))
