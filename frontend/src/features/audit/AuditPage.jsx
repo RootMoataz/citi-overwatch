@@ -1,10 +1,11 @@
 import Settings from '@mui/icons-material/SettingsOutlined'
 import {
-  Autocomplete, Avatar, Box, Button, Chip, Collapse, Link, MenuItem, Pagination, Paper, Skeleton, Stack, TextField, Typography,
+  Autocomplete, Avatar, Box, Button, Chip, Collapse, FormControlLabel, Link, MenuItem, Pagination, Paper, Skeleton, Stack, Switch,
+  TextField, Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useAuditLog, useEveryone } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
@@ -157,14 +158,27 @@ function Timeline({ items, pages }) {
 export default function AuditPage() {
   const [filters, setFilters] = useState({ actor: '', action: '', entity_type: '', from: '', to: '' })
   const [page, setPage] = useState(1)
-  const audit = useAuditLog({ ...filters, page, page_size: PAGE_SIZE })
+  // Sign-ins are routine: hidden unless ?signins=1 (or the Action filter asks for them), so real changes surface first.
+  const [params, setParams] = useSearchParams()
+  const showSignIns = params.get('signins') === '1'
+  const hideSignIns = !showSignIns && filters.action !== 'login'
+  const audit = useAuditLog({ ...filters, ...(hideSignIns ? { exclude_action: 'login' } : {}), page, page_size: PAGE_SIZE })
   const people = useEveryone()
   const leaving = useRedirectOnDenied(audit.error)
   const who = (people.data ?? []).find((p) => String(p.id) === filters.actor) ?? null
-  const items = audit.data?.items ?? []
+  const items = (audit.data?.items ?? []).filter((e) => !hideSignIns || e.action !== 'login')
   const pages = Math.max(1, Math.ceil((audit.data?.total ?? 0) / PAGE_SIZE))
   const change = (next) => { setFilters((f) => ({ ...f, ...next })); setPage(1) }
   const set = (k) => (e) => change({ [k]: e.target.value })
+  const toggleSignIns = (e) => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (e.target.checked) next.set('signins', '1')
+      else next.delete('signins')
+      return next
+    }, { replace: true })
+    setPage(1)
+  }
   if (leaving) return null
   return (
     <>
@@ -187,6 +201,8 @@ export default function AuditPage() {
           <TextField label="From" type="date" value={filters.from} onChange={set('from')} slotProps={{ inputLabel: { shrink: true } }} sx={{ flex: 1 }} />
           <TextField label="To" type="date" value={filters.to} onChange={set('to')} slotProps={{ inputLabel: { shrink: true } }} sx={{ flex: 1 }} />
         </Stack>
+        <FormControlLabel sx={{ mt: 1 }} label="Show sign-ins"
+          control={<Switch checked={showSignIns || filters.action === 'login'} disabled={filters.action === 'login'} onChange={toggleSignIns} />} />
       </Paper>
       <ErrorAlert error={audit.error} onRetry={() => audit.refetch()} sx={{ mb: 2 }} />
       {audit.isLoading ? <Skeleton variant="rounded" height={240} /> : null}

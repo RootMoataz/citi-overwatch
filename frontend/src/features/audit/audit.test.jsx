@@ -155,6 +155,40 @@ describe('AuditPage', () => {
     await waitFor(() => expect(seen.at(-1)).toMatchObject({ page: '1', entity_type: 'milestone' }))
   })
 
+  test('sign-ins are hidden by default; the switch shows them and keeps the choice in the URL', async () => {
+    const seen = []
+    const signIn = entry({ id: 'a-login', action: 'login', entity_type: 'user', changes: { before: null, after: null },
+      summary: { actor: { name: 'Avery Admin' }, sentence: 'Avery Admin signed in' } })
+    const change = entry({ id: 'a-upd', summary: { actor: { name: 'Avery Admin' }, sentence: 'Avery Admin updated Apollo' } })
+    serve([signIn, change], 2, seen)
+    renderAsUser(<AuditPage />, { user: users.admin, route: '/audit', path: '/audit' })
+    const user = userEvent.setup()
+    expect(await screen.findByText('updated Apollo')).toBeInTheDocument()
+    expect(seen.at(-1)).toMatchObject({ exclude_action: 'login' })
+    expect(screen.queryByText('signed in')).not.toBeInTheDocument()   // left out even if the server sends one
+
+    await user.click(screen.getByRole('switch', { name: /show sign-ins/i }))
+    expect(await screen.findByText('signed in')).toBeInTheDocument()
+    expect(seen.at(-1)).not.toHaveProperty('exclude_action')
+    expect(screen.getByTestId('location')).toHaveTextContent('signins=1')
+  })
+
+  test('a link with ?signins=1 opens with sign-ins shown, and asking for sign-ins by action always shows them', async () => {
+    const seen = []
+    serve([], 0, seen)
+    renderAsUser(<AuditPage />, { user: users.admin, route: '/audit?signins=1', path: '/audit' })
+    const user = userEvent.setup()
+    expect(await screen.findByRole('switch', { name: /show sign-ins/i })).toBeChecked()
+    await waitFor(() => expect(seen.length).toBeGreaterThan(0))
+    expect(seen.at(-1)).not.toHaveProperty('exclude_action')
+    await user.click(screen.getByRole('switch', { name: /show sign-ins/i }))
+    await waitFor(() => expect(seen.at(-1)).toMatchObject({ exclude_action: 'login' }))
+    await user.click(screen.getByRole('combobox', { name: /action/i }))
+    await user.click(await screen.findByRole('option', { name: /^login$/i }))
+    await waitFor(() => expect(seen.at(-1)).toMatchObject({ action: 'login' }))
+    expect(seen.at(-1)).not.toHaveProperty('exclude_action')
+  })
+
   test('the CSV export still offers the entries, now with the sentence', async () => {
     serve([entry({ summary: { actor: { name: 'Avery Admin' }, sentence: 'Avery Admin updated Apollo' } })])
     renderAsUser(<AuditPage />, { user: users.admin, route: '/audit', path: '/audit' })
