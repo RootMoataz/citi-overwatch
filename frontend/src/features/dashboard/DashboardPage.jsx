@@ -66,7 +66,7 @@ function BudgetChart({ budgets }) {
           ...(rows.some((r) => r.tone === 'warning') ? [{ kind: 'bar', tone: 'warning', label: 'Forecast over budget' }] : []),
           ...(rows.some((r) => r.tone === 'alert') ? [{ kind: 'bar', tone: 'alert', label: 'Over budget' }] : [])]}
         rows={rows.map((r) => ({
-          id: r.id, label: r.name, tone: r.tone,
+          id: r.id, label: r.name, href: `/projects/${r.id}?tab=budget`, tone: r.tone,
           track: r.hasBudget ? 100 : null, value: r.hasBudget ? r.usedPct : null, marker: r.hasBudget ? r.forecastPct : null,
           valueText: r.hasBudget ? `${formatPct(r.usedPct)} used` : 'No budget',
           detail: r.hasBudget

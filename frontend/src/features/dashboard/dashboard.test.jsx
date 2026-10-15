@@ -130,6 +130,8 @@ describe('DashboardPage', () => {
       'Atlas. Budget $60,000. Consumed $58,000 (96.7%). Forecast at end date $70,000 (116.7%) · ⚠ forecast over budget',
       'Apollo. Budget $250,000. Consumed $50,000 (20%). Forecast at end date $120,000 (48%)'])
     expect(within(rows[0]).getByText('96.7% used')).toBeInTheDocument()
+    // Each project name opens that project's Budget tab.
+    expect(within(rows[1]).getByRole('link', { name: 'Open Apollo' })).toHaveAttribute('href', '/projects/p1?tab=budget')
   })
 
   test('budget chart says when every forecast is within budget', async () => {

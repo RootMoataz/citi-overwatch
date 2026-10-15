@@ -1,5 +1,6 @@
-import { Box, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Link, Stack, Tooltip, Typography } from '@mui/material'
 import { keyframes, useTheme } from '@mui/material/styles'
+import { Link as RouterLink } from 'react-router-dom'
 import { chartPalette, TONE_TEXT } from '../app/chartColors.js'
 
 const grow = keyframes`from { transform: scaleX(0) } to { transform: scaleX(1) }`
@@ -29,7 +30,8 @@ function Key({ kind, label, color, palette }) {
  * text, so nothing is clipped at any width and colour is never the only signal; hovering or focusing a row shows the
  * exact numbers.
  *
- * rows: [{ id, label, value, track?, marker?, tone: 'ok'|'warning'|'alert', valueText, detail?, summary }]
+ * rows: [{ id, label, href?, value, track?, marker?, tone: 'ok'|'warning'|'alert', valueText, detail?, summary }]
+ * `href` turns the row's label into a link (e.g. to the project).
  * legend: [{ kind: 'bar'|'track'|'marker'|'reference', label, tone? , trackColor? }]
  */
 export default function BulletChart({ rows, max, ticks, tickFormat, axisLabel, references = [], legend = [], ariaLabel,
@@ -52,11 +54,14 @@ export default function BulletChart({ rows, max, ticks, tickFormat, axisLabel, r
               sx={{ outline: 'none', borderRadius: 1, px: 0.5, mx: -0.5, py: 0.25,
                 '&:hover, &:focus-visible': { bgcolor: 'action.hover' },
                 '&:focus-visible': { boxShadow: (t) => `0 0 0 2px ${t.palette.primary.main}` } }}>
-              <Stack direction="row" aria-hidden sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
-                <Typography variant="body2" noWrap sx={{ fontWeight: 600, flex: 1, minWidth: 0 }}>
-                  {row.label}
+              <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
+                <Typography variant="body2" noWrap aria-hidden={row.href ? undefined : true}
+                  sx={{ fontWeight: 600, flex: 1, minWidth: 0 }}>
+                  {row.href
+                    ? <Link component={RouterLink} to={row.href} underline="hover" aria-label={`Open ${row.label}`}>{row.label}</Link>
+                    : row.label}
                 </Typography>
-                <Typography variant="body2" sx={{ flexShrink: 0, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+                <Typography variant="body2" aria-hidden sx={{ flexShrink: 0, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
                   color: TONE_TEXT[row.tone] ?? 'text.primary' }}>
                   {row.valueText}
                 </Typography>
