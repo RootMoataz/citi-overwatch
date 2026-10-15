@@ -133,7 +133,7 @@ export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/m
 
 // ---------- time, approvals, notifications ----------
 const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['milestone-costs'], ['projects'], ['allocations'],
-  ['notifications'], ['profile']]
+  ['notifications'], ['profile'], ['timesheet-reminders']]
 export const useWeek = (week, userId) => useQuery({
   queryKey: ['time', week, userId ?? 'me'], queryFn: () => api.get('/time-entries', { week, user: userId }),
   placeholderData: keepPreviousData,
@@ -163,6 +163,11 @@ export const useAllocations = (week, enabled = true) =>
 export const useDashboard = (department = '') => useQuery({
   queryKey: ['dashboard', department], queryFn: () => api.get('/dashboard', { department }),
   placeholderData: keepPreviousData,
+})
+// Managers and admins: their people with an empty timesheet (this week from Friday 14:00 New York time, else last week).
+export const useMissingTimesheets = (department = '', enabled = true) => useQuery({
+  queryKey: ['timesheet-reminders', department], enabled,
+  queryFn: () => api.get('/timesheet-reminders', { department }), placeholderData: keepPreviousData,
 })
 export const useUsers = (filters) => useQuery({
   queryKey: ['users', 'list', filters], queryFn: () => api.get('/users', { page_size: 100, ...filters }),

@@ -75,7 +75,7 @@ describe('CreateUserWizard', () => {
     expect(username).toHaveValue('ada.lovelace')
     expect(await within(dialog).findByLabelText('Available')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: /next/i })).toBeEnabled()
-  })
+  }, 15000) // Same as above: types through two form steps, slow under a full parallel run.
 
   test('generate password satisfies checklist; show-once dialog when email_sent is false', async () => {
     let posted = null

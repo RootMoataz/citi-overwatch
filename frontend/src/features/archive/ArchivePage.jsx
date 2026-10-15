@@ -8,6 +8,8 @@ import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
+import { utcIso } from '../../lib/csv.js'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 
@@ -17,6 +19,15 @@ const TYPES = {
   milestone: { label: 'Milestone', plural: 'Milestones', effect: 'It comes back on its project, and counts toward progress and budget again.' },
   user: { label: 'Person', plural: 'People', effect: 'The account can sign in again with its existing password.' },
 }
+
+const CSV_COLUMNS = [
+  { header: 'Name', value: (i) => i.name },
+  { header: 'Type', value: (i) => TYPES[i.type]?.label ?? i.type },
+  { header: 'Project or username', value: (i) => i.project?.name ?? i.username },
+  { header: 'Archived at (UTC)', value: (i) => utcIso(i.archived_at) },
+  { header: 'Archived by', value: (i) => i.archived_by?.name },
+  { header: 'You can restore it', value: (i) => Boolean(i.can_restore) },
+]
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '—')
 
@@ -51,7 +62,8 @@ export default function ArchivePage() {
     <>
       <PageHeader title="Archive" subtitle={admin
         ? 'Everything archived, in one place. Restoring brings a record back exactly as it was.'
-        : 'Archived work from the projects you manage. You can restore milestones; only an admin can restore a project.'} />
+        : 'Archived work from the projects you manage. You can restore milestones; only an admin can restore a project.'}
+        actions={<ExportCsvButton name="archive" columns={CSV_COLUMNS} rows={items} />} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <TextField select label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">Everything ({all.length})</MenuItem>

@@ -7,6 +7,8 @@ import { useAuditLog, useEveryone } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
+import { utcIso } from '../../lib/csv.js'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 
@@ -27,6 +29,17 @@ function changedFields(changes) {
   return keys.filter((k) => JSON.stringify(before?.[k] ?? null) !== JSON.stringify(after?.[k] ?? null))
     .map((k) => ({ field: label(k), from: before ? show(before[k]) : null, to: show(after?.[k]) }))
 }
+
+const CSV_COLUMNS = [
+  { header: 'When (UTC)', value: (e) => utcIso(e.created_at) },
+  { header: 'Who', value: (e) => e.actor.name },
+  { header: 'Action', value: (e) => label(e.action) },
+  { header: 'Record type', value: (e) => label(e.entity_type) },
+  { header: 'Record id', value: (e) => e.entity_id },
+  { header: 'Changes', value: (e) => changedFields(e.changes)
+    .map((f) => `${f.field}: ${f.from === null ? f.to : `${f.from} -> ${f.to}`}`).join('; ') },
+  { header: 'Request id', value: (e) => e.request_id },
+]
 
 function ChangeList({ changes }) {
   const fields = changedFields(changes)
@@ -55,7 +68,8 @@ export default function AuditPage() {
   if (leaving) return null
   return (
     <>
-      <PageHeader title="Audit log" subtitle="Every change, who made it and when. Entries can't be edited or deleted." />
+      <PageHeader title="Audit log" subtitle="Every change, who made it and when. Entries can't be edited or deleted."
+        actions={<ExportCsvButton name="audit-log" columns={CSV_COLUMNS} rows={items} />} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2 }}>
           <Autocomplete options={people.data ?? []} value={who} loading={people.isLoading} sx={{ flex: 1 }}

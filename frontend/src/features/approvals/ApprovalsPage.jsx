@@ -4,8 +4,23 @@ import { useApprovals } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import { num } from '../../lib/csv.js'
 import ApprovalRow from './ApprovalRow.jsx'
+
+const CSV_COLUMNS = [
+  { header: 'Person', value: (i) => i.user.name },
+  { header: 'Project', value: (i) => i.project.name },
+  { header: 'Milestone', value: (i) => i.milestone.name },
+  { header: 'Date', value: (i) => i.entry.work_date },
+  { header: 'Hours', value: (i) => num(i.entry.hours) },
+  { header: 'Status', value: (i) => i.label },
+  { header: 'Overtime', value: (i) => Boolean(i.entry.over_40) },
+  { header: 'Edited after a decision', value: (i) => Boolean(i.entry.edited_after_decision) },
+  { header: 'Week logged total (hours)', value: (i) => num(i.week_logged_total) },
+  { header: 'Note', value: (i) => i.entry.note },
+]
 
 export default function ApprovalsPage() {
   const [params, setParams] = useSearchParams()
@@ -24,7 +39,10 @@ export default function ApprovalsPage() {
   return (
     <>
       <PageHeader title="Approvals" subtitle="Every logged hour needs your approval before it counts toward the project budget."
-        actions={Object.keys(filters).length ? <Button onClick={() => setParams({})}>Show everyone</Button> : null} />
+        actions={<>
+          <ExportCsvButton name="approvals" columns={CSV_COLUMNS} rows={items} />
+          {Object.keys(filters).length ? <Button onClick={() => setParams({})}>Show everyone</Button> : null}
+        </>} />
       <ErrorAlert error={approvals.error} onRetry={() => approvals.refetch()} sx={{ mb: 2 }} />
       {approvals.isLoading ? <Skeleton variant="rounded" height={200} /> : null}
       {!approvals.isLoading && !approvals.error && items.length === 0 ? (

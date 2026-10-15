@@ -5,4 +5,6 @@ import { setupServer } from 'msw/node'
 export { http, HttpResponse, delay } from 'msw'
 export const API = '/api/v1'
 // Every screen that shows people asks who has a profile photo; by default nobody does (initials everywhere).
-export const server = setupServer(http.get(`${API}/avatars`, () => HttpResponse.json({ items: {} })))
+// Managers' and admins' dashboards list missing timesheets; by default everyone has logged hours.
+export const server = setupServer(http.get(`${API}/avatars`, () => HttpResponse.json({ items: {} })),
+  http.get(`${API}/timesheet-reminders`, () => HttpResponse.json({ week_start: '2026-10-05', due: false, people: [] })))

@@ -1,8 +1,25 @@
-import { Paper, Skeleton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
+import { Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { useMilestoneCosts } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import { STATUS } from '../../app/theme.js'
+import { num } from '../../lib/csv.js'
 import { formatHours, formatMoney, formatPct } from '../../lib/format.js'
+
+const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
+
+/** The CSV mirrors the table, total row included; hours only when the viewer sees them on screen. */
+function csvColumns(showHours) {
+  return [
+    { header: 'Milestone', value: (r) => r.milestone?.name ?? 'Total (consumed)' },
+    { header: 'Status', value: (r) => (r.milestone ? STATUS[r.milestone.status]?.label ?? r.milestone.status : '') },
+    ...(showHours ? [{ header: 'Approved hours', value: (r) => num(r.approved_hours) },
+      { header: 'Pending hours', value: (r) => num(r.pending_hours) }] : []),
+    { header: 'Approved cost (USD)', value: (r) => num(r.approved_cost) },
+    { header: 'Share of budget (%)', value: (r) => num(r.budget_pct) },
+  ]
+}
 
 /** Approved cost per milestone. The server's total is the project's Consumed figure, so the two always agree.
  * Hours columns only appear for the project's manager and admins (team hours are private). Never shows a rate. */
@@ -15,7 +32,10 @@ export default function MilestoneCostTable({ project }) {
   const bold = { fontWeight: 700 }
   return (
     <TableContainer component={Paper} variant="outlined">
-      <Typography variant="h3" component="h2" sx={{ px: 2, pt: 2 }}>Cost by milestone</Typography>
+      <Stack direction="row" sx={{ px: 2, pt: 2, gap: 1, justifyContent: 'space-between', alignItems: 'center' }}>
+        <Typography variant="h3" component="h2">Cost by milestone</Typography>
+        <ExportCsvButton name={`${slug(project.name)}-milestone-costs`} columns={csvColumns(showHours)} rows={[...items, total]} />
+      </Stack>
       <Table size="small" aria-label={`Cost by milestone on ${project.name}`}>
         <TableHead>
           <TableRow>

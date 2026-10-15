@@ -10,14 +10,32 @@ import { useAllocations } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
+import { num } from '../../lib/csv.js'
 import { addDays, formatDate, formatHours, formatPct, mondayOf } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import AllocationCharts from './AllocationCharts.jsx'
 
 // The server lists only the viewer's own people here, so a manager may open each profile.
 const MANAGED = { managed: true }
+
+/** One CSV line per person and project (people on no project get one line with the project left empty). */
+const csvRows = (people, week) => people.flatMap((person) =>
+  (person.projects.length ? person.projects : [null]).map((project) => ({ week, person, project })))
+const CSV_COLUMNS = [
+  { header: 'Week starting', value: (r) => r.week },
+  { header: 'Person', value: (r) => r.person.user.name },
+  { header: 'Job title', value: (r) => r.person.user.job_title },
+  { header: 'Project', value: (r) => r.project?.name },
+  { header: 'Planned hours', value: (r) => num(r.project?.planned) },
+  { header: 'Logged hours', value: (r) => num(r.project?.logged) },
+  { header: 'Approved hours', value: (r) => num(r.project?.approved) },
+  { header: 'Person planned total (hours)', value: (r) => num(r.person.planned_total) },
+  { header: 'Person logged total (hours)', value: (r) => num(r.person.logged_total) },
+  { header: 'Person utilization (%)', value: (r) => num(r.person.utilization_pct) },
+]
 
 function Utilization({ value }) {
   return (
@@ -45,7 +63,8 @@ export default function AllocationPage() {
 
   return (
     <>
-      <PageHeader title="Allocation" subtitle="Planned vs. logged hours per person and project. Utilization = logged hours ÷ 40." />
+      <PageHeader title="Allocation" subtitle="Planned vs. logged hours per person and project. Utilization = logged hours ÷ 40."
+        actions={<ExportCsvButton name="allocation" columns={CSV_COLUMNS} rows={csvRows(people, week)} />} />
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 2 }}>
         <IconButton aria-label="Previous week" onClick={() => setParams({ week: addDays(week, -7) })}><ChevronLeft /></IconButton>
         <Typography variant="subtitle1" component="p">Week of {formatDate(week)}</Typography>

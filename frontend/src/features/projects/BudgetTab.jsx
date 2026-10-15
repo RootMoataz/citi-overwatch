@@ -4,6 +4,7 @@ import { BarChart } from '@mui/x-charts/BarChart'
 import { useProjectSummary } from '../../api/queries.js'
 import { chartColors } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import { formatMoney, formatPct } from '../../lib/format.js'
 import MilestoneCostTable from './MilestoneCostTable.jsx'
 import StatTile from './StatTile.jsx'
@@ -20,6 +21,8 @@ export default function BudgetTab({ project }) {
   const over = s.remaining < 0
   return (
     <Stack sx={{ gap: 3 }}>
+      <PrintHeader title={`${project.name}: budget`} />
+      <Stack direction="row" data-print="hide" sx={{ justifyContent: 'flex-end', mb: -1 }}><PrintButton /></Stack>
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Planned budget" value={formatMoney(s.budget)} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Consumed (approved hours)" value={formatMoney(s.consumed)} /></Grid>

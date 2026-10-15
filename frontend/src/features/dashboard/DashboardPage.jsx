@@ -13,12 +13,14 @@ import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
+import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney, formatPct, mondayOf } from '../../lib/format.js'
 import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import StatTile from '../projects/StatTile.jsx'
+import MissingTimesheets from './MissingTimesheets.jsx'
 import Section from './Section.jsx'
 import SmartInsightsPanel from './SmartInsightsPanel.jsx'
 
@@ -144,11 +146,15 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
   if (dashboard.error) return <ErrorAlert error={dashboard.error} onRetry={() => dashboard.refetch()} />
   const d = dashboard.data
   const active = d.projects.filter((p) => p.status === 'active')
+  // Managers and admins chase empty timesheets in their scope (the server answers 403 to anyone else).
+  const chasesTimesheets = user.role === 'manager' || user.role === 'admin'
+  const heading = title ?? `Hello, ${user.first_name}`
   const busiest = [...(allocations.data ?? [])].filter((r) => !department || String(r.user.department_id) === department).sort((a, b) => b.utilization_pct - a.utilization_pct).slice(0, 6)
 
   return (
     <>
-      <PageHeader title={title ?? `Hello, ${user.first_name}`} subtitle={subtitle} />
+      <PrintHeader title={title ?? 'Delivery dashboard'} />
+      <PageHeader title={heading} subtitle={subtitle} actions={<PrintButton />} />
       {intro}
       <Stack direction={{ xs: 'column', sm: 'row' }} useFlexGap role="toolbar" aria-label="Dashboard filters"
         sx={{ gap: 1.5, mt: -1.5, mb: 3, alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between' }}>
@@ -235,6 +241,12 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
             )}
           </Section>
         </Grid>
+
+        {chasesTimesheets ? (
+          <Grid size={12}>
+            <MissingTimesheets department={department} />
+          </Grid>
+        ) : null}
 
         <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="What are the key deliverables and their completion status?">

@@ -5,7 +5,8 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { useCallback, useMemo, useState } from 'react'
 import { makeQueryClient } from './queryClient.js'
-import { ColorModeContext, readPreference, resolveMode, storePreference, useSystemDark } from './colorMode.js'
+import { ColorModeContext, readPreference, resolveMode, storePreference, usePrinting, useSystemDark } from './colorMode.js'
+import PrintStyles from './PrintStyles.jsx'
 import { buildTheme } from './theme.js'
 import { ToastContext } from './toast.js'
 
@@ -37,9 +38,12 @@ function ToastProvider({ children }) {
 export function AppProviders({ children, queryClient, mode: pinned }) {
   const [preference, setChoice] = useState(readPreference)
   const systemDark = useSystemDark()
-  const mode = pinned ?? resolveMode(preference, systemDark)
+  // Paper is light: printing (and Save as PDF) always uses the light theme.
+  const printing = usePrinting()
+  const screenMode = pinned ?? resolveMode(preference, systemDark)
+  const mode = printing ? 'light' : screenMode
   const setPreference = useCallback((next) => { storePreference(next); setChoice(next) }, [])
-  const colorMode = useMemo(() => ({ preference, mode, setPreference }), [preference, mode, setPreference])
+  const colorMode = useMemo(() => ({ preference, mode: screenMode, setPreference }), [preference, screenMode, setPreference])
   const theme = useMemo(() => buildTheme(mode), [mode])
   const [client] = useState(() => queryClient ?? makeQueryClient())
   return (
@@ -47,6 +51,7 @@ export function AppProviders({ children, queryClient, mode: pinned }) {
       <ThemeProvider theme={theme}>
         {/* enableColorScheme tells the browser too, so scrollbars, inputs and date pickers match. */}
         <CssBaseline enableColorScheme />
+        <PrintStyles />
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <QueryClientProvider client={client}>
             <ToastProvider>{children}</ToastProvider>

@@ -7,14 +7,26 @@ import { useUsers } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import ResponsiveTable from '../../components/ResponsiveTable.jsx'
+import { num } from '../../lib/csv.js'
 import { formatMoney, fullName } from '../../lib/format.js'
 import CreateUserWizard from './CreateUserWizard.jsx'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 
 const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
+
+const CSV_COLUMNS = [
+  { header: 'Name', value: (u) => fullName(u) },
+  { header: 'Username', value: (u) => u.username },
+  { header: 'Email', value: (u) => u.email },
+  { header: 'Role', value: (u) => ROLE[u.role] ?? u.role },
+  { header: 'Job title', value: (u) => u.job_title },
+  { header: 'Salary (USD)', value: (u) => num(u.salary) },
+  { header: 'Archived', value: (u) => Boolean(u.is_archived) },
+]
 
 export default function PeoplePage() {
   const navigate = useNavigate()
@@ -40,7 +52,10 @@ export default function PeoplePage() {
   return (
     <>
       <PageHeader title="People" subtitle="Create accounts, set roles and salaries, and archive people who've left."
-        actions={<Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreating(true)}>New account</Button>} />
+        actions={<>
+          <ExportCsvButton name={archived ? 'people-archived' : 'people'} columns={CSV_COLUMNS} rows={rows} />
+          <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreating(true)}>New account</Button>
+        </>} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>
           <TextField type="search" label="Search people" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 2 }}

@@ -321,7 +321,22 @@ As an admin (managers get the same without `hourly_rate`):
 | `SUPPORT_ROUTED` | That milestone's project manager | "*Name* was auto-routed to support *milestone*" | Same as `SUPPORT_ASSIGNED` |
 | `MILESTONE_CLAIMED` | The project's manager (not when they claim it themselves) | "*Name* claimed *milestone* (*project*)" | `name`, `milestone {id, name}`, `project {id, name}` |
 
-For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, so the bell can open that week's timesheet.
+| `TIMESHEET_EMPTY` | An active employee or manager on at least one active project with no pending or approved hours this week, from Friday 14:00 to the end of Sunday, New York time | "Your timesheet for the week of Mon 12 Oct is empty" | `week_start` |
+
+For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, so the bell can open that week's timesheet; `TIMESHEET_EMPTY` links to `/timesheet?week=<week_start>` the same way.
+
+`TIMESHEET_EMPTY` is never scheduled: `GET /notifications` creates it for the caller when it is due (and `GET /timesheet-reminders` does the same for a manager), at most once per person-week (the `(type, subject_user_id, week_start)` unique key). Once the caller has logged hours that week, an unread one is marked read. See [the Friday reminder](LOGIC_WALKTHROUGH.md#14-the-friday-timesheet-reminder).
+
+### Missing timesheets
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/timesheet-reminders?department=` | Admins and managers. People in the same scope as `/dashboard` (admins: every active employee and manager; managers: their reports and the people on their live projects; `department` narrows it) whose week is empty. The week is this one from Friday 14:00 New York time (`due: true`), otherwise last week (`due: false`). `403` for anyone else |
+
+```json
+{"week_start": "2026-10-05", "due": false,
+ "people": [{"id": "c1d2…", "name": "Chloe Park", "job_title": "Business Analyst"}]}
+```
 
 ## Insights and audit
 

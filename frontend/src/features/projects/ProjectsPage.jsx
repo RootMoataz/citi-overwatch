@@ -12,17 +12,34 @@ import { STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import AvatarStack from '../../components/AvatarStack.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import ResponsiveTable from '../../components/ResponsiveTable.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import { num } from '../../lib/csv.js'
 import { formatDate, formatPct } from '../../lib/format.js'
-import { PROGRESS_WEIGHTING } from '../../lib/labels.js'
+import { PROGRESS_WEIGHTING, RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import ProjectForm from './ProjectForm.jsx'
 
 const FILTERS = ['q', 'status', 'manager', 'at_risk']
+
+const CSV_COLUMNS = [
+  { header: 'Project', value: (p) => p.name },
+  { header: 'Status', value: (p) => STATUS[p.status]?.label ?? p.status },
+  { header: 'Manager', value: (p) => p.manager?.name },
+  { header: 'Department', value: (p) => p.department?.name },
+  { header: 'Team', value: (p) => (p.team ?? []).map((t) => t.name).join('; ') },
+  { header: 'Progress (%)', value: (p) => num(p.progress_pct) },
+  { header: 'Budget (USD)', value: (p) => num(p.budget) },
+  { header: 'Consumed (USD)', value: (p) => num(p.consumed) },
+  { header: 'Budget used (%)', value: (p) => num(p.budget_pct) },
+  { header: 'Start date', value: (p) => p.start_date },
+  { header: 'Due date', value: (p) => p.predicted_end_date },
+  { header: 'At risk', value: (p) => (p.at_risk_reasons ?? []).map((r) => RISK_LABELS[r] ?? r).join('; ') },
+]
 
 function Progress({ value, compact = false }) {
   return (
@@ -99,7 +116,10 @@ export default function ProjectsPage() {
   return (
     <>
       <PageHeader title="Projects" subtitle="Status, progress (weighted by milestone difficulty), budget and risk for every project you can see."
-        actions={canCreate ? <Button variant="contained" startIcon={<Add />} onClick={() => setCreating(true)}>New project</Button> : null} />
+        actions={<>
+          <ExportCsvButton name="projects" columns={CSV_COLUMNS} rows={rows} />
+          {canCreate ? <Button variant="contained" startIcon={<Add />} onClick={() => setCreating(true)}>New project</Button> : null}
+        </>} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>
           <TextField type="search" label="Search projects" value={search} onChange={(e) => setSearch(e.target.value)}
