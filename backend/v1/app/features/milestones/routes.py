@@ -29,7 +29,7 @@ def archive_milestone(req, ctx, conn):
     return json_response(204)
 
 
-@router.route("POST", "/milestones/{id}/restore", roles={"admin"})
+@router.route("POST", "/milestones/{id}/restore", roles={"admin", "manager"})
 def restore_milestone(req, ctx, conn):
     return json_response(200, service.restore_milestone(conn, ctx, req.path_params["id"]))
 

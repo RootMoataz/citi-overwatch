@@ -3,6 +3,7 @@ and the approval budget breakdown with forecast (spec §3.7)."""
 
 import json
 import math
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -19,7 +20,9 @@ MIN_HOURS = Decimal("0.25")
 MAX_HOURS = Decimal(24)
 CENT = Decimal("0.01")
 FORECAST_WEEKS = 4
-COUNTED = ("pending", "approved")  # rejected entries don't count toward the 40h mark
+COUNTED = ("pending", "approved")  # rejected entries don't count toward the 40h mark (or the 24h day)
+OPEN_STATUSES = ("planned", "active")  # on hold pauses logging; completed closes it
+NUMBER_TEXT = re.compile(r"-?\d+(\.\d+)?")  # hours sent as text: digits and one point only (no "1e1", "+5")
 
 
 def _today() -> date:
@@ -94,7 +97,8 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         project_filter = " AND p.manager_id = CAST(:me AS uuid)"  # managers see their own projects only
         args["me"] = ctx.user_id
     rows = query(conn, f"""
-        SELECT m.id AS milestone_id, m.name AS milestone_name, p.id AS project_id, p.name AS project_name, a.role
+        SELECT m.id AS milestone_id, m.name AS milestone_name, p.id AS project_id, p.name AS project_name,
+               p.status AS project_status, a.role
         FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id JOIN projects p ON p.id = m.project_id
         WHERE a.user_id = CAST(:u AS uuid) AND NOT m.is_archived AND NOT p.is_archived
           AND m.start_date <= :b AND m.end_date >= :a{project_filter}
@@ -111,7 +115,8 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
         "week_start": start,
         "user": {"id": user["id"], "name": name},
         "rows": [{"milestone": {"id": r["milestone_id"], "name": r["milestone_name"]},
-                  "project": {"id": r["project_id"], "name": r["project_name"]}, "role": r["role"]} for r in rows],
+                  "project": {"id": r["project_id"], "name": r["project_name"], "status": r["project_status"]},
+                  "role": r["role"], "open": r["project_status"] in OPEN_STATUSES} for r in rows],
         "entries": [_entry_view(e, name, show_rate=ctx.is_admin or str(user_id) == ctx.user_id) for e in entries],
         "totals": {"logged": sum((e["hours"] for e in entries if e["status"] in COUNTED), Decimal(0)),
                    "approved": sum((e["hours"] for e in entries if e["status"] == "approved"), Decimal(0))},
@@ -120,28 +125,85 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
 
 # ---------- saving a week ----------
 
+def _hours(value, work_date: date) -> Decimal:
+    """A plain non-negative number of hours, at most 24 and to the cent. Text must be digits and one point."""
+    def fail(message: str, reason: str):
+        raise ApiError(400, "VALIDATION_ERROR", message, {"hours": reason})
+
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)) or             (isinstance(value, str) and not NUMBER_TEXT.fullmatch(value.strip())):
+        fail(f"Hours on {short_day(work_date)} must be a number (digits and one decimal point)", "invalid_number")
+    hours = as_decimal(value, "hours")
+    if hours < 0:
+        fail(f"Hours on {short_day(work_date)} can't be negative", "min:0")
+    if hours > MAX_HOURS:
+        fail(f"Hours on {short_day(work_date)} can't be more than {MAX_HOURS}", f"max:{MAX_HOURS}")
+    if 0 < hours < MIN_HOURS:
+        fail(f"Log at least {MIN_HOURS} hours", f"min:{MIN_HOURS}")
+    if hours != hours.quantize(CENT):  # the column is numeric(5,2); don't let the database round silently
+        fail("Use at most 2 decimal places", "Use at most 2 decimal places")
+    return hours
+
+
+def _closed_reason(ms: dict) -> str | None:
+    """Why no hours can be logged or changed on this milestone right now, or None while it's open."""
+    if ms["is_archived"]:
+        return f"{ms['name']} is archived, so its hours can't be changed"
+    if ms["p_archived"]:
+        return f"{ms['p_name']} is archived, so its hours can't be changed"
+    if ms["p_status"] == "on_hold":
+        return f"{ms['p_name']} is on hold — logging is paused"
+    if ms["p_status"] == "completed":
+        return f"{ms['p_name']} is completed — logging is closed"
+    return None
+
+
+def _changes_something(conn, ctx: Ctx, ms: dict, work_date: date, hours: Decimal, note) -> bool:
+    """Would saving this cell write anything? (Re-sending an unchanged cell is a no-op, not a change.)"""
+    existing = query_one(conn, """SELECT hours, note, status FROM time_entries WHERE user_id = CAST(:u AS uuid)
+                                  AND milestone_id = :m AND work_date = :d""", u=ctx.user_id, m=ms["id"], d=work_date)
+    if not existing:
+        return hours != 0
+    return (existing["hours"] != hours or (note is not None and note != existing["note"])
+            or existing["status"] == "rejected")  # re-saving a rejected cell resubmits it
+
+
 def _validate_cell(conn, ctx: Ctx, cell: dict, start: date) -> dict:
     require(cell, "milestone_id", "work_date", "hours")
     milestone_id = as_uuid(cell["milestone_id"], "milestone_id")
     work_date = as_date(cell["work_date"], "work_date")
-    hours = as_decimal(cell["hours"], "hours", min=Decimal(0), max=MAX_HOURS)
-    if 0 < hours < MIN_HOURS:
-        raise ApiError(400, "VALIDATION_ERROR", f"Log at least {MIN_HOURS} hours", {"hours": f"min:{MIN_HOURS}"})
-    if hours != hours.quantize(CENT):  # the column is numeric(5,2); don't let the database round silently
-        raise ApiError(400, "VALIDATION_ERROR", "Use at most 2 decimal places",
-                       {"hours": "Use at most 2 decimal places"})
+    hours = _hours(cell["hours"], work_date)
     note = as_str(cell.get("note") or "", "note", min_len=0, max_len=1000) if "note" in cell else None
     if not (start <= work_date <= start + timedelta(days=6)):
         raise ApiError(400, "OUTSIDE_WEEK", f"{work_date} isn't in the week of {start}")
-    ms = query_one(conn, """SELECT m.*, p.start_date AS p_start, p.predicted_end_date AS p_end, p.manager_id
+    ms = query_one(conn, """SELECT m.*, p.start_date AS p_start, p.predicted_end_date AS p_end, p.manager_id,
+                                   p.name AS p_name, p.status AS p_status, p.is_archived AS p_archived
                             FROM milestones m JOIN projects p ON p.id = m.project_id
-                            WHERE m.id = CAST(:i AS uuid) AND NOT m.is_archived AND NOT p.is_archived""",
-                   i=milestone_id)
+                            WHERE m.id = CAST(:i AS uuid)""", i=milestone_id)
     if not ms or not is_assignee(conn, milestone_id, ctx.user_id):
         raise ApiError(400, "NOT_ASSIGNED", "You can only log time on milestones you're assigned to")
+    closed = _closed_reason(ms)
+    if closed and _changes_something(conn, ctx, ms, work_date, hours, note):
+        raise ApiError(409, "PROJECT_NOT_OPEN", closed)
     if not (ms["p_start"] <= work_date <= ms["p_end"]):
         raise ApiError(400, "OUT_OF_PROJECT_RANGE", f"{work_date} is outside the project's dates")
-    return {"milestone": ms, "work_date": work_date, "hours": hours, "note": note}
+    return {"milestone": ms, "work_date": work_date, "hours": hours, "note": note, "closed": bool(closed)}
+
+
+def _check_daily_cap(conn, ctx: Ctx, cells: list[dict]) -> None:
+    """No day may go over 24h across all of the person's milestones: their saved pending/approved hours on
+    live work, with each cell in this save replacing whatever that cell held before."""
+    for work_date in sorted({c["work_date"] for c in cells}):
+        mine = {str(c["milestone"]["id"]): c["hours"] for c in cells if c["work_date"] == work_date}
+        saved = query(conn, """SELECT t.milestone_id, t.hours FROM time_entries t
+                               JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
+                               JOIN projects p ON p.id = t.project_id AND NOT p.is_archived
+                               WHERE t.user_id = CAST(:u AS uuid) AND t.work_date = :d
+                                 AND t.status IN ('pending', 'approved')""", u=ctx.user_id, d=work_date)
+        total = sum((r["hours"] for r in saved if str(r["milestone_id"]) not in mine), Decimal(0)) + sum(mine.values())
+        if total > MAX_HOURS:
+            raise ApiError(400, "DAY_OVER_24H",
+                           f"More than 24h on {short_day(work_date)} ({total.normalize():f}h across your milestones). "
+                           "A day can't go over 24 hours.", {"work_date": str(work_date), "hours": total})
 
 
 def _alert_recipient(conn, ctx: Ctx, project_manager_id) -> str | None:
@@ -168,6 +230,8 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
     if not isinstance(body["entries"], list):
         raise ApiError(400, "VALIDATION_ERROR", "entries must be a list", {"entries": "required"})
     cells = [_validate_cell(conn, ctx, c, start) for c in body["entries"]]  # validate everything first
+    cells = [c for c in cells if not c["closed"]]  # what's left on a closed project is an unchanged re-send
+    _check_daily_cap(conn, ctx, cells)
     cells.sort(key=lambda c: (c["work_date"], str(c["milestone"]["id"])))
     me = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
     with transaction(conn):

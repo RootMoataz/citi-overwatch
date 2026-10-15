@@ -164,7 +164,7 @@ def archive_milestone(conn, ctx: Ctx, milestone_id: str) -> None:
 
 
 def restore_milestone(conn, ctx: Ctx, milestone_id: str) -> dict:
-    load_milestone(conn, ctx, milestone_id, include_archived=True)
+    load_milestone(conn, ctx, milestone_id, manage=True, include_archived=True)  # admins and the project's manager
     with transaction(conn):
         conn.run("""UPDATE milestones SET is_archived = false, archived_at = NULL, updated_at = now()
                     WHERE id = CAST(:i AS uuid)""", i=milestone_id)

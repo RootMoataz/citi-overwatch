@@ -225,7 +225,10 @@ def test_archive_and_restore(client, conn):
     assert client.request("DELETE", f"/milestones/{ms['id']}", token=token_for(conn, mgr))[0] == 204
     assert listing(client, conn, mgr, project) == []
     assert client.request("GET", f"/milestones/{ms['id']}", token=token_for(conn, mgr))[0] == 404
-    assert client.request("POST", f"/milestones/{ms['id']}/restore", token=token_for(conn, mgr))[0] == 403
+    assert client.request("POST", f"/milestones/{ms['id']}/restore", token=token_for(conn, assignee))[0] == 403
+    status, body, _, _ = client.request("POST", f"/milestones/{ms['id']}/restore", token=token_for(conn, mgr))
+    assert status == 200 and body["name"] == "Gone"   # the project's manager restores their own milestones
+    assert client.request("DELETE", f"/milestones/{ms['id']}", token=token_for(conn, mgr))[0] == 204
     status, body, _, _ = client.request("POST", f"/milestones/{ms['id']}/restore", token=token_for(conn, admin))
     assert status == 200 and body["name"] == "Gone"
     assert [m["name"] for m in listing(client, conn, mgr, project)] == ["Gone"]

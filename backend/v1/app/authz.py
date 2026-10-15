@@ -51,10 +51,14 @@ def load_milestone(conn, ctx, milestone_id, *, manage: bool = False,
         raise _not_found()
     milestone = query_one(conn, "SELECT * FROM milestones WHERE id = CAST(:id AS uuid)",
                           id=str(milestone_id))
-    if not milestone or (milestone["is_archived"] and not (ctx.is_admin and include_archived)):
+    if not milestone or (milestone["is_archived"] and not include_archived):
         raise _not_found()
-    project = load_project(conn, ctx, str(milestone["project_id"]), manage=manage,
-                           include_archived=include_archived)
+    project = load_project(conn, ctx, str(milestone["project_id"]), include_archived=include_archived)
+    # An archived milestone is only there for those who can restore it: admins and the project's manager.
+    if milestone["is_archived"] and not manages(ctx, project):
+        raise _not_found()
+    if manage and not manages(ctx, project):
+        raise ApiError(403, "FORBIDDEN", "You don't have permission to do this")
     return milestone, project
 
 

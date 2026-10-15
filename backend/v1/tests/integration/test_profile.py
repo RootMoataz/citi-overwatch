@@ -99,3 +99,34 @@ def test_manager_loses_access_when_person_leaves_their_project(client, conn):
     assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 200
     conn.run("UPDATE project_members SET is_archived = true WHERE user_id = CAST(:u AS uuid)", u=str(emp["id"]))
     assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 404
+
+
+def test_own_history_includes_archived_and_completed_work_read_only(client, conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=mgr["id"])
+    done = make_project(conn, mgr, name="Done", status="completed", **SPAN)
+    shelved = make_project(conn, mgr, name="Shelved", archived=True, **SPAN)
+    live = make_project(conn, mgr, name="Live", **SPAN)
+    for p in (done, shelved, live):
+        add_member(conn, p, emp)
+    wrap = make_milestone(conn, done, name="Wrap", status="completed")
+    old = make_milestone(conn, shelved, name="Old")
+    cut = make_milestone(conn, live, name="Cut", archived=True)
+    log_entry(conn, emp, wrap, MONDAY - timedelta(days=14), 6)
+    log_entry(conn, emp, old, MONDAY - timedelta(days=14), 4)
+    log_entry(conn, emp, cut, MONDAY - timedelta(days=14), 2, status="pending")
+
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, emp))[1]
+    milestones = {m["name"]: m for m in body["milestones"]}
+    assert set(milestones) == {"Wrap", "Old", "Cut"}
+    assert milestones["Wrap"]["project"] == {"id": str(done["id"]), "name": "Done", "status": "completed",
+                                             "is_archived": False}
+    assert (milestones["Old"]["project"]["is_archived"], milestones["Old"]["can_open"]) == (True, False)
+    assert (milestones["Cut"]["is_archived"], milestones["Cut"]["logged_hours"]) == (True, 2.0)
+    assert {p["name"] for p in body["projects"]} == {"Done", "Shelved", "Live"}
+    assert body["all_time"] == {"logged": 6.0, "approved": 6.0}      # archived work stays out of the totals
+
+    # Their manager still sees only live work: the archive view of someone's history is the owner's and admins'.
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[1]
+    assert {m["name"] for m in body["milestones"]} == {"Wrap"}
+    assert {p["name"] for p in body["projects"]} == {"Done", "Live"}

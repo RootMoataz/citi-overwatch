@@ -67,8 +67,10 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
         raise NOT_FOUND
     uid = str(user["id"])
     start = week_start(as_date(params["week"], "week") if params.get("week") else _today())
-    # Archived projects and milestones are out of every total (spec §3.1); admins still see them in the history.
-    live = "" if ctx.is_admin else " AND NOT p.is_archived AND NOT m.is_archived"
+    # Archived projects and milestones are out of every total (spec §3.1). The history still lists them for
+    # admins and for the person themselves (their own past work, read-only); managers see live work only.
+    whole_history = ctx.is_admin or uid == ctx.user_id
+    live = "" if whole_history else " AND NOT p.is_archived AND NOT m.is_archived"
     totals = query_one(conn, f"""SELECT {HOURS} FROM time_entries t
                                  JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
                                  JOIN projects p ON p.id = t.project_id AND NOT p.is_archived
@@ -81,12 +83,13 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
         LEFT JOIN (SELECT t.project_id, {HOURS} FROM time_entries t
                    JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
                    WHERE t.user_id = CAST(:u AS uuid) GROUP BY t.project_id) h ON h.project_id = p.id
-        WHERE pm.user_id = CAST(:u AS uuid){'' if ctx.is_admin else ' AND NOT p.is_archived'}
+        WHERE pm.user_id = CAST(:u AS uuid){'' if whole_history else ' AND NOT p.is_archived'}
         ORDER BY p.start_date DESC, lower(p.name)""", u=uid)
     # Assigned milestones, plus any they logged time on (leaving a team removes the assignment, not the hours).
     milestones = query(conn, f"""
         SELECT m.id, m.name, m.status, m.difficulty, m.start_date, m.end_date, m.is_archived, a.role,
-               p.id AS project_id, p.name AS project_name, {HOURS}
+               p.id AS project_id, p.name AS project_name, p.status AS project_status,
+               p.is_archived AS project_archived, {HOURS}
         FROM milestones m JOIN projects p ON p.id = m.project_id
         LEFT JOIN milestone_assignees a ON a.milestone_id = m.id AND a.user_id = CAST(:u AS uuid)
         LEFT JOIN time_entries t ON t.milestone_id = m.id AND t.user_id = CAST(:u AS uuid)
@@ -108,7 +111,8 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
                      for p in projects],
         "milestones": [{"id": m["id"], "name": m["name"], "status": m["status"], "difficulty": m["difficulty"],
                         "start_date": m["start_date"], "end_date": m["end_date"], "is_archived": m["is_archived"], "role": m["role"],
-                        "project": {"id": m["project_id"], "name": m["project_name"]},
+                        "project": {"id": m["project_id"], "name": m["project_name"],
+                                    "status": m["project_status"], "is_archived": m["project_archived"]},
                         "logged_hours": m["logged"], "approved_hours": m["approved"],
                         "can_open": can_open(m["project_id"])} for m in milestones],
     }
