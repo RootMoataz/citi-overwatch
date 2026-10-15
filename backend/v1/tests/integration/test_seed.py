@@ -4,7 +4,8 @@ from decimal import Decimal
 from app.db import query, query_one
 from app.rules.at_risk import at_risk_reasons
 from app.rules.cycles import dependency_order
-from app.seed import DEMO_PASSWORD, PEOPLE, seed
+from tests.helpers import login
+from app.seed import DEMO_PASSWORD, MILESTONE_DETAILS, PEOPLE, PEOPLE_SKILLS, SKILLS, WORKFLOW_KEYS, seed
 
 
 def test_seed_idempotent_and_demo_logins_work(client, conn):
@@ -160,6 +161,18 @@ def demo_state(conn) -> dict:
         "priorities": {(r["project"], r["name"]): r["priority"] for r in query(conn, """
             SELECT p.name AS project, m.name, m.priority FROM milestones m
             JOIN projects p ON p.id = m.project_id""")},
+        "skills": {r["username"]: r["skills"] for r in query(conn, """
+            SELECT u.username, array_agg(s.name ORDER BY s.name) AS skills FROM user_skills us
+            JOIN users u ON u.id = us.user_id JOIN skills s ON s.id = us.skill_id GROUP BY u.username""")},
+        "details": {(r["project"], r["name"]): (r["objective"], r["completion_criteria"], r["skills"])
+                    for r in query(conn, """
+            SELECT p.name AS project, m.name, m.objective, m.completion_criteria,
+                   ARRAY(SELECT s.name FROM milestone_skills ms JOIN skills s ON s.id = ms.skill_id
+                         WHERE ms.milestone_id = m.id ORDER BY s.name) AS skills
+            FROM milestones m JOIN projects p ON p.id = m.project_id""")},
+        "updates": query_one(conn, "SELECT count(*) AS n FROM milestone_updates")["n"],
+        "kickbacks": [(r["category"], r["resolution"]) for r in query(conn, """
+            SELECT category, resolution FROM milestone_kickbacks""")],
     }
 
 
@@ -178,8 +191,13 @@ def seed_the_old_way(conn) -> dict:
     conn.run("DELETE FROM departments")
     conn.run("DELETE FROM conversations")  # messages came later too
     conn.run("DELETE FROM notifications WHERE type = 'MESSAGE_RECEIVED'")
-    del expected["milestones"][("Beacon Mobile App", "Prototype")]
-    del expected["priorities"][("Beacon Mobile App", "Prototype")]
+    # ...and the milestone workflow (skills, details, the work log and kickbacks) later again.
+    for table in ("user_skills", "milestone_skills", "milestone_updates", "milestone_kickbacks", "skills"):
+        conn.run(f"DELETE FROM {table}")
+    conn.run("DELETE FROM audit_log WHERE action IN ('post_update', 'kick_back', 'resolve_kickback')")
+    conn.run("UPDATE milestones SET objective = '', completion_criteria = ''")
+    for key in ("milestones", "priorities", "details"):
+        del expected[key][("Beacon Mobile App", "Prototype")]
     return expected
 
 
@@ -206,13 +224,19 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
     assert sorted(result["priorities_updated"]) == [
         "Apollo Data Migration / Cutover", "Apollo Data Migration / Schema Mapping", "Atlas Customer Portal / Build",
         "Atlas Customer Portal / Launch", "Delta Compliance Audit / Audit Fieldwork"]
-    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
+    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2
     assert result["already_set"] == 0
+    assert result["skills_created"] == list(SKILLS)
+    assert sorted(result["user_skills_updated"]) == sorted(PEOPLE_SKILLS)
+    assert len(result["milestone_details_updated"]) == len(MILESTONE_DETAILS) - 1  # all but the missing Prototype
+    assert result["progress_updates_created"] == ["Apollo Data Migration / Schema Mapping progress update"]
+    assert result["kickbacks_created"] == ["Apollo Data Migration / Schema Mapping kickback"]
     assert result["users_created"] == ["executive.demo"]
     assert result["conversations_created"] == DEMO_CONVERSATIONS
     after = counts(conn)
-    # No assignees, hours or projects added or removed; the only new person is the executive demo login.
-    assert after == {**before, "departments": 3, "users": before["users"] + 1}
+    # No assignees, hours or projects added or removed; the only new person is the executive demo login. The audit
+    # log gains the demo update and the kickback with its resolution.
+    assert after == {**before, "departments": 3, "users": before["users"] + 1, "audit_log": before["audit_log"] + 3}
     exe = query_one(conn, """SELECT u.role::text AS role, u.must_change_password, d.name AS dept FROM users u
                              LEFT JOIN departments d ON d.id = u.department_id WHERE u.username = 'executive.demo'""")
     assert exe == {"role": "executive", "must_change_password": False, "dept": "Operations"}
@@ -233,12 +257,13 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     result = function.handler({"op": "demo_backfill"})
     assert (demo_state(conn), counts(conn)) == (state, before)
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
-                "difficulties_updated", "priorities_updated"):
+                "difficulties_updated", "priorities_updated", *WORKFLOW_KEYS):
         assert result[key] == [], key
-    # departments of people and projects, Beacon, difficulties, the executive login, the demo messages, priorities
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 5
+    # departments of people and projects, Beacon, difficulties, the executive login, the demo messages, priorities,
+    # people's skills, milestone details, the progress update and the kickback
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 5 + 15 + 9 + 1 + 1
     assert result["users_created"] == [] and result["conversations_created"] == []
-    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
+    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2
 
 
 def test_demo_backfill_on_a_fresh_seed_changes_nothing(conn):
@@ -395,3 +420,42 @@ def test_demo_backfill_skips_the_demo_messages_when_their_people_are_gone(conn):
     result = demo_backfill(conn)
     assert result["conversations_created"] == []
     assert {"item": "demo messages", "reason": "missing"} in result["skipped"]
+
+
+def test_demo_backfill_keeps_skills_details_and_history_someone_already_set(conn):
+    from app.seed import demo_backfill
+
+    seed_the_old_way(conn)
+    qa = query_one(conn, "INSERT INTO skills (name) VALUES ('qa') RETURNING id")["id"]
+    eli = query_one(conn, "SELECT id FROM users WHERE username = 'employee.demo'")["id"]
+    conn.run("INSERT INTO user_skills (user_id, skill_id) VALUES (:u, :s)", u=eli, s=qa)
+    conn.run("UPDATE milestones SET objective = 'Our own objective' WHERE name = 'Cutover'")
+    result = demo_backfill(conn)
+    state = demo_state(conn)
+    assert "QA" not in result["skills_created"]  # reused whatever its case
+    assert state["skills"]["employee.demo"] == ["qa"] and "employee.demo" not in result["user_skills_updated"]
+    objective, criteria, skills = state["details"][("Apollo Data Migration", "Cutover")]
+    assert objective == "Our own objective" and criteria and skills == ["Backend Development", "DevOps"]
+
+
+def test_seed_has_skills_details_a_progress_update_and_a_resolved_kickback(client, conn):
+    seed(conn)
+    token = login(client, "manager.demo", DEMO_PASSWORD)
+    eli = query_one(conn, "SELECT id FROM users WHERE username = 'employee.demo'")["id"]
+    profile = client.request("GET", f"/users/{eli}/profile", token=token)[1]
+    assert [s["name"] for s in profile["skills"]] == ["Backend Development", "Data Engineering"]
+    mapping = query_one(conn, "SELECT id, project_id FROM milestones WHERE name = 'Schema Mapping'")
+    view = client.request("GET", f"/milestones/{mapping['id']}", token=token)[1]
+    assert view["objective"] and view["completion_criteria"].count("\n") == 3
+    assert view["progress_percent"] == 60 and view["status"] == "in_progress" and view["open_kickback"] is None
+    history = client.request("GET", f"/milestones/{mapping['id']}/history", token=token)[1]
+    assert [(k["raised_by"]["name"], k["resolution"]) for k in history["kickbacks"]] == [("Ana Ruiz", "returned")]
+    assert [e["sentence"] for e in history["events"]] == [
+        "Eli Employee posted an update on Schema Mapping",
+        "Morgan Manager returned Schema Mapping to the team after a kickback",
+        "Ana Ruiz kicked back Schema Mapping (Unclear requirement)"]
+    # Completing Schema Mapping auto-assigns Cutover to Ben, the only one with both of its skills.
+    status, body, _, _ = client.request("POST", f"/milestones/{mapping['id']}/status", token=token,
+                                        json={"status": "completed"})
+    assert status == 200
+    assert [(a["milestone"]["name"], a["user"]["name"], a["skills"]) for a in body["auto_assigned"]] ==         [("Cutover", "Ben Okafor", ["Backend Development", "DevOps"])]

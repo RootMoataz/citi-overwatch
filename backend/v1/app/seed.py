@@ -79,6 +79,75 @@ PRIORITIES = {
     ("Delta Compliance Audit", "Audit Fieldwork"): "low",
 }
 
+# The skills catalogue (also seeded by migration 009) and who has which.
+SKILLS = ("QA", "Frontend Development", "Backend Development", "UI/UX Design", "DevOps", "Data Engineering",
+          "Business Analysis", "Project Management")
+PEOPLE_SKILLS = {
+    "manager.demo": ("Project Management",), "riley.chen": ("Project Management",),
+    "employee.demo": ("Backend Development", "Data Engineering"), "ben.okafor": ("Backend Development", "DevOps"),
+    "ana.ruiz": ("Data Engineering",), "chloe.park": ("Business Analysis", "QA"), "gia.rossi": ("UI/UX Design",),
+    "hugo.lee": ("Frontend Development",), "kira.sato": ("QA",), "leo.martin": ("Business Analysis",),
+    "dev.patel": ("Frontend Development",), "emma.stone": ("QA",), "finn.walsh": ("DevOps",),
+    "isla.nguyen": ("DevOps",), "jack.brown": ("DevOps",),
+}
+
+# (project, milestone) -> (objective, completion criteria one per line, required skills).
+MILESTONE_DETAILS = {
+    ("Apollo Data Migration", "Discovery"): (
+        "Inventory every legacy table and who owns it",
+        "Every legacy table listed with an owner\nRow counts captured for each table\nData quality issues logged",
+        ("Business Analysis", "Data Engineering")),
+    ("Apollo Data Migration", "Schema Mapping"): (
+        "Map every legacy field to the new customer data model",
+        "Customer, account and transaction tables mapped\nAddress fields split into street, city and postcode\n"
+        "Records that don't parse flagged for review\nMapping sheet signed off by the data owner",
+        ("Data Engineering", "Backend Development")),
+    ("Apollo Data Migration", "Cutover"): (
+        "Switch live traffic to the new platform with no data loss",
+        "Final sync verified against legacy row counts\nTraffic switched in the agreed window\n"
+        "Rollback plan rehearsed\nLegacy warehouse set to read-only",
+        ("Backend Development", "DevOps")),
+    ("Atlas Customer Portal", "Requirements"): (
+        "Agree which account changes customers can make themselves",
+        "User journeys agreed with the service team\nOut-of-scope changes listed\nRequirements signed off",
+        ("Business Analysis",)),
+    ("Atlas Customer Portal", "Build"): (
+        "Build the self-service screens and the APIs behind them",
+        "Address, contact and payment-day changes work end to end\nAccessibility checks pass\n"
+        "API errors shown in plain language",
+        ("Frontend Development", "Backend Development")),
+    ("Atlas Customer Portal", "Launch"): (
+        "Release the portal to every customer",
+        "Regression suite green\nSupport team briefed\nMonitoring and alerts in place",
+        ("DevOps", "QA")),
+    ("Beacon Mobile App", "Design"): (
+        "Design the field team's core journeys",
+        "Job list, job detail and sign-off screens designed\nTested with five field engineers\nDesign system agreed",
+        ("UI/UX Design",)),
+    ("Beacon Mobile App", "Prototype"): (
+        "A clickable prototype field teams can try on a phone",
+        "Runs on iOS and Android test devices\nWorks offline for a full shift\nFeedback from two field teams captured",
+        ("Frontend Development", "UI/UX Design")),
+    ("Cobalt Infrastructure Upgrade", "Assessment"): (
+        "Find every end-of-life device and plan its replacement",
+        "Every site surveyed\nReplacement list priced\nOutage windows agreed with each site",
+        ("DevOps",)),
+    ("Delta Compliance Audit", "Audit Fieldwork"): (
+        "Test the year's key controls and collect the evidence",
+        "Every key control tested\nEvidence filed for each test\nFindings agreed with control owners",
+        ("QA", "Business Analysis")),
+}
+
+# The work log and a kickback (resolved) on Schema Mapping, so the timeline and history have something to show.
+DEMO_UPDATE = ("Apollo Data Migration", "Schema Mapping", "employee.demo", 5 * 60,
+               "Customer and account tables are mapped and reconciled. Addresses are next: about 3% of records "
+               "don't parse and are flagged for Thursday's review.", 60)
+DEMO_KICKBACK = ("Apollo Data Migration", "Schema Mapping", "ana.ruiz", "unclear_requirement",
+                 "The legacy address field mixes street, city and postcode in free text and the new model needs "
+                 "them split. Which format should records that don't parse go into?",
+                 "manager.demo", "Split them into street, city and postcode. Flag anything that doesn't parse and "
+                 "we'll go through those together on Thursday.", 4)  # days ago
+
 
 # A short, realistic message thread and a milestone discussion: (sender, minutes ago, text). Times are relative to
 # when they're loaded. Each reader's last_read_at is set so Eli has one unread message in each on first sign-in.
@@ -144,6 +213,107 @@ def _demo_messages(conn) -> tuple[list[str], str | None]:
                  subject=subject, milestone=milestone["id"], group=True)
     return [f"{manager['first_name']} {manager['last_name']} and {employee['first_name']} {employee['last_name']}",
             subject], None
+
+
+WORKFLOW_KEYS = ("skills_created", "user_skills_updated", "milestone_details_updated", "progress_updates_created",
+                 "kickbacks_created")
+
+
+def _demo_workflow(conn, out: dict, skip) -> None:
+    """Skills, milestone details, a progress update and a resolved kickback, filling blanks only: a person gets the
+    seed's skills only while they have none; a milestone's objective, criteria and required skills are each set only
+    while empty; the update and kickback are added only while Schema Mapping has none. Safe to run again."""
+    skill_ids = {}
+    for name in SKILLS:
+        row = query_one(conn, "SELECT id FROM skills WHERE lower(name) = lower(:n)", n=name)
+        if not row:
+            row = query_one(conn, "INSERT INTO skills (name) VALUES (:n) RETURNING id", n=name)
+            out["skills_created"].append(name)
+        skill_ids[name] = row["id"]
+
+    for username, names in PEOPLE_SKILLS.items():
+        user = query_one(conn, "SELECT id FROM users WHERE username = :u", u=username)
+        if not user:
+            skip(f"skills of {username}", "missing")
+        elif query_one(conn, "SELECT 1 AS ok FROM user_skills WHERE user_id = :u LIMIT 1", u=user["id"]):
+            skip(f"skills of {username}", "already_set")
+        else:
+            for name in names:
+                conn.run("INSERT INTO user_skills (user_id, skill_id) VALUES (:u, :s)", u=user["id"], s=skill_ids[name])
+            out["user_skills_updated"].append(username)
+
+    def milestone_row(project, name):
+        return query_one(conn, """SELECT m.* FROM milestones m JOIN projects p ON p.id = m.project_id
+                                  WHERE p.name = :p AND NOT p.is_archived AND m.name = :m AND NOT m.is_archived
+                                  ORDER BY m.created_at LIMIT 1""", p=project, m=name)
+
+    for (project, name), (objective, criteria, needs) in MILESTONE_DETAILS.items():
+        label = f"{project} / {name}"
+        m = milestone_row(project, name)
+        if not m:
+            skip(label, "missing")
+            continue
+        filled = False
+        if not m["objective"]:
+            conn.run("UPDATE milestones SET objective = :o WHERE id = :i", o=objective, i=m["id"])
+            filled = True
+        if not m["completion_criteria"]:
+            conn.run("UPDATE milestones SET completion_criteria = :c WHERE id = :i", c=criteria, i=m["id"])
+            filled = True
+        if not query_one(conn, "SELECT 1 AS ok FROM milestone_skills WHERE milestone_id = :i LIMIT 1", i=m["id"]):
+            for skill in needs:
+                conn.run("INSERT INTO milestone_skills (milestone_id, skill_id) VALUES (:m, :s)", m=m["id"],
+                         s=skill_ids[skill])
+            filled = True
+        if filled:
+            out["milestone_details_updated"].append(label)
+        else:
+            skip(label, "already_set")
+
+    now = datetime.now(timezone.utc)
+    project, name, username, minutes, text, percent = DEMO_UPDATE
+    m, author = milestone_row(project, name), query_one(conn, "SELECT id FROM users WHERE username = :u", u=username)
+    label = f"{project} / {name} progress update"
+    if not m or not author:
+        skip(label, "missing")
+    elif query_one(conn, "SELECT 1 AS ok FROM milestone_updates WHERE milestone_id = :i LIMIT 1", i=m["id"]):
+        skip(label, "already_set")
+    else:
+        at = now - timedelta(minutes=minutes)
+        conn.run("""INSERT INTO milestone_updates (milestone_id, author_id, body, percent_complete, created_at)
+                    VALUES (:m, :a, :b, :p, :t)""", m=m["id"], a=author["id"], b=text, p=percent, t=at)
+        conn.run("""INSERT INTO audit_log (actor_id, action, entity_type, entity_id, changes, created_at)
+                    VALUES (:a, 'post_update', 'milestone', :m, CAST(:c AS jsonb), :t)""",
+                 a=author["id"], m=str(m["id"]), t=at,
+                 c=json.dumps({"before": None, "after": {"percent_complete": percent}}))
+        out["progress_updates_created"].append(label)
+
+    project, name, raiser_name, category, reason, resolver_name, note, days = DEMO_KICKBACK
+    m = milestone_row(project, name)
+    raiser = query_one(conn, "SELECT id FROM users WHERE username = :u", u=raiser_name)
+    resolver = query_one(conn, "SELECT id FROM users WHERE username = :u", u=resolver_name)
+    label = f"{project} / {name} kickback"
+    if not m or not raiser or not resolver:
+        skip(label, "missing")
+    elif query_one(conn, "SELECT 1 AS ok FROM milestone_kickbacks WHERE milestone_id = :i LIMIT 1", i=m["id"]):
+        skip(label, "already_set")
+    else:
+        raised, resolved = now - timedelta(days=days), now - timedelta(days=days, hours=-3)
+        kickback = query_one(conn, """
+            INSERT INTO milestone_kickbacks (milestone_id, raised_by, category, reason, previous_status, raised_at,
+                                             resolved_by, resolution, resolution_note, resolved_at)
+            VALUES (:m, :r, :c, :reason, 'in_progress', :raised, :s, 'returned', :n, :resolved) RETURNING id""",
+            m=m["id"], r=raiser["id"], c=category, reason=reason, raised=raised, s=resolver["id"], n=note,
+            resolved=resolved)
+        for actor, action, before, after, at in (
+                (raiser["id"], "kick_back", {"status": "in_progress"},
+                 {"status": "blocked", "category": category, "kickback_id": str(kickback["id"])}, raised),
+                (resolver["id"], "resolve_kickback", {"status": "blocked"},
+                 {"status": "in_progress", "resolution": "returned", "kickback_id": str(kickback["id"])}, resolved)):
+            conn.run("""INSERT INTO audit_log (actor_id, action, entity_type, entity_id, changes, created_at)
+                        VALUES (:a, :act, 'milestone', :m, CAST(:c AS jsonb), :t)""",
+                     a=actor, act=action, m=str(m["id"]), t=at, c=json.dumps({"before": before, "after": after}))
+        out["kickbacks_created"].append(label)
 
 
 def seed(conn) -> dict:
@@ -214,12 +384,14 @@ def demo_backfill(conn) -> dict:
     it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
     seed's difficulty and priority, each only while it's still 'medium'; executive.demo is created (published demo password) only
     if that username doesn't exist yet; the demo message thread and Schema Mapping discussion are added only while
-    there are no conversations at all. Assignees and hours are never touched. Safe to run again.
+    there are no conversations at all; skills, milestone objectives, criteria and required skills, the Schema Mapping
+    progress update and resolved kickback fill blanks only (see _demo_workflow). Assignees and hours are never
+    touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
-           "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "conversations_created": [], "already_set": 0,
-           "skipped": []}
+           "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "conversations_created": [],
+           **{key: [] for key in WORKFLOW_KEYS}, "already_set": 0, "skipped": []}
 
     def skip(item: str, reason: str) -> None:
         """Values already there are only counted; anything the operator may want to look at is listed."""
@@ -328,6 +500,8 @@ def demo_backfill(conn) -> dict:
             if why_not:
                 skip("demo messages", why_not)
             out["conversations_created"] = created
+
+        _demo_workflow(conn, out, skip)
     return out
 
 
@@ -412,7 +586,7 @@ def _load(conn) -> None:
         member(apollo, username, hours)
     assign(discovery, "chloe.park", "employee.demo")
     assign(mapping, "employee.demo", "ana.ruiz", "ben.okafor")
-    assign(cutover, "ben.okafor")
+    # Cutover is left unassigned: completing Schema Mapping auto-assigns it (it needs Backend Development or DevOps).
 
     # 2. At-risk project: past its predicted end with an overdue milestone.
     atlas = project("Atlas Customer Portal", "riley.chen", "active", d(-120), d(-4), 60000,
@@ -498,3 +672,4 @@ def _load(conn) -> None:
              u=people["manager.demo"]["id"], s=d(30), e=d(150))
 
     _demo_messages(conn)
+    _demo_workflow(conn, {key: [] for key in WORKFLOW_KEYS}, lambda item, reason: None)
