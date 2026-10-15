@@ -117,6 +117,10 @@ aws lambda invoke --function-name coding-workshop-v1-<suffix> \
 # Usernames that already exist are skipped. Delete out.json once the passwords are saved somewhere safe.
 aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-format raw-in-base64-out   --payload '{"op":"create_admins","users":[{"username":"admin.demo2","first_name":"Jordan","last_name":"Admin"}]}' out.json
 
+# Demo data seeded before departments, pull mode and difficulty: fills only the blanks (run "migrate" first).
+# Safe to run again; it never overwrites what an admin set and never touches assignees or hours.
+aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-format raw-in-base64-out --payload '{"op":"demo_backfill"}' out.json && cat out.json
+
 ./bin/deploy-frontend.sh                 # builds the React app and syncs it to S3 + invalidates CloudFront
 ```
 
