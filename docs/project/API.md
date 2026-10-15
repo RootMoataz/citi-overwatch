@@ -84,10 +84,10 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/users?q=&role=&archived=&page=&page_size=` | Admins and managers. Managers get no salaries |
-| POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent |
+| POST | `/users` | `{first_name, last_name, email, role, manager_id (required for employees), job_title?, salary?, department_id?, username, password}` → `201 {user, email_sent, temp_password?}`. `temp_password` is only returned when the email couldn't be sent |
 | GET | `/users/{id}` | |
 | GET | `/users/{id}/profile?week=` | Every role. Admins see anyone; managers see themselves and people on a project they manage; employees see only themselves. Anyone else gets `404`. `salary` is only included for admins and the person themselves |
-| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary` and `manager_id`. You can't change your own role or salary |
+| PUT | `/users/{id}` | Any field, including `username`, `role`, `salary`, `manager_id` and `department_id` (an active department, or `null` to clear it; anything else is `400`). You can't change your own role or salary |
 | DELETE | `/users/{id}` | Archives the account → `204`. Returns `409 HAS_DEPENDENTS` if they manage projects or have reports |
 | POST | `/users/{id}/restore` | |
 | POST | `/users/{id}/reset-password` | Issues a new temporary password, forces a change at the next sign-in and ends their sessions → `{email_sent, temp_password?}` |
@@ -95,7 +95,8 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
 
 ```json
 {"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer", "role": "employee",
-          "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"}, "is_archived": false},
+          "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"}, "department": {"id": "4f1c…", "name": "Technology"},
+          "is_archived": false},
  "this_week": {"week_start": "2026-10-12", "logged": 45.0, "overtime": 5.0, "planned": 30.0},
  "all_time": {"logged": 212.0, "approved": 160.0},
  "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "status": "active", "planned_hours_per_week": 30.0,
@@ -113,6 +114,23 @@ GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
 ```json
 {"username": "jsmith", "valid": true, "available": true,
  "suggestions": ["jsmith", "jane.smith", "smithj", "jane_smith", "janes"]}
+```
+
+## Departments
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/departments?include_archived=true` | Everyone signed in. Active departments by name, each with `user_count` and `project_count` (non-archived people and projects in it). `include_archived` only works for admins |
+| POST | `/departments` | Admin. `{name}` (1–80 characters) → `201`. A name already used, ignoring case, is `409 CONFLICT` with `{name: "taken"}` |
+| PUT | `/departments/{id}` | Admin. `{name}`: renames it |
+| DELETE | `/departments/{id}` | Admin. Archives it → `204`. It leaves the pickers and the dashboard filter; people and projects already in it keep it |
+| POST | `/departments/{id}/restore` | Admin |
+
+Every change is in the audit log (`entity_type` `department`).
+
+```json
+{"items": [{"id": "4f1c…", "name": "Technology", "is_archived": false, "archived_at": null,
+            "user_count": 7, "project_count": 2}]}
 ```
 
 ## Project requests
@@ -135,10 +153,10 @@ GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects?q=&status=&manager=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see. `archived` is admin only |
-| POST | `/projects` | Admin. `{name, description?, start_date, predicted_end_date, budget, manager_id, status?}` → `201` |
+| GET | `/projects?q=&status=&manager=&department=&at_risk=true&archived=true&page=&page_size=` | Only the projects you can see. `archived` is admin only; `department` is a department ID |
+| POST | `/projects` | Admin. `{name, description?, start_date, predicted_end_date, budget, manager_id, status?, department_id?, work_mode?}` → `201`. `work_mode` is `push` (default) or `pull` |
 | GET | `/projects/{id}` | `404` if you can't see it |
-| PUT | `/projects/{id}` | The project's manager or an admin. Only admins can change the manager |
+| PUT | `/projects/{id}` | The project's manager or an admin, including `department_id` (an active department or `null`) and `work_mode`. Only admins can change the manager |
 | DELETE | `/projects/{id}` | Admin. Archives the project → `204` |
 | POST | `/projects/{id}/restore` | Admin |
 | GET | `/projects/{id}/summary` | Budget, consumed, remaining, percentages, risk reasons and team size |
@@ -152,8 +170,9 @@ GET /api/v1/projects?page_size=1
             "description": "Move customer records from the legacy warehouse to the new platform.", "status": "active",
             "start_date": "2026-07-15", "predicted_end_date": "2026-12-27", "budget": 250000.0, "consumed": 13465.92,
             "budget_pct": 5.4, "progress_pct": 16.7, "at_risk_reasons": [],
-            "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"}, "is_archived": false, "completed_at": null,
-            "created_at": "2026-10-13T18:00:15.020027-04:00"}],
+            "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"},
+            "department": {"id": "4f1c…", "name": "Technology"}, "work_mode": "push",
+            "is_archived": false, "completed_at": null, "created_at": "2026-10-13T18:00:15.020027-04:00"}],
  "total": 3}
 ```
 
@@ -178,13 +197,14 @@ A missing field:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support), `difficulty` and `is_assignee` |
+| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support), `difficulty`, `is_assignee`, `claimable` (a pull project's ready, unassigned milestone) and `can_claim` (claimable and you're on the team) |
 | POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date, difficulty?}` → `201`. `difficulty` is `easy`, `medium` (default) or `hard`; anything else is `400`. The dates must fall within the project's dates |
 | GET / PUT / DELETE | `/milestones/{id}` | `DELETE` archives |
 | POST | `/milestones/{id}/restore` | Admin |
 | PUT | `/milestones/{id}/dependencies` | `{predecessor_ids: [...]}` → `{…, warnings}`. Returns `400 DEPENDENCY_CYCLE` or `CROSS_PROJECT_DEPENDENCY`. `warnings` flags a start date before a predecessor's end |
 | PUT | `/milestones/{id}/assignees` | `{user_ids: [...]}`. They must be project members (`NOT_A_MEMBER`) |
 | POST | `/milestones/{id}/status` | `{status}`. Assignees can move it to `in_progress` and `ready_for_review`; only the manager or an admin can set `completed` or send it back. Returns `400 INVALID_TRANSITION`, or `403 NOT_ASSIGNED`. The response is the milestone plus `routed_to`: when an assignee sends it for review they're added as support elsewhere ([auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)) and `routed_to` is `{milestone: {id, name, end_date}, project: {id, name}}`; otherwise it's `null` |
+| POST | `/milestones/{id}/claim` | Pull projects only: a team member makes themselves the primary assignee of a milestone that's ready to start (not started, every predecessor completed) and has nobody on it → the milestone. `409 NOT_PULL_PROJECT` in a push project, `409 NOT_READY`, `409 ALREADY_CLAIMED` (also what the second of two simultaneous claims gets), `403 NOT_A_MEMBER` for anyone not on the team. Audited as `claim`; the project manager gets `MILESTONE_CLAIMED` ([pull mode](LOGIC_WALKTHROUGH.md#11-pull-mode-claiming-a-milestone)) |
 | GET / POST | `/milestones/{id}/notes` | `{body}` (1–2,000 characters). Append-only |
 
 ```json
@@ -253,6 +273,7 @@ As an admin (managers get the same without `hourly_rate`):
 | `ENTRY_REJECTED` | The employee | "Your 8h on Schema Mapping (Mon 12 Oct) was rejected: *reason*" | `entry_id`, `work_date`, `week_start`, `hours`, `reason`, `milestone {id, name}`, `project {id, name}` |
 | `SUPPORT_ASSIGNED` | The employee who was auto-routed | "You've been added as support on *milestone* (*project*), due *date*" | `name`, `end_date`, `milestone`, `project`, `from_milestone` |
 | `SUPPORT_ROUTED` | That milestone's project manager | "*Name* was auto-routed to support *milestone*" | Same as `SUPPORT_ASSIGNED` |
+| `MILESTONE_CLAIMED` | The project's manager (not when they claim it themselves) | "*Name* claimed *milestone* (*project*)" | `name`, `milestone {id, name}`, `project {id, name}` |
 
 For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, so the bell can open that week's timesheet.
 
@@ -260,13 +281,13 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/dashboard` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals` |
-| GET | `/allocations?week=` | Admins and managers. Per person: projects with planned, logged and approved hours, totals and `utilization_pct` |
+| GET | `/dashboard?department=` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals`. `department` (an ID) keeps only that department's projects in every project-based number, only its people in `over_allocated`, and only its projects' entries in `pending_approvals` ([department filter](LOGIC_WALKTHROUGH.md#12-the-dashboards-department-filter)) |
+| GET | `/allocations?week=` | Admins and managers. Per person (with their `department_id`): projects with planned, logged and approved hours, totals and `utilization_pct` |
 | GET | `/insights/smart` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
 | GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first. `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
 
 ```json
-[{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer"},
+[{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer", "department_id": "4f1c…"},
   "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "planned": 30.0, "logged": 45.0, "approved": 0.0}],
   "planned_total": 30.0, "logged_total": 45.0, "utilization_pct": 112.5}, "…"]
 ```

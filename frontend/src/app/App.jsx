@@ -17,6 +17,7 @@ import PersonProfilePage from '../features/people/PersonProfilePage.jsx'
 import ProfilePage from '../features/profile/ProfilePage.jsx'
 import ArchivePage from '../features/archive/ArchivePage.jsx'
 import AuditPage from '../features/audit/AuditPage.jsx'
+import DepartmentsPage from '../features/departments/DepartmentsPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
 import { useApprovals } from '../api/queries.js'
 import { can } from '../lib/permissions.js'
@@ -52,6 +53,7 @@ export default function App() {
           {/* Every role; the server returns 404 for anyone the viewer may not see. */}
           <Route path="people/:id/profile" element={<PersonProfilePage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="departments" element={<RequireAuth roles={['admin']}><DepartmentsPage /></RequireAuth>} />
           <Route path="audit" element={<RequireAuth roles={['admin']}><AuditPage /></RequireAuth>} />
           <Route path="archive" element={<RequireAuth roles={['admin']}><ArchivePage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />

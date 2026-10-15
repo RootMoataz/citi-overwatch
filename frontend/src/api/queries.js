@@ -111,6 +111,9 @@ export const useMilestoneStatus = (projectId) => useApiMutation(
     success: (data) => (data?.routed_to
       ? `Status updated. You're now supporting ${data.routed_to.milestone.name} (${data.routed_to.project.name})`
       : 'Status updated') })
+// Pull mode: a team member takes a ready, unassigned milestone; 409 means someone else got there first.
+export const useClaimMilestone = (projectId) => useApiMutation((id) => api.post(`/milestones/${id}/claim`),
+  { invalidate: [...milestoneKeys(projectId), ['milestones'], ['profile']], success: (m) => `You're on ${m.name}` })
 export const useArchiveMilestone = (projectId) => useApiMutation((id) => api.del(`/milestones/${id}`),
   { invalidate: milestoneKeys(projectId), success: 'Milestone archived' })
 export const useNotes = (milestoneId, enabled = true) =>
@@ -146,7 +149,11 @@ export const useAllocations = (week, enabled = true) =>
   useQuery({ queryKey: ['allocations', week], enabled, queryFn: () => api.get('/allocations', { week }) })
 
 // ---------- dashboard, people, profile, audit ----------
-export const useDashboard = () => useQuery({ queryKey: ['dashboard'], queryFn: () => api.get('/dashboard') })
+// department: an id narrows the project widgets and the over-40h list to that department ('' = all).
+export const useDashboard = (department = '') => useQuery({
+  queryKey: ['dashboard', department], queryFn: () => api.get('/dashboard', { department }),
+  placeholderData: keepPreviousData,
+})
 export const useUsers = (filters) => useQuery({
   queryKey: ['users', 'list', filters], queryFn: () => api.get('/users', { page_size: 100, ...filters }),
   placeholderData: keepPreviousData,
@@ -189,3 +196,19 @@ const RESTORE_PATHS = { project: 'projects', milestone: 'milestones', user: 'use
 export const useRestoreArchived = () => useApiMutation((item) => api.post(`/${RESTORE_PATHS[item.type]}/${item.id}/restore`),
   { invalidate: [['archive'], ['projects'], ['project'], ['milestones'], ['users'], ['user'], ['dashboard']],
     success: (_, item) => `Restored ${item.name}` })
+
+// ---------- departments ----------
+// Everyone signed in can list them; admins also see archived ones and change them.
+export const useDepartments = ({ includeArchived = false, enabled = true } = {}) => useQuery({
+  queryKey: ['departments', includeArchived], enabled,
+  queryFn: () => api.get('/departments', includeArchived ? { include_archived: 'true' } : undefined),
+})
+const departmentKeys = [['departments'], ['projects'], ['project'], ['dashboard'], ['users'], ['user'], ['profile']]
+export const useCreateDepartment = () => useApiMutation((body) => api.post('/departments', body),
+  { invalidate: departmentKeys, success: (d) => `Added ${d.name}` })
+export const useRenameDepartment = () => useApiMutation(({ id, name }) => api.put(`/departments/${id}`, { name }),
+  { invalidate: departmentKeys, success: (d) => `Renamed to ${d.name}` })
+export const useArchiveDepartment = () => useApiMutation((d) => api.del(`/departments/${d.id}`),
+  { invalidate: departmentKeys, success: (_, d) => `Archived ${d.name}` })
+export const useRestoreDepartment = () => useApiMutation((d) => api.post(`/departments/${d.id}/restore`),
+  { invalidate: departmentKeys, success: (d) => `Restored ${d.name}` })

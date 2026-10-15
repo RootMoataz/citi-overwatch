@@ -63,6 +63,8 @@ export const projectSchema = z.object({
   budget: money,
   manager_id: z.string().min(1, { message: 'Pick a manager' }),
   status: z.string().optional(),
+  department_id: z.string().optional().default(''),
+  work_mode: z.enum(['push', 'pull']),
 }).superRefine(endAfterStart('start_date', 'predicted_end_date'))
 
 export const requestSchema = z.object({

@@ -7,6 +7,7 @@ import { renderAsUser, users } from '../../test/render.jsx'
 import AuditPage from '../audit/AuditPage.jsx'
 import ProfilePage from '../profile/ProfilePage.jsx'
 import CreateUserWizard from './CreateUserWizard.jsx'
+import UserDetailPage from './UserDetailPage.jsx'
 import { EMAILJS_URL } from '../../lib/emailRelay.js'
 
 const managers = http.get(`${API}/users`, () => HttpResponse.json({ items: [
@@ -232,5 +233,23 @@ describe('AuditPage', () => {
     await user.clear(screen.getByRole('combobox', { name: /who/i }))
     await user.type(screen.getByRole('combobox', { name: /who/i }), 'oli')
     expect(await screen.findByRole('option', { name: /olive old \(archived\)/i })).toBeInTheDocument()
+  })
+})
+
+describe('UserDetailPage', () => {
+  test('admin puts a person in a department', async () => {
+    let put = null
+    const ada = { id: 'u-ada', username: 'ada', first_name: 'Ada', last_name: 'Lovelace', email: 'ada@acme.example',
+      role: 'employee', job_title: 'Analyst', salary: 90000, manager_id: 'u-mgr', department_id: null, is_archived: false }
+    server.use(managers,
+      http.get(`${API}/users/u-ada`, () => HttpResponse.json(ada)),
+      http.get(`${API}/departments`, () => HttpResponse.json({ items: [{ id: 'd1', name: 'Technology', is_archived: false }] })),
+      http.put(`${API}/users/u-ada`, async ({ request }) => { put = await request.json(); return HttpResponse.json({ ...ada, ...put }) }))
+    renderAsUser(<UserDetailPage />, { user: users.admin, route: '/people/u-ada', path: '/people/:id' })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('combobox', { name: /department/i }))
+    await user.click(await screen.findByRole('option', { name: 'Technology' }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(put).toEqual({ department_id: 'd1' }))
   })
 })

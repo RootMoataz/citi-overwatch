@@ -1,6 +1,6 @@
 # Data model
 
-The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, and [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
+The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, and [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
 
 Conventions:
 
@@ -33,6 +33,8 @@ erDiagram
   users ||--o{ refresh_tokens : has
   users ||--o{ password_reset_codes : has
   users ||--o{ audit_log : "acts in"
+  departments |o--o{ users : "groups"
+  departments |o--o{ projects : "groups"
 
   users {
     uuid id PK
@@ -41,6 +43,7 @@ erDiagram
     user_role role "admin | manager | employee"
     numeric salary "annual, ≥ 0"
     uuid manager_id FK "required for employees"
+    uuid department_id FK "optional"
     bool must_change_password
     timestamptz temp_password_expires_at
     int failed_login_count
@@ -54,7 +57,14 @@ erDiagram
     numeric budget "≥ 0"
     project_status status "planned | active | on_hold | completed"
     uuid manager_id FK
+    uuid department_id FK "optional"
+    text work_mode "push | pull"
     timestamptz completed_at
+  }
+  departments {
+    uuid id PK
+    text name "unique on lower()"
+    bool is_archived
   }
   milestones {
     uuid id PK
@@ -84,7 +94,8 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `users` | Every account.<br>• Usernames and emails are unique **regardless of case**, through unique indexes on `lower(…)`.<br>• `manager_id` is the reporting manager. The service requires it for employees.<br>• `must_change_password` and `temp_password_expires_at` (72 h) drive the forced change.<br>• `failed_login_count` and `locked_until` drive the 15-minute lockout.<br>• Indexed on `manager_id`. |
+| `users` | Every account.<br>• Usernames and emails are unique **regardless of case**, through unique indexes on `lower(…)`.<br>• `manager_id` is the reporting manager. The service requires it for employees.<br>• `must_change_password` and `temp_password_expires_at` (72 h) drive the forced change.<br>• `failed_login_count` and `locked_until` drive the 15-minute lockout.<br>• `department_id` (optional) is set by an admin.<br>• Indexed on `manager_id` and `department_id`. |
+| `departments` | Admin-managed groups for people and projects. The name is unique **regardless of case** (unique index on `lower(name)`, archived ones included). Archiving hides a department from the pickers and the dashboard filter; people and projects already in it keep it until someone changes them. |
 | `refresh_tokens` | One row per session. Only `token_hash` (unique) is stored. `revoked_at` is set on rotation, logout, password change and reset. |
 | `password_reset_codes` | The hashed 6-digit code, with `expires_at` (15 min), `attempts` (locks at 5) and `used_at` (single use). Indexed on `(user_id, created_at DESC)`, which makes the resend limit cheap to check. |
 | `app_secrets` | `name → value`. Holds the JWT signing key, which the first migration generates. |
@@ -93,7 +104,7 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `projects` | The project's name (unique among non-archived projects, by a partial unique index on `lower(name)`), dates, budget, status and its one manager. `completed_at` is set when the project is completed. |
+| `projects` | The project's name (unique among non-archived projects, by a partial unique index on `lower(name)`), dates, budget, status and its one manager. `completed_at` is set when the project is completed.<br>• `department_id` (optional) is set by the project's manager or an admin.<br>• `work_mode` is `push` (the default: the manager assigns milestones) or `pull` (team members claim ready milestones, see [LOGIC_WALKTHROUGH §11](LOGIC_WALKTHROUGH.md#11-pull-mode-claiming-a-milestone)); a `CHECK` allows only those two. |
 | `project_requests` | A manager's proposal: name, description, proposed dates and budget, and a reason. `status` is `pending`, `approved` or `rejected`, and the row records `decided_by`, `decided_at` and `decision_comment`. On approval, `project_id` links to the project it created. |
 | `project_members` | Staffing. `(project_id, user_id)` is unique, and `planned_hours_per_week` must be more than 0 and at most 40. The cross-project 40-hour cap is checked in the service, because it depends on which projects' dates overlap. |
 

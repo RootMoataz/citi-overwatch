@@ -1,7 +1,7 @@
 import { Grid, Paper, Stack, Typography } from '@mui/material'
 import { useProjectSummary } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
-import { RISK_LABELS } from '../../lib/labels.js'
+import { RISK_LABELS, WORK_MODE } from '../../lib/labels.js'
 import { formatDate, formatMoney, formatPct } from '../../lib/format.js'
 import StatTile from './StatTile.jsx'
 
@@ -24,6 +24,10 @@ export default function OverviewTab({ project }) {
         <Typography variant="h3" component="h2" sx={{ mb: 1 }}>About</Typography>
         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{project.description || 'No description yet.'}</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>Manager: {project.manager.name}</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>Department: {project.department?.name ?? 'None'}</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {WORK_MODE[project.work_mode ?? 'push'].label} mode: {WORK_MODE[project.work_mode ?? 'push'].help.toLowerCase()}
+        </Typography>
       </Paper>
       {project.at_risk_reasons.length ? (
         <Paper variant="outlined" sx={{ p: 2, borderColor: 'warning.main' }}>

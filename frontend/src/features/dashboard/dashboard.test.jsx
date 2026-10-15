@@ -1,4 +1,5 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
@@ -25,8 +26,34 @@ const allocations = [{ user: { id: 'u-emp', name: 'Eli Employee', job_title: 'En
   utilization_pct: 112.5, projects: [{ id: 'p1', name: 'Apollo', planned: 30, logged: 45, approved: 0 },
     { id: 'p2', name: 'Atlas', planned: 10, logged: 0, approved: 0 }] }]
 
+const departments = [{ id: 'd1', name: 'Technology', is_archived: false }, { id: 'd2', name: 'Operations', is_archived: false }]
+
 describe('DashboardPage', () => {
+  beforeEach(() => server.use(http.get(`${API}/departments`, () => HttpResponse.json({ items: departments }))))
   beforeEach(() => server.use(http.get(`${API}/insights/smart`, () => HttpResponse.json([]))))
+
+  test('the department filter asks the server for that department and keeps it in the URL', async () => {
+    const asked = []
+    server.use(http.get(`${API}/dashboard`, ({ request }) => {
+      const dept = new URL(request.url).searchParams.get('department')
+      asked.push(dept)
+      return HttpResponse.json(dept === 'd1' ? { ...dashboard, projects: [project()], at_risk: [], budgets: [dashboard.budgets[0]] } : dashboard)
+    }), http.get(`${API}/allocations`, () => HttpResponse.json([
+      ...allocations, { ...allocations[0], user: { id: 'u-ops', name: 'Otto Ops', job_title: 'Ops', department_id: 'd2' } }])))
+    renderAsUser(<DashboardPage />, { user: users.admin, route: '/' })
+    const user = userEvent.setup()
+    const busiest = await screen.findByRole('table', { name: /busiest people/i })
+    expect(within(busiest).getByText('Otto Ops')).toBeInTheDocument()
+    await user.click(await screen.findByRole('combobox', { name: /department/i }))
+    expect(screen.getByRole('option', { name: 'All departments' })).toBeInTheDocument()
+    await user.click(screen.getByRole('option', { name: 'Technology' }))
+    await waitFor(() => expect(asked).toContain('d1'))
+    expect(asked[0]).toBeNull()
+    expect(screen.getByTestId('location')).toHaveTextContent('/?department=d1')
+    await waitFor(() => expect(screen.queryByText('Nothing at risk')).toBeInTheDocument())
+    const allocation = screen.getByRole('region', { name: /resources allocated/i })
+    expect(within(allocation).queryByText('Otto Ops')).not.toBeInTheDocument()
+  })
 
   test('dashboard renders a section for each of the seven questions', async () => {
     server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),

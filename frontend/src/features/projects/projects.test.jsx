@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import ProjectDetailPage from './ProjectDetailPage.jsx'
@@ -47,7 +47,34 @@ function detailHandlers(p = project(), costs = milestoneCosts()) {
   ]
 }
 
+const departmentsHandler = () => http.get(`${API}/departments`, () => HttpResponse.json({ items: [
+  { id: 'd1', name: 'Technology', is_archived: false }, { id: 'd2', name: 'Operations', is_archived: false }] }))
+
 describe('ProjectsPage', () => {
+  beforeEach(() => server.use(departmentsHandler()))
+
+  test('admin puts a new project in a department and picks pull mode', async () => {
+    let posted = null
+    server.use(listHandler([]), managersHandler(),
+      http.post(`${API}/projects`, async ({ request }) => { posted = await request.json(); return HttpResponse.json(project(), { status: 201 }) }))
+    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /new project/i }))
+    const dialog = await screen.findByRole('dialog', { name: /new project/i })
+    await user.type(within(dialog).getByLabelText(/^name/i), 'Orion')
+    await user.type(within(dialog).getByLabelText(/start date/i), '2026-06-01')
+    await user.type(within(dialog).getByLabelText(/predicted end date/i), '2026-12-01')
+    await user.click(within(dialog).getByRole('combobox', { name: /manager/i }))
+    await user.click(await screen.findByRole('option', { name: /morgan manager/i }))
+    expect(within(dialog).getByRole('combobox', { name: /work mode/i })).toHaveTextContent(/push/i)
+    await user.click(within(dialog).getByRole('combobox', { name: /department/i }))
+    await user.click(await screen.findByRole('option', { name: 'Technology' }))
+    await user.click(within(dialog).getByRole('combobox', { name: /work mode/i }))
+    await user.click(await screen.findByRole('option', { name: /pull/i }))
+    await user.click(within(dialog).getByRole('button', { name: /create project/i }))
+    await waitFor(() => expect(posted).toMatchObject({ name: 'Orion', department_id: 'd1', work_mode: 'pull' }))
+  })
+
   test('projects filters sync to URL and refetch', async () => {
     const seen = []
     server.use(listHandler([project()], seen), managersHandler())
@@ -135,6 +162,31 @@ describe('ProjectsPage', () => {
 })
 
 describe('ProjectDetailPage', () => {
+  beforeEach(() => server.use(departmentsHandler()))
+
+  test('overview shows the department and the work mode', async () => {
+    server.use(...detailHandlers(project({ department: { id: 'd1', name: 'Technology' }, work_mode: 'pull' })))
+    renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1', path: '/projects/:id' })
+    expect(await screen.findByText(/department: technology/i)).toBeInTheDocument()
+    expect(screen.getByText(/pull mode/i)).toBeInTheDocument()
+  })
+
+  test('the manager moves the project to another department and back to push mode', async () => {
+    let put = null
+    server.use(...detailHandlers(project({ department: { id: 'd1', name: 'Technology' }, work_mode: 'pull' })),
+      http.put(`${API}/projects/p1`, async ({ request }) => { put = await request.json(); return HttpResponse.json(project()) }))
+    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1', path: '/projects/:id' })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /edit/i }))
+    const dialog = await screen.findByRole('dialog', { name: /edit project/i })
+    await user.click(await within(dialog).findByRole('combobox', { name: /department/i }))
+    await user.click(await screen.findByRole('option', { name: 'Operations' }))
+    await user.click(within(dialog).getByRole('combobox', { name: /work mode/i }))
+    await user.click(await screen.findByRole('option', { name: /push/i }))
+    await user.click(within(dialog).getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(put).toMatchObject({ department_id: 'd2', work_mode: 'push' }))
+  })
+
   test('tabs are kept in the URL', async () => {
     server.use(...detailHandlers())
     renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=budget', path: '/projects/:id' })

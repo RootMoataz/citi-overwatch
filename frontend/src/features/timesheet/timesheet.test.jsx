@@ -289,6 +289,22 @@ describe('NotificationBell', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: /added as support on build/i }))
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/p2?tab=milestones'))
   })
+
+  test('a claimed-milestone alert opens the project milestones', async () => {
+    server.use(
+      http.get(`${API}/notifications`, () => HttpResponse.json([{ id: 'n4', type: 'MILESTONE_CLAIMED', week_start: null,
+        read_at: null, subject_user: { id: 'u-ada', name: 'Ada Lovelace' },
+        payload: { milestone: { id: 'm5', name: 'Design' }, project: { id: 'p3', name: 'Beacon' } },
+        message: 'Ada Lovelace claimed Design (Beacon)' }])),
+      http.post(`${API}/notifications/n4/read`, () => HttpResponse.json({ id: 'n4', read: true })),
+    )
+    renderAsUser(<NotificationBell />, { user: users.manager, route: '/', path: '/' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }))
+    const item = await screen.findByRole('menuitem', { name: /ada lovelace claimed design/i })
+    expect(within(item).getByText(/open the project's milestones/i)).toBeInTheDocument()
+    await userEvent.click(item)
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/p3?tab=milestones'))
+  })
 })
 
 test('employee does not see Approvals in navigation', () => {

@@ -209,4 +209,38 @@ describe('MilestonesTab', () => {
     await user.click(within(dialog).getByRole('button', { name: /save/i }))
     await waitFor(() => expect(sent).toEqual([{ difficulty: 'easy' }]))
   })
+
+  test('in a pull project, team members claim ready milestones and see what pull mode means', async () => {
+    let claimed = null
+    const open = { ...cutover, claimable: true, can_claim: true }
+    server.use(...handlers([discovery, mapping, open], [
+      http.post(`${API}/milestones/m3/claim`, () => { claimed = 'm3'; return HttpResponse.json({ ...open, assignees: [me], is_assignee: true }) })]))
+    renderAsUser(<MilestonesTab project={{ ...project, work_mode: 'pull' }} manage={false} user={users.employee} />,
+      { user: users.employee, route: '/milestones-under-test' })
+    const user = userEvent.setup()
+    expect(await screen.findByText(/this project works in pull mode/i)).toBeInTheDocument()
+    expect(within(await card('Discovery')).queryByRole('button', { name: /claim/i })).not.toBeInTheDocument()
+    await user.click(within(await card('Cutover')).getByRole('button', { name: /claim cutover/i }))
+    await waitFor(() => expect(claimed).toBe('m3'))
+    expect(await screen.findByText("You're on Cutover")).toBeInTheDocument()
+  })
+
+  test('a claim someone else won first explains why', async () => {
+    const open = { ...cutover, claimable: true, can_claim: true }
+    server.use(...handlers([open], [http.post(`${API}/milestones/m3/claim`, () => HttpResponse.json({ error: {
+      code: 'ALREADY_CLAIMED', message: 'Someone is already on this milestone', request_id: 'r-1' } }, { status: 409 }))]))
+    renderAsUser(<MilestonesTab project={{ ...project, work_mode: 'pull' }} manage={false} user={users.employee} />,
+      { user: users.employee, route: '/milestones-under-test' })
+    const user = userEvent.setup()
+    await user.click(within(await card('Cutover')).getByRole('button', { name: /claim cutover/i }))
+    expect(await within(await card('Cutover')).findByText('Someone is already on this milestone')).toBeInTheDocument()
+  })
+
+  test('push projects have no claim buttons or pull explanation', async () => {
+    server.use(...handlers([{ ...cutover, claimable: false, can_claim: false }]))
+    renderTab(users.employee, false)
+    await card('Cutover')
+    expect(screen.queryByRole('button', { name: /claim/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/pull mode/i)).not.toBeInTheDocument()
+  })
 })

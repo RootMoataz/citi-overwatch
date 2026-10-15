@@ -4,7 +4,9 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
-import { useArchiveUser, useManagers, useResetUserPassword, useRestoreUser, useUpdateUser, useUser } from '../../api/queries.js'
+import {
+  useArchiveUser, useDepartments, useManagers, useResetUserPassword, useRestoreUser, useUpdateUser, useUser,
+} from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -15,7 +17,7 @@ import ShowOnceDialog from './ShowOnceDialog.jsx'
 import { relayCredentials } from '../../lib/emailRelay.js'
 import { useToast } from '../../app/toast.js'
 
-const FIELDS = ['first_name', 'last_name', 'email', 'username', 'role', 'job_title', 'salary', 'manager_id']
+const FIELDS = ['first_name', 'last_name', 'email', 'username', 'role', 'job_title', 'salary', 'manager_id', 'department_id']
 
 function Dependents({ error }) {
   if (error?.code !== 'HAS_DEPENDENTS') return <ErrorAlert error={error} sx={{ mb: 2 }} />
@@ -36,6 +38,7 @@ export default function UserDetailPage() {
   const { user: me } = useSession()
   const person = useUser(id)
   const managers = useManagers()
+  const departments = useDepartments({ includeArchived: true })
   const update = useUpdateUser(id)
   const archive = useArchiveUser(id)
   const restore = useRestoreUser(id)
@@ -107,6 +110,15 @@ export default function UserDetailPage() {
             </TextField>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}><TextField label="Job title" value={form.job_title} onChange={set('job_title')} /></Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            {/* Archived departments are listed only so a person still in one shows it; they can't be picked. */}
+            <TextField select label="Department" value={form.department_id} onChange={set('department_id')}>
+              <MenuItem value="">No department</MenuItem>
+              {(departments.data?.items ?? []).filter((d) => !d.is_archived || String(d.id) === form.department_id).map((d) => (
+                <MenuItem key={d.id} value={String(d.id)} disabled={d.is_archived}>{d.name}{d.is_archived ? ' (archived)' : ''}</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField label="Annual salary" type="number" value={form.salary} onChange={set('salary')} disabled={self}
               helperText={self ? "You can't change your own salary" : 'Used for project cost (salary ÷ 2,080 per hour)'}

@@ -5,11 +5,12 @@ import {
 import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useMediaQuery } from 'react-responsive'
-import { useManagers } from '../../api/queries.js'
+import { useDepartments, useManagers } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { fullName } from '../../lib/format.js'
+import { WORK_MODE } from '../../lib/labels.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { projectSchema } from '../../lib/schemas.js'
 
@@ -28,6 +29,12 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
   const editing = Boolean(project)
   const admin = user?.role === 'admin'
   const managers = useManagers(open && admin)
+  const departments = useDepartments({ enabled: open })
+  // An archived department isn't offered any more, but a project already in one still shows it.
+  const departmentOptions = [...(departments.data?.items ?? [])]
+  if (project?.department && !departmentOptions.some((d) => String(d.id) === String(project.department.id))) {
+    departmentOptions.push(project.department)
+  }
   const [failure, setFailure] = useState(null)
   const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(projectSchema),
@@ -35,13 +42,15 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
       name: project?.name ?? '', description: project?.description ?? '', start_date: project?.start_date ?? '',
       predicted_end_date: project?.predicted_end_date ?? '', budget: project?.budget ?? '',
       manager_id: project ? String(project.manager.id) : '', status: project?.status ?? 'planned',
+      department_id: project?.department ? String(project.department.id) : '', work_mode: project?.work_mode ?? 'push',
     },
   })
 
   const onSubmit = async (values) => {
     setFailure(null)
     const body = { name: values.name, description: values.description ?? '', start_date: values.start_date,
-      predicted_end_date: values.predicted_end_date, budget: values.budget }
+      predicted_end_date: values.predicted_end_date, budget: values.budget,
+      department_id: values.department_id || null, work_mode: values.work_mode }
     if (admin) body.manager_id = values.manager_id
     if (editing && values.status !== project.status) body.status = values.status
     if (!editing) body.status = 'planned'
@@ -107,6 +116,23 @@ export default function ProjectForm({ open, project, onClose, onSave }) {
                 )} />
               </Grid>
             ) : null}
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Controller name="department_id" control={control} render={({ field }) => (
+                <TextField select label="Department" {...field} disabled={isSubmitting}
+                  helperText="Used to filter the dashboard">
+                  <MenuItem value="">No department</MenuItem>
+                  {departmentOptions.map((d) => <MenuItem key={d.id} value={String(d.id)}>{d.name}</MenuItem>)}
+                </TextField>
+              )} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Controller name="work_mode" control={control} render={({ field }) => (
+                <TextField select label="Work mode" {...field} disabled={isSubmitting}
+                  helperText={WORK_MODE[field.value]?.help}>
+                  {Object.entries(WORK_MODE).map(([mode, meta]) => <MenuItem key={mode} value={mode}>{meta.label}</MenuItem>)}
+                </TextField>
+              )} />
+            </Grid>
             {editing ? (
               <Grid size={{ xs: 12, sm: 6 }}>
                 <Controller name="status" control={control} render={({ field }) => (

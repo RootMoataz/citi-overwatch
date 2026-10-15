@@ -6,7 +6,9 @@ import {
   Alert, Box, Button, Card, CardContent, Chip, Collapse, IconButton, Skeleton, Stack, Tooltip, Typography,
 } from '@mui/material'
 import { Fragment, useState } from 'react'
-import { useArchiveMilestone, useMembers, useMilestones, useMilestoneStatus } from '../../api/queries.js'
+import {
+  useArchiveMilestone, useClaimMilestone, useMembers, useMilestones, useMilestoneStatus,
+} from '../../api/queries.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -21,6 +23,7 @@ import MilestoneNotes from './MilestoneNotes.jsx'
 
 function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
   const status = useMilestoneStatus(m.project_id)
+  const claim = useClaimMilestone(m.project_id)
   const [notesOpen, setNotesOpen] = useState(false)
   const [failure, setFailure] = useState(null)
   const waitingOn = m.predecessors.map((id) => names[String(id)]).filter(Boolean)
@@ -30,6 +33,11 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
   const move = async (target) => {
     setFailure(null)
     try { await status.mutateAsync({ id: m.id, status: target }) } catch (err) { setFailure(err) }
+  }
+
+  const take = async () => {
+    setFailure(null)
+    try { await claim.mutateAsync(m.id) } catch (err) { setFailure(err) }
   }
 
   return (
@@ -65,6 +73,11 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
         </Stack>
         <ErrorAlert error={failure} sx={{ mt: 1 }} />
         <Stack direction="row" useFlexGap sx={{ gap: 1, mt: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          {m.can_claim ? (
+            <Button size="small" variant="contained" aria-label={`Claim ${m.name}`} disabled={claim.isPending} onClick={take}>
+              Claim
+            </Button>
+          ) : null}
           {actions.map((a) => {
             const blocked = m.blocked && m.status === 'not_started'
             const button = (
@@ -105,6 +118,12 @@ export default function MilestonesTab({ project, manage, extra }) {
         <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
           <Button variant="contained" startIcon={<Add />} onClick={() => setEditing({ milestone: null })}>Add milestone</Button>
         </Stack>
+      ) : null}
+      {project.work_mode === 'pull' ? (
+        <Alert severity="info">
+          This project works in pull mode: team members claim milestones that are ready to start and have nobody on them.
+          Claiming one makes you its owner and lets the manager know.
+        </Alert>
       ) : null}
       {warning ? <Alert severity="warning" onClose={() => setWarning('')}>{warning}</Alert> : null}
       <ErrorAlert error={milestones.error} onRetry={() => milestones.refetch()} />

@@ -58,4 +58,11 @@ describe('PersonProfilePage', () => {
     renderProfile(users.employee, null, 404)
     expect(await screen.findByText('Profile not available')).toBeInTheDocument()
   })
+
+  test('shows the department the person is in', async () => {
+    const body = profile()
+    renderProfile(users.admin, { ...body, user: { ...body.user, department: { id: 'd1', name: 'Technology' } } })
+    const label = await screen.findByText('Department')
+    expect(within(label.parentElement).getByText('Technology')).toBeInTheDocument()
+  })
 })

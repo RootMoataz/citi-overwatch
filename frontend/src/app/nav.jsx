@@ -1,4 +1,5 @@
 import AssignmentTurnedIn from '@mui/icons-material/AssignmentTurnedIn'
+import Apartment from '@mui/icons-material/ApartmentOutlined'
 import Dashboard from '@mui/icons-material/DashboardOutlined'
 import Folder from '@mui/icons-material/FolderOutlined'
 import Groups from '@mui/icons-material/GroupsOutlined'
@@ -21,6 +22,7 @@ export const NAV = [
   { to: '/allocation', label: 'Allocation', icon: <ViewTimeline />, action: 'allocation.view' },
   { to: '/requests', label: 'Project requests', icon: <PostAdd />, action: 'requests.view' },
   { to: '/people', label: 'People', icon: <Groups />, action: 'people.view' },
+  { to: '/departments', label: 'Departments', icon: <Apartment />, action: 'departments.manage' },
   { to: '/audit', label: 'Audit log', icon: <History />, action: 'audit.view' },
   { to: '/archive', label: 'Archive', icon: <Inventory />, action: 'archive.view' },
 ]

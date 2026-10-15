@@ -266,3 +266,41 @@ flowchart TD
 - **UI:** [`SmartInsightsPanel.jsx`](../../frontend/src/features/dashboard/SmartInsightsPanel.jsx). Each row has a severity icon and colour plus a *High/Medium/Low* chip (so colour isn't the only signal), the title, the detail and a link. With nothing to say it shows "No suggestions right now". It shares the dashboard's query key, so approvals and project edits refresh it.
 
 **Worked example (demo data, as `manager.demo`):** Eli has 45h logged this week (*high*); Ana, on the same project, has 0h, so she's suggested to take some of his work (*medium*); Ben's hours from last Thursday are still pending (*medium*); and Ana has had two entries rejected this month (*low*).
+
+## 11. Pull mode: claiming a milestone
+
+Each project works in **push** mode (the default: its manager assigns people, as before) or **pull** mode, set by the project's manager or an admin in the project dialog. In a pull project, people on the team pick up ready work themselves.
+
+```mermaid
+flowchart TD
+  A["POST /milestones/{id}/claim"] --> V{can see the project?}
+  V -- no --> N404[404]
+  V -- yes --> P{project in pull mode?}
+  P -- no --> E1["409 NOT_PULL_PROJECT"]
+  P -- yes --> M{caller on the team?}
+  M -- no --> E2["403 NOT_A_MEMBER"]
+  M -- yes --> L["BEGIN; SELECT the milestone … FOR UPDATE<br/>(a second claim waits here)"]
+  L --> R["claim_blocker(): not started, not archived,<br/>every predecessor completed, nobody on it"]
+  R -- not ready --> E3["409 NOT_READY"]
+  R -- someone on it --> E4["409 ALREADY_CLAIMED"]
+  R -- ok --> W["INSERT milestone_assignees role = 'primary'<br/>audit claim (actor = the claimer)<br/>MILESTONE_CLAIMED to the project manager; COMMIT"]
+```
+
+- **Code:** the eligibility check is a pure function, `claim_blocker()` in [`app/rules/claim.py`](../../backend/v1/app/rules/claim.py). `claim_milestone()` in [`app/features/milestones/service.py`](../../backend/v1/app/features/milestones/service.py) locks the milestone row, re-reads its status, assignees and predecessors, and writes the assignment, the audit entry and the notification in one transaction.
+- **Race:** the row lock means two claims at once can't both win. The second waits for the first to commit, then sees an assignee and gets `409 ALREADY_CLAIMED` (tested with two real database connections in `tests/integration/test_claim.py`).
+- **Who can claim:** active team members only. The manager and admins (unless they're on the team) assign through the milestone dialog, as in push mode, which still works in pull projects.
+- **The 40-hour cap is unchanged:** claimers are already on the team, so their planned hours don't move; the cap is checked when someone joins a team (section 8). Manager assignments don't check it either.
+- **The list says what's claimable:** each milestone has `claimable` (pull project, ready, nobody on it) and `can_claim` (claimable and the caller is on the team), from the same `claim_blocker()`.
+- **UI:** [`MilestonesTab.jsx`](../../frontend/src/features/milestones/MilestonesTab.jsx) shows a short pull-mode explanation and a **Claim** button on each milestone the viewer can claim; a lost race shows the server's message on that card. The manager's bell links to the project's milestones.
+- **Example (demo data):** *Beacon Mobile App* is in pull mode. Gia and Hugo are on its team; *Design* has nobody on it and nothing to wait on, so either can claim it. *Prototype* waits on *Design*, so it can't be claimed until *Design* is completed.
+
+## 12. The dashboard's department filter
+
+Admins keep a list of departments (the **Departments** page); people (set by an admin on the person's page) and projects (set by the project's manager or an admin) can each be in one.
+
+- **Filtered on the server:** the dashboard sends `GET /dashboard?department=<id>`. [`visible_projects()`](../../backend/v1/app/features/projects/service.py) adds `p.department_id = :dept` to the same visibility query, so the status counts, risk section, active-projects table, deliverables, dependency links and budget chart all come from that department's projects. `over_allocated` keeps only that department's people, and `pending_approvals` only entries on its projects.
+- **Why the server:** the response's milestone lists and budgets are built from the visible projects, so filtering the rows once there keeps every widget consistent, and nothing outside the department is sent.
+- **Allocation widget:** `/allocations` returns each person's `department_id`, and the dashboard's "busiest people" table hides people from other departments.
+- **The choice is in the URL** (`/?department=<id>`), so a filtered dashboard can be shared or reloaded. "All departments" removes it. The filter only appears once there's at least one department.
+- **Not filtered:** the Smart insights panel (section 10) still covers everything you can see.
+- **Code:** [`DashboardPage.jsx`](../../frontend/src/features/dashboard/DashboardPage.jsx), [`app/features/departments/`](../../backend/v1/app/features/departments/) and [`DepartmentsPage.jsx`](../../frontend/src/features/departments/DepartmentsPage.jsx).

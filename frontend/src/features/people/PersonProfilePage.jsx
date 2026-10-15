@@ -61,6 +61,7 @@ export default function PersonProfilePage() {
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Job title" value={p.job_title} /></Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Role" value={ROLE[p.role]} /></Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Reports to" value={p.manager?.name} /></Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Department" value={p.department?.name} /></Grid>
           {'salary' in p ? <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Annual salary" value={formatMoney(p.salary)} /></Grid> : null}
         </Grid>
       </Paper>

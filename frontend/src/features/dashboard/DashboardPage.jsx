@@ -1,11 +1,11 @@
 import {
-  Box, Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, Skeleton, Stack, Table, TableBody, TableCell,
-  TableHead, TableRow, Typography,
+  Box, Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, MenuItem, Skeleton, Stack, Table, TableBody,
+  TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
 import { BarChart } from '@mui/x-charts/BarChart'
 import { useId } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
-import { useAllocations, useDashboard } from '../../api/queries.js'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
+import { useAllocations, useDashboard, useDepartments } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -105,11 +105,27 @@ function Risk({ atRisk }) {
   )
 }
 
+/** Narrows the project widgets and the people lists to one department; the choice lives in ?department=. */
+function DepartmentFilter({ value, onChange }) {
+  const departments = useDepartments()
+  const items = departments.data?.items ?? []
+  if (!items.length) return null
+  return (
+    <TextField select size="small" label="Department" value={value} onChange={(e) => onChange(e.target.value)} sx={{ minWidth: 200 }}>
+      <MenuItem value="">All departments</MenuItem>
+      {items.map((d) => <MenuItem key={d.id} value={String(d.id)}>{d.name}</MenuItem>)}
+    </TextField>
+  )
+}
+
 export default function DashboardPage() {
   const { user } = useSession()
   const approver = can(user, 'approvals.view')
-  const dashboard = useDashboard()
+  const [params, setParams] = useSearchParams()
+  const department = params.get('department') ?? ''
+  const dashboard = useDashboard(department)
   const allocations = useAllocations(mondayOf(new Date()), approver)
+  const pickDepartment = (id) => setParams(id ? { department: id } : {}, { replace: true })
 
   if (dashboard.isLoading) {
     return <Grid container spacing={2}>{[0, 1, 2, 3].map((i) => <Grid key={i} size={{ xs: 12, md: 6 }}><Skeleton variant="rounded" height={220} /></Grid>)}</Grid>
@@ -117,15 +133,18 @@ export default function DashboardPage() {
   if (dashboard.error) return <ErrorAlert error={dashboard.error} onRetry={() => dashboard.refetch()} />
   const d = dashboard.data
   const active = d.projects.filter((p) => p.status === 'active')
-  const busiest = [...(allocations.data ?? [])].sort((a, b) => b.utilization_pct - a.utilization_pct).slice(0, 6)
+  const busiest = [...(allocations.data ?? [])].filter((r) => !department || String(r.user.department_id) === department).sort((a, b) => b.utilization_pct - a.utilization_pct).slice(0, 6)
 
   return (
     <>
       <PageHeader title={`Hello, ${user.first_name}`} subtitle="Live view of delivery health. Refreshes every 30 seconds."
-        actions={approver && d.pending_approvals ? (
-          <Button component={RouterLink} to="/approvals" variant="contained" color="warning">
-            {d.pending_approvals} waiting for your approval
-          </Button>) : null} />
+        actions={<>
+          <DepartmentFilter value={department} onChange={pickDepartment} />
+          {approver && d.pending_approvals ? (
+            <Button component={RouterLink} to="/approvals" variant="contained" color="warning">
+              {d.pending_approvals} waiting for your approval
+            </Button>) : null}
+        </>} />
       <Grid container spacing={2}>
         <Grid size={12}>
           <Risk atRisk={d.at_risk} />
