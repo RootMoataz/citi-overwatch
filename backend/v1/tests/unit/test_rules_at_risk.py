@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal as D
 
-from app.rules.at_risk import at_risk_reasons
+from app.rules.at_risk import at_risk_reasons, weighted_progress
 
 TODAY = date(2026, 10, 13)
 
@@ -13,8 +13,8 @@ def reasons(**overrides):
     return at_risk_reasons(**args)
 
 
-def ms(end, status="in_progress"):
-    return {"end_date": end, "status": status}
+def ms(end, status="in_progress", difficulty="medium"):
+    return {"end_date": end, "status": status, "difficulty": difficulty}
 
 
 def test_healthy_project_has_no_reasons():
@@ -58,3 +58,25 @@ def test_completed_or_archived_never_at_risk():
     late = dict(predicted_end=date(2026, 1, 1), consumed=D(1000))
     assert reasons(status="completed", **late) == []
     assert reasons(is_archived=True, **late) == []
+
+
+def test_weighted_progress_uses_difficulty_weights():
+    later = date(2026, 11, 1)
+    assert weighted_progress([]) == (0, 0)
+    assert weighted_progress([ms(later, "completed", "easy"), ms(later, "in_progress", "hard")]) == (1, 4)
+    assert weighted_progress([ms(later, "completed", "hard"), ms(later, "in_progress", "easy")]) == (3, 4)
+    assert weighted_progress([ms(later, "completed"), ms(later)]) == (2, 4)  # all medium = plain count
+
+
+def test_weighted_progress_treats_missing_difficulty_as_medium():
+    assert weighted_progress([{"end_date": date(2026, 11, 1), "status": "completed"}]) == (2, 2)
+
+
+def test_burn_uses_weighted_done_percent():
+    later = date(2026, 11, 1)
+    easy_done = [ms(later, "completed", "easy"), ms(later, "in_progress", "hard")]  # 25% weighted, 50% by count
+    assert reasons(consumed=D(450), milestones=easy_done) == ["BUDGET_BURN"]      # 45 - 25 = 20
+    assert reasons(consumed=D(449), milestones=easy_done) == []
+    hard_done = [ms(later, "completed", "hard"), ms(later, "in_progress", "easy")]  # 75% weighted
+    assert reasons(consumed=D(940), milestones=hard_done) == []                   # 94 - 75 = 19
+    assert reasons(consumed=D(950), milestones=hard_done) == ["BUDGET_BURN"]

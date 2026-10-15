@@ -114,12 +114,13 @@ def _load(conn) -> None:
             RETURNING *""", n=name, desc=description, s=start, e=end, b=Decimal(budget), st=status,
             m=people[manager]["id"], c=people["admin.demo"]["id"], done=completed)
 
-    def milestone(proj, name, start, end, status, description=""):
+    def milestone(proj, name, start, end, status, description="", difficulty="medium"):
         return query_one(conn, """
-            INSERT INTO milestones (project_id, name, description, start_date, end_date, status, completed_at)
+            INSERT INTO milestones (project_id, name, description, start_date, end_date, status, completed_at,
+                                    difficulty)
             VALUES (:p, :n, :desc, :s, :e, CAST(:st AS milestone_status),
-                    CASE WHEN :st = 'completed' THEN now() END)
-            RETURNING *""", p=proj["id"], n=name, desc=description, s=start, e=end, st=status)
+                    CASE WHEN :st = 'completed' THEN now() END, :dif)
+            RETURNING *""", p=proj["id"], n=name, desc=description, s=start, e=end, st=status, dif=difficulty)
 
     def member(proj, username, hours):
         conn.run("INSERT INTO project_members (project_id, user_id, planned_hours_per_week) VALUES (:p, :u, :h)",
@@ -152,9 +153,11 @@ def _load(conn) -> None:
     # 1. Healthy active project with a three-step dependency chain.
     apollo = project("Apollo Data Migration", "manager.demo", "active", d(-90), d(75), 250000,
                      "Move customer records from the legacy warehouse to the new platform.")
-    discovery = milestone(apollo, "Discovery", d(-90), d(-60), "completed", "Inventory every legacy table.")
+    discovery = milestone(apollo, "Discovery", d(-90), d(-60), "completed", "Inventory every legacy table.",
+                          "easy")
     mapping = milestone(apollo, "Schema Mapping", d(-59), d(10), "in_progress", "Map legacy fields to the new model.")
-    cutover = milestone(apollo, "Cutover", d(11), d(60), "not_started", "Switch traffic to the new platform.")
+    cutover = milestone(apollo, "Cutover", d(11), d(60), "not_started", "Switch traffic to the new platform.",
+                        "hard")
     depends(mapping, discovery)
     depends(cutover, mapping)
     for username, hours in (("employee.demo", 30), ("ana.ruiz", 20), ("ben.okafor", 20), ("chloe.park", 15)):
@@ -166,8 +169,8 @@ def _load(conn) -> None:
     # 2. At-risk project: past its predicted end with an overdue milestone.
     atlas = project("Atlas Customer Portal", "riley.chen", "active", d(-120), d(-4), 60000,
                     "Self-service portal for customer account changes.")
-    requirements = milestone(atlas, "Requirements", d(-120), d(-90), "completed")
-    build = milestone(atlas, "Build", d(-89), d(-8), "in_progress")
+    requirements = milestone(atlas, "Requirements", d(-120), d(-90), "completed", difficulty="easy")
+    build = milestone(atlas, "Build", d(-89), d(-8), "in_progress", difficulty="hard")
     launch = milestone(atlas, "Launch", d(-7), d(-4), "not_started")
     depends(build, requirements)
     depends(launch, build)
@@ -184,13 +187,13 @@ def _load(conn) -> None:
     member(beacon, "hugo.lee", 20)
     cobalt = project("Cobalt Infrastructure Upgrade", "riley.chen", "on_hold", d(-30), d(120), 150000,
                      "Replace end-of-life network hardware.")
-    assessment = milestone(cobalt, "Assessment", d(-30), d(10), "in_progress")
+    assessment = milestone(cobalt, "Assessment", d(-30), d(10), "in_progress", difficulty="easy")
     for username in ("isla.nguyen", "jack.brown", "finn.walsh"):
         member(cobalt, username, 20)
     assign(assessment, "isla.nguyen", "jack.brown")
     delta = project("Delta Compliance Audit", "manager.demo", "completed", d(-200), d(-30), 40000,
                     "Annual controls audit.", completed=True)
-    audit = milestone(delta, "Audit Fieldwork", d(-200), d(-30), "completed")
+    audit = milestone(delta, "Audit Fieldwork", d(-200), d(-30), "completed", difficulty="hard")
     member(delta, "kira.sato", 20)
     member(delta, "leo.martin", 20)
     assign(audit, "kira.sato", "leo.martin")

@@ -44,11 +44,12 @@ def dashboard(conn, ctx: Ctx) -> dict:
 
     overdue, due_soon = [], []
     if ids:
-        milestones = query(conn, """SELECT id, project_id, name, end_date, status FROM milestones
+        milestones = query(conn, """SELECT id, project_id, name, end_date, status, difficulty FROM milestones
                                     WHERE project_id = ANY(CAST(:ids AS uuid[])) AND NOT is_archived
                                       AND status <> 'completed' ORDER BY end_date""", ids=ids)
         for m in milestones:
             entry = {"id": m["id"], "name": m["name"], "end_date": m["end_date"], "status": m["status"],
+                     "difficulty": m["difficulty"],
                      "project": {"id": m["project_id"], "name": by_id[str(m["project_id"])]["name"]}}
             if m["end_date"] < today:
                 overdue.append(entry)

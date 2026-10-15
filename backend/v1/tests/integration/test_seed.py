@@ -101,3 +101,9 @@ def test_create_admins_op_makes_ready_admin_logins_and_skips_existing(client, co
         "username": "admin.demo2", "password": result["created"][0]["password"]})
     assert status == 200
     assert body["user"]["role"] == "admin" and body["user"]["must_change_password"] is False
+
+
+def test_seed_milestones_have_a_mix_of_difficulties(conn):
+    seed(conn)
+    difficulties = {r["difficulty"] for r in query(conn, "SELECT DISTINCT difficulty FROM milestones")}
+    assert difficulties == {"easy", "medium", "hard"}

@@ -11,7 +11,7 @@ from app.ctx import Ctx
 from app.db import query, query_one, transaction
 from app.features.common import conflict_from
 from app.http import ApiError
-from app.rules.at_risk import at_risk_reasons
+from app.rules.at_risk import at_risk_reasons, weighted_progress
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
 
 STATUSES = ("planned", "active", "on_hold", "completed")
@@ -52,10 +52,11 @@ def _milestones_by_project(conn, ids: list[str]) -> dict[str, list[dict]]:
     out: dict[str, list[dict]] = {i: [] for i in ids}
     if not ids:
         return out
-    rows = query(conn, """SELECT project_id, end_date, status FROM milestones
+    rows = query(conn, """SELECT project_id, end_date, status, difficulty FROM milestones
                           WHERE project_id = ANY(CAST(:ids AS uuid[])) AND NOT is_archived""", ids=ids)
     for r in rows:
-        out[str(r["project_id"])].append({"end_date": r["end_date"], "status": r["status"]})
+        out[str(r["project_id"])].append({"end_date": r["end_date"], "status": r["status"],
+                                          "difficulty": r["difficulty"]})
     return out
 
 
@@ -64,14 +65,15 @@ def _pct(part: Decimal, whole: Decimal) -> float:
 
 
 def decorate(project: dict, milestones: list[dict], consumed: Decimal) -> dict:
-    """Project row → API shape with consumed, percentages and at-risk reasons."""
-    done = sum(1 for m in milestones if m["status"] == "completed")
+    """Project row → API shape with consumed, percentages and at-risk reasons.
+    Progress is weighted by milestone difficulty (easy 1, medium 2, hard 3)."""
+    done, total = weighted_progress(milestones)
     return {
         "id": project["id"], "name": project["name"], "description": project["description"],
         "status": project["status"], "start_date": project["start_date"],
         "predicted_end_date": project["predicted_end_date"], "budget": project["budget"],
         "consumed": consumed, "budget_pct": _pct(consumed, project["budget"]),
-        "progress_pct": _pct(Decimal(done), Decimal(len(milestones))),
+        "progress_pct": _pct(Decimal(done), Decimal(total)),
         "at_risk_reasons": at_risk_reasons(
             status=project["status"], is_archived=project["is_archived"],
             predicted_end=project["predicted_end_date"], budget=project["budget"],

@@ -18,7 +18,8 @@ from app.rules.routing import pick_support_milestone
 from app.validation import as_date, as_enum, as_str, as_uuid, require
 
 STATUSES = ("not_started", "in_progress", "ready_for_review", "completed")
-EDITABLE = {"name", "description", "start_date", "end_date"}
+DIFFICULTIES = ("easy", "medium", "hard")
+EDITABLE = {"name", "description", "start_date", "end_date", "difficulty"}
 
 
 def _project_milestones(conn, project_id: str) -> list[dict]:
@@ -66,7 +67,7 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
         out.append({
             "id": m["id"], "project_id": m["project_id"], "name": m["name"], "description": m["description"],
             "start_date": m["start_date"], "end_date": m["end_date"], "status": m["status"],
-            "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
+            "difficulty": m["difficulty"], "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
             "blocked": blocked, "predecessors": preds, "assignees": people, "supporting_ids": supporting.get(mid, []),
             "is_assignee": any(str(a["id"]) == ctx.user_id for a in people),
             "completed_at": m["completed_at"], "is_archived": m["is_archived"],
@@ -103,11 +104,12 @@ def create_milestone(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
     data = {"name": as_str(body["name"], "name", max_len=120),
             "description": as_str(body.get("description") or "", "description", min_len=0, max_len=4000),
             "start_date": as_date(body["start_date"], "start_date"),
-            "end_date": as_date(body["end_date"], "end_date")}
+            "end_date": as_date(body["end_date"], "end_date"),
+            "difficulty": as_enum(body.get("difficulty", "medium"), "difficulty", DIFFICULTIES)}
     _check_dates(project, data["start_date"], data["end_date"])
     with transaction(conn):
-        row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date)
-                                 VALUES (CAST(:p AS uuid), :name, :description, :start_date, :end_date)
+        row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty)
+                                 VALUES (CAST(:p AS uuid), :name, :description, :start_date, :end_date, :difficulty)
                                  RETURNING id""", p=project_id, **data)
         record(conn, ctx, "create", "milestone", str(row["id"]), after=data)
     return _view(conn, ctx, row["id"])
@@ -132,6 +134,8 @@ def update_milestone(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
     for field in ("start_date", "end_date"):
         if field in body:
             changes[field] = as_date(body[field], field)
+    if "difficulty" in body:
+        changes["difficulty"] = as_enum(body["difficulty"], "difficulty", DIFFICULTIES)
     _check_dates(project, changes.get("start_date", before["start_date"]), changes.get("end_date", before["end_date"]))
     if changes:
         sets = ", ".join(f"{k} = :{k}" for k in changes)

@@ -81,7 +81,7 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
         ORDER BY p.start_date DESC, lower(p.name)""", u=uid)
     # Assigned milestones, plus any they logged time on (leaving a team removes the assignment, not the hours).
     milestones = query(conn, f"""
-        SELECT m.id, m.name, m.status, m.start_date, m.end_date, m.is_archived, a.role,
+        SELECT m.id, m.name, m.status, m.difficulty, m.start_date, m.end_date, m.is_archived, a.role,
                p.id AS project_id, p.name AS project_name, {HOURS}
         FROM milestones m JOIN projects p ON p.id = m.project_id
         LEFT JOIN milestone_assignees a ON a.milestone_id = m.id AND a.user_id = CAST(:u AS uuid)
@@ -102,8 +102,8 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
                       "planned_hours_per_week": p["planned_hours_per_week"], "on_team": p["on_team"],
                       "logged_hours": p["logged"], "approved_hours": p["approved"], "can_open": can_open(p["id"])}
                      for p in projects],
-        "milestones": [{"id": m["id"], "name": m["name"], "status": m["status"], "start_date": m["start_date"],
-                        "end_date": m["end_date"], "is_archived": m["is_archived"], "role": m["role"],
+        "milestones": [{"id": m["id"], "name": m["name"], "status": m["status"], "difficulty": m["difficulty"],
+                        "start_date": m["start_date"], "end_date": m["end_date"], "is_archived": m["is_archived"], "role": m["role"],
                         "project": {"id": m["project_id"], "name": m["project_name"]},
                         "logged_hours": m["logged"], "approved_hours": m["approved"],
                         "can_open": can_open(m["project_id"])} for m in milestones],

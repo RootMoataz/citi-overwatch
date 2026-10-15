@@ -255,3 +255,16 @@ def test_milestone_costs_follow_budget_tab_visibility(client, conn):
     assert client.request("GET", path, token=token_for(conn, outsider))[0] == 404
     admin = make_user(conn, role="admin")
     assert client.request("GET", path, token=token_for(conn, admin))[1]["hours_visible"] is True
+
+
+def test_progress_is_weighted_by_difficulty(client, conn):
+    mgr = make_user(conn, role="manager")
+    project = make_project(conn, mgr)
+    make_milestone(conn, project, status="completed", difficulty="easy")       # weight 1, done
+    make_milestone(conn, project, status="in_progress", difficulty="hard")     # weight 3
+    make_milestone(conn, project, status="completed", difficulty="hard", archived=True)  # not counted
+    url = f"/projects/{project['id']}"
+    assert client.request("GET", url, token=token_for(conn, mgr))[1]["progress_pct"] == 25.0
+    assert client.request("GET", f"{url}/summary", token=token_for(conn, mgr))[1]["progress_pct"] == 25.0
+    listed = client.request("GET", "/projects", token=token_for(conn, mgr))[1]["items"]
+    assert [p["progress_pct"] for p in listed] == [25.0]

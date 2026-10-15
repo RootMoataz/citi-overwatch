@@ -229,3 +229,49 @@ def test_archive_and_restore(client, conn):
     status, body, _, _ = client.request("POST", f"/milestones/{ms['id']}/restore", token=token_for(conn, admin))
     assert status == 200 and body["name"] == "Gone"
     assert [m["name"] for m in listing(client, conn, mgr, project)] == ["Gone"]
+
+
+def test_difficulty_defaults_to_medium_and_is_set_on_create(client, conn):
+    mgr, _, _, project = setup(conn)
+    url = f"/projects/{project['id']}/milestones"
+    dates = {"start_date": "2026-02-01", "end_date": "2026-03-01"}
+    status, body, _, _ = client.request("POST", url, token=token_for(conn, mgr), json={"name": "Plain", **dates})
+    assert (status, body["difficulty"]) == (201, "medium")
+    status, body, _, _ = client.request("POST", url, token=token_for(conn, mgr),
+                                        json={"name": "Tough", "difficulty": "hard", **dates})
+    assert (status, body["difficulty"]) == (201, "hard")
+    audit = query(conn, "SELECT changes FROM audit_log WHERE entity_id = :i AND action = 'create'", i=body["id"])
+    assert audit[0]["changes"]["after"]["difficulty"] == "hard"
+    assert {m["name"]: m["difficulty"] for m in listing(client, conn, mgr, project)} == {"Plain": "medium",
+                                                                                          "Tough": "hard"}
+
+
+def test_difficulty_rejects_bad_values(client, conn):
+    mgr, _, _, project = setup(conn)
+    ms = make_milestone(conn, project)
+    for bad in ("extreme", "Hard", "", None, 3):
+        status, body, _, _ = client.request("POST", f"/projects/{project['id']}/milestones", token=token_for(conn, mgr),
+                                            json={"name": "X", "start_date": "2026-02-01", "end_date": "2026-03-01",
+                                                  "difficulty": bad})
+        assert (status, body["error"]["details"]) == (400, {"difficulty": "invalid_choice"}), bad
+        status, body, _, _ = client.request("PUT", f"/milestones/{ms['id']}", token=token_for(conn, mgr),
+                                            json={"difficulty": bad})
+        assert (status, body["error"]["details"]) == (400, {"difficulty": "invalid_choice"}), bad
+
+
+def test_manager_and_admin_edit_difficulty_and_it_is_audited(client, conn):
+    mgr, assignee, _, project = setup(conn)
+    admin = make_user(conn, role="admin")
+    ms = make_milestone(conn, project)
+    assign(conn, ms, assignee)
+    url = f"/milestones/{ms['id']}"
+    status, body, _, _ = client.request("PUT", url, token=token_for(conn, mgr), json={"difficulty": "easy"})
+    assert (status, body["difficulty"]) == (200, "easy")
+    status, body, _, _ = client.request("PUT", url, token=token_for(conn, admin), json={"difficulty": "hard"})
+    assert (status, body["difficulty"]) == (200, "hard")
+    assert client.request("PUT", url, token=token_for(conn, assignee), json={"difficulty": "easy"})[0] == 403
+    rows = query(conn, """SELECT changes FROM audit_log WHERE entity_id = :i AND action = 'update'
+                          ORDER BY created_at""", i=str(ms["id"]))
+    assert [(r["changes"]["before"], r["changes"]["after"]) for r in rows] == [({"difficulty": "medium"}, {"difficulty": "easy"}),
+                                                          ({"difficulty": "easy"}, {"difficulty": "hard"})]
+    assert client.request("GET", url, token=token_for(conn, assignee))[1]["difficulty"] == "hard"
