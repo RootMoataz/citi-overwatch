@@ -16,6 +16,7 @@ import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
 import StatTile from '../../components/StatTile.jsx'
 import MessageButton from '../messages/MessageButton.jsx'
 import SkillsCard from './SkillsCard.jsx'
+import YourManagerCard from './YourManagerCard.jsx'
 
 const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
 
@@ -77,6 +78,7 @@ export default function PersonProfilePage() {
           {'salary' in p ? <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Annual salary" value={formatMoney(p.salary)} /></Grid> : null}
         </Grid>
       </Paper>
+      {own ? <YourManagerCard manager={p.manager} sx={{ mb: 2 }} /> : null}
       <SkillsCard person={p} skills={skills ?? []} canEdit={Boolean(canEditSkills)} />
       <Typography variant="subtitle1" component="h2" sx={{ mb: 1 }}>Week of {formatDate(week.week_start)}</Typography>
       <Grid container spacing={2} sx={{ mb: 2 }}>
