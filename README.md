@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 958 backend (307 unit · 651 integration, 97% coverage) · 688 frontend component · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,041 backend (349 unit · 692 integration, 98% coverage) · 716 frontend component (61 files) · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -29,32 +29,83 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 
 Highlights:
 
-- **Three roles.** Admin, manager and employee, enforced on the server and reflected in the UI ([permission matrix](docs/project/USER_STORIES.md#roles-at-a-glance)).
+- **Four roles plus a public demo.** Admin, manager, employee and a read-only executive, enforced on the server and reflected in the UI ([permission matrix](docs/project/USER_STORIES.md#roles-at-a-glance)). A public demo admin gets 5-minute sessions and a fail-closed list of allowed writes.
 - **Accounts.** Admins create them in a five-step wizard with live username checks and a generated password. The welcome email carries a temporary password, which must be changed at first sign-in.
-- **Timesheets.** People log hours on the milestones they're assigned to. Every hour needs the project manager's approval before it counts toward the budget. Going over 40 hours is a warning, not a block.
-- **Approvals.** Each pending entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
+- **Timesheets.** Employees (and managers or admins an admin has switched to "Tracks own hours") log hours on the milestones they're assigned to. Every hour needs the project manager's (or delegate's) approval before it counts toward the budget. Going over 40 hours is a warning, not a block. Admins submit approved pay periods to HR, and later edits come back as corrections.
+- **Approvals.** The Timesheets page groups pending hours by person-week. Each entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
 - **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
 - **Nothing is ever deleted.** Records are archived and an admin can restore them. Every change is written to the **audit log**.
 - **Responsive.** A sidebar on desktop, a drawer on phones, and tables that become cards on small screens.
 
+- **Planning and milestones.** Department templates, a Backlog → Ready → Scheduled planning board with a finalize checklist, priority and difficulty, skills, auto-routing when work is handed in or completed, and kickbacks when an employee is blocked.
+- **Messages, Puppy and the command palette.** One-to-one and milestone threads under clear who-may-message-whom rules, a rule-based assistant that summarises what needs you, and Ctrl+K search that understands phrases like "at-risk projects in Technology". None of it uses an AI service.
+
+## Feature tour
+
+Screenshots from the live site with the demo data (light mode unless noted).
+
+### Signing in
+
+| | |
+|---|---|
+| ![Sign-in page: the ACME Scout brand panel on the left, the sign-in form and four one-click demo buttons on the right](docs/images/login.png) | ![The same sign-in page in dark mode](docs/images/login-dark.png) |
+| Sign-in with one-click demo logins | Dark mode follows the system or the account menu |
+
+### Employee
+
+| | |
+|---|---|
+| ![My week: hours logged against the 40-hour week, and the employee's milestones with status, priority and difficulty chips and a Start timer button](docs/images/my-week.png) | ![Kick back dialog on the Hypercare milestone: a category and an explanation, with Cancel and Kick back buttons](docs/images/kickback.png) |
+| **My week**: hours so far, assigned milestones, a start/stop timer | **Kick back** a blocked milestone to the manager with a reason |
+
 <p>
-  <img src="docs/images/approvals.png" alt="Approvals with the budget impact breakdown" width="68%">
-  <img src="docs/images/timesheet-mobile.png" alt="The timesheet on a phone" width="28%">
+  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone: week picker, the Schema Mapping row with hours per day, a Start timer button and Tracked/Manual source chips" width="30%">
 </p>
+
+### Manager
+
+| | |
+|---|---|
+| ![Manager dashboard: approvals waiting, risk tiles, smart insights and active projects](docs/images/dashboard.png) | ![Timesheets To review filtered to flagged weeks: Gia Rossi's entries with work notes, Same hours daily and Over plan red flags, and the tracked/manual share](docs/images/timesheets-review.png) |
+| **Dashboard**: approvals, risk, insights and project status | **Timesheets → To review**: red flags, work notes and the tracked share |
+| ![Beacon Mobile App planning board with Backlog, Ready and Scheduled columns of milestone cards](docs/images/planning-board.png) | ![Finalize the plan dialog listing six plan checks, two of them needing fixes](docs/images/finalize-checklist.png) |
+| **Planning board** for a planned project | **Finalize** checks before the project goes active |
+| ![Apollo Data Migration milestone Schema Mapping expanded: priority and difficulty chips, the people on it, the done-when checklist, required skills and pending hours](docs/images/milestones.png) | ![Apollo Data Migration Budget tab: planned, consumed and remaining budget, a forecast marker and cost by milestone](docs/images/budget.png) |
+| **Milestones** with priority, difficulty, people and details | **Budget**: consumed vs planned, forecast, cost per milestone |
+| ![Messages: the Schema Mapping discussion thread with Ana and Ben](docs/images/messages.png) | ![Puppy assistant Summary tab: what needs you, a tip and the top insight](docs/images/puppy.png) |
+| **Messages**: one-to-one and milestone discussions | **Puppy**: a rule-based summary of what needs you |
+
+![The manager dashboard in dark mode](docs/images/dark-mode.png)
+
+### Executive (read-only)
+
+| | |
+|---|---|
+| ![Organisation dashboard marked Read-only view, with a projects-by-status donut and risk tiles](docs/images/executive.png) | ![Audit log grouped by day, with readable sentences and before/after changes](docs/images/audit.png) |
+| **Organisation dashboard**: every project, no edits, no salaries | **Audit log**: who changed what, and when |
+
+![Command palette with the query "at-risk projects in Technology" interpreted as Projects · At risk · Technology](docs/images/palette.png)
+
+### Admin (public demo admin)
+
+| | |
+|---|---|
+| ![Control centre with the demo admin's countdown banner, admin shortcut tiles and projects by status](docs/images/control-centre.png) | ![Timesheets HR submission tab: pick a pay period, totals, and past submissions with a payroll CSV](docs/images/hr-submission.png) |
+| **Control centre** (the 5-minute demo banner is visible) | **HR submission**: pay periods, corrections and payroll CSV |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   B[Browser<br/>React + MUI] -->|"/ (static files)"| CF[CloudFront]
-  CF --> S3[S3 website bucket]
-  CF -->|"/api/v1/*"| L[Lambda 'v1'<br/>Python]
+  CF --> S3[S3 bucket<br/>React build]
+  CF -->|"/api/v1/*"| L["Lambda 'v1' (Function URL)<br/>Python, in the VPC"]
   L -->|pg8000, TLS| A[(Aurora PostgreSQL 17)]
-  L -.->|welcome and reset emails| SES[AWS SES]
   L --> CW[CloudWatch Logs<br/>one JSON line per request]
+  B -.->|"sign-in emails, report email<br/>(EmailJS relay)"| EJ[EmailJS]
 ```
 
-One Python Lambda (`backend/v1`) serves the whole API, organized by feature, with the business rules kept as pure functions in `app/rules/`. The React app is a static build on S3 behind the same CloudFront distribution, so the browser only ever talks to one origin. More detail is in [ARCHITECTURE.md](docs/project/ARCHITECTURE.md).
+One Python Lambda (`backend/v1`) serves the whole API, organized by feature, with the business rules kept as pure functions in `app/rules/`. The React app is a static build on S3 behind the same CloudFront distribution, so the app and API share one origin. The Lambda has no internet route, so emails go out from the browser through EmailJS. More detail is in [ARCHITECTURE.md](docs/project/ARCHITECTURE.md).
 
 ## Quick start (Windows, Git Bash)
 
@@ -107,8 +158,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 958 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 688 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,041 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 716 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint
@@ -164,7 +215,7 @@ aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-for
 - **Cost = approved hours × salary ÷ 2,080.** The rate is copied onto each entry when it's approved, so a raise doesn't rewrite past costs. Benefits and overhead aren't modelled.
 - **40 hours is a warning for logged time but a hard cap for planned time.** Managers can't plan anyone past 40 hours a week. People can log overtime, which shows as "Pending (Overtime requested from …)" and alerts the manager once.
 - **Pure-Python dependencies only** (`pg8000`, `PyJWT`, standard-library PBKDF2), so the Lambda package builds on Windows without Docker.
-- **Email on the live site:** the workshop Lambda's VPC has no route to SES. When an email can't be sent, the admin sees the temporary password once, with a copy button. Forgotten-password codes therefore only work locally.
+- **Email on the live site:** the workshop Lambda has no internet route and its pre-made role carries no SES permission, so the server can't send email. The admin's browser relays welcome and reset emails (and "Email this report") through EmailJS; if that isn't configured or fails, the admin sees the temporary password once, with a copy button. Forgotten-password codes are never relayed, so they only work locally.
 
 Every decision, with its reasoning and cost, is in [DECISIONS.md](docs/project/DECISIONS.md).
 
@@ -174,7 +225,7 @@ Every decision, with its reasoning and cost, is in [DECISIONS.md](docs/project/D
 |---|---|
 | [REQUIREMENTS.md](docs/project/REQUIREMENTS.md) | The brief, word for word, and the checklist of what's done |
 | [USER_STORIES.md](docs/project/USER_STORIES.md) | Stories per role and page, with acceptance criteria for loading, success and failure |
-| [ARCHITECTURE.md](docs/project/ARCHITECTURE.md) | Cloud and local diagrams, request lifecycle, request IDs and logging |
+| [ARCHITECTURE.md](docs/project/ARCHITECTURE.md) | Components, feature modules, operator ops, security model, key data flows, request lifecycle and logging |
 | [DATA_MODEL.md](docs/project/DATA_MODEL.md) | ER diagram and table notes |
 | [API.md](docs/project/API.md) | Every endpoint, example requests and responses, error codes |
 | [LOGIC_WALKTHROUGH.md](docs/project/LOGIC_WALKTHROUGH.md) | Diagrams of the key flows and rules, linked to the code |
