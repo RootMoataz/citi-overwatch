@@ -51,6 +51,7 @@ describe('executive: read-only leadership view', () => {
     http.get(`${API}/insights/smart`, () => HttpResponse.json([])),
     http.get(`${API}/departments`, () => HttpResponse.json({ items: [{ id: 'd1', name: 'Technology', is_archived: false }] })),
     http.get(`${API}/allocations`, () => HttpResponse.json([])),
+    http.get(`${API}/projects/status-counts`, () => HttpResponse.json({ planned: 1, active: 2, on_hold: 0, completed: 1, archived: 0, total: 4 })),
   ))
 
   test('the navigation lists only the read-only pages, in one group', () => {
@@ -79,6 +80,7 @@ describe('executive: read-only leadership view', () => {
     expect(screen.getByText('Read-only view')).toBeInTheDocument()
     expect((await screen.findAllByText('Apollo')).length).toBeGreaterThan(0)
     expect(screen.queryByRole('list', { name: /admin shortcuts/i })).not.toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: /projects by status/i })).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /approvals/i })).not.toBeInTheDocument()
     expect(approvalsAsked).toBe(false)
   })

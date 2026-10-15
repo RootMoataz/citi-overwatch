@@ -19,6 +19,14 @@ const items = [
 const renderArchive = () => renderAsUser(<ArchivePage />, { user: users.admin, route: '/archive', path: '/archive' })
 
 describe('ArchivePage', () => {
+  test('?type=project opens the archive filtered to projects', async () => {
+    server.use(http.get(`${API}/archive`, () => HttpResponse.json({ items })))
+    renderAsUser(<ArchivePage />, { user: users.admin, route: '/archive?type=project', path: '/archive' })
+    expect(await screen.findByRole('row', { name: /gone project/i })).toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /dropped milestone/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('row', { name: /lee leaver/i })).not.toBeInTheDocument()
+  })
+
   test('a manager sees their own archived projects read-only and can restore their milestones; no people', async () => {
     const managerItems = [
       { type: 'project', id: 'p7', name: 'Shelved Project', archived_at: '2026-10-13T12:00:00Z', archived_by: avery, can_restore: false },

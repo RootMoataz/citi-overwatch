@@ -2,6 +2,7 @@ import {
   Button, MenuItem, Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useArchive, useRestoreArchived } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
@@ -39,7 +40,9 @@ export default function ArchivePage() {
   const types = Object.entries(TYPES).filter(([t]) => everything || t !== 'user')
   const archive = useArchive()
   const restore = useRestoreArchived()
-  const [type, setType] = useState('')
+  // ?type=project (from the home page's projects-by-status card) opens the list already filtered.
+  const [params] = useSearchParams()
+  const [type, setType] = useState(() => (types.some(([t]) => t === params.get('type')) ? params.get('type') : ''))
   const [confirm, setConfirm] = useState(null)
   const [failure, setFailure] = useState(null)
   const leaving = useRedirectOnDenied(archive.error)

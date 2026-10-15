@@ -49,6 +49,7 @@ describe('HomePage by role', () => {
     http.get(`${API}/insights/smart`, () => HttpResponse.json([])),
     http.get(`${API}/departments`, () => HttpResponse.json({ items: [{ id: 'd1', name: 'Technology', is_archived: false }] })),
     http.get(`${API}/allocations`, () => HttpResponse.json([])),
+    http.get(`${API}/projects/status-counts`, () => HttpResponse.json({ planned: 1, active: 2, on_hold: 0, completed: 1, archived: 0, total: 4 })),
   ))
 
   test('employees get My week: hours against 40h, their milestones and what they can claim, not the dashboard', async () => {
@@ -159,6 +160,7 @@ describe('HomePage by role', () => {
     expect(tile(/open project requests/i)).toHaveAttribute('href', '/requests')
     await waitFor(() => expect(tile(/archive/i)).toHaveTextContent('3'))
     expect(tile(/audit log/i)).toHaveAttribute('href', '/audit')
+    expect(await screen.findByRole('region', { name: /projects by status/i })).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: /^risk$/i })).toBeInTheDocument()
   })
 })

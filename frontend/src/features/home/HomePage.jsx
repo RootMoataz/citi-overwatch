@@ -5,11 +5,13 @@ import DashboardPage from '../dashboard/DashboardPage.jsx'
 import ApprovalsPanel from './ApprovalsPanel.jsx'
 import ControlCentre from './ControlCentre.jsx'
 import MyWeekPage from './MyWeekPage.jsx'
+import ProjectStatusCard from './ProjectStatusCard.jsx'
 import { isReadOnly } from '../../lib/permissions.js'
 
 /** Each role lands somewhere different: employees on their week, managers on the dashboard with their approvals
  * queue pinned on top, admins on a control centre above the organisation-wide dashboard, and executives on that
- * same organisation-wide dashboard, marked read-only, without the admin shortcuts. */
+ * same organisation-wide dashboard, marked read-only, without the admin shortcuts. Admins and executives both get
+ * projects by status (archived included) at the top. */
 export default function HomePage() {
   const { user } = useSession()
   if (user.role === 'employee') return <MyWeekPage />
@@ -22,7 +24,8 @@ export default function HomePage() {
             <Chip size="small" variant="outlined" color="info" icon={<Visibility />} label="Read-only view" />
             <span>Hello, {user.first_name}. Live delivery health across the organisation.</span>
           </Stack>
-        )} />
+        )}
+        intro={<Box sx={{ mb: 3 }}><ProjectStatusCard /></Box>} />
     )
   }
   return (
@@ -31,6 +34,7 @@ export default function HomePage() {
       intro={(
         <Box sx={{ mb: 3 }}>
           <ControlCentre />
+          <Box sx={{ mt: 2 }}><ProjectStatusCard /></Box>
           <Typography variant="h3" component="h2" sx={{ mt: 4 }}>Organisation dashboard</Typography>
         </Box>
       )} />
