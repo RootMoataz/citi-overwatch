@@ -48,7 +48,7 @@ export default function ApprovalRow({ item, showContext = true }) {
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' } }}>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            <UserAvatar userId={item.user.id} name={item.user.name} size={24}
+            <UserAvatar userId={item.user.id} name={item.user.name}
               sx={{ display: 'inline-flex', verticalAlign: 'middle', mr: 1 }} />
             {item.user.name} · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}
             {showContext ? <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}> · {item.project.name} › {item.milestone.name}</Typography> : null}

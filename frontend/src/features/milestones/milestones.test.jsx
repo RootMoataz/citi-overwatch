@@ -171,6 +171,25 @@ describe('MilestonesTab', () => {
       .toEqual(['Ada Lovelace · Primary', 'Eli Employee · Supporting'])
   })
 
+  test('people sit on their own row, names in order, kept out of the dates line', async () => {
+    const ada = { id: 'u-ada', name: 'Ada Lovelace' }
+    server.use(...handlers([{ ...cutover, assignees: [me, ada], supporting_ids: [me.id] }, discovery]))
+    renderTab(users.manager, true)
+    const cut = await card('Cutover')
+    const dates = within(cut).getByText(/Jul 1, 2026/)
+    expect(dates).not.toHaveTextContent(/Ada|Eli/)
+    const row = within(cut).getByRole('group', { name: 'People on Cutover' }).parentElement
+    expect(row).toHaveTextContent(/Ada Lovelace, Eli Employee\s*Supporting/)
+    expect(within(await card('Discovery')).queryByText('Nobody assigned')).not.toBeInTheDocument()
+  })
+
+  test('a milestone with no assignees says so', async () => {
+    server.use(...handlers([cutover]))
+    renderTab(users.manager, true)
+    expect(within(await card('Cutover')).getByText('Nobody assigned')).toBeInTheDocument()
+    expect(within(await card('Cutover')).queryByRole('group', { name: 'People on Cutover' })).not.toBeInTheDocument()
+  })
+
   test('each milestone card shows its difficulty', async () => {
     server.use(...handlers())
     renderTab(users.employee, false)

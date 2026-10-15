@@ -16,6 +16,7 @@ import UserAvatar from '../../components/UserAvatar.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatHours, fullName } from '../../lib/format.js'
 import { memberSchema } from '../../lib/schemas.js'
+import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 
 function capMessage(name, err) {
   return `${name} is already planned for ${err.details.current_total}h of ${err.details.cap}h per week.`
@@ -104,7 +105,7 @@ export default function TeamTab({ project, manage }) {
                     onClick={() => setRemoving(m)}><Delete /></IconButton></Tooltip>
                 </Stack>
               ) : null}>
-                <ListItemAvatar sx={{ minWidth: 48 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={32} /></ListItemAvatar>
+                <ListItemAvatar sx={{ minWidth: 52 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={AVATAR_SIZE.row} /></ListItemAvatar>
                 <ListItemText primary={fullName(m.user)}
                   secondary={`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`} />
               </ListItem>

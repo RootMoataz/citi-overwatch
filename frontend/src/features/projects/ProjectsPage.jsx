@@ -24,10 +24,11 @@ import ProjectForm from './ProjectForm.jsx'
 
 const FILTERS = ['q', 'status', 'manager', 'at_risk']
 
-function Progress({ value }) {
+function Progress({ value, compact = false }) {
   return (
     <Stack direction="row" sx={{ alignItems: 'center', gap: 1, width: '100%' }}>
-      <LinearProgress variant="determinate" value={Math.min(value, 100)} sx={{ flexGrow: 1, height: 6, borderRadius: 3 }}
+      <LinearProgress variant="determinate" value={Math.min(value, 100)}
+        sx={{ flexGrow: 1, minWidth: compact ? 32 : 64, height: 6, borderRadius: 3 }}
         aria-label="Progress, weighted by milestone difficulty" />
       <Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right' }}>{formatPct(value)}</Typography>
     </Stack>
@@ -66,21 +67,25 @@ export default function ProjectsPage() {
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = projects.data?.items ?? []
+  // Sized to fit a 1366px laptop without sideways scrolling: names wrap, people stay on one line.
   const columns = [
-    { field: 'name', headerName: 'Project', flex: 1.6, minWidth: 200,
-      renderCell: ({ row }) => <Link component={RouterLink} to={`/projects/${row.id}`} underline="hover">{row.name}</Link> },
-    { field: 'status', headerName: 'Status', width: 140, renderCell: ({ value }) => <StatusChip status={value} /> },
-    { field: 'manager', headerName: 'Manager', flex: 1, minWidth: 160, valueGetter: (value) => value?.name,
+    { field: 'name', headerName: 'Project', flex: 1.2, minWidth: 132,
+      renderCell: ({ row }) => (
+        <Link component={RouterLink} to={`/projects/${row.id}`} underline="hover"
+          sx={{ whiteSpace: 'normal', lineHeight: 1.35, py: 0.5 }}>{row.name}</Link>
+      ) },
+    { field: 'status', headerName: 'Status', width: 112, renderCell: ({ value }) => <StatusChip status={value} /> },
+    { field: 'manager', headerName: 'Manager', flex: 1, minWidth: 172, valueGetter: (value) => value?.name,
       renderCell: ({ row }) => <PersonWithAvatar person={row.manager} /> },
-    { field: 'team', headerName: 'Team', width: 140, sortable: false,
-      renderCell: ({ row }) => <Box sx={{ py: 0.5 }}><TeamAvatars project={row} /></Box> },
+    { field: 'team', headerName: 'Team', width: 136, sortable: false,
+      renderCell: ({ row }) => <TeamAvatars project={row} /> },
     { field: 'progress_pct', headerName: 'Progress', description: `Milestones done, weighted by difficulty. ${PROGRESS_WEIGHTING}`,
-      flex: 1, minWidth: 160,
-      renderCell: ({ value }) => <Progress value={value} /> },
-    { field: 'budget_pct', headerName: 'Budget', width: 110, renderCell: ({ value }) => `${formatPct(value)} used` },
+      width: 104, renderCell: ({ value }) => <Progress value={value} compact /> },
+    { field: 'budget_pct', headerName: 'Budget', description: 'Share of the budget used so far', width: 84,
+      renderCell: ({ value }) => formatPct(value) },
     { field: 'predicted_end_date', headerName: 'Due', width: 120, valueFormatter: (value) => formatDate(value) },
-    { field: 'at_risk_reasons', headerName: 'Risk', flex: 1.4, minWidth: 220, sortable: false,
-      renderCell: ({ value }) => <Box sx={{ py: 1 }}><RiskBadges reasons={value} /></Box> },
+    { field: 'at_risk_reasons', headerName: 'Risk', flex: 1.2, minWidth: 172, sortable: false,
+      renderCell: ({ value }) => <Box sx={{ py: 0.5 }}><RiskBadges reasons={value} /></Box> },
   ]
 
   const canCreate = can(user, 'project.create')
@@ -124,7 +129,7 @@ export default function ProjectsPage() {
               <StatusChip status={row.status} />
             </Stack>
             <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-              <PersonWithAvatar person={row.manager} />
+              <PersonWithAvatar person={row.manager} sx={{ flex: 1 }} />
               <TeamAvatars project={row} />
             </Stack>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>

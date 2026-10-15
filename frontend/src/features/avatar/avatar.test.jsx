@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import AvatarStack from '../../components/AvatarStack.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
-import { colourFor, initials } from '../../lib/avatarLook.js'
+import { colourFor, initials, initialsFor, initialsStyle } from '../../lib/avatarLook.js'
 import { blobToBase64, centerSquare, sourceProblem } from '../../lib/avatarImage.js'
 import { renderWithProviders, users } from '../../test/render.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
@@ -57,6 +57,18 @@ describe('UserAvatar', () => {
     expect(initials('')).toBe('?')
   })
 
+  test('initials always fit their circle: one letter below 24px, text well under the diameter', () => {
+    expect(initialsFor('Ada Lovelace', 20)).toBe('A')
+    expect(initialsFor('Ada Lovelace', 24)).toBe('AL')
+    expect(initials('Mary Jane Watson')).toBe('MW')
+    for (const size of [20, 24, 28, 36, 56]) {
+      const style = initialsStyle(size)
+      expect(style.lineHeight).toBe(1)
+      // Two wide capitals ("MW") are roughly 1.7em across; they must clear a 2px ring on each side.
+      expect(style.fontSize * 1.7).toBeLessThanOrEqual(size - 4)
+    }
+  })
+
   test('fetches the photo once per user and version and shows it', async () => {
     photoIndex({ u1: '1700' })
     const seen = []
@@ -84,6 +96,13 @@ describe('AvatarStack', () => {
     const group = screen.getByRole('group', { name: 'Team' })
     expect(within(group).getByRole('img', { name: 'Ann A' })).toBeInTheDocument()
     expect(within(group).getByRole('img', { name: '3 more: Di D, Ed E, Flo F' })).toHaveTextContent('+3')
+  })
+
+  test('the +N circle is the same size as the others', () => {
+    renderWithProviders(<AvatarStack people={people} max={3} size={28} label="Team" />)
+    const more = screen.getByRole('img', { name: /4 more/ })
+    expect(more).toHaveStyle({ width: '28px', height: '28px' })
+    expect(screen.getByRole('img', { name: 'Ann A' })).toHaveStyle({ width: '28px', height: '28px' })
   })
 
   test('labels include the detail, and nothing renders for nobody', () => {

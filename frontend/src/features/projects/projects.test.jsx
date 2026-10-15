@@ -105,7 +105,8 @@ describe('ProjectsPage', () => {
     renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
     expect(await screen.findByText('Past due date')).toBeInTheDocument()
     expect(screen.getByText('33.3%')).toBeInTheDocument()
-    expect(screen.getByText('20% used')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Budget' })).toBeInTheDocument()
+    expect(screen.getByText('20%')).toBeInTheDocument()
     expect(screen.getByText(/progress \(weighted by milestone difficulty\)/i)).toBeInTheDocument()
   })
 

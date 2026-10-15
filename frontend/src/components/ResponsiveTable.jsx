@@ -19,7 +19,9 @@ export default function ResponsiveTable({ rows, columns, renderCard, loading = f
           disableVirtualization={import.meta.env.MODE === "test"}
           initialState={{ pagination: { paginationModel: { pageSize } } }} pageSizeOptions={[10, 25, 50]}
           onRowClick={onRowClick ? (params) => onRowClick(params.row) : undefined}
-          sx={{ bgcolor: 'background.paper', '& .MuiDataGrid-row': { cursor: onRowClick ? 'pointer' : 'default' } }} />
+          sx={{ bgcolor: 'background.paper', '& .MuiDataGrid-row': { cursor: onRowClick ? 'pointer' : 'default' },
+            // Auto-height rows: centre every cell's content and give it a little air.
+            '& .MuiDataGrid-cell': { display: 'flex', alignItems: 'center', py: 0.75, minWidth: 0 } }} />
       </Box>
     )
   }

@@ -25,7 +25,7 @@ export default function OverviewTab({ project }) {
         <Typography variant="h3" component="h2" sx={{ mb: 1 }}>About</Typography>
         <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{project.description || 'No description yet.'}</Typography>
         <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 2, mb: 0.5 }}>
-          Manager: <PersonWithAvatar person={project.manager} size={32} sx={{ ml: 0.5, color: 'text.primary' }} />
+          Manager: <PersonWithAvatar person={project.manager} sx={{ ml: 0.5, color: 'text.primary' }} />
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>Department: {project.department?.name ?? 'None'}</Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>

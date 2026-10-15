@@ -14,6 +14,7 @@ import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { can } from '../lib/permissions.js'
 import { DRAWER_WIDTH, NAV } from './nav.jsx'
+import { AVATAR_SIZE } from '../lib/avatarLook.js'
 
 const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
 
@@ -97,7 +98,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           <Box sx={{ flexGrow: 1 }} />
           {topBarExtras}
           <IconButton aria-label="Account menu" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
-            <UserAvatar userId={user?.id} name={fullName(user)} size={32} />
+            <UserAvatar userId={user?.id} name={fullName(user)} size={AVATAR_SIZE.header} />
           </IconButton>
           <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
             <Stack direction="row" sx={{ px: 2, py: 1, gap: 1.5, alignItems: 'center' }}>
