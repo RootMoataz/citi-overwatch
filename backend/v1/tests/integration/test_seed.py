@@ -162,6 +162,8 @@ def seed_the_old_way(conn) -> dict:
     conn.run("UPDATE projects SET department_id = NULL, work_mode = 'push'")
     conn.run("UPDATE milestones SET difficulty = 'medium'")
     conn.run("DELETE FROM departments")
+    conn.run("DELETE FROM conversations")  # messages came later too
+    conn.run("DELETE FROM notifications WHERE type = 'MESSAGE_RECEIVED'")
     del expected["milestones"][("Beacon Mobile App", "Prototype")]
     return expected
 
@@ -189,6 +191,7 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
     assert result["already_set"] == 0
     assert result["users_created"] == ["executive.demo"]
+    assert result["conversations_created"] == DEMO_CONVERSATIONS
     after = counts(conn)
     # No assignees, hours or projects added or removed; the only new person is the executive demo login.
     assert after == {**before, "departments": 3, "users": before["users"] + 1}
@@ -214,8 +217,8 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
                 "difficulties_updated"):
         assert result[key] == [], key
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1  # ... and the executive login
-    assert result["users_created"] == []
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1  # ... the executive login and the demo messages
+    assert result["users_created"] == [] and result["conversations_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
 
 
@@ -290,3 +293,82 @@ def test_executive_demo_login_from_the_seed_and_the_backfill(client, conn):
     status, body, _, _ = client.request("POST", "/auth/change-password", token=body["access_token"], json={
         "current_password": DEMO_PASSWORD, "new_password": "An0ther!Passw0rd"})
     assert (status, body["error"]["code"]) == (403, "DEMO_ACCOUNT")
+
+
+DEMO_CONVERSATIONS = ["Morgan Manager and Eli Employee", "Schema Mapping · Apollo Data Migration"]
+
+
+def demo_threads(conn) -> dict:
+    """Each demo conversation's subject (or pair) -> its participants' usernames and its messages' senders."""
+    out = {}
+    for c in query(conn, "SELECT id, subject, is_group, milestone_id FROM conversations ORDER BY created_at"):
+        people = sorted(r["username"] for r in query(conn, """
+            SELECT u.username FROM conversation_participants cp JOIN users u ON u.id = cp.user_id
+            WHERE cp.conversation_id = :c""", c=c["id"]))
+        senders = [r["username"] for r in query(conn, """
+            SELECT u.username FROM messages m JOIN users u ON u.id = m.sender_id
+            WHERE m.conversation_id = :c ORDER BY m.created_at""", c=c["id"])]
+        out[c["subject"] or "1:1"] = {"people": people, "senders": senders, "milestone": c["milestone_id"] is not None}
+    return out
+
+
+def test_seed_has_a_manager_employee_thread_and_a_schema_mapping_discussion(client, conn):
+    seed(conn)
+    threads = demo_threads(conn)
+    assert threads["1:1"] == {"people": ["employee.demo", "manager.demo"],
+                              "senders": ["manager.demo", "employee.demo", "manager.demo"], "milestone": False}
+    discussion = threads["Schema Mapping · Apollo Data Migration"]
+    assert discussion["milestone"] is True
+    assert discussion["people"] == ["ana.ruiz", "ben.okafor", "employee.demo", "manager.demo"]
+    assert discussion["senders"] == ["manager.demo", "ana.ruiz", "ben.okafor"]
+    # Eli has something waiting in both: the badge and the bell show it on first sign-in.
+    status, body, _, _ = client.request("POST", "/auth/login", json={"username": "employee.demo", "password": DEMO_PASSWORD})
+    token = body["access_token"]
+    _, counts_, _, _ = client.request("GET", "/messages/unread-count", token=token)
+    assert counts_ == {"unread": 2, "conversations": 2}
+    _, alerts, _, _ = client.request("GET", "/notifications?unread=true", token=token)
+    assert sorted(a["message"] for a in alerts if a["type"] == "MESSAGE_RECEIVED") == [
+        "Ben Okafor sent you a message", "Morgan Manager sent you a message"]
+    # The pair is the real one-to-one: starting a conversation with Morgan reuses it.
+    _, contacts, _, _ = client.request("GET", "/messages/contacts", token=token)
+    morgan = next(c for c in contacts["items"] if c["name"] == "Morgan Manager")
+    status, conv, _, _ = client.request("POST", "/conversations", token=token,
+                                        json={"participant_ids": [str(morgan["id"])], "body": "Will do"})
+    assert status == 200 and len(demo_threads(conn)) == 2
+
+
+def test_demo_backfill_adds_the_demo_messages_once(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    expected = demo_threads(conn)
+    conn.run("DELETE FROM conversations")
+    result = demo_backfill(conn)
+    assert result["conversations_created"] == DEMO_CONVERSATIONS
+    assert demo_threads(conn) == expected
+    again = demo_backfill(conn)
+    assert again["conversations_created"] == [] and demo_threads(conn) == expected
+
+
+def test_demo_backfill_leaves_messages_alone_once_anyone_has_written(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    conn.run("DELETE FROM conversations")
+    ids = [r["id"] for r in query(conn, "SELECT id FROM users WHERE username IN ('admin.demo', 'riley.chen')")]
+    conv = query_one(conn, "INSERT INTO conversations (created_by, pair_key) VALUES (:a, 'x') RETURNING id", a=ids[0])
+    conn.run("INSERT INTO messages (conversation_id, sender_id, body) VALUES (:c, :s, 'Hello')", c=conv["id"], s=ids[0])
+    result = demo_backfill(conn)
+    assert result["conversations_created"] == []
+    assert query_one(conn, "SELECT count(*) AS n FROM conversations")["n"] == 1
+
+
+def test_demo_backfill_skips_the_demo_messages_when_their_people_are_gone(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    conn.run("DELETE FROM conversations")
+    conn.run("UPDATE users SET username = 'someone.else' WHERE username = 'ben.okafor'")
+    result = demo_backfill(conn)
+    assert result["conversations_created"] == []
+    assert {"item": "demo messages", "reason": "missing"} in result["skipped"]

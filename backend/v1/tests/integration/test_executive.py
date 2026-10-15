@@ -15,7 +15,7 @@ MONDAY = TODAY - timedelta(days=TODAY.weekday())
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 SECRET_KEYS = {"salary", "hourly_rate"}
 
-# The only writes an executive may make: their own password, name and email, photo, and notifications.
+# The only writes an executive may make: their own password, name and email, photo, notifications and messages.
 # Logout and the other sign-in routes need no token, so the guard never sees them.
 EXECUTIVE_WRITES = {
     ("POST", "/auth/change-password"),
@@ -24,6 +24,9 @@ EXECUTIVE_WRITES = {
     ("DELETE", "/me/avatar"),
     ("POST", "/notifications/read-all"),
     ("POST", "/notifications/{id}/read"),
+    ("POST", "/conversations"),
+    ("POST", "/conversations/{id}/messages"),
+    ("POST", "/conversations/{id}/read"),
 }
 
 

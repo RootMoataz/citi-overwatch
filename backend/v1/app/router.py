@@ -1,7 +1,7 @@
 """Method + path routing with a central auth and role guard.
 
 Executives are read-only: every POST/PUT/PATCH/DELETE is refused for them here, before any handler runs, unless the
-route opts in with allow_executive=True (only their own account: password, name and email, photo, notifications).
+route opts in with allow_executive=True (only their own account: password, name and email, photo, notifications) and sending their own messages.
 Every JSON response to an executive also has salary and hourly-rate fields removed, wherever they sit."""
 
 import json

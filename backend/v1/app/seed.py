@@ -4,6 +4,7 @@ Dates are relative to today, so the demo stays realistic whenever it is loaded.
 Running seed() again is a no-op once admin.demo exists.
 """
 
+import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -68,6 +69,72 @@ DIFFICULTIES = {
     ("Cobalt Infrastructure Upgrade", "Assessment"): "easy",
     ("Delta Compliance Audit", "Audit Fieldwork"): "hard",
 }
+
+
+# A short, realistic message thread and a milestone discussion: (sender, minutes ago, text). Times are relative to
+# when they're loaded. Each reader's last_read_at is set so Eli has one unread message in each on first sign-in.
+DEMO_DIRECT = [
+    ("manager.demo", 20 * 60, "Hi Eli, how is Schema Mapping coming along? Ana mentioned the legacy address fields "
+                              "are messy."),
+    ("employee.demo", 19 * 60 + 40, "Customer and account tables are mapped. Addresses are the last big piece: the old "
+                                    "system keeps them in one free-text field."),
+    ("manager.demo", 2 * 60, "Thanks. Split them into street, city and postcode, and flag anything that doesn't parse "
+                             "so we can go through it together on Thursday."),
+]
+DEMO_DISCUSSION = ("Apollo Data Migration", "Schema Mapping", [
+    ("manager.demo", 26 * 60, "Starting a thread for Schema Mapping so questions don't get lost. Target is the end of "
+                              "next week."),
+    ("ana.ruiz", 25 * 60, "I'll take the transaction tables. Ben, can you pick up the reference data?"),
+    ("ben.okafor", 3 * 60, "Yes, reference data is mine. I'll post the mapping sheet here by tomorrow."),
+])
+
+
+def _demo_messages(conn) -> tuple[list[str], str | None]:
+    """Create the demo conversations. Returns (titles created, None) or ([], why not)."""
+    usernames = {"manager.demo", "employee.demo", "ana.ruiz", "ben.okafor"}
+    people = {r["username"]: r for r in query(conn, """SELECT id, username, first_name, last_name FROM users
+                                                       WHERE username = ANY(:u) AND NOT is_archived""",
+                                              u=sorted(usernames))}
+    project_name, milestone_name, discussion = DEMO_DISCUSSION
+    milestone = query_one(conn, """SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id
+                                   WHERE p.name = :p AND NOT p.is_archived AND m.name = :m AND NOT m.is_archived""",
+                          p=project_name, m=milestone_name)
+    if set(people) != usernames or not milestone:
+        return [], "missing"
+    now = datetime.now(timezone.utc)
+
+    def conversation(lines, readers, **columns):
+        last = now - timedelta(minutes=lines[-1][1])
+        conv = query_one(conn, """INSERT INTO conversations (created_by, created_at, subject, milestone_id, is_group,
+                                                             pair_key, last_message_at)
+                                  VALUES (:by, :at, :subject, :milestone, :group, :pair, :last) RETURNING *""",
+                         by=people[lines[0][0]]["id"], at=now - timedelta(minutes=lines[0][1]), last=last,
+                         subject=columns.get("subject"), milestone=columns.get("milestone"),
+                         group=columns.get("group", False), pair=columns.get("pair"))
+        for username, read_upto in readers.items():
+            read_at = None if read_upto is None else now - timedelta(minutes=lines[read_upto][1])
+            conn.run("""INSERT INTO conversation_participants (conversation_id, user_id, joined_at, last_read_at)
+                        VALUES (:c, :u, :j, :r)""", c=conv["id"], u=people[username]["id"], j=conv["created_at"],
+                     r=read_at)
+        for username, minutes, text in lines:
+            conn.run("INSERT INTO messages (conversation_id, sender_id, body, created_at) VALUES (:c, :s, :b, :t)",
+                     c=conv["id"], s=people[username]["id"], b=text, t=now - timedelta(minutes=minutes))
+        # The bell: one unread alert for Eli, from whoever wrote last.
+        sender = people[lines[-1][0]]
+        conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload, created_at)
+                    VALUES (:r, 'MESSAGE_RECEIVED', :s, CAST(:p AS jsonb), :t)""",
+                 r=people["employee.demo"]["id"], s=sender["id"], t=last,
+                 p=json.dumps({"conversation_id": str(conv["id"]), "name": f"{sender['first_name']} {sender['last_name']}",
+                               "subject": columns.get("subject"), "is_group": columns.get("group", False)}))
+
+    manager, employee = people["manager.demo"], people["employee.demo"]
+    conversation(DEMO_DIRECT, {"manager.demo": 2, "employee.demo": 1},
+                 pair=":".join(sorted([str(manager["id"]), str(employee["id"])])))
+    subject = f"{milestone_name} · {project_name}"
+    conversation(discussion, {"manager.demo": 2, "employee.demo": 1, "ana.ruiz": 2, "ben.okafor": 2},
+                 subject=subject, milestone=milestone["id"], group=True)
+    return [f"{manager['first_name']} {manager['last_name']} and {employee['first_name']} {employee['last_name']}",
+            subject], None
 
 
 def seed(conn) -> dict:
@@ -137,11 +204,13 @@ def demo_backfill(conn) -> dict:
     Departments are reused (any case) or created; a demo person or project gets the seed's department only while
     it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
     seed's difficulty only while it's still 'medium'; executive.demo is created (published demo password) only
-    if that username doesn't exist yet. Assignees and hours are never touched. Safe to run again.
+    if that username doesn't exist yet; the demo message thread and Schema Mapping discussion are added only while
+    there are no conversations at all. Assignees and hours are never touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
-           "work_mode_updated": [], "difficulties_updated": [], "already_set": 0, "skipped": []}
+           "work_mode_updated": [], "difficulties_updated": [], "conversations_created": [], "already_set": 0,
+           "skipped": []}
 
     def skip(item: str, reason: str) -> None:
         """Values already there are only counted; anything the operator may want to look at is listed."""
@@ -226,6 +295,15 @@ def demo_backfill(conn) -> dict:
                             WHERE id = ANY(:ids) AND difficulty = 'medium'""",
                          d=difficulty, ids=[r["id"] for r in rows if r["difficulty"] == "medium"])
                 out["difficulties_updated"].append(label)
+
+        # The demo messages, only while nobody has written anything yet.
+        if query_one(conn, "SELECT 1 AS ok FROM conversations LIMIT 1"):
+            skip("demo messages", "already_set")
+        else:
+            created, why_not = _demo_messages(conn)
+            if why_not:
+                skip("demo messages", why_not)
+            out["conversations_created"] = created
     return out
 
 
@@ -394,3 +472,5 @@ def _load(conn) -> None:
                 VALUES (:u, 'Orion Analytics Dashboard', 'Executive reporting on delivery health.',
                         :s, :e, 75000, 'Leadership needs a weekly view of delivery risk.')""",
              u=people["manager.demo"]["id"], s=d(30), e=d(150))
+
+    _demo_messages(conn)
