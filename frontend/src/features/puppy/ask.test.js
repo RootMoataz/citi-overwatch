@@ -121,3 +121,24 @@ describe('Ask Puppy: do-it-for-me requests become actions (confirmed in the pane
     expect(ask(question)).toMatchObject({ kind: 'action', action })
   })
 })
+
+describe('Ask Puppy to create accounts', () => {
+  test('admins start the conversation with plain phrases', () => {
+    for (const phrase of ['create users', 'add users', 'new accounts', 'onboard people', 'create accounts for the instructors',
+      'Hey Puppy, please add new users']) {
+      expect(ask(phrase, users.admin)).toEqual({ kind: 'action', action: 'create-users' })
+    }
+  })
+
+  test('the public demo admin is told it is disabled; other roles never get it', () => {
+    expect(ask('create users', users.demoAdmin)).toEqual({ kind: 'refuse', text: 'Creating accounts is disabled in the public demo.' })
+    for (const role of ['manager', 'employee', 'executive']) {
+      expect(ask('create users', users[role])).not.toMatchObject({ action: 'create-users' })
+    }
+  })
+
+  test('questions about how it works, and projects or skills, are not requests', () => {
+    expect(ask('how do I create a user?', users.admin)).not.toMatchObject({ action: 'create-users' })
+    expect(ask('add people to project Apollo', users.admin)).not.toMatchObject({ action: 'create-users' })
+  })
+})

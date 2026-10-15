@@ -1,6 +1,6 @@
 import { Badge, Box, IconButton, Popover, Tooltip } from '@mui/material'
 import { visuallyHidden } from '@mui/utils'
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useNotifications } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import PuppyFace from './PuppyFace.jsx'
@@ -19,6 +19,12 @@ export default function Puppy() {
   const items = notifications.data ?? []
   const [settings, setSettings] = useState(readSoundSettings)
   const [anchor, setAnchor] = useState(null)
+  // An open conversation (Create user accounts) can hold off Esc or a click outside until the admin confirms.
+  const guard = useRef(null)
+  // The panel widens for that conversation; the popover then moves so it stays on screen.
+  const popover = useRef(null)
+  const reposition = useCallback(() => popover.current?.updatePosition(), [])
+  const requestClose = () => { if (guard.current && guard.current() === false) return; setAnchor(null) }
   const { announcement, excitedAt } = usePuppyAlerts({ me: user?.id, notifications: notifications.data, settings })
   useTitleBadge(items.length, settings.titleBadge)
 
@@ -41,12 +47,12 @@ export default function Puppy() {
         </IconButton>
       </Tooltip>
       <Box role="status" aria-live="polite" data-testid="puppy-announcement" sx={visuallyHidden}>{announcement}</Box>
-      <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}
+      <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={requestClose} action={popover}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{ paper: { role: 'dialog', 'aria-label': 'Puppy assistant', sx: { mt: 1, borderRadius: 3 } } }}>
         {anchor ? (
           <PuppyPanel user={user} notifications={items} settings={settings} onSettings={changeSettings}
-            onClose={() => setAnchor(null)} />
+            onClose={() => setAnchor(null)} guardRef={guard} onResize={reposition} />
         ) : null}
       </Popover>
     </>

@@ -4,7 +4,8 @@
 // only opens the right page, and the decision stays with the person.
 import { RISK_LABELS } from '../../lib/labels.js'
 import { formatDate } from '../../lib/format.js'
-import { can } from '../../lib/permissions.js'
+import { can, isPublicDemo } from '../../lib/permissions.js'
+import { SAY } from './createUsers.js'
 
 /** Words no Puppy action may contain (checked by a test for every role). */
 export const DESTRUCTIVE = ['reject', 'archive', 'delete', 'restore', 'remove', 'approve all', 'bulk', 'change role', 'salary']
@@ -60,6 +61,12 @@ export function buildActions({ user, today, unread = 0, mode = 'light', projects
   if (REPORT_ROLES.includes(user.role)) {
     out.push({ id: 'email-report', label: 'Email this report to me', to: '/?report=email',
       confirm: 'Puppy will open Email this report on your dashboard with Send to me on. You press Send.' })
+  }
+  // Admins: a conversation that collects the people first and creates nothing until the admin says yes. The public
+  // demo admin sees it but is told it's disabled (the server refuses POST /users for that account anyway).
+  if (user.role === 'admin') {
+    out.push({ id: 'create-users', label: 'Create user accounts', flow: true, blocked: isPublicDemo(user) ? SAY.demo : null,
+      confirm: 'Puppy will ask who to add and show you everything before creating anything.' })
   }
   const next = mode === 'dark' ? 'light' : 'dark'
   out.push({ id: 'theme', label: `Switch to the ${next} theme`, mode: next, confirm: `Puppy will switch Scout to the ${next} theme.` })

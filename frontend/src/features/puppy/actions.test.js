@@ -16,12 +16,19 @@ describe('do-it-for-me actions', () => {
     expect(ids(users.employee)).toEqual(['mark-read', 'open-timesheet', 'message-manager', 'open-at-risk', 'theme', 'sound'])
     // Managers and admins keep a timesheet only when "Tracks own hours" is on for them.
     expect(ids(users.manager)).toEqual(['mark-read', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
-    expect(ids(users.admin)).toEqual(['mark-read', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
+    expect(ids(users.admin)).toEqual(['mark-read', 'open-approvals', 'open-at-risk', 'email-report', 'create-users', 'theme', 'sound'])
     expect(ids({ ...users.manager, tracks_own_hours: true }))
       .toEqual(['mark-read', 'open-timesheet', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
     expect(buildActions({ user: users.manager, ...base }).find((a) => a.id === 'open-approvals').to).toBe('/timesheets')
     // Executives are read-only: no timesheet, no approvals.
     expect(ids(users.executive)).toEqual(['mark-read', 'open-at-risk', 'email-report', 'theme', 'sound'])
+  })
+
+  test('only admins get Create user accounts; the public demo admin is told it is disabled', () => {
+    const byRole = (user) => buildActions({ user, ...base }).find((a) => a.id === 'create-users')
+    expect(byRole(users.admin)).toMatchObject({ label: 'Create user accounts', flow: true, blocked: null })
+    expect(byRole(users.demoAdmin)).toMatchObject({ blocked: 'Creating accounts is disabled in the public demo.' })
+    for (const user of [users.manager, users.employee, users.executive]) expect(byRole(user)).toBeUndefined()
   })
 
   test('nothing destructive or money-affecting is ever offered, for any role', () => {

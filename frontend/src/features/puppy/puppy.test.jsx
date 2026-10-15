@@ -389,10 +389,12 @@ describe.each(Object.keys(users))('safeguards on screen for the %s', (role) => {
     await userEvent.click(within(panel).getByRole('tab', { name: 'Do it' }))
     await within(panel).findByRole('button', { name: /Atlas/ })
     // Every action's confirmation sentence, too.
+    // (Create user accounts is a conversation with its own confirmation, tested in createUsersChat.test.jsx.)
     const list = within(panel).getByTestId('puppy-actions')
-    const count = within(list).getAllByRole('button').length
+    const confirmable = () => within(list).getAllByRole('button').filter((b) => b.textContent !== 'Create user accounts')
+    const count = confirmable().length
     for (let i = 0; i < count; i += 1) {
-      await userEvent.click(within(list).getAllByRole('button')[i])
+      await userEvent.click(confirmable()[i])
       expect(within(list).getByRole('button', { name: 'Confirm' })).toBeInTheDocument()
       expect(document.body.textContent).not.toMatch(new RegExp(`${LEAK}|482913`))
       await userEvent.click(within(list).getByRole('button', { name: 'Cancel' }))

@@ -7,12 +7,12 @@ import Lightbulb from '@mui/icons-material/LightbulbOutlined'
 import Shield from '@mui/icons-material/ShieldOutlined'
 import WarningAmber from '@mui/icons-material/WarningAmber'
 import {
-  Box, Button, ButtonBase, Collapse, Divider, IconButton, List, ListItem, ListItemButton, ListItemText, Skeleton, Stack, Tab,
+  Alert, Box, Button, ButtonBase, Collapse, Divider, IconButton, List, ListItem, ListItemButton, ListItemText, Skeleton, Stack, Tab,
   Tabs, Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api/client.js'
 import { useContacts, useUnreadMessages } from '../../api/messages.js'
@@ -25,6 +25,7 @@ import usePaletteData from '../palette/usePaletteData.js'
 import { buildActions } from './actions.js'
 import AskPuppy from './AskPuppy.jsx'
 import ConfirmAction from './ConfirmAction.jsx'
+import CreateUsersChat from './CreateUsersChat.jsx'
 import { PUPPY_CAN_SEE, PUPPY_DISCLAIMER, PUPPY_TAGLINE } from './copy.js'
 import { puppyView } from './privacy.js'
 import PuppyFace from './PuppyFace.jsx'
@@ -158,17 +159,21 @@ function Summary({ user, view, unreadMessages, insightsLoading, go }) {
 function DoIt({ actions, onRun, busy }) {
   const [chosen, setChosen] = useState(null)
   const action = actions.find((a) => a.id === chosen)
+  // A conversation (Create user accounts) asks its own questions and confirms before anything is written.
+  const pick = (a) => (a.flow && !a.blocked ? onRun(a) : setChosen(a.id))
   return (
     <>
       <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1.5, mb: 1 }}>
         Puppy can do these for you. Each one asks first, and runs as you through Scout&apos;s normal pages.
       </Typography>
       <Stack sx={{ gap: 0.75 }} data-testid="puppy-actions">
-        {actions.map((a) => (a.id === chosen && action ? (
+        {actions.map((a) => (a.id === chosen && action?.blocked ? (
+          <Alert key={a.id} severity="info" variant="outlined" onClose={() => setChosen(null)}>{action.blocked}</Alert>
+        ) : a.id === chosen && action ? (
           <ConfirmAction key={a.id} action={action} busy={busy}
             onConfirm={async () => { await onRun(action); setChosen(null) }} onCancel={() => setChosen(null)} />
         ) : (
-          <Button key={a.id} variant="outlined" size="small" onClick={() => setChosen(a.id)}
+          <Button key={a.id} variant="outlined" size="small" onClick={() => pick(a)}
             sx={{ justifyContent: 'flex-start', textAlign: 'left' }}>{a.label}</Button>
         )))}
       </Stack>
@@ -195,12 +200,14 @@ function CanSee() {
 }
 
 /** The panel behind the Puppy button: tips and a summary, do-it-for-me actions, Ask Puppy and the sound settings. */
-export default function PuppyPanel({ user, notifications, settings, onSettings, onClose }) {
+export default function PuppyPanel({ user, notifications, settings, onSettings, onClose, guardRef, onResize }) {
   const navigate = useNavigate()
   const toast = useToast()
   const colorMode = useColorMode()
   const markAll = useMarkAllRead()
   const [tab, setTab] = useState('summary')
+  const [flow, setFlow] = useState(null)
+  useEffect(() => { onResize?.() }, [flow, onResize])
   const data = usePuppyData(user, notifications)
   const { view } = data
   const go = (to) => { onClose(); navigate(to) }
@@ -219,6 +226,8 @@ export default function PuppyPanel({ user, notifications, settings, onSettings, 
     } else if (action.id === 'theme') {
       colorMode.setPreference(action.mode)
       toast.success(`Switched to the ${action.mode} theme`)
+    } else if (action.id === 'create-users') {
+      if (user?.role === 'admin' && !action.blocked) setFlow('create-users')
     } else if (action.id === 'sound') setTab('sound')
     else if (action.to) go(action.to)
   }
@@ -227,7 +236,7 @@ export default function PuppyPanel({ user, notifications, settings, onSettings, 
   const askData = useMemo(() => ({ loading: data.loading, projects: view.projects, people: view.people,
     departments: view.departments }), [data.loading, view.projects, view.people, view.departments])
   return (
-    <Box sx={{ width: { xs: 'calc(100vw - 32px)', sm: 400 }, maxWidth: 400 }}>
+    <Box sx={{ width: { xs: 'calc(100vw - 32px)', sm: flow ? 560 : 400 }, maxWidth: flow ? 560 : 400 }}>
       <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center', px: 2, pt: 2 }}>
         <PuppyFace size={44} perked={notifications.length > 0} />
         <Box sx={{ minWidth: 0 }}>
@@ -235,6 +244,14 @@ export default function PuppyPanel({ user, notifications, settings, onSettings, 
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>{PUPPY_TAGLINE}</Typography>
         </Box>
       </Stack>
+      {flow ? (
+        <>
+          <Divider sx={{ mt: 1 }} />
+          <Box sx={{ px: 2, pb: 1.5 }}>
+            <CreateUsersChat guardRef={guardRef} onExit={() => { setFlow(null); setTab('do') }} onLeave={go} onClosePanel={onClose} />
+          </Box>
+        </>
+      ) : (<>
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" aria-label="Puppy" sx={{ mt: 1, minHeight: 40,
         '& .MuiTab-root': { minHeight: 40, minWidth: 0, px: 1 } }}>
         <Tab value="summary" label="Summary" />
@@ -250,6 +267,7 @@ export default function PuppyPanel({ user, notifications, settings, onSettings, 
         {tab === 'ask' ? <Box sx={{ pt: 1.5 }}><AskPuppy user={user} data={askData} actions={actions} onRun={run} go={go} /></Box> : null}
         {tab === 'sound' ? <Box sx={{ pt: 1.5 }}><SoundSettings settings={settings} onChange={onSettings} /></Box> : null}
       </Box>
+      </>)}
       <Divider />
       <CanSee />
       <Typography variant="caption" component="p" sx={{ px: 2, pt: 0.5, pb: 1, color: 'text.secondary' }}>{PUPPY_DISCLAIMER}</Typography>

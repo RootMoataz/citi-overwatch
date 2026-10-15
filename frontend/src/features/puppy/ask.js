@@ -9,6 +9,7 @@
 //   7. anything else → an honest "no rule for that" with examples the viewer can use
 import { RISK_LABELS } from '../../lib/labels.js'
 import { examplePhrases, findByName, normalize, parsePhrase } from '../palette/phrases.js'
+import { SAY } from './createUsers.js'
 import { findHelp } from './help.js'
 
 export const REFUSE_PRIVATE = 'I keep pay and private details out of reach — ask an admin through the proper page.'
@@ -30,6 +31,17 @@ const ACTIONS = [
   ['open-at-risk', /\bopen\b.*\bat[\s-]?risk project\b|\bopen\b.*\briskiest project\b/],
   ['sound', /\b(?:change|switch|pick|set|choose)\b.*\b(?:alert |notification )?sounds?\b|\bsound settings\b|\bmute (?:puppy|sounds?|alerts?)\b/],
 ]
+
+// "create users", "add users", "new accounts", "onboard people", "create accounts for the instructors"; not questions
+// about how it works ("how do I create a user?"), and not projects, milestones or skills.
+const CREATE_USERS = /\b(?:create|add|make|set up|onboard|register)\b.*\b(?:users?|accounts?|people|persons?|instructors?|employees?|staff|team members?|logins?)\b|\bnew (?:user )?accounts?\b|\bnew users\b/
+const NOT_CREATE_USERS = /^(?:how|what|why|where|who|when|which)\b|^(?:can|do|should|could) i\b|\b(?:projects?|milestones?|skills?)\b/
+
+/** An admin asking Puppy to create accounts: the conversation (or, for the public demo admin, why it's disabled). */
+function createUsersIntent(text, user) {
+  if (user?.role !== 'admin' || !CREATE_USERS.test(text) || NOT_CREATE_USERS.test(text)) return null
+  return user.is_public_demo ? { kind: 'refuse', text: SAY.demo } : { kind: 'action', action: 'create-users' }
+}
 
 const PRIVATE = new RegExp([
   /\bsalar(?:y|ies)\b|\bwages?\b|\bpay(?:check|slip|roll)?\b|\bpaid\b|\bearn(?:s|ings)?\b/.source,
@@ -72,6 +84,8 @@ export function askPuppy(question, context = {}) {
   const text = stripPolite(question)
   const whole = normalize(question)
   if (!whole) return { kind: 'empty' }
+  const create = createUsersIntent(stripPolite(question), context.user)
+  if (create) return create
   const action = ACTIONS.find(([, re]) => re.test(whole))
   if (action) return { kind: 'action', action: action[0] }
   if (PRIVATE.test(whole)) return { kind: 'refuse', text: REFUSE_PRIVATE }

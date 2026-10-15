@@ -10,4 +10,6 @@ export const PUPPY_CAN_SEE = [
   'Your questions stay in this browser: Puppy never sends, stores or logs them.',
   'Puppy acts only after you confirm, as you, through the normal APIs. It never approves, rejects, archives or deletes: '
     + 'for those it opens the right page and the decision stays yours.',
+  'Admins can have Puppy create user accounts: what you type stays in this browser until you confirm the summary, then '
+    + 'goes to Scout through the same checks as the People page. Temporary passwords are never shown in the conversation.',
 ]

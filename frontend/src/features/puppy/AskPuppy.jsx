@@ -26,10 +26,13 @@ function Answer({ question, user, data, actions, onRun, onAsk, go }) {
   useEffect(() => {
     if (!result || done.current === question.id) return
     done.current = question.id
-    if (result.kind === 'navigate') navigate(result.to)
+    if (result.kind === 'action' && result.action === 'create-users') {
+      const flow = actions.find((a) => a.id === 'create-users' && !a.blocked)
+      if (flow) onRun(flow)
+    } else if (result.kind === 'navigate') navigate(result.to)
     else if (result.kind === 'theme') setPreference(result.mode)
     else if (result.kind === 'signout') logout()
-  }, [result, question.id, navigate, setPreference, logout])
+  }, [result, question.id, navigate, setPreference, logout, actions, onRun])
 
   if (!result) return <Typography variant="body2" sx={{ color: 'text.secondary' }}>Puppy is sniffing around…</Typography>
   if (result.kind === 'refuse') return <Alert severity="info" variant="outlined">{result.text}</Alert>
