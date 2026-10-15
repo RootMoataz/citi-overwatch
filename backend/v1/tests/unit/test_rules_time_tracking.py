@@ -88,3 +88,33 @@ def test_a_wall_time_skipped_by_the_spring_change_still_converts():
     from app.rules.time_tracking import _to_utc
     # 02:30 on 8 March 2026 never happens in New York (02:00 EST jumps to 03:00 EDT); it reads as standard time.
     assert _to_utc(datetime(2026, 3, 8, 2, 30)) == utc(2026, 3, 8, 7, 30)
+
+
+# ---------- timer drafts, locks and attribution ----------
+
+def test_a_cell_with_timer_hours_is_locked():
+    from app.rules.time_tracking import is_locked
+    assert not is_locked(Decimal(0), Decimal(0)) and not is_locked(None, None)
+    assert is_locked(Decimal("0.25"), Decimal(0))   # submitted timer hours
+    assert is_locked(Decimal(0), Decimal("1.5"))    # a draft waiting for Save week
+
+
+def test_the_cell_shows_saved_plus_draft_hours():
+    from app.rules.time_tracking import timer_cell
+    assert timer_cell(Decimal(3), Decimal("1.5")) == Decimal("4.5")
+    assert timer_cell(None, Decimal(2)) == Decimal(2)
+
+
+def test_submitting_attributes_draft_hours_as_tracked():
+    from app.rules.time_tracking import tracked_on_submit
+    assert tracked_on_submit(Decimal(0), Decimal("1.5"), Decimal("4.5")) == Decimal("1.5")
+    assert tracked_on_submit(Decimal(2), Decimal(1), Decimal(5)) == Decimal(3)
+    assert tracked_on_submit(Decimal(4), Decimal(1), Decimal(3)) == Decimal(3)  # never more than the entry holds
+
+
+def test_a_draft_fits_what_is_left_of_the_24h_day():
+    from app.rules.time_tracking import draft_room
+    assert draft_room(Decimal(2), Decimal(10)) == Decimal(2)
+    assert draft_room(Decimal(2), Decimal("22.9")) == Decimal(1)   # 1.1h left -> 1h (quarter below)
+    assert draft_room(Decimal(2), Decimal(24)) == Decimal(0)
+    assert draft_room(Decimal(2), Decimal(30)) == Decimal(0)

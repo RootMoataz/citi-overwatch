@@ -2,7 +2,11 @@
 
 A timer belongs to the New York date it started on (the same clock as the Friday reminder; the app keeps no
 per-user timezone). Stopping it turns the elapsed time into hours rounded to the nearest quarter hour; under 7.5
-minutes logs nothing. A timer still running after that day's midnight is stopped at 23:59:59 of its day.
+minutes records nothing. A timer still running after that day's midnight is stopped at 23:59:59 of its day.
+
+Stopping never submits hours: the rounded hours wait on the timer as a draft of that day's cell (base hours already
+saved + draft hours) until the person saves the week, which attributes them to the entry as tracked hours. A cell with
+timer hours (draft or submitted) is locked: its hours change only through an approved change request.
 
 How much of an entry came from timers (tracked_hours) gives its source label: tracked, manual or mixed.
 
@@ -17,6 +21,7 @@ from app.rules.timesheet_reminder import local_time
 
 QUARTER = Decimal("0.25")
 MAX_HOURS = Decimal(24)
+MIN_REQUEST = Decimal("0.25")  # a change request asks for at least a quarter hour (clearing goes through rejection)
 NOTE_MIN, NOTE_MAX = 10, 500
 
 
@@ -64,6 +69,29 @@ def entry_source(hours: Decimal, tracked: Decimal | None) -> str:
 def tracked_after_edit(tracked: Decimal, new_hours: Decimal) -> Decimal:
     """A hand edit can't leave more tracked hours than the entry now holds."""
     return min(tracked, new_hours)
+
+
+def is_locked(tracked: Decimal | None, draft: Decimal | None) -> bool:
+    """A cell holding timer hours, submitted (the entry's tracked_hours) or still a draft, is locked."""
+    return (tracked or Decimal(0)) > 0 or (draft or Decimal(0)) > 0
+
+
+def timer_cell(base: Decimal | None, draft: Decimal | None) -> Decimal:
+    """What a cell shows and must be saved as: the hours already saved there plus timer hours not submitted yet."""
+    return (base or Decimal(0)) + (draft or Decimal(0))
+
+
+def tracked_on_submit(tracked: Decimal | None, draft: Decimal | None, hours: Decimal) -> Decimal:
+    """Tracked hours of an entry once its cell's draft timer hours are submitted with it (never more than it holds)."""
+    return min((tracked or Decimal(0)) + (draft or Decimal(0)), hours)
+
+
+def draft_room(hours: Decimal, day_total: Decimal) -> Decimal:
+    """The part of a stopped timer's hours that fits the 24h day (day_total: saved + draft hours that day already),
+    to the quarter hour below."""
+    room = max(MAX_HOURS - day_total, Decimal(0))
+    room = (room / QUARTER).to_integral_value(rounding="ROUND_FLOOR") * QUARTER
+    return min(hours, room)
 
 
 def clean_note(note) -> str:
