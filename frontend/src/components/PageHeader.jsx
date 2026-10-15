@@ -7,7 +7,7 @@ export default function PageHeader({ title, subtitle, actions, breadcrumb }) {
       <Box sx={{ minWidth: 0 }}>
         {breadcrumb}
         <Typography variant="h1" component="h1">{title}</Typography>
-        {subtitle ? <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>{subtitle}</Typography> : null}
+        {subtitle ? <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>{subtitle}</Typography> : null}
       </Box>
       {actions ? <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap' }}>{actions}</Stack> : null}
     </Stack>
