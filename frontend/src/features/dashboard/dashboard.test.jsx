@@ -134,7 +134,9 @@ describe('DashboardPage', () => {
       http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
     renderAsUser(<DashboardPage />, { user: users.manager, route: '/' })
     const table = await screen.findByRole('table', { name: /busiest people this week/i })
-    expect(within(table).getByText('Eli Employee').parentElement).toHaveTextContent('EEEli Employee')
+    const name = within(table).getByRole('link', { name: 'Eli Employee' })   // the server scoped this list to their people
+    expect(name).toHaveAttribute('href', '/people/u-emp/profile')
+    expect(name.closest('[title]').parentElement).toHaveTextContent('EEEli Employee')
   })
 
   test('employee dashboard skips the team allocation table', async () => {

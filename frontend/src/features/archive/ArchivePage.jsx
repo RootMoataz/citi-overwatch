@@ -8,6 +8,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 
 // Everything that can be archived and restored today, with what restoring it does.
 const TYPES = {
@@ -76,7 +77,7 @@ export default function ArchivePage() {
                   </TableCell>
                   <TableCell>{TYPES[i.type]?.label ?? i.type}</TableCell>
                   <TableCell>{when(i.archived_at)}</TableCell>
-                  <TableCell>{i.archived_by?.name ?? '—'}</TableCell>
+                  <TableCell>{i.archived_by ? <PersonLink person={i.archived_by} /> : '—'}</TableCell>
                   <TableCell align="right">
                     {i.can_restore ? (
                       <Button size="small" variant="outlined" aria-label={`Restore ${i.name}`} onClick={() => setConfirm(i)}>Restore</Button>

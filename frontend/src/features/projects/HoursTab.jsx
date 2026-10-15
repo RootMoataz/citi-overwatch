@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { useAllocations } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import { addDays, formatDate, formatHours, mondayOf } from '../../lib/format.js'
 
 /** Planned vs. logged vs. approved hours per person on this project, for one week. */
@@ -42,7 +43,7 @@ export default function HoursTab({ project, manage }) {
             <TableBody>
               {rows.map((r) => (
                 <TableRow key={r.person.id}>
-                  <TableCell component="th" scope="row">{r.person.name}</TableCell>
+                  <TableCell component="th" scope="row"><PersonLink person={r.person} context={{ project }} /></TableCell>
                   <TableCell align="right">{formatHours(r.planned)}</TableCell>
                   <TableCell align="right" sx={{ color: r.logged > r.planned ? 'warning.main' : undefined }}>{formatHours(r.logged)}</TableCell>
                   <TableCell align="right">{formatHours(r.approved)}</TableCell>

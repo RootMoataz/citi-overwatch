@@ -7,6 +7,7 @@ import { useAuditLog, useEveryone } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 
 const TYPES = ['user', 'project', 'project_request', 'milestone', 'time_entry']
 // Every action the backend records (see audit.record calls), most common first.
@@ -83,7 +84,7 @@ export default function AuditPage() {
                 <Fragment key={e.id}>
                   <TableRow>
                     <TableCell>{new Date(e.created_at).toLocaleString()}</TableCell>
-                    <TableCell>{e.actor.name}</TableCell>
+                    <TableCell><PersonLink person={e.actor} /></TableCell>
                     <TableCell>{label(e.action)}</TableCell>
                     <TableCell>{label(e.entity_type)}<Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{e.entity_id}</Typography></TableCell>
                     <TableCell align="right">

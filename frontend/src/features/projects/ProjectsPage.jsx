@@ -129,7 +129,7 @@ export default function ProjectsPage() {
               <StatusChip status={row.status} />
             </Stack>
             <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-              <PersonWithAvatar person={row.manager} sx={{ flex: 1 }} />
+              <PersonWithAvatar person={row.manager} link={false} sx={{ flex: 1 }} />
               <TeamAvatars project={row} />
             </Stack>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>

@@ -14,6 +14,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import { formatHours, fullName } from '../../lib/format.js'
 import { memberSchema } from '../../lib/schemas.js'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
@@ -106,7 +107,7 @@ export default function TeamTab({ project, manage }) {
                 </Stack>
               ) : null}>
                 <ListItemAvatar sx={{ minWidth: 52 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={AVATAR_SIZE.row} /></ListItemAvatar>
-                <ListItemText primary={fullName(m.user)}
+                <ListItemText primary={<PersonLink person={{ id: m.user.id, name: fullName(m.user) }} context={{ project }} />}
                   secondary={`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`} />
               </ListItem>
             ))}

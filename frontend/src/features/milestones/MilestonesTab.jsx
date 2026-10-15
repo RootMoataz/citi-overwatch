@@ -13,6 +13,7 @@ import AvatarStack from '../../components/AvatarStack.jsx'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import SupportingChip from '../../components/SupportingChip.jsx'
@@ -22,7 +23,7 @@ import { statusActions } from '../../lib/milestoneActions.js'
 import MilestoneDialog from './MilestoneDialog.jsx'
 import MilestoneNotes from './MilestoneNotes.jsx'
 
-function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
+function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra }) {
   const status = useMilestoneStatus(m.project_id)
   const claim = useClaimMilestone(m.project_id)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -71,7 +72,7 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
                   <Typography variant="body2" component="div" sx={{ minWidth: 0 }}>
                     {ordered.map((a, i) => (
                       <Fragment key={a.id}>
-                        {i ? ', ' : ''}{a.name}
+                        {i ? ', ' : ''}<PersonLink person={a} context={{ project }} />
                         {supporting.has(String(a.id)) ? <SupportingChip person={a.name} /> : null}
                       </Fragment>
                     ))}
@@ -153,7 +154,7 @@ export default function MilestonesTab({ project, manage, extra }) {
       ) : null}
       {items.length ? <Timeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }} /> : null}
       {items.map((m) => (
-        <MilestoneCard key={m.id} m={m} names={names} manage={manage} extra={extra}
+        <MilestoneCard key={m.id} m={m} project={project} names={names} manage={manage} extra={extra}
           onEdit={(milestone) => setEditing({ milestone })} onArchive={setArchiving} />
       ))}
       {editing ? (

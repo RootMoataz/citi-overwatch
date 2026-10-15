@@ -2,13 +2,15 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import { ApiError } from '../api/client.js'
-import { renderWithProviders } from '../test/render.jsx'
+import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
 import { setViewport } from '../test/setup.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import EmptyState from './EmptyState.jsx'
 import ErrorAlert from './ErrorAlert.jsx'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import PageHeader from './PageHeader.jsx'
+import PersonLink from './PersonLink.jsx'
+import PersonWithAvatar from './PersonWithAvatar.jsx'
 import ResponsiveTable from './ResponsiveTable.jsx'
 import RiskBadges from './RiskBadges.jsx'
 import StatusChip from './StatusChip.jsx'
@@ -96,5 +98,46 @@ describe('ErrorBoundary', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/something went wrong/i)
     expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument()
     spy.mockRestore()
+  })
+})
+
+describe('people link to their profile only when the viewer may open it', () => {
+  const ada = { id: 'u-ada', name: 'Ada Lovelace' }
+  const project = { id: 'p1', manager: { id: users.manager.id }, is_archived: false }
+
+  test('admins get a link to anyone', () => {
+    renderAsUser(<PersonWithAvatar person={ada} />, { user: users.admin })
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
+  })
+
+  test("employees see other people's names as plain text, and their own as a link", () => {
+    renderAsUser(<><PersonLink person={ada} /><PersonLink person={{ id: users.employee.id, name: 'Eli Employee' }} /></>,
+      { user: users.employee })
+    expect(screen.getByText('Ada Lovelace')).not.toHaveAttribute('href')
+    expect(screen.queryByRole('link', { name: 'Ada Lovelace' })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Eli Employee' })).toHaveAttribute('href', `/people/${users.employee.id}/profile`)
+  })
+
+  test("managers get a link for people on their own project, plain text elsewhere", () => {
+    renderAsUser(<>
+      <PersonWithAvatar person={ada} context={{ project }} />
+      <PersonWithAvatar person={{ id: 'u-bo', name: 'Bo Other' }} context={{ project: { ...project, manager: { id: 'u-x' } } }} />
+    </>, { user: users.manager })
+    expect(screen.getByRole('link', { name: 'Ada Lovelace' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Bo Other' })).not.toBeInTheDocument()
+    expect(screen.getByText('Bo Other')).toBeInTheDocument()
+  })
+
+  test('link={false} keeps a name as text even for admins (e.g. inside a tappable card)', () => {
+    renderAsUser(<PersonWithAvatar person={ada} link={false} />, { user: users.admin })
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  test('clicking the name does not also trigger the row it sits in', async () => {
+    const onRow = vi.fn()
+    renderAsUser(<div role="presentation" onClick={onRow}><PersonLink person={ada} /></div>, { user: users.admin })
+    await userEvent.click(screen.getByRole('link', { name: 'Ada Lovelace' }))
+    expect(onRow).not.toHaveBeenCalled()
+    expect(screen.getByTestId('location')).toHaveTextContent('/people/u-ada/profile')
   })
 })

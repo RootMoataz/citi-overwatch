@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { can } from './permissions.js'
+import { can, canViewProfile } from './permissions.js'
 import { users } from '../test/render.jsx'
 
 const { admin, manager, employee } = users
@@ -54,5 +54,35 @@ describe('permissions mirror spec §2', () => {
     expect(can(admin, 'people.view')).toBe(true)
     expect(can(null, 'project.create')).toBe(false)
     expect(can(admin, 'unknown.action')).toBe(false)
+  })
+})
+
+describe('canViewProfile mirrors the server rule (users/profile.py)', () => {
+  const managed = { id: 'p1', manager: { id: manager.id }, is_archived: false }
+  const someoneElses = { id: 'p2', manager: { id: 'u-other-mgr' }, is_archived: false }
+
+  test('admins open anyone; everybody opens their own', () => {
+    expect(canViewProfile(admin, 'u-anyone')).toBe(true)
+    for (const viewer of [admin, manager, employee]) expect(canViewProfile(viewer, viewer.id)).toBe(true)
+  })
+
+  test('employees open nobody else, whatever the context', () => {
+    expect(canViewProfile(employee, 'u-colleague')).toBe(false)
+    expect(canViewProfile(employee, 'u-colleague', { project: managed, managed: true })).toBe(false)
+    expect(canViewProfile(employee, manager.id)).toBe(false)
+  })
+
+  test("managers open people on a live project they manage, or in a list the server scoped to their people", () => {
+    expect(canViewProfile(manager, 'u-member', { project: managed })).toBe(true)
+    expect(canViewProfile(manager, 'u-member', { project: { managerId: manager.id } })).toBe(true)
+    expect(canViewProfile(manager, 'u-member', { managed: true })).toBe(true)
+    expect(canViewProfile(manager, 'u-member', { project: someoneElses })).toBe(false)
+    expect(canViewProfile(manager, 'u-member', { project: { ...managed, is_archived: true } })).toBe(false)
+    expect(canViewProfile(manager, 'u-member')).toBe(false)                  // no context: can't tell, so no link
+  })
+
+  test('nobody signed in, or no person (the "System" actor), is never a link', () => {
+    expect(canViewProfile(null, 'u-anyone')).toBe(false)
+    expect(canViewProfile(admin, null)).toBe(false)
   })
 })

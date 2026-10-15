@@ -97,7 +97,8 @@ describe('ProjectsPage', () => {
     const group = await screen.findByRole('group', { name: 'Apollo Data Migration team' })
     expect(within(group).getByRole('img', { name: 'Ann Ames' })).toHaveTextContent('AA')
     expect(within(group).getByRole('img', { name: '2 more: Di Dunn, Ed Eve' })).toHaveTextContent('+2')
-    expect(screen.getByText('Morgan Manager').parentElement).toHaveTextContent('MMMorgan Manager')
+    const manager = screen.getByRole('link', { name: 'Morgan Manager' })      // admins open anyone's profile
+    expect(manager.closest('[title]').parentElement).toHaveTextContent('MMMorgan Manager')
   })
 
   test('rows show progress, budget use and risk', async () => {
@@ -189,6 +190,14 @@ describe('ProjectDetailPage', () => {
     const list = await screen.findByRole('list', { name: /team members/i })
     expect(await within(list).findByText('Ada Lovelace')).toBeInTheDocument()
     expect(within(list).getByText('AL')).toBeInTheDocument()
+    expect(within(list).queryByRole('link', { name: 'Ada Lovelace' })).not.toBeInTheDocument()   // a teammate: plain text
+  })
+
+  test("the project's manager opens a team member's profile from the team tab", async () => {
+    server.use(...detailHandlers(), http.get(`${API}/users`, () => HttpResponse.json({ items: [], total: 0 })))
+    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=team', path: '/projects/:id' })
+    const list = await screen.findByRole('list', { name: /team members/i })
+    expect(await within(list).findByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
   })
 
   test('the manager moves the project to another department and back to push mode', async () => {

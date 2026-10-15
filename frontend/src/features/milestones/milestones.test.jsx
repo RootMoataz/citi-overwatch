@@ -183,6 +183,20 @@ describe('MilestonesTab', () => {
     expect(within(await card('Discovery')).queryByText('Nobody assigned')).not.toBeInTheDocument()
   })
 
+  test("the project's manager can open each assignee's profile; a teammate sees only their own name as a link", async () => {
+    const ada = { id: 'u-ada', name: 'Ada Lovelace' }
+    server.use(...handlers([{ ...cutover, assignees: [me, ada] }]))
+    const { unmount } = renderTab(users.manager, true)
+    const cut = await card('Cutover')
+    expect(within(cut).getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
+    expect(within(cut).getByRole('link', { name: 'Eli Employee' })).toHaveAttribute('href', `/people/${me.id}/profile`)
+    unmount()
+    renderTab(users.employee, false)
+    const mine = await card('Cutover')
+    expect(within(mine).queryByRole('link', { name: 'Ada Lovelace' })).not.toBeInTheDocument()
+    expect(within(mine).getByRole('link', { name: 'Eli Employee' })).toBeInTheDocument()
+  })
+
   test('a milestone with no assignees says so', async () => {
     server.use(...handlers([cutover]))
     renderTab(users.manager, true)

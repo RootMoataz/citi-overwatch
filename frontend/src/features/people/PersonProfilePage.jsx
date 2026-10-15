@@ -7,6 +7,7 @@ import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -64,7 +65,7 @@ export default function PersonProfilePage() {
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Job title" value={p.job_title} /></Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Role" value={ROLE[p.role]} /></Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Reports to" value={p.manager?.name} /></Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Reports to" value={p.manager ? <PersonLink person={p.manager} /> : null} /></Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Department" value={p.department?.name} /></Grid>
           {'salary' in p ? <Grid size={{ xs: 12, sm: 6, md: 3 }}><ReadOnly label="Annual salary" value={formatMoney(p.salary)} /></Grid> : null}
         </Grid>

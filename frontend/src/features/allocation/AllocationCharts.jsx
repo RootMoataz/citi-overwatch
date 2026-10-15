@@ -37,7 +37,7 @@ function PeopleChart({ people }) {
       <Typography role="note" variant="body2" sx={{ mt: 1, color: over.length ? 'warning.main' : 'text.secondary' }}>
         {over.length
           ? <>⚠ Over 40h this week: {over.map((p, i) => (
-            <Fragment key={p.user.id}>{i ? '; ' : ''}<PersonLink person={p.user} color="inherit">
+            <Fragment key={p.user.id}>{i ? '; ' : ''}<PersonLink person={p.user} context={{ managed: true }} color="inherit">
               {`${p.user.name} (${formatHours(p.logged_total)})`}</PersonLink></Fragment>
           ))}. Their logged bars are orange.</>
           : 'Nobody is over 40h this week.'}

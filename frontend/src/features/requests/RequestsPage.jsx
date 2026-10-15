@@ -13,6 +13,7 @@ import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatMoney } from '../../lib/format.js'
 import { can } from '../../lib/permissions.js'
@@ -103,7 +104,7 @@ function RequestCard({ request, decide, onReject }) {
             label={request.status === 'pending' ? 'Waiting for an admin' : undefined} />
         </Stack>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {request.requested_by.name} · {formatDate(request.proposed_start)} – {formatDate(request.proposed_end)} · {formatMoney(request.proposed_budget)}
+          <PersonLink person={request.requested_by} /> · {formatDate(request.proposed_start)} – {formatDate(request.proposed_end)} · {formatMoney(request.proposed_budget)}
         </Typography>
         <Typography variant="body2" sx={{ mt: 1 }}>{request.reason}</Typography>
         {request.decision_comment ? <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>Admin: {request.decision_comment}</Typography> : null}

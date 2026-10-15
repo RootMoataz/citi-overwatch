@@ -2,6 +2,7 @@ import { Box, Link, Skeleton, Stack, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { useApprovals } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatDayLabel, formatHours } from '../../lib/format.js'
 import Section from '../dashboard/Section.jsx'
@@ -29,7 +30,7 @@ export default function ApprovalsPanel() {
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                   <UserAvatar userId={item.user.id} name={item.user.name}
                     sx={{ display: 'inline-flex', verticalAlign: 'middle', mr: 1 }} />
-                  {item.user.name} · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}
+                  <PersonLink person={item.user} context={{ managed: true }} /> · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}
                 </Typography>
                 <Typography variant="caption" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>
                   {item.project.name} › {item.milestone.name}

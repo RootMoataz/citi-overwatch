@@ -42,3 +42,22 @@ export function can(user, action, resource = {}) {
       return false
   }
 }
+
+const managerIdOf = (project) => project?.manager?.id ?? project?.managerId ?? project?.manager_id
+
+/**
+ * Whether a person's name should open their profile. Mirrors the server (users/profile.py `_can_view`), which
+ * answers 404 to anyone else: admins see anyone and everyone sees themselves; a manager sees their direct reports,
+ * the people on live projects they manage and anyone whose hours wait for their approval; employees see only
+ * themselves. The screen can't know a manager's reach in general, so callers say where the person appears:
+ * `project` — a project the person is on (its manager and archived flag decide), or `managed: true` — a list the
+ * server already limited to the manager's own people (Allocation, the dashboard's people lists, Approvals).
+ * Without context a manager gets plain text rather than a link that might lead nowhere.
+ */
+export function canViewProfile(viewer, personId, { project, managed = false } = {}) {
+  if (!viewer || personId == null) return false
+  if (isAdmin(viewer) || same(personId, viewer.id)) return true
+  if (!isManager(viewer)) return false
+  if (managed) return true
+  return Boolean(project) && !project.is_archived && same(managerIdOf(project), viewer.id)
+}

@@ -15,6 +15,9 @@ import { addDays, formatDate, formatHours, formatPct, mondayOf } from '../../lib
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import AllocationCharts from './AllocationCharts.jsx'
 
+// The server lists only the viewer's own people here, so a manager may open each profile.
+const MANAGED = { managed: true }
+
 function Utilization({ value }) {
   return (
     <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 140 }}>
@@ -63,7 +66,7 @@ export default function AllocationPage() {
               {people.map((person) => (
                 <TableRow key={person.user.id}>
                   <TableCell component="th" scope="row">
-                    <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}><PersonWithAvatar person={person.user} link /></Typography>
+                    <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}><PersonWithAvatar person={person.user} context={MANAGED} /></Typography>
                     <Typography variant="caption" sx={{ color: 'text.secondary' }}>{person.user.job_title}</Typography>
                   </TableCell>
                   {projects.map((p) => {
@@ -82,7 +85,7 @@ export default function AllocationPage() {
           {people.map((person) => (
             <Card key={person.user.id}>
               <CardContent>
-                <Typography variant="subtitle1" component="div"><PersonWithAvatar person={person.user} link /></Typography>
+                <Typography variant="subtitle1" component="div"><PersonWithAvatar person={person.user} context={MANAGED} /></Typography>
                 <Utilization value={person.utilization_pct} />
                 {person.projects.map((c) => (
                   <Typography key={c.id} variant="body2" sx={{ color: 'text.secondary' }}>

@@ -55,7 +55,7 @@ export default function PeoplePage() {
         emptyState={users.isError ? null : <EmptyState title={archived ? 'No archived accounts' : 'Nobody matches'} />}
         renderCard={(row) => (
           <Stack sx={{ gap: 0.5 }}>
-            <Typography variant="subtitle1" component="div"><PersonWithAvatar person={{ id: row.id, name: fullName(row) }} size={AVATAR_SIZE.row} /></Typography>
+            <Typography variant="subtitle1" component="div"><PersonWithAvatar person={{ id: row.id, name: fullName(row) }} size={AVATAR_SIZE.row} link={false} /></Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>{row.username} · {ROLE[row.role]} · {row.job_title || 'No title'}</Typography>
           </Stack>
         )} />

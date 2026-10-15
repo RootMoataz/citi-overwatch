@@ -26,6 +26,8 @@ const projectLink = (p, tab) => (
 )
 
 const BUDGET_COLORS = { planned: '#9DB6D3', consumed: '#0B5CAD', forecast: '#B26A00', over: '#C62828' }
+// The over-40h and busiest lists only hold the viewer's own people (the server scopes them).
+const MANAGED = { managed: true }
 const overBudget = (b) => Number(b.budget) > 0 && Number(b.forecast) > Number(b.budget)
 
 /** Q7: planned vs consumed vs forecast per project. Over-budget forecasts are red, marked ⚠ on the axis,
@@ -202,7 +204,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
                 {d.over_allocated.map((o) => (
                   <ListItem key={o.user.id} disableGutters
                     secondaryAction={<Chip color="warning" size="small" label={formatHours(o.week_logged_total)} />}>
-                    <ListItemText primary={<PersonWithAvatar person={o.user} />} />
+                    <ListItemText primary={<PersonWithAvatar person={o.user} context={MANAGED} />} />
                   </ListItem>
                 ))}
               </List>
@@ -220,7 +222,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
                 <TableBody>
                   {busiest.map((r) => (
                     <TableRow key={r.user.id}>
-                      <TableCell><PersonWithAvatar person={r.user} /></TableCell><TableCell align="right">{formatHours(r.planned_total)}</TableCell>
+                      <TableCell><PersonWithAvatar person={r.user} context={MANAGED} /></TableCell><TableCell align="right">{formatHours(r.planned_total)}</TableCell>
                       <TableCell align="right">{formatHours(r.logged_total)}</TableCell>
                       <TableCell align="right" sx={{ color: r.utilization_pct > 100 ? 'warning.main' : undefined }}>{formatPct(r.utilization_pct)}</TableCell>
                     </TableRow>
