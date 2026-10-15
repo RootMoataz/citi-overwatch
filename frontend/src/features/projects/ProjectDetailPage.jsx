@@ -12,7 +12,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { can } from '../../lib/permissions.js'
-import { PROJECT_TABS } from './tabs.js'
+import { projectTabs } from './tabs.js'
 import ProjectForm from './ProjectForm.jsx'
 
 export default function ProjectDetailPage() {
@@ -28,7 +28,6 @@ export default function ProjectDetailPage() {
   const [confirmArchive, setConfirmArchive] = useState(false)
   const leaving = useRedirectOnDenied(project.error)
 
-  const tab = PROJECT_TABS.some((t) => t.value === params.get('tab')) ? params.get('tab') : 'overview'
   const back = <Link component={RouterLink} to="/projects" underline="hover"
     sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}><ArrowBack fontSize="small" /> Projects</Link>
 
@@ -39,7 +38,8 @@ export default function ProjectDetailPage() {
   const p = project.data
   const resource = { managerId: p.manager.id }
   const manage = can(user, 'project.manage', resource) && !p.is_archived
-  const ActiveTab = PROJECT_TABS.find((t) => t.value === tab).Component
+  const { tabs, current: tab } = projectTabs(p, params.get('tab'))
+  const ActiveTab = tabs.find((t) => t.value === tab).Component
 
   return (
     <>
@@ -57,7 +57,7 @@ export default function ProjectDetailPage() {
         </>} />
       <Tabs value={tab} onChange={(_, value) => setParams({ tab: value }, { replace: true })} variant="scrollable"
         allowScrollButtonsMobile aria-label="Project sections" sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        {PROJECT_TABS.map((t) => <Tab key={t.value} value={t.value} label={t.label} id={`tab-${t.value}`}
+        {tabs.map((t) => <Tab key={t.value} value={t.value} label={t.label} id={`tab-${t.value}`}
           aria-controls={`panel-${t.value}`} />)}
       </Tabs>
       <Box role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
