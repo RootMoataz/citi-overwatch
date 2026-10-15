@@ -37,6 +37,7 @@ describe('DashboardPage', () => {
     for (const name of headings) expect(await screen.findByRole('heading', { name, level: 2 })).toBeInTheDocument()
     const status = screen.getByRole('region', { name: /status of each active project/i })
     expect(within(status).getByText('Active')).toBeInTheDocument()
+    expect(within(status).getByRole('columnheader', { name: /progress \(weighted by difficulty\)/i })).toBeInTheDocument()
     const risk = screen.getByRole('region', { name: /at risk/i })
     expect(within(risk).getByText('Past due date')).toBeInTheDocument()
     const over = screen.getByRole('region', { name: /over-allocated/i })

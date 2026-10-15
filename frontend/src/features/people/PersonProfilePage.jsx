@@ -6,6 +6,7 @@ import { useProfile } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import DifficultyChip from '../../components/DifficultyChip.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
 import StatTile from '../projects/StatTile.jsx'
@@ -99,7 +100,7 @@ export default function PersonProfilePage() {
               <TableCell component="th" scope="row">{m.name}</TableCell>
               <TableCell>{projectLink(m.project, m.can_open, 'milestones')}</TableCell>
               <TableCell>{m.role === 'supporting' ? 'Supporting' : m.role === 'primary' ? 'Primary' : 'No longer assigned'}</TableCell>
-              <TableCell><StatusChip status={m.status} /></TableCell>
+              <TableCell><StatusChip status={m.status} /><DifficultyChip difficulty={m.difficulty} sx={{ ml: 0.75 }} /></TableCell>
               <TableCell>{formatDate(m.start_date)} – {formatDate(m.end_date)}</TableCell>
               <TableCell align="right">{formatHours(m.logged_hours)}</TableCell>
               <TableCell align="right">{formatHours(m.approved_hours)}</TableCell>

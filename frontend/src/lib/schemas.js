@@ -85,6 +85,7 @@ export const milestoneSchema = z.object({
   description: z.string().max(4000).optional().default(''),
   start_date: isoDate('start date'),
   end_date: isoDate('end date'),
+  difficulty: z.enum(['easy', 'medium', 'hard']),
   predecessor_ids: z.array(z.string()),
   assignee_ids: z.array(z.string()),
 }).superRefine(endAfterStart('start_date', 'end_date'))

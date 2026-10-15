@@ -8,6 +8,7 @@ import { useMediaQuery } from 'react-responsive'
 import { useSaveMilestone } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDate, fullName } from '../../lib/format.js'
+import { DIFFICULTY, PROGRESS_WEIGHTING } from '../../lib/labels.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { milestoneSchema } from '../../lib/schemas.js'
 
@@ -26,7 +27,8 @@ export default function MilestoneDialog({ project, milestone, milestones, member
     resolver: zodResolver(milestoneSchema),
     defaultValues: {
       name: milestone?.name ?? '', description: milestone?.description ?? '', start_date: milestone?.start_date ?? '',
-      end_date: milestone?.end_date ?? '', predecessor_ids: initialPreds, assignee_ids: initialPeople,
+      end_date: milestone?.end_date ?? '', difficulty: milestone?.difficulty ?? 'medium', predecessor_ids: initialPreds,
+      assignee_ids: initialPeople,
     },
   })
   const others = milestones.filter((m) => String(m.id) !== String(milestone?.id))
@@ -36,7 +38,7 @@ export default function MilestoneDialog({ project, milestone, milestones, member
   const onSubmit = async (values) => {
     setFailure(null)
     const fields = {}
-    for (const key of ['name', 'description', 'start_date', 'end_date']) {
+    for (const key of ['name', 'description', 'start_date', 'end_date', 'difficulty']) {
       if (!milestone || values[key] !== (milestone[key] ?? '')) fields[key] = values[key]
     }
     try {
@@ -99,6 +101,14 @@ export default function MilestoneDialog({ project, milestone, milestones, member
               <TextField label="End date" type="date" required {...register('end_date')} disabled={isSubmitting}
                 slotProps={{ inputLabel: { shrink: true } }} error={Boolean(errors.end_date)}
                 helperText={errors.end_date?.message ?? `Until ${formatDate(project.predicted_end_date)}`} />
+            </Grid>
+            <Grid size={12}>
+              <Controller name="difficulty" control={control} render={({ field }) => (
+                <TextField select label="Difficulty" {...field} disabled={isSubmitting}
+                  helperText={`Project progress is weighted by difficulty. ${PROGRESS_WEIGHTING}`}>
+                  {Object.entries(DIFFICULTY).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                </TextField>
+              )} />
             </Grid>
             <Grid size={12}>
               {multi('predecessor_ids', 'Depends on', others.map((m) => ({ value: String(m.id), label: m.name,

@@ -69,6 +69,7 @@ describe('ProjectsPage', () => {
     expect(await screen.findByText('Past due date')).toBeInTheDocument()
     expect(screen.getByText('33.3%')).toBeInTheDocument()
     expect(screen.getByText('20% used')).toBeInTheDocument()
+    expect(screen.getByText(/progress \(weighted by milestone difficulty\)/i)).toBeInTheDocument()
   })
 
   test('empty projects list shows EmptyState with action for admin', async () => {
@@ -195,5 +196,13 @@ describe('ProjectDetailPage', () => {
     const dialog = await screen.findByRole('dialog', { name: /archive this project/i })
     await user.click(within(dialog).getByRole('button', { name: /^archive$/i }))
     await waitFor(() => expect(archived).toBe(true))
+  })
+
+  test('overview says progress is weighted by difficulty', async () => {
+    server.use(...detailHandlers())
+    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1', path: '/projects/:id' })
+    const tile = (await screen.findByText('Progress')).parentElement
+    expect(within(tile).getByText('33.3%')).toBeInTheDocument()
+    expect(within(tile).getByText(/milestones done, weighted by difficulty/i)).toBeInTheDocument()
   })
 })

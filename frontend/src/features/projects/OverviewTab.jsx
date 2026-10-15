@@ -12,7 +12,8 @@ export default function OverviewTab({ project }) {
     <Stack sx={{ gap: 3 }}>
       <ErrorAlert error={summary.error} onRetry={() => summary.refetch()} />
       <Grid container spacing={2}>
-        <Grid size={{ xs: 6, md: 3 }}><StatTile label="Milestones done" value={formatPct(s?.progress_pct ?? project.progress_pct)} /></Grid>
+        <Grid size={{ xs: 6, md: 3 }}><StatTile label="Progress" value={formatPct(s?.progress_pct ?? project.progress_pct)}
+          hint="Milestones done, weighted by difficulty" /></Grid>
         <Grid size={{ xs: 6, md: 3 }}><StatTile label="Budget used" value={formatPct(s?.budget_pct ?? project.budget_pct)}
           hint={`${formatMoney(s?.consumed ?? project.consumed)} of ${formatMoney(project.budget)}`} /></Grid>
         <Grid size={{ xs: 6, md: 3 }}><StatTile label="Team" value={s?.member_count ?? '—'} hint="people on this project" /></Grid>

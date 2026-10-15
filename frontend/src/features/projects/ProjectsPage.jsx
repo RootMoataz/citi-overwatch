@@ -16,6 +16,7 @@ import ResponsiveTable from '../../components/ResponsiveTable.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatPct } from '../../lib/format.js'
+import { PROGRESS_WEIGHTING } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import ProjectForm from './ProjectForm.jsx'
 
@@ -25,7 +26,7 @@ function Progress({ value }) {
   return (
     <Stack direction="row" sx={{ alignItems: 'center', gap: 1, width: '100%' }}>
       <LinearProgress variant="determinate" value={Math.min(value, 100)} sx={{ flexGrow: 1, height: 6, borderRadius: 3 }}
-        aria-label="Milestones completed" />
+        aria-label="Progress, weighted by milestone difficulty" />
       <Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right' }}>{formatPct(value)}</Typography>
     </Stack>
   )
@@ -64,7 +65,8 @@ export default function ProjectsPage() {
       renderCell: ({ row }) => <Link component={RouterLink} to={`/projects/${row.id}`} underline="hover">{row.name}</Link> },
     { field: 'status', headerName: 'Status', width: 140, renderCell: ({ value }) => <StatusChip status={value} /> },
     { field: 'manager', headerName: 'Manager', flex: 1, minWidth: 140, valueGetter: (value) => value?.name },
-    { field: 'progress_pct', headerName: 'Milestones done', flex: 1, minWidth: 160,
+    { field: 'progress_pct', headerName: 'Progress', description: `Milestones done, weighted by difficulty. ${PROGRESS_WEIGHTING}`,
+      flex: 1, minWidth: 160,
       renderCell: ({ value }) => <Progress value={value} /> },
     { field: 'budget_pct', headerName: 'Budget', width: 110, renderCell: ({ value }) => `${formatPct(value)} used` },
     { field: 'predicted_end_date', headerName: 'Due', width: 120, valueFormatter: (value) => formatDate(value) },
@@ -82,7 +84,7 @@ export default function ProjectsPage() {
 
   return (
     <>
-      <PageHeader title="Projects" subtitle="Status, progress, budget and risk for every project you can see."
+      <PageHeader title="Projects" subtitle="Status, progress (weighted by milestone difficulty), budget and risk for every project you can see."
         actions={canCreate ? <Button variant="contained" startIcon={<Add />} onClick={() => setCreating(true)}>New project</Button> : null} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>

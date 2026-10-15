@@ -151,7 +151,7 @@ GET /api/v1/projects?page_size=1
 {"items": [{"id": "86a8c3a5-ce0c-4f80-8ca3-8ec702661dc8", "name": "Apollo Data Migration",
             "description": "Move customer records from the legacy warehouse to the new platform.", "status": "active",
             "start_date": "2026-07-15", "predicted_end_date": "2026-12-27", "budget": 250000.0, "consumed": 13465.92,
-            "budget_pct": 5.4, "progress_pct": 33.3, "at_risk_reasons": [],
+            "budget_pct": 5.4, "progress_pct": 16.7, "at_risk_reasons": [],
             "manager": {"id": "9315bbc9-…", "name": "Morgan Manager"}, "is_archived": false, "completed_at": null,
             "created_at": "2026-10-13T18:00:15.020027-04:00"}],
  "total": 3}
@@ -178,8 +178,8 @@ A missing field:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support) and `is_assignee` |
-| POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date}` → `201`. The dates must fall within the project's dates |
+| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support), `difficulty` and `is_assignee` |
+| POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date, difficulty?}` → `201`. `difficulty` is `easy`, `medium` (default) or `hard`; anything else is `400`. The dates must fall within the project's dates |
 | GET / PUT / DELETE | `/milestones/{id}` | `DELETE` archives |
 | POST | `/milestones/{id}/restore` | Admin |
 | PUT | `/milestones/{id}/dependencies` | `{predecessor_ids: [...]}` → `{…, warnings}`. Returns `400 DEPENDENCY_CYCLE` or `CROSS_PROJECT_DEPENDENCY`. `warnings` flags a start date before a predecessor's end |
@@ -190,7 +190,7 @@ A missing field:
 ```json
 {"id": "07ad53b4-fd9d-4947-a584-aed75e47ec08", "project_id": "86a8c3a5-…", "name": "Discovery",
  "description": "Inventory every legacy table.", "start_date": "2026-07-15", "end_date": "2026-08-14",
- "status": "completed", "display_status": "completed", "blocked": false, "predecessors": [],
+ "status": "completed", "difficulty": "easy", "display_status": "completed", "blocked": false, "predecessors": [],
  "assignees": [{"id": "81c483ea-…", "name": "Eli Employee"}, {"id": "a250afbe-…", "name": "Chloe Park"}],
  "is_assignee": false, "completed_at": "2026-10-13T18:00:15.020027-04:00", "is_archived": false}
 ```

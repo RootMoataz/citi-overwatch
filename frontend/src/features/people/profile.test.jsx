@@ -16,7 +16,8 @@ const profile = ({ salary } = {}) => ({
       planned_hours_per_week: 10, on_team: true, logged_hours: 6, approved_hours: 6, can_open: false }],
   milestones: [
     { id: 'm1', name: 'Review', status: 'in_progress', start_date: '2026-10-01', end_date: '2026-10-31', is_archived: false,
-      role: 'supporting', project: { id: 'p1', name: 'Apollo' }, logged_hours: 12, approved_hours: 0, can_open: true }],
+      role: 'supporting', project: { id: 'p1', name: 'Apollo' }, logged_hours: 12, approved_hours: 0, can_open: true,
+      difficulty: 'easy' }],
 })
 
 const renderProfile = (viewer, body, status = 200) => {
@@ -43,6 +44,7 @@ describe('PersonProfilePage', () => {
     const row = within(milestones).getByRole('rowheader', { name: 'Review' }).closest('tr')
     expect(within(row).getByText('Supporting')).toBeInTheDocument()
     expect(within(row).getByText('12h')).toBeInTheDocument()
+    expect(within(row).getByLabelText('Difficulty: Easy')).toBeInTheDocument()
   })
 
   test('managers never see a salary', async () => {

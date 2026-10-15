@@ -62,6 +62,7 @@ erDiagram
     date start_date
     date end_date "≥ start_date"
     milestone_status status "not_started | in_progress | ready_for_review | completed"
+    text difficulty "easy | medium | hard"
   }
   time_entries {
     uuid id PK
@@ -100,7 +101,7 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `milestones` | The brief's deliverables. The stored status is one of four values; **blocked is never stored**, it's computed from the predecessors. The service checks that both dates fall within the project's dates. |
+| `milestones` | The brief's deliverables. The stored status is one of four values; **blocked is never stored**, it's computed from the predecessors. The service checks that both dates fall within the project's dates.<br>• `difficulty` is `easy`, `medium` (the default) or `hard` (a `CHECK`), weighted 1 / 2 / 3 in progress. Only the project's manager or an admin sets it. |
 | `milestone_dependencies` | Directed edges: `milestone_id` depends on `depends_on_id`.<br>• The primary key is the pair.<br>• `CHECK` forbids self-dependency.<br>• The service enforces the same-project and no-loop rules (see [LOGIC_WALKTHROUGH §7](LOGIC_WALKTHROUGH.md#7-dependency-loop-detection)). |
 | `milestone_assignees` | Who works on a milestone; the primary key is the pair. The person must be a project member. Removing someone from the team removes these links too.<br>• `role` is `primary` (the default, and every assignment a manager makes) or `supporting` (added by [auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)). Re-saving a milestone's assignees keeps the role of the people who stay. |
 | `milestone_notes` | Append-only progress notes, 1–2,000 characters, with `author_id` and the time. |
@@ -125,7 +126,7 @@ erDiagram
 | Hourly rate | `salary ÷ 2,080`, rounded to cents, copied onto the entry when it's approved |
 | Consumed budget | `SUM(hours × hourly_rate)` over the project's **approved**, non-archived entries |
 | Budget used % | `consumed ÷ budget × 100` |
-| Progress % | completed milestones ÷ non-archived milestones × 100 (0 if there are none) |
+| Progress % | weight of completed milestones ÷ weight of non-archived milestones × 100, weighted by difficulty (easy 1, medium 2, hard 3); 0 if there are none |
 | Week total (for the over-40 flag) | the person's pending + approved hours, Monday–Sunday, across all projects |
 | Forecast | consumed + (average approved weekly cost over the last 4 complete weeks × weeks left until the predicted end date) |
 | Utilization (Allocation page) | logged hours in the week ÷ 40 |

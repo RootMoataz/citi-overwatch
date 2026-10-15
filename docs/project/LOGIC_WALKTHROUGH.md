@@ -159,7 +159,7 @@ flowchart TD
 flowchart LR
   P[project, not completed, not archived] --> R1{any milestone past its end date<br/>and not completed?}
   P --> R2{today > predicted end date?}
-  P --> R3{"budget > 0 and<br/>% budget used − % milestones completed ≥ 20?"}
+  P --> R3{"budget > 0 and<br/>% budget used − weighted % milestones completed ≥ 20?"}
   R1 -- yes --> A1[OVERDUE_MILESTONE]
   R2 -- yes --> A2[PAST_DUE]
   R3 -- yes --> A3[BUDGET_BURN]
@@ -168,12 +168,13 @@ flowchart LR
 
 - **Code:** [`app/rules/at_risk.py`](../../backend/v1/app/rules/at_risk.py), a pure function of dates and numbers.
 - **The inputs** (milestone counts, consumed budget) are gathered in one query by [`app/features/insights/`](../../backend/v1/app/features/insights/) and [`projects/`](../../backend/v1/app/features/projects/).
+- **Completed % is weighted by difficulty** (easy 1, medium 2, hard 3), the same figure as the project's progress.
 - **A project with no milestones** counts as 0% complete, so spending on it can flag burn.
 - **Each reason is shown as a badge** by [`RiskBadges.jsx`](../../frontend/src/components/RiskBadges.jsx), on the dashboard, in the project list and on the project overview.
 
 **Worked example:**
 - **Atlas Customer Portal** in the demo data ended 4 days ago, and its *Build* and *Launch* milestones are past their end dates. It shows two reasons: *Past due date* and *Overdue milestone*.
-- **Apollo** is healthy: 5.4% of its budget is used against 33.3% of its milestones done.
+- **Apollo** is healthy: 5.4% of its budget is used against 16.7% progress (its easy *Discovery* is done; medium *Schema Mapping* and hard *Cutover* are not).
 
 ## 7. Dependency loop detection
 

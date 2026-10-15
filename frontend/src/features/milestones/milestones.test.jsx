@@ -13,14 +13,15 @@ const me = { id: users.employee.id, name: 'Eli Employee' }
 
 const ms = (overrides) => ({
   project_id: 'p1', description: '', status: 'not_started', display_status: 'not_started', blocked: false,
-  predecessors: [], assignees: [], is_assignee: false, completed_at: null, is_archived: false, ...overrides,
+  predecessors: [], assignees: [], is_assignee: false, completed_at: null, is_archived: false, difficulty: 'medium',
+  ...overrides,
 })
 
 const discovery = ms({ id: 'm1', name: 'Discovery', start_date: '2026-01-05', end_date: '2026-02-28', status: 'in_progress',
   display_status: 'in_progress', assignees: [me], is_assignee: true })
 const mapping = ms({ id: 'm2', name: 'Schema Mapping', start_date: '2026-03-01', end_date: '2026-06-30',
   display_status: 'blocked', blocked: true, predecessors: ['m1'], assignees: [me], is_assignee: true })
-const cutover = ms({ id: 'm3', name: 'Cutover', start_date: '2026-07-01', end_date: '2026-09-30' })
+const cutover = ms({ id: 'm3', name: 'Cutover', start_date: '2026-07-01', end_date: '2026-09-30', difficulty: 'hard' })
 
 function handlers(list = [discovery, mapping, cutover], extra = []) {
   return [
@@ -158,5 +159,54 @@ describe('MilestonesTab', () => {
     expect(within(cut).getByText('Supporting')).toBeInTheDocument()
     expect(within(cut).getByLabelText('Eli Employee is supporting')).toBeInTheDocument()
     expect(within(cut).queryByLabelText('Ada Lovelace is supporting')).not.toBeInTheDocument()
+  })
+
+  test('each milestone card shows its difficulty', async () => {
+    server.use(...handlers())
+    renderTab(users.employee, false)
+    expect(within(await card('Cutover')).getByLabelText('Difficulty: Hard')).toHaveTextContent('Hard')
+    expect(within(await card('Discovery')).getByLabelText('Difficulty: Medium')).toHaveTextContent('Medium')
+  })
+
+  test('manager picks a difficulty when adding a milestone, Medium by default', async () => {
+    let created = null
+    server.use(...handlers([], [
+      http.post(`${API}/projects/p1/milestones`, async ({ request }) => {
+        created = await request.json()
+        return HttpResponse.json({ ...cutover, id: 'm9', ...created }, { status: 201 })
+      }),
+      http.put(`${API}/milestones/m9/dependencies`, () => HttpResponse.json({ ...cutover, warnings: [] })),
+      http.put(`${API}/milestones/m9/assignees`, () => HttpResponse.json(cutover))]))
+    renderTab(users.manager, true)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /add milestone/i }))
+    const dialog = await screen.findByRole('dialog', { name: /new milestone/i })
+    const difficulty = within(dialog).getByRole('combobox', { name: /difficulty/i })
+    expect(difficulty).toHaveTextContent('Medium')
+    expect(within(dialog).getByText(/weighted by difficulty/i)).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/^name/i), 'Launch')
+    await user.type(within(dialog).getByLabelText(/start date/i), '2026-10-01')
+    await user.type(within(dialog).getByLabelText(/end date/i), '2026-10-31')
+    await user.click(difficulty)
+    await user.click(await screen.findByRole('option', { name: 'Hard' }))
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(created).toMatchObject({ name: 'Launch', difficulty: 'hard' }))
+  })
+
+  test('editing sends the difficulty only when it changed', async () => {
+    const sent = []
+    server.use(...handlers([discovery, mapping, cutover], [
+      http.put(`${API}/milestones/m1`, async ({ request }) => {
+        sent.push(await request.json())
+        return HttpResponse.json({ ...discovery, ...sent.at(-1) })
+      })]))
+    renderTab(users.manager, true)
+    const user = userEvent.setup()
+    await user.click(within(await card('Discovery')).getByRole('button', { name: /edit discovery/i }))
+    const dialog = await screen.findByRole('dialog', { name: /edit milestone/i })
+    await user.click(within(dialog).getByRole('combobox', { name: /difficulty/i }))
+    await user.click(await screen.findByRole('option', { name: 'Easy' }))
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(sent).toEqual([{ difficulty: 'easy' }]))
   })
 })

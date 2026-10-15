@@ -139,7 +139,7 @@ export default function DashboardPage() {
             </Grid>
             {active.length ? (
               <Table size="small" aria-label="Active projects">
-                <TableHead><TableRow><TableCell>Project</TableCell><TableCell>Milestones done</TableCell>
+                <TableHead><TableRow><TableCell>Project</TableCell><TableCell>Progress (weighted by difficulty)</TableCell>
                   <TableCell>Budget used</TableCell><TableCell>Due</TableCell></TableRow></TableHead>
                 <TableBody>
                   {active.map((p) => (
@@ -147,7 +147,7 @@ export default function DashboardPage() {
                       <TableCell>{projectLink(p)}</TableCell>
                       <TableCell sx={{ minWidth: 140 }}>
                         <LinearProgress variant="determinate" value={Math.min(p.progress_pct, 100)} sx={{ height: 6, borderRadius: 3 }}
-                          aria-label={`${p.name} milestones done`} />
+                          aria-label={`${p.name} progress`} />
                         <Typography variant="caption">{formatPct(p.progress_pct)}</Typography>
                       </TableCell>
                       <TableCell>{formatPct(p.budget_pct)}</TableCell>

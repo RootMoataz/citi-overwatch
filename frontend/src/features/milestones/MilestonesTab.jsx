@@ -8,6 +8,7 @@ import {
 import { Fragment, useState } from 'react'
 import { useArchiveMilestone, useMembers, useMilestones, useMilestoneStatus } from '../../api/queries.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DifficultyChip from '../../components/DifficultyChip.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -39,6 +40,7 @@ function MilestoneCard({ m, names, manage, onEdit, onArchive, extra }) {
             <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
               <Typography variant="subtitle1" component="h3">{m.name}</Typography>
               <StatusChip status={m.display_status} />
+              <DifficultyChip difficulty={m.difficulty} />
               {m.is_assignee ? <Chip size="small" variant="outlined" label="Assigned to you" /> : null}
             </Stack>
             <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>
