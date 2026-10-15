@@ -13,6 +13,7 @@ from app.authz import APPROVER_SQL
 from app.ctx import Ctx
 from app.db import query
 from app.features.insights.service import _people_scope
+from app.features.milestones.workflow import CATEGORY_LABELS
 from app.features.projects.service import decorated, visible_projects
 from app.features.time.service import _today, _weekly_costs, week_start
 from app.rules.insights import REJECTION_WINDOW_DAYS, smart_insights
@@ -45,12 +46,18 @@ def _milestones(conn, rows: list[dict]) -> list[dict]:
         return []
     found = query(conn, """SELECT m.id, m.project_id, m.name, m.status, m.priority, m.start_date, m.end_date,
                                   (SELECT max(t.work_date) FROM time_entries t WHERE t.milestone_id = m.id
-                                     AND t.status IN ('pending', 'approved')) AS last_logged
-                           FROM milestones m WHERE m.project_id = ANY(CAST(:ids AS uuid[]))
+                                     AND t.status IN ('pending', 'approved')) AS last_logged,
+                                  k.category, u.first_name, u.last_name
+                           FROM milestones m
+                           LEFT JOIN milestone_kickbacks k ON k.milestone_id = m.id AND k.resolved_at IS NULL
+                           LEFT JOIN users u ON u.id = k.raised_by
+                           WHERE m.project_id = ANY(CAST(:ids AS uuid[]))
                              AND NOT m.is_archived AND m.status <> 'completed' ORDER BY m.end_date""",
                   ids=list(open_projects))
     return [{"id": m["id"], "name": m["name"], "project_id": m["project_id"], "status": m["status"],
              "priority": m["priority"],
+             "kickback": {"category_label": CATEGORY_LABELS[m["category"]], "raised_by": _name(m)}
+             if m["category"] else None,
              "project_name": open_projects[str(m["project_id"])]["name"],
              "project_status": open_projects[str(m["project_id"])]["status"],
              "start_date": m["start_date"], "end_date": m["end_date"], "last_logged": m["last_logged"]}

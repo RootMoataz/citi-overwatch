@@ -15,7 +15,10 @@ export const STATUS = {
   not_started: { label: 'Not started', color: '#5B6B7F', dark: TONE.grey },
   in_progress: { label: 'In progress', color: '#0B5CAD', dark: TONE.blue },
   ready_for_review: { label: 'Ready for review', color: '#6B3FA0', dark: TONE.purple },
-  blocked: { label: 'Blocked', color: '#B3261E', dark: TONE.red },
+  // Kicked back by an assignee; only its manager's review moves it on.
+  blocked: { label: 'Blocked – needs review', color: '#B3261E', dark: TONE.red },
+  // Computed, never stored: a predecessor isn't completed yet.
+  waiting: { label: 'Waiting on dependencies', color: '#5B6B7F', dark: TONE.grey },
   pending: { label: 'Pending approval', color: '#B26A00', dark: TONE.amber },
   approved: { label: 'Approved', color: '#1E7D45', dark: TONE.green },
   rejected: { label: 'Rejected', color: '#B3261E', dark: TONE.red },

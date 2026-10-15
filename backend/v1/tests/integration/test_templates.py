@@ -35,6 +35,9 @@ def test_any_signed_in_user_lists_the_department_templates(client, conn):
 
 def test_creating_a_project_from_the_template_adds_the_preset_milestones_in_one_go(client, conn):
     admin, manager = make_user(conn, role="admin"), make_user(conn, role="manager")
+    for skill in ("Business Analysis", "Backend Development", "Data Engineering", "Frontend Development",
+                  "UI/UX Design", "QA", "DevOps"):
+        conn.run("INSERT INTO skills (name) VALUES (:n) ON CONFLICT DO NOTHING", n=skill)
     tech = department(conn, "technology")  # any case matches the preset
     status, body, _, _ = client.request("POST", "/projects", token=token_for(conn, admin),
                                         json=body_for(manager, tech, template=True))
@@ -48,6 +51,15 @@ def test_creating_a_project_from_the_template_adds_the_preset_milestones_in_one_
                                                                   WHERE project_id = CAST(:p AS uuid)""", p=body["id"])}
     assert estimates == {m["name"]: m["estimated_hours"] for m in expected}
     assert all(r["description"] for r in rows)
+    # Each step brings its objective, completion criteria and required skills for the milestone workflow.
+    details = query(conn, """SELECT m.name, m.objective, m.completion_criteria,
+                                    ARRAY(SELECT s.name FROM milestone_skills ms JOIN skills s ON s.id = ms.skill_id
+                                          WHERE ms.milestone_id = m.id ORDER BY s.name) AS skills
+                             FROM milestones m WHERE m.project_id = CAST(:p AS uuid)""", p=body["id"])
+    by_name = {m["name"]: m for m in expected}
+    for d in details:
+        assert d["objective"] == by_name[d["name"]]["objective"] and d["completion_criteria"]
+        assert d["skills"] == sorted(by_name[d["name"]]["required_skills"])
     assert query_one(conn, """SELECT count(*) AS n FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id
                               WHERE m.project_id = CAST(:p AS uuid)""", p=body["id"])["n"] == 0
     names = {str(r["id"]): r["name"] for r in rows}

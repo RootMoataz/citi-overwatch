@@ -252,15 +252,21 @@ def _template_plan(conn, body: dict, data: dict) -> tuple[str, list[dict]] | Non
 
 
 def add_planned_milestones(conn, project_id: str, plan: list[dict]) -> list[dict]:
-    """Insert a plan's milestones (not started, nobody assigned, with their effort estimate) and their dependencies. Runs inside the caller's
+    """Insert a plan's milestones (not started, nobody assigned, with their effort estimate, objective, completion
+    criteria and required skills) and their dependencies. Runs inside the caller's
     transaction. Returns the new rows."""
     ids, rows = {}, []
     for m in plan:
         row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty,
-                                                         priority, estimated_hours)
-                                 VALUES (CAST(:p AS uuid), :n, :d, :s, :e, :dif, :pr, :est) RETURNING *""",
+                                                         priority, estimated_hours, objective, completion_criteria)
+                                 VALUES (CAST(:p AS uuid), :n, :d, :s, :e, :dif, :pr, :est, :obj, :crit) RETURNING *""",
                         p=str(project_id), n=m["name"], d=m["description"], s=m["start_date"], e=m["end_date"],
-                        dif=m["difficulty"], pr=m["priority"], est=m.get("estimated_hours"))
+                        dif=m["difficulty"], pr=m["priority"], est=m.get("estimated_hours"),
+                        obj=m.get("objective") or "", crit=m.get("completion_criteria") or "")
+        # The step's required skills, by name from the catalogue (an archived or missing skill is left out).
+        conn.run("""INSERT INTO milestone_skills (milestone_id, skill_id)
+                    SELECT :m, id FROM skills WHERE lower(name) = ANY(:names) AND NOT is_archived""",
+                 m=row["id"], names=[n.lower() for n in m.get("required_skills") or []])
         ids[m["name"]] = row["id"]
         rows.append(row)
     for m in plan:

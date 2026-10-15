@@ -2,6 +2,7 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../app/toast.js'
 import { celebrate } from '../lib/celebrate.js'
+import { statusToast } from '../lib/workflow.js'
 import { api } from './client.js'
 
 // Errors that mean "what you're looking at is out of date": refetch so the screen shows the current state.
@@ -132,11 +133,10 @@ export const useSaveMilestone = (projectId) => useApiMutation(async ({ id, field
 }, { invalidate: milestoneKeys(projectId), success: (_, v) => (v.id ? 'Milestone saved' : 'Milestone added') })
 export const useMilestoneStatus = (projectId) => useApiMutation(
   ({ id, status }) => api.post(`/milestones/${id}/status`, { status }),
-  // "Ready for review" may auto-route the person onto another milestone, maybe in another project.
-  { invalidate: [...milestoneKeys(projectId), ['milestones'], ['time'], ['notifications']],
-    success: (data) => (data?.routed_to
-      ? `Status updated. You're now supporting ${data.routed_to.milestone.name} (${data.routed_to.project.name})`
-      : 'Status updated'),
+  // "Ready for review" may auto-route the person onto another milestone, maybe in another project; "Completed" may
+  // auto-assign the people who were on it to the next milestone.
+  { invalidate: [...milestoneKeys(projectId), ['milestones'], ['time'], ['notifications'], ['profile']],
+    success: statusToast,
     after: (_, variables) => { if (variables.status === 'completed') celebrate() } })
 // Pull mode: a team member takes a ready, unassigned milestone; 409 means someone else got there first.
 export const useClaimMilestone = (projectId) => useApiMutation((id) => api.post(`/milestones/${id}/claim`),

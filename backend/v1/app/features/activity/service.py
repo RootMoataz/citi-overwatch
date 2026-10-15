@@ -2,7 +2,8 @@
 
 `summarize` turns audit-log rows into {actor, verb, object, project, sentence}, e.g. "Morgan Manager approved 9h for
 Eli Employee on Schema Mapping". It looks the names up in a few batched queries and never copies a recorded
-value other than hours, statuses and milestone priorities, so no salary or rate can reach a sentence. The audit log
+value other than hours, statuses, milestone priorities, kickback categories and the skill names an auto-assignment
+matched, so no salary or rate can reach a sentence. The audit log
 uses it too.
 
 Who sees which event in the feed (sign-ins and password events never appear, for anyone):
@@ -19,6 +20,7 @@ from app.ctx import Ctx
 from app.db import query
 from app.features.time.service import _today
 from app.http import ApiError
+from app.features.milestones.workflow import CATEGORY_LABELS
 from app.rules.priority import PRIORITY_LABELS
 from app.validation import as_uuid
 
@@ -26,7 +28,7 @@ HIDDEN_ACTIONS = ["login", "password_change", "password_reset", "password_reset_
 DEFAULT_LIMIT, MAX_LIMIT = 20, 50
 
 STATUS_LABELS = {"not_started": "Not started", "in_progress": "In progress", "ready_for_review": "Ready for review",
-                 "completed": "Completed", "planned": "Planned", "active": "Active", "on_hold": "On hold"}
+                 "completed": "Completed", "blocked": "Blocked", "planned": "Planned", "active": "Active", "on_hold": "On hold"}
 
 
 def _name(row: dict | None, first="first_name", last="last_name") -> str | None:
@@ -58,7 +60,8 @@ def _changes(row: dict) -> tuple[dict, dict]:
 def summarize(conn, rows: list[dict]) -> list[dict]:
     """One summary per audit row (same order). Rows need: actor_id, first_name/last_name (the actor's), action,
     entity_type, entity_id, changes."""
-    want = {t: set() for t in ("project", "milestone", "time_entry", "user", "project_request", "department")}
+    want = {t: set() for t in ("project", "milestone", "time_entry", "user", "project_request", "department",
+                               "skill")}
     for r in rows:
         if r["entity_type"] in want and r["entity_id"]:
             want[r["entity_type"]].add(str(r["entity_id"]))
@@ -66,6 +69,8 @@ def summarize(conn, rows: list[dict]) -> list[dict]:
         for side in (before, after):
             if side.get("user_id"):
                 want["user"].add(str(side["user_id"]))
+            if side.get("from_milestone_id"):
+                want["milestone"].add(str(side["from_milestone_id"]))
 
     entries = _lookup(conn, """SELECT id, user_id, milestone_id, project_id, hours FROM time_entries
                                WHERE id = ANY(CAST(:ids AS uuid[]))""", want["time_entry"])
@@ -83,6 +88,7 @@ def summarize(conn, rows: list[dict]) -> list[dict]:
                     want["user"])
     departments = _lookup(conn, "SELECT id, name FROM departments WHERE id = ANY(CAST(:ids AS uuid[]))",
                           want["department"])
+    skills = _lookup(conn, "SELECT id, name FROM skills WHERE id = ANY(CAST(:ids AS uuid[]))", want["skill"])
 
     def project_ref(project_id):
         p = projects.get(str(project_id)) if project_id else None
@@ -124,11 +130,24 @@ def summarize(conn, rows: list[dict]) -> list[dict]:
                 verb, tail = "moved", f"to {STATUS_LABELS.get(target, target)}"
             elif action == "update" and set(after) == {"priority"}:
                 verb, tail = "set priority of", f"to {PRIORITY_LABELS.get(after['priority'], after['priority'])}"
+            elif action == "auto_assign":
+                source = milestones.get(str(after.get("from_milestone_id")))
+                verb = f"auto-assigned {person(after.get('user_id'))} to"
+                tail = f"after {source['name'] if source else 'a milestone'} was completed"
+                if after.get("skills"):
+                    tail += f" (skill: {', '.join(after['skills'])})"
+            elif action == "kick_back":
+                verb, tail = "kicked back", f"({CATEGORY_LABELS.get(after.get('category'), 'Other')})"
+            elif action == "resolve_kickback" and after.get("resolution") == "returned":
+                verb, tail = "returned", "to the team after a kickback"
+            elif action == "resolve_kickback":
+                verb, tail = "put", "back in the queue after a kickback"
             else:
                 verb = {"create": "added milestone", "update": "updated", "archive": "archived milestone",
                         "restore": "restored milestone", "claim": "claimed", "set_assignees": "changed who works on",
                         "set_dependencies": "changed the dependencies of", "add_note": "added a note to",
-                        "auto_assign_support": "started supporting"}.get(action, verb)
+                        "auto_assign_support": "started supporting",
+                        "post_update": "posted an update on"}.get(action, verb)
         elif etype == "project":
             project = project_ref(eid)
             obj = {"type": "project", "id": eid, "name": project["name"] if project else "a project"}
@@ -155,13 +174,19 @@ def summarize(conn, rows: list[dict]) -> list[dict]:
             self_event = eid == actor_id
             obj = None if self_event else {"type": "user", "id": eid, "name": person(eid)}
             verb = ({"update": "updated their profile", "avatar_set": "updated their profile photo",
+                     "set_skills": "updated their skills",
                      "avatar_remove": "removed their profile photo", "login": "signed in",
                      "password_change": "changed their password", "password_reset": "reset their password"}
                     if self_event else
                     {"create": "created an account for", "update": "updated the account of",
                      "archive": "archived the account of", "restore": "restored the account of",
-                     "avatar_remove": "removed the profile photo of",
+                     "avatar_remove": "removed the profile photo of", "set_skills": "updated the skills of",
                      "password_reset_by_admin": "reset the password of"}).get(action, verb)
+        elif etype == "skill":
+            skill = skills.get(eid)
+            obj = {"type": "skill", "id": eid, "name": skill["name"] if skill else "a skill"}
+            verb = {"create": "added skill", "update": "renamed skill", "archive": "archived skill",
+                    "restore": "restored skill"}.get(action, verb)
         elif etype == "department":
             dept = departments.get(eid)
             obj = {"type": "department", "id": eid, "name": dept["name"] if dept else "a department"}

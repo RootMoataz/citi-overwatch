@@ -1,28 +1,29 @@
-"""Milestones: dates inside the project, dependencies without loops, assignees, status and notes,
-and auto-routing to support work after "Ready for review"."""
+"""Milestones: dates inside the project, dependencies without loops, assignees, status and notes, what the work is
+(objective, completion criteria, required skills), and auto-routing after "Ready for review" and "Completed"
+(features/milestones/routing.py). Progress updates, kickbacks and history live in features/milestones/workflow.py."""
 
-import json
-from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.audit import record
 from app.authz import is_assignee, is_member, load_milestone, load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
-from app.features.members.service import other_planned_hours
+from app.features.milestones.notify import notify
+from app.features.milestones.routing import route_after_completion, route_to_support
+from app.features.milestones.workflow import can_resolve, open_kickbacks
+from app.features.skills.lookup import check_skill_ids, required_skills_of
 from app.http import ApiError
-from app.rules.capacity import fits_weekly_plan
 from app.rules.claim import claim_blocker
 from app.rules.cycles import creates_cycle, dependency_order
 from app.rules.estimates import MAX_ESTIMATE, duration_days, used_pct, working_days
-from app.rules.milestone_status import can_transition
+from app.rules.milestone_status import SETTABLE_STATUSES, can_kick_back, can_transition
 from app.rules.priority import PRIORITIES
-from app.rules.routing import pick_support_milestone
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, require
 
-STATUSES = ("not_started", "in_progress", "ready_for_review", "completed")
 DIFFICULTIES = ("easy", "medium", "hard")
-EDITABLE = {"name", "description", "start_date", "end_date", "difficulty", "priority", "estimated_hours"}
+EDITABLE = {"name", "description", "start_date", "end_date", "difficulty", "priority", "estimated_hours", "objective",
+            "completion_criteria", "required_skill_ids"}
+OBJECTIVE_MAX, CRITERIA_MAX = 300, 4000
 TENTH = Decimal("0.1")
 
 
@@ -76,20 +77,40 @@ def _assignees(conn, project_id: str) -> tuple[dict[str, list[dict]], dict[str, 
     return out, supporting
 
 
+def _latest_percent(conn, milestone_ids) -> dict[str, int]:
+    """milestone id -> the percent complete from its newest update that gave one."""
+    ids = sorted({str(m) for m in milestone_ids})
+    if not ids:
+        return {}
+    rows = query(conn, """SELECT DISTINCT ON (milestone_id) milestone_id, percent_complete FROM milestone_updates
+                          WHERE milestone_id = ANY(CAST(:ids AS uuid[])) AND percent_complete IS NOT NULL
+                          ORDER BY milestone_id, created_at DESC, id DESC""", ids=ids)
+    return {str(r["milestone_id"]): r["percent_complete"] for r in rows}
+
+
+def display_status(status: str, waiting: bool) -> str:
+    """What the card shows: 'waiting' while a predecessor isn't completed (computed, never stored); otherwise the
+    stored status, 'blocked' meaning kicked back and waiting for the manager's review."""
+    return "waiting" if waiting and status not in ("completed", "blocked") else status
+
+
 def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict]:
     edges = _edges(conn, project_id)
     assignees, supporting = _assignees(conn, project_id)
     status_of = {str(m["id"]): m["status"] for m in _project_milestones(conn, project_id)}
-    project = query_one(conn, """SELECT work_mode, status::text AS status, is_archived FROM projects
-                                 WHERE id = CAST(:p AS uuid)""", p=str(project_id))
+    project = query_one(conn, "SELECT * FROM projects WHERE id = CAST(:p AS uuid)", p=str(project_id))
     on_team = is_member(conn, str(project_id), ctx.user_id)
     logged = _logged(conn, project_id)
+    ids = [m["id"] for m in milestones]
+    required, kickbacks, percents = required_skills_of(conn, ids), open_kickbacks(conn, ids), _latest_percent(conn, ids)
+    managing, resolving = manages(ctx, project), can_resolve(ctx, project)
     out = []
     for m in milestones:
         mid = str(m["id"])
         preds = sorted(edges.get(mid, set()))
         blocked = any(status_of.get(p) != "completed" for p in preds)
         people = assignees.get(mid, [])
+        mine = any(str(a["id"]) == ctx.user_id for a in people)
         claimable = claim_blocker(work_mode=project["work_mode"], project_status=project["status"],
                                   project_archived=project["is_archived"], status=m["status"],
                                   is_archived=m["is_archived"], blocked=blocked, assignee_count=len(people)) is None
@@ -101,10 +122,16 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
             "working_days": working_days(m["start_date"], m["end_date"]),
             "logged_hours": logged.get(mid, Decimal(0)),
             "estimate_used_pct": used_pct(logged.get(mid, Decimal(0)), m["estimated_hours"]),
-            "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
+            "display_status": display_status(m["status"], blocked),
+            "objective": m["objective"], "completion_criteria": m["completion_criteria"],
+            "required_skills": required.get(mid, []), "progress_percent": percents.get(mid),
+            "open_kickback": kickbacks.get(mid),
             "blocked": blocked, "predecessors": preds, "assignees": people, "supporting_ids": supporting.get(mid, []),
-            "is_assignee": any(str(a["id"]) == ctx.user_id for a in people),
+            "is_assignee": mine,
             "claimable": claimable, "can_claim": claimable and on_team,
+            "can_post_update": not m["is_archived"] and (managing or mine),
+            "can_kick_back": not m["is_archived"] and mine and can_kick_back(m["status"]),
+            "can_resolve_kickback": mid in kickbacks and resolving,
             "completed_at": m["completed_at"], "is_archived": m["is_archived"],
             "plan_column": m["plan_column"], "sequence": m["sequence"],  # place on the planning board
         })
@@ -134,6 +161,20 @@ def list_milestones(conn, ctx: Ctx, project_id: str) -> list[dict]:
     return _views(conn, ctx, project_id, [by_id[mid] for mid in order if mid in by_id])
 
 
+def _criteria(value) -> str:
+    """Checklist-style text: one item per line, trimmed, blank lines dropped."""
+    text = as_str(value or "", "completion_criteria", min_len=0, max_len=CRITERIA_MAX)
+    return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+
+def _set_required_skills(conn, milestone_id: str, skill_ids: set[str]) -> None:
+    conn.run("""DELETE FROM milestone_skills WHERE milestone_id = CAST(:m AS uuid)
+                AND NOT (skill_id = ANY(CAST(:ids AS uuid[])))""", m=milestone_id, ids=sorted(skill_ids))
+    for skill in sorted(skill_ids):
+        conn.run("""INSERT INTO milestone_skills (milestone_id, skill_id) VALUES (CAST(:m AS uuid), CAST(:s AS uuid))
+                    ON CONFLICT DO NOTHING""", m=milestone_id, s=skill)
+
+
 def create_milestone(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
     project = load_project(conn, ctx, project_id, manage=True)
     require(body, "name", "start_date", "end_date")
@@ -143,15 +184,20 @@ def create_milestone(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
             "end_date": as_date(body["end_date"], "end_date"),
             "difficulty": as_enum(body.get("difficulty", "medium"), "difficulty", DIFFICULTIES),
             "priority": as_enum(body.get("priority", "medium"), "priority", PRIORITIES),
-            "estimated_hours": as_estimate(body.get("estimated_hours"))}
+            "estimated_hours": as_estimate(body.get("estimated_hours")),
+            "objective": as_str(body.get("objective") or "", "objective", min_len=0, max_len=OBJECTIVE_MAX),
+            "completion_criteria": _criteria(body.get("completion_criteria"))}
+    skills = check_skill_ids(conn, body.get("required_skill_ids") or [], "required_skill_ids")
     _check_dates(project, data["start_date"], data["end_date"])
     with transaction(conn):
         row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty,
-                                                         priority, estimated_hours)
+                                                         priority, estimated_hours, objective, completion_criteria)
                                  VALUES (CAST(:p AS uuid), :name, :description, :start_date, :end_date, :difficulty,
-                                         :priority, :estimated_hours)
+                                         :priority, :estimated_hours, :objective, :completion_criteria)
                                  RETURNING id""", p=project_id, **data)
-        record(conn, ctx, "create", "milestone", str(row["id"]), after=data)
+        _set_required_skills(conn, str(row["id"]), skills)
+        record(conn, ctx, "create", "milestone", str(row["id"]),
+               after={**data, **({"required_skill_ids": sorted(skills)} if skills else {})})
     return _view(conn, ctx, row["id"])
 
 
@@ -180,14 +226,27 @@ def update_milestone(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
         changes["priority"] = as_enum(body["priority"], "priority", PRIORITIES)
     if "estimated_hours" in body:
         changes["estimated_hours"] = as_estimate(body["estimated_hours"])
+    if "objective" in body:
+        changes["objective"] = as_str(body["objective"] or "", "objective", min_len=0, max_len=OBJECTIVE_MAX)
+    if "completion_criteria" in body:
+        changes["completion_criteria"] = _criteria(body["completion_criteria"])
+    current_skills = {str(r["skill_id"]) for r in query(
+        conn, "SELECT skill_id FROM milestone_skills WHERE milestone_id = CAST(:m AS uuid)", m=milestone_id)}
+    skills = current_skills
+    if "required_skill_ids" in body:
+        skills = check_skill_ids(conn, body["required_skill_ids"] or [], "required_skill_ids", keep=current_skills)
     _check_dates(project, changes.get("start_date", before["start_date"]), changes.get("end_date", before["end_date"]))
-    if changes:
-        sets = ", ".join(f"{k} = :{k}" for k in changes)
+    if changes or skills != current_skills:
+        sets = "".join(f"{k} = :{k}, " for k in changes)
         with transaction(conn):
-            conn.run(f"UPDATE milestones SET {sets}, updated_at = now() WHERE id = CAST(:mid AS uuid)",
+            conn.run(f"UPDATE milestones SET {sets}updated_at = now() WHERE id = CAST(:mid AS uuid)",
                      mid=milestone_id, **changes)
-            record(conn, ctx, "update", "milestone", milestone_id,
-                   before={k: before[k] for k in changes}, after=changes)
+            before_values, after_values = {k: before[k] for k in changes}, dict(changes)
+            if skills != current_skills:
+                _set_required_skills(conn, milestone_id, skills)
+                before_values["required_skill_ids"] = sorted(current_skills)
+                after_values["required_skill_ids"] = sorted(skills)
+            record(conn, ctx, "update", "milestone", milestone_id, before=before_values, after=after_values)
     return _view(conn, ctx, milestone_id)
 
 
@@ -295,80 +354,46 @@ def claim_milestone(conn, ctx: Ctx, milestone_id: str) -> dict:
         record(conn, ctx, "claim", "milestone", milestone_id, after={"user_id": ctx.user_id})
         if str(m["manager_id"]) != ctx.user_id:
             me = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
-            _notify(conn, m["manager_id"], "MILESTONE_CLAIMED", ctx.user_id,
-                    {"name": f"{me['first_name']} {me['last_name']}",
-                     "milestone": {"id": str(m["id"]), "name": m["name"]},
-                     "project": {"id": str(m["project_id"]), "name": m["project_name"]}})
+            notify(conn, m["manager_id"], "MILESTONE_CLAIMED", ctx.user_id,
+                   {"name": f"{me['first_name']} {me['last_name']}",
+                    "milestone": {"id": str(m["id"]), "name": m["name"]},
+                    "project": {"id": str(m["project_id"]), "name": m["project_name"]}})
     return _view(conn, ctx, milestone_id)
 
 
-def _notify(conn, recipient, kind: str, subject, payload: dict) -> None:
-    # week_start stays NULL: the (type, subject, week) unique key is for OVER_40H, and routing can repeat in a week.
-    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
-                VALUES (CAST(:r AS uuid), :t, CAST(:s AS uuid), CAST(:p AS jsonb))""",
-             r=str(recipient), t=kind, s=str(subject), p=json.dumps(payload))
-
-
-def _route_to_support(conn, ctx: Ctx, reviewed: dict) -> dict | None:
-    """Add the person who sent `reviewed` for review as support on the most urgent other milestone
-    (LOGIC_WALKTHROUGH §9). Runs inside the status change's transaction; returns what it picked, or None."""
-    rows = query(conn, """
-        SELECT m.id, m.name, m.end_date, m.priority, m.status::text AS status, m.is_archived, m.project_id,
-               p.name AS project_name, p.manager_id, p.start_date AS p_start, p.predicted_end_date AS p_end,
-               p.status::text AS project_status, p.is_archived AS project_archived, pm.planned_hours_per_week,
-               EXISTS (SELECT 1 FROM milestone_assignees a
-                       WHERE a.milestone_id = m.id AND a.user_id = CAST(:u AS uuid)) AS assigned
-        FROM milestones m JOIN projects p ON p.id = m.project_id
-        JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = CAST(:u AS uuid) AND NOT pm.is_archived""",
-                 u=ctx.user_id)
-    target = pick_support_milestone(rows, today=datetime.now(timezone.utc).date(), exclude_id=str(reviewed["id"]),
-                                    member_projects={str(r["project_id"]) for r in rows})
-    if not target:
-        return None
-    project = {"id": target["project_id"], "start_date": target["p_start"], "predicted_end_date": target["p_end"]}
-    # Already on the project, so planned hours don't change; still never route someone planned past 40h.
-    if not fits_weekly_plan(other_planned_hours(conn, ctx.user_id, project), Decimal(target["planned_hours_per_week"])):
-        return None
-    conn.run("""INSERT INTO milestone_assignees (milestone_id, user_id, role)
-                VALUES (:m, CAST(:u AS uuid), 'supporting') ON CONFLICT (milestone_id, user_id) DO NOTHING""",
-             m=target["id"], u=ctx.user_id)
-    if not conn.row_count:  # a manager assigned them in the meantime: nothing to route
-        return None
-    record(conn, ctx, "auto_assign_support", "milestone", str(target["id"]),
-           after={"user_id": ctx.user_id, "role": "supporting", "from_milestone_id": str(reviewed["id"])})
-    me = query_one(conn, "SELECT first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=ctx.user_id)
-    payload = {"name": f"{me['first_name']} {me['last_name']}", "end_date": str(target["end_date"]),
-               "milestone": {"id": str(target["id"]), "name": target["name"]},
-               "project": {"id": str(target["project_id"]), "name": target["project_name"]},
-               "from_milestone": {"id": str(reviewed["id"]), "name": reviewed["name"]}}
-    _notify(conn, ctx.user_id, "SUPPORT_ASSIGNED", ctx.user_id, payload)
-    if str(target["manager_id"]) != ctx.user_id:
-        _notify(conn, target["manager_id"], "SUPPORT_ROUTED", ctx.user_id, payload)
-    return {"milestone": {"id": target["id"], "name": target["name"], "end_date": target["end_date"]},
-            "project": {"id": target["project_id"], "name": target["project_name"]}}
-
-
 def change_status(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
+    """Move a milestone along (rules/milestone_status.py). Sending it for review routes the sender to support work;
+    completing it routes everyone who was on it to the next ready milestone (features/milestones/routing.py)."""
     require(body, "status")
-    target = as_enum(body["status"], "status", STATUSES)
+    target = as_enum(body["status"], "status", SETTABLE_STATUSES)
     milestone, project = load_milestone(conn, ctx, milestone_id)
     is_manager = manages(ctx, project)  # manages THIS project, not just has the role
     if not is_manager and not is_assignee(conn, milestone_id, ctx.user_id):
         raise ApiError(403, "NOT_ASSIGNED", "Only people assigned to this milestone can update it")
     view = _view(conn, ctx, milestone_id)
+    if milestone["status"] == "blocked":
+        raise ApiError(400, "INVALID_TRANSITION", "This milestone was kicked back: resolve the kickback first")
     if not can_transition(current=milestone["status"], target=target, is_manager=is_manager, blocked=view["blocked"]):
         reason = " (waiting on predecessors)" if view["blocked"] and milestone["status"] == "not_started" else ""
         raise ApiError(400, "INVALID_TRANSITION", f"Can't move from {milestone['status']} to {target}{reason}")
-    routed = None
+    routed, auto = None, None
     with transaction(conn):
+        # Lock, then make sure nobody (a kickback, another status change) moved it since it was read.
+        now = query_one(conn, "SELECT status::text AS status FROM milestones WHERE id = CAST(:i AS uuid) FOR UPDATE",
+                        i=milestone_id)
+        if now["status"] != milestone["status"]:
+            raise ApiError(409, "STATUS_CHANGED", "Someone else just changed this milestone; reload and try again")
         conn.run(f"""UPDATE milestones SET status = CAST(:s AS milestone_status), updated_at = now(),
                      completed_at = {'now()' if target == 'completed' else 'NULL'} WHERE id = CAST(:i AS uuid)""",
                  s=target, i=milestone_id)
         record(conn, ctx, "status_change", "milestone", milestone_id,
                before={"status": milestone["status"]}, after={"status": target})
         if target == "ready_for_review" and is_assignee(conn, milestone_id, ctx.user_id):
-            routed = _route_to_support(conn, ctx, milestone)
-    return {**_view(conn, ctx, milestone_id), "routed_to": routed}
+            routed = route_to_support(conn, ctx, milestone)
+        if target == "completed":
+            auto = route_after_completion(conn, ctx, milestone)
+    return {**_view(conn, ctx, milestone_id), "routed_to": routed,
+            "auto_assigned": auto["assigned"] if auto else [], "unfilled": auto["unfilled"] if auto else []}
 
 
 def list_notes(conn, ctx: Ctx, milestone_id: str) -> list[dict]:

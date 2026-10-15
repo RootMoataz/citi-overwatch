@@ -11,6 +11,7 @@ UNIQUE_FIELDS = {
     "projects_name_active": "name",
     "project_members_project_id_user_id_key": "user_id",
     "departments_name_lower": "name",
+    "skills_name_lower": "name",
 }
 # invalid text representation, bad dates/numbers, FK and CHECK violations
 CLIENT_ERROR_CODES = {"22P02", "22007", "22008", "22003", "23503", "23514"}

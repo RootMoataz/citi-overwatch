@@ -11,6 +11,7 @@ from app.authz import APPROVER_SQL, is_uuid
 from app.ctx import Ctx
 from app.db import query, query_one
 from app.features.projects.service import visible_projects
+from app.features.skills.lookup import skills_of
 from app.features.time.service import _today, _week_logged, week_start
 from app.http import ApiError
 from app.rules.overtime import WEEKLY_CAP
@@ -21,6 +22,31 @@ HOURS = """coalesce(sum(t.hours) FILTER (WHERE t.status IN ('pending', 'approved
            coalesce(sum(t.hours) FILTER (WHERE t.status = 'approved'), 0) AS approved"""
 
 
+# A manager's own people: their direct reports and the people on live projects they manage. Needs :u and :me.
+MANAGED_PERSON_SQL = """(u.manager_id = CAST(:me AS uuid)
+                         OR EXISTS (SELECT 1 FROM project_members pm JOIN projects p ON p.id = pm.project_id
+                                    WHERE pm.user_id = u.id AND p.manager_id = CAST(:me AS uuid)
+                                      AND NOT pm.is_archived AND NOT p.is_archived))"""
+
+
+def manages_person(conn, ctx: Ctx, user_id: str) -> bool:
+    """The caller is a manager and `user_id` is one of their direct reports or on a live project they manage."""
+    if ctx.role != "manager":
+        return False
+    return query_one(conn, f"SELECT 1 AS ok FROM users u WHERE u.id = CAST(:u AS uuid) AND {MANAGED_PERSON_SQL}",
+                     u=user_id, me=ctx.user_id) is not None
+
+
+def can_edit_skills(conn, ctx: Ctx, user: dict) -> bool:
+    """Admins edit anyone's skills; a manager edits the skills of the employees they manage (direct reports or people
+    on their live projects), never their own or another manager's. Archived people are read-only."""
+    if user["is_archived"]:
+        return False
+    if ctx.is_admin:
+        return True
+    return user["role"] == "employee" and manages_person(conn, ctx, str(user["id"]))
+
+
 def _can_view(conn, ctx: Ctx, user_id: str) -> bool:
     if ctx.sees_all or user_id == ctx.user_id:
         return True
@@ -28,10 +54,7 @@ def _can_view(conn, ctx: Ctx, user_id: str) -> bool:
         return False
     # The same people a manager already sees on Allocation, the dashboard and Approvals.
     return query_one(conn, f"""SELECT 1 AS ok FROM users u WHERE u.id = CAST(:u AS uuid) AND (
-                                u.manager_id = CAST(:me AS uuid)
-                                OR EXISTS (SELECT 1 FROM project_members pm JOIN projects p ON p.id = pm.project_id
-                                           WHERE pm.user_id = u.id AND p.manager_id = CAST(:me AS uuid)
-                                             AND NOT pm.is_archived AND NOT p.is_archived)
+                                {MANAGED_PERSON_SQL}
                                 OR EXISTS (SELECT 1 FROM time_entries t JOIN projects p ON p.id = t.project_id
                                            JOIN milestones m ON m.id = t.milestone_id
                                            WHERE t.user_id = u.id AND t.status = 'pending'
@@ -113,6 +136,8 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
 
     return {
         "user": _header(conn, ctx, user),
+        "skills": skills_of(conn, [uid]).get(uid, []),
+        "can_edit_skills": can_edit_skills(conn, ctx, user),
         "this_week": _this_week(conn, uid, start),
         "all_time": {"logged": Decimal(totals["logged"]), "approved": Decimal(totals["approved"])},
         "projects": [{"id": p["id"], "name": p["name"], "status": p["status"], "start_date": p["start_date"],

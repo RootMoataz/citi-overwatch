@@ -21,7 +21,7 @@ const ms = (overrides) => ({
 const discovery = ms({ id: 'm1', name: 'Discovery', start_date: '2026-01-05', end_date: '2026-02-28', status: 'in_progress',
   display_status: 'in_progress', assignees: [me], is_assignee: true })
 const mapping = ms({ id: 'm2', name: 'Schema Mapping', start_date: '2026-03-01', end_date: '2026-06-30',
-  display_status: 'blocked', blocked: true, predecessors: ['m1'], assignees: [me], is_assignee: true })
+  display_status: 'waiting', blocked: true, predecessors: ['m1'], assignees: [me], is_assignee: true })
 const cutover = ms({ id: 'm3', name: 'Cutover', start_date: '2026-07-01', end_date: '2026-09-30', difficulty: 'hard',
   priority: 'critical' })
 
@@ -54,13 +54,13 @@ describe('MilestonesTab', () => {
     expect(within(disc).queryByRole('button', { name: /edit/i })).not.toBeInTheDocument()
   })
 
-  test('blocked milestone start button disabled with tooltip naming predecessors', async () => {
+  test('waiting milestone start button disabled with tooltip naming predecessors', async () => {
     server.use(...handlers())
     renderTab(users.employee, false)
     const map = await card('Schema Mapping')
     const start = within(map).getByRole('button', { name: /start/i })
     expect(start).toBeDisabled()
-    expect(within(map).getByText('Blocked')).toBeInTheDocument()
+    expect(within(map).getByText('Waiting on dependencies')).toBeInTheDocument()
     await userEvent.hover(start.parentElement)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Waiting on: Discovery')
   })
@@ -130,7 +130,7 @@ describe('MilestonesTab', () => {
     const timeline = await screen.findByRole('list', { name: /milestone timeline/i })
     const bars = within(timeline).getAllByRole('listitem')
     expect(bars).toHaveLength(3)
-    expect(bars[1]).toHaveAccessibleName(/Schema Mapping, Mar 1, 2026 to Jun 30, 2026, Blocked/)
+    expect(bars[1]).toHaveAccessibleName(/Schema Mapping, Mar 1, 2026 to Jun 30, 2026, Waiting on dependencies/)
     expect(bars[1]).toHaveAttribute('tabindex', '0')
   })
 

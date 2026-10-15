@@ -1,4 +1,4 @@
-from app.features.milestones import service
+from app.features.milestones import service, workflow
 from app.http import json_response
 from app.router import router
 
@@ -62,3 +62,28 @@ def list_notes(req, ctx, conn):
 @router.route("POST", "/milestones/{id}/notes")
 def add_note(req, ctx, conn):
     return json_response(201, service.add_note(conn, ctx, req.path_params["id"], req.json()))
+
+
+@router.route("GET", "/milestones/{id}/updates")
+def list_updates(req, ctx, conn):
+    return json_response(200, workflow.list_updates(conn, ctx, req.path_params["id"]))
+
+
+@router.route("POST", "/milestones/{id}/updates")
+def post_update(req, ctx, conn):
+    return json_response(201, workflow.post_update(conn, ctx, req.path_params["id"], req.json()))
+
+
+@router.route("POST", "/milestones/{id}/kickback")
+def kick_back(req, ctx, conn):
+    return json_response(201, workflow.kick_back(conn, ctx, req.path_params["id"], req.json()))
+
+
+@router.route("POST", "/milestones/{id}/kickback/resolve", roles={"admin", "manager"})
+def resolve_kickback(req, ctx, conn):
+    return json_response(200, workflow.resolve_kickback(conn, ctx, req.path_params["id"], req.json()))
+
+
+@router.route("GET", "/milestones/{id}/history")
+def history(req, ctx, conn):
+    return json_response(200, workflow.history(conn, ctx, req.path_params["id"]))

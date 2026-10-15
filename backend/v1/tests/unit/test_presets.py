@@ -114,7 +114,22 @@ def test_templates_lists_every_department_for_the_api():
     assert [t["department"] for t in out] == ["Technology", "Operations", "Risk & Compliance"]
     first = out[0]["milestones"][0]
     assert set(first) == {"name", "description", "weight", "estimated_hours", "difficulty", "priority", "after",
-                          "skills"}
+                          "skills", "required_skills", "completion_criteria"}
+
+
+def test_every_step_names_catalogue_skills_and_three_completion_criteria():
+    from app.presets import PRESETS, step_named
+    from app.seed import SKILLS
+    for department, steps in PRESETS.items():
+        for step in steps:
+            assert step.required and set(step.required) <= set(SKILLS), step.name
+            assert len(step.criteria) == 3 and all(c.strip() for c in step.criteria), step.name
+            assert step_named(department.lower(), step.name.upper()) is step
+    assert step_named("Technology", "Design") is None  # an alias is not the step's name
+    plan = plan_for("Technology", date(2026, 1, 1), date(2026, 7, 1))
+    assert plan[0]["objective"] == plan[0]["description"]
+    assert plan[0]["completion_criteria"].count(chr(10)) == 2
+    assert plan[0]["required_skills"] == ["Business Analysis"]
 
 
 def test_estimates_scale_with_the_time_each_step_gets():

@@ -1,6 +1,6 @@
 from datetime import date
 
-from app.rules.routing import pick_support_milestone
+from app.rules.routing import next_milestone_order_key, pick_support_milestone
 
 TODAY = date(2026, 10, 14)
 
@@ -85,3 +85,29 @@ def test_skips_already_assigned_and_the_reviewed_milestone():
 
 def test_no_candidates():
     assert pick([]) is None
+
+
+# ---------- skills on the "Ready for review" support route ----------
+
+def test_support_route_needs_one_required_skill_when_the_milestone_lists_any():
+    qa = ms("qa", end=date(2026, 10, 15))
+    qa["required_skills"] = {"QA", "Frontend"}
+    anyone = ms("anyone", end=date(2026, 11, 30))
+    found = pick_support_milestone([qa, anyone], today=TODAY, exclude_id="done", member_projects={"p1"},
+                                   skills={"Backend"})
+    assert found["id"] == "anyone"
+    found = pick_support_milestone([qa, anyone], today=TODAY, exclude_id="done", member_projects={"p1"},
+                                   skills={"Frontend"})
+    assert found["id"] == "qa"
+
+
+def test_workflow_order_key_ranks_after_priority_and_before_the_end_date():
+    # No sequence, no date: last, after every milestone that has them.
+    assert next_milestone_order_key({}) > next_milestone_order_key({"sequence": 99, "end_date": date(2030, 1, 1),
+                                                                     "name": "z", "id": "z"})
+    first = ms("first", end=date(2026, 12, 1))
+    second = ms("second", end=date(2026, 10, 20))
+    first["sequence"], second["sequence"] = 1, 2
+    assert pick([first, second]) == "first"
+    second["priority"] = "high"
+    assert pick([first, second]) == "second"

@@ -121,7 +121,7 @@ def test_manager_people_picker_has_no_salary(client, conn):
     make_user(conn, role="employee", manager_id=mgr["id"], first_name="Zed")
     status, body, _, _ = client.request("GET", "/users?role=employee", token=token_for(conn, mgr))
     assert status == 200 and body["total"] == 1
-    assert set(body["items"][0]) == {"id", "username", "first_name", "last_name", "job_title"}
+    assert set(body["items"][0]) == {"id", "username", "first_name", "last_name", "job_title", "skills"}
 
 
 def test_employee_cannot_list_users(client, conn):

@@ -13,7 +13,14 @@ export const RISK_LABELS = {
   OVERDUE_MILESTONE: 'Overdue milestone',
   PAST_DUE: 'Past due date',
   BUDGET_BURN: 'Budget burning faster than progress',
+  BLOCKED_MILESTONE: 'Kicked back – needs review',
 }
+
+/** Why an assignee kicked a milestone back. */
+export const KICKBACK_CATEGORY = {
+  blocker: 'Blocker', technical_issue: 'Technical issue', unclear_requirement: 'Unclear requirement', other: 'Other',
+}
+export const KICKBACK_REASON = { min: 10, max: 2000 }
 
 /** Milestone difficulty; project progress weighs completed milestones easy 1, medium 2, hard 3. */
 export const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }

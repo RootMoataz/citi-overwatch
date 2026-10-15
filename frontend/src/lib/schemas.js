@@ -95,6 +95,9 @@ export const milestoneSchema = z.object({
   // Optional person-hours: empty, or more than 0 and at most 10,000 with one decimal at most (the server's rule).
   estimated_hours: z.string().trim().refine((v) => v === '' || (/^\d+(\.\d)?$/.test(v) && Number(v) > 0 && Number(v) <= 10000),
     { message: 'Enter hours from 0.1 to 10,000, with one decimal at most' }).optional().default(''),
+  objective: z.string().trim().max(300, { message: 'Keep the objective under 300 characters' }).optional().default(''),
+  completion_criteria: z.string().max(4000, { message: 'Keep the criteria under 4000 characters' }).optional().default(''),
+  required_skill_ids: z.array(z.string()),
   predecessor_ids: z.array(z.string()),
   assignee_ids: z.array(z.string()),
 }).superRefine(endAfterStart('start_date', 'end_date'))

@@ -4,6 +4,9 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMarkAllRead, useMarkRead, useNotifications } from '../api/queries.js'
 
+/** The project's milestones tab, scrolled to the milestone the alert is about. */
+const milestoneLink = (n) => `/projects/${n.payload.project.id}?tab=milestones&milestone=${n.payload.milestone.id}`
+
 /** Where each alert type leads, and the hint shown under its message. */
 const TARGETS = {
   OVER_40H: (n) => [`/timesheets?user=${n.subject_user.id}`, 'Review their hours in Timesheets'],
@@ -15,11 +18,17 @@ const TARGETS = {
   TIMESHEET_EMPTY: (n) => [`/timesheet?week=${n.week_start}`, 'Log your hours for that week'],
   PLAN_FINALIZED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   MESSAGE_RECEIVED: (n) => [`/messages/${n.payload.conversation_id}`, 'Open the conversation'],
+  AUTO_ASSIGNED: (n) => [milestoneLink(n), 'Open the milestone'],
+  AUTO_ROUTED: (n) => [milestoneLink(n), 'Open the milestone to reassign it if needed'],
+  NO_QUALIFIED_PERSON: (n) => [milestoneLink(n), 'Open the milestone to assign someone'],
+  MILESTONE_UPDATE: (n) => [milestoneLink(n), 'Open the work log'],
+  KICKBACK_RAISED: (n) => [milestoneLink(n), 'Review the kickback'],
+  KICKBACK_RESOLVED: (n) => [milestoneLink(n), 'Open the milestone'],
 }
 const target = (n) => (TARGETS[n.type] ?? TARGETS.OVER_40H)(n)
 
-/** Unread alerts (overtime, rejected hours, auto-routed support, claimed milestones, Friday's empty-timesheet reminder,
- * new messages); opening one marks it read and goes to the page it's about. */
+/** Unread alerts (overtime, rejected hours, auto-routing, claimed milestones, progress updates, kickbacks, Friday's
+ * empty-timesheet reminder, new messages); opening one marks it read and goes to the page it's about. */
 export default function NotificationBell() {
   const navigate = useNavigate()
   const notifications = useNotifications()

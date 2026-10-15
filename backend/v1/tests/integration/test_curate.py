@@ -326,7 +326,9 @@ def test_a_fresh_seed_is_curated_the_same_way(conn):
     assert all(p["added"] == [] for p in again["projects"].values())
     assert again["projects"]["Apollo Data Migration"]["after"]["at_risk"] == []  # today's seed: Apollo is healthy
     assert 70 <= again["projects"]["Delta Compliance Audit"]["after"]["budget_pct"] <= 90
-    assert query_one(conn, "SELECT count(*) AS n FROM audit_log")["n"] == 0  # the seed writes no audit
+    # The seed writes no audit of its own, only the demo work log's and kickback's history entries.
+    assert {r["action"] for r in query(conn, "SELECT action FROM audit_log")} == {
+        "post_update", "kick_back", "resolve_kickback"}
 
 
 def test_every_demo_milestone_gets_an_estimate_that_fits_its_hours_and_set_ones_stay(live):

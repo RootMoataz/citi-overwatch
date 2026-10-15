@@ -5,6 +5,7 @@ from decimal import Decimal
 from app.audit import record
 from app.authz import load_project
 from app.ctx import Ctx
+from app.features.skills.lookup import skills_of
 from app.db import query, query_one, transaction
 from app.http import ApiError
 from app.rules.capacity import WEEKLY_CAP, fits_weekly_plan
@@ -61,7 +62,11 @@ def list_members(conn, ctx: Ctx, project_id: str) -> list[dict]:
     load_project(conn, ctx, project_id)
     rows = query(conn, SELECT + """ WHERE pm.project_id = CAST(:p AS uuid) AND NOT pm.is_archived
                                     ORDER BY lower(u.last_name), lower(u.first_name)""", p=project_id)
-    return [_view(r) for r in rows]
+    skills = skills_of(conn, [r["user_id"] for r in rows])
+    out = [_view(r) for r in rows]
+    for item in out:
+        item["user"]["skills"] = skills.get(str(item["user"]["id"]), [])
+    return out
 
 
 def add_member(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
