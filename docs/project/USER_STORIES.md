@@ -493,7 +493,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### E3. Explain my hours (U) — Done
 **As** an employee, **I want** to add a short work note to new or changed hours **so that** my manager can approve them with confidence.
-- **Failure:** a save with new hours and neither a 10–500 character note nor a progress update that day is refused (`400 PROOF_REQUIRED`), listing the cells and highlighting each note icon.
+- **Failure:** a save with new hours and neither a 10–500 character note nor a progress update that day is refused (`400 PROOF_REQUIRED`), listing the cells and highlighting the work note box on each of those rows (the note icon under each cell in the Week grid).
 
 #### E4. Kick back a milestone I can't progress (U) — Done
 **As** an assignee, **I want** to send a milestone back to my manager with a category and reason **so that** blockers are visible instead of silent.

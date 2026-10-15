@@ -1156,7 +1156,7 @@ against three limits, each as hours already used + the running timer:
   (`details.cells: [{milestone_id, milestone, work_date, reason: no_note | note_too_short}]`). The timesheet shows the
   list and highlights the work note box on each of those rows (the Week grid: the note icon under each cell).
 - **Timer stops** never fail for want of proof: the stop may carry a note; without one, and without a progress update
-  that day, the hours are saved with `needs_note = true`. The employee sees "Add a note" on that cell; approvers see a
+  that day, the hours are saved with `needs_note = true`. The employee sees a "Needed" hint on that row's work note box (the Day view) or "Add a note" on that cell (the Week grid); approvers see a
   red **No proof of work** flag. Adding the note (a normal save) or posting a progress update that day settles it.
 - **Reviewers** see the note, or "Progress update: …" (the first 200 characters), beside each entry in To review.
 
