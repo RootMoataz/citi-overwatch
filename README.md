@@ -74,8 +74,18 @@ Open http://localhost:3000 and sign in with a demo login. Locally, emails aren't
 | Manager | `manager.demo` | `Demo123!` |
 | Employee | `employee.demo` | `Demo123!` |
 | Executive (read-only) | `executive.demo` | `Demo123!` |
+| Admin demo (public, 5-minute limit) | `demo.admin` | `Demo123!` |
 
-The three published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation. On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
+The **Admin demo** (the sign-in page's "Admin" button) is a separate public account, Dana Demo-Admin, not the real admin login, whose password stays private. Because its password is published, the server limits it:
+
+- **5-minute sessions.** It is signed out 5 minutes after sign-in, enforced by the server: its access token expires by then and refreshing can't extend it. The app shows a countdown banner and, at the end, "Your 5-minute demo session has ended." on the sign-in page.
+- **Restricted actions** (`403 DEMO_RESTRICTED`, "Disabled in the public demo."): changing its own password, name, email or photo; creating, editing, archiving or restoring people, password resets for anyone, or removing someone's photo; archiving or restoring projects; any department change; anything that changes credentials or submits timesheets to HR. The app shows these buttons disabled with a tooltip.
+- **Still allowed:** everything read-only, plus the normal admin workflow: approving and rejecting hours, deciding project requests, creating and editing projects and milestones, archiving and restoring milestones, staffing, messages and notifications.
+- **Sign-in:** like the other demo logins it never locks after wrong passwords; instead each network address gets 20 Admin-demo sign-ins a minute.
+
+The full allow and deny lists are in `backend/v1/app/public_demo.py`; [Logic walkthrough §22](docs/project/LOGIC_WALKTHROUGH.md#22-the-public-demo-admin) explains them. Seed creates it; on an existing database run the `demo_backfill` operation (it adds `demo.admin` only if missing).
+
+The published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation. On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
 
 Other useful commands:
 

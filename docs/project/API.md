@@ -35,12 +35,15 @@ Every error has the same envelope:
 | 400 | `REQUEST_CLOSED`, `SELF_ARCHIVE`, `SELF_DEMOTION` | Deciding a request twice; archiving or demoting yourself |
 | 401 | `AUTH_REQUIRED`, `TOKEN_EXPIRED` | No token, or an expired access token (the client refreshes and retries once) |
 | 401 | `INVALID_CREDENTIALS`, `TEMP_PASSWORD_EXPIRED`, `REFRESH_INVALID` | Sign-in and refresh |
+| 401 | `DEMO_SESSION_EXPIRED` | Refreshing a public demo session after its 5 minutes ("Your 5-minute demo session has ended.") |
 | 403 | `FORBIDDEN`, `NOT_ASSIGNED`, `SELF_APPROVAL`, `PASSWORD_CHANGE_REQUIRED`, `DEMO_ACCOUNT` | Not allowed for your role or this record; approving your own hours; a temporary password is still in use; changing a published demo account's password |
+| 403 | `DEMO_RESTRICTED` | A public demo account called a write route on the denylist ("Disabled in the public demo."; see [Public demo accounts](#public-demo-accounts)) |
 | 403 | `READ_ONLY` | An executive called a `POST`, `PUT`, `PATCH` or `DELETE` route other than their own account's (see [Executives](#executives-read-only)) |
 | 404 | `NOT_FOUND` | It doesn't exist, **or you aren't allowed to see it** (so its existence isn't revealed) |
 | 405 | `METHOD_NOT_ALLOWED` | The path exists, but not with this method |
 | 409 | `STALE_ENTRY` | The time entry changed (edited or decided by someone else) since you loaded it |
 | 409 | `CONFLICT`, `ALREADY_MEMBER`, `HAS_DEPENDENTS` | A duplicate username, email or project name; already on the team; archiving someone who still manages projects or has reports (`details` lists them) |
+| 429 | `RATE_LIMITED` | More than 20 sign-ins a minute to a public demo account from one address; sending messages too fast |
 | 423 | `ACCOUNT_LOCKED`, `CODE_LOCKED` | 5 failed sign-ins (15-minute lock), or 5 wrong reset codes |
 | 500 | `INTERNAL_ERROR` | An unexpected error. It's logged with a stack trace, under the same `request_id` |
 
@@ -53,20 +56,46 @@ Success codes: `200` OK, `201` created, `204` archived or no content.
 - **No writes.** The router refuses every `POST`, `PUT`, `PATCH` and `DELETE` for an executive with `403 READ_ONLY` before the handler runs. A route opts in with `allow_executive=True`; only their own account does: `POST /auth/change-password`, `PUT /me`, `PUT /me/avatar`, `DELETE /me/avatar`, `POST /notifications/read-all`, `POST /notifications/{id}/read`, and sending their own messages: `POST /conversations`, `POST /conversations/{id}/messages`, `POST /conversations/{id}/read` (sign-in, refresh and logout need no token). A test walks every registered write route and checks this list.
 - **No pay.** Every JSON response to an executive has every `salary` and `hourly_rate` field removed, at any depth, including the audit log's `changes` and their own `/me` and profile.
 
+## Public demo accounts
+
+`users.is_public_demo` marks an account whose password is published: `demo.admin` (Dana Demo-Admin, an admin in
+Operations, `Demo123!`), behind the sign-in page's Admin button. The real `admin.demo` is a normal admin.
+
+- **The session ends 5 minutes after sign-in.** The sign-in and refresh responses' `user` (and `GET /me`) carry
+  `is_public_demo: true` and `session_expires_at` (ISO time, UTC). Every access token carries the end as `sxp` and
+  expires no later than it; the refresh token stores it and each refresh copies it unchanged (the cookie's `Max-Age` is
+  the time left), so refreshing never extends the session. After the end, `/auth/refresh` answers
+  `401 DEMO_SESSION_EXPIRED`. A demo account's token without `sxp` is refused (`401 AUTH_REQUIRED`).
+- **Writes are checked centrally.** The router refuses a public demo account's write before the handler runs, with
+  `403 DEMO_RESTRICTED`, unless `app/public_demo.py` allows it:
+  - **Denied:** `POST /auth/change-password`, `PUT /me`, `PUT /me/avatar`, `DELETE /me/avatar`, `POST /users`,
+    `PUT /users/{id}`, `DELETE /users/{id}`, `POST /users/{id}/restore`, `POST /users/{id}/reset-password`,
+    `DELETE /users/{id}/avatar`, `DELETE /projects/{id}`, `POST /projects/{id}/restore`, `POST /departments`,
+    `PUT /departments/{id}`, `DELETE /departments/{id}`, `POST /departments/{id}/restore`; and any write route whose
+    path mentions `password`, `credential` or an `hr` segment (for example a future
+    `/timesheets/{id}/submit-to-hr`), whatever the lists say.
+  - **Allowed:** every read, and notifications, messages and milestone discussions; creating and editing projects;
+    project requests and their decisions; staffing (`/projects/{id}/members`); every milestone write including archive
+    and restore; logging your own hours and approving or rejecting hours.
+  - **Anything else is refused** until it is reviewed: a test fails while any write route is in neither list.
+- **Sign-in.** Wrong passwords never lock a public demo account (anyone could lock everyone else out), and it gets no
+  forgotten-password codes. Instead each client address gets 20 sign-ins to it per rolling minute (`429 RATE_LIMITED`);
+  the address is CloudFront's `CloudFront-Viewer-Address` when present, else the Function URL's source IP.
+
 ---
 
 ## Auth
 
 | Method | Path | Auth | Body → response |
 |---|---|---|---|
-| POST | `/auth/login` | — | `{username, password}` → `200 {access_token, user}` and sets the `ow_refresh` cookie |
+| POST | `/auth/login` | — | `{username, password}` → `200 {access_token, user}` and sets the `ow_refresh` cookie. `user` includes `is_public_demo` and `session_expires_at` (`null` unless a public demo) |
 | POST | `/auth/refresh` | cookie | → `200 {access_token, user}`; rotates the cookie |
 | POST | `/auth/logout` | cookie | → `204`; revokes the refresh token and clears the cookie |
 | POST | `/auth/change-password` | Bearer (a restricted token is allowed) | `{current_password, new_password}` → `200 {access_token, user}` |
 | POST | `/auth/forgot-password` | — | `{username}` → `200 {"message": "If that account exists, a code has been sent."}` (always the same) |
 | POST | `/auth/verify-reset-code` | — | `{username, code}` → `200 {reset_token}` |
 | POST | `/auth/reset-password` | — | `{reset_token, new_password}` → `204`; ends every session |
-| GET | `/me` | Bearer | → your profile, including your own salary |
+| GET | `/me` | Bearer | → your profile, including your own salary, `is_public_demo` and `session_expires_at` |
 | PUT | `/me` | Bearer | `{first_name?, last_name?, email?}` → the updated profile |
 | PUT | `/me/avatar` | Bearer | `{image}`: your profile photo as base64 PNG → the updated profile. See [Profile photos](#profile-photos) |
 | DELETE | `/me/avatar` | Bearer | Removes your photo → the updated profile (`200` even if you had none) |
@@ -443,6 +472,6 @@ These run only through an IAM-authorized `aws lambda invoke`, never through the 
 |---|---|
 | `{"op": "migrate"}` | `{"applied": ["001_init.sql"]}`, or `[]` when nothing is new |
 | `{"op": "rotate_demo"}` | `{"rotated": 13}`: gives every seeded account except `admin.demo`, `manager.demo` and `employee.demo` a random password (run once on the public site) |
-| `{"op": "seed"}` | `{"seeded": true, "demo_users": ["admin.demo", "manager.demo", "employee.demo"]}`. Does nothing once the demo data exists |
+| `{"op": "seed"}` | `{"seeded": true, "demo_users": ["admin.demo", "manager.demo", "employee.demo", "executive.demo", "demo.admin"]}`. Does nothing once the demo data exists |
 | `{"op": "create_admins", "users": [{"username", "first_name", "last_name"}, ...]}` | `{"created": [{"username", "password"}], "skipped": [...]}`: adds ready-to-use admin logins with random passwords (no forced change on first login); usernames that already exist are skipped. Used to create the live demo admins `admin.demo2`–`admin.demo4` |
-| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "priorities_updated": ["Apollo Data Migration / Cutover", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode, difficulty and priority up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty and priority on demo milestones (matched by project and milestone name), each only while still `medium` (priorities: Apollo Cutover critical, Schema Mapping high, Atlas Build critical, Atlas Launch high, Delta Audit Fieldwork low). Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |
+| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo", "demo.admin"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "priorities_updated": ["Apollo Data Migration / Cutover", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode, difficulty and priority up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; creates the public demo admin `demo.admin` (published password `Demo123!`, `is_public_demo`, in Operations) only if that username doesn't exist yet, and lists an existing unflagged `demo.admin` under `skipped` as `exists_not_public_demo` (it is never flagged, so a private password is never published); switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty and priority on demo milestones (matched by project and milestone name), each only while still `medium` (priorities: Apollo Cutover critical, Schema Mapping high, Atlas Build critical, Atlas Launch high, Delta Audit Fieldwork low). Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |
