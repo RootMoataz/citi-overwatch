@@ -160,13 +160,13 @@ function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, co
             </Button>
           ))}
         </Stack>
-        {extra ? extra(m) : null}
         <Collapse in={panel === 'details'} unmountOnExit><MilestoneDetails milestone={m} /></Collapse>
         <Collapse in={panel === 'log'} unmountOnExit><WorkLog milestone={m} /></Collapse>
         <Collapse in={panel === 'history'} unmountOnExit><MilestoneHistory milestone={m} /></Collapse>
         <Collapse in={panel === 'notes'} unmountOnExit>
           <MilestoneNotes milestoneId={m.id} canPost={manage || m.is_assignee} />
         </Collapse>
+        {extra ? extra(m) : null}
         {kicking ? <KickbackDialog milestone={m} onClose={() => setKicking(false)} /> : null}
       </CardContent>
     </Card>
