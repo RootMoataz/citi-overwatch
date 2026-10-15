@@ -94,6 +94,7 @@ describe('login page brand and demo', () => {
     expect(await screen.findByRole('heading', { name: /sign in/i })).toBeInTheDocument()
     expect(screen.getAllByRole('img', { name: /acme scout/i }).length).toBeGreaterThan(0)
     expect(screen.getByText(/before it slips/i)).toBeInTheDocument()
+    expect(screen.getByText('ACME Scout · a project by Moataz Hikal')).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/overwatch/i)
     expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute('href', '/forgot-password')
   })

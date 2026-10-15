@@ -1,6 +1,7 @@
 {
-  "name": "frontend",
+  "name": "acme-scout",
   "version": "0.0.1",
+  "description": "ACME Scout (Moataz Hikal Project): see every project, person and dollar, before it slips.",
   "private": true,
   "type": "module",
   "scripts": {

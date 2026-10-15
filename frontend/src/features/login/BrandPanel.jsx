@@ -99,7 +99,7 @@ export default function BrandPanel() {
         </Stack>
       </Box>
       <Typography variant="caption" sx={{ position: 'relative', color: 'rgba(255,255,255,0.6)', display: { xs: 'none', md: 'block' } }}>
-        ACME Scout · project tracking for ACME
+        ACME Scout · a project by Moataz Hikal
       </Typography>
     </Box>
   )

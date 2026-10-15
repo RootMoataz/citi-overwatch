@@ -73,8 +73,8 @@ describe('Email this report', () => {
     await user.click(screen.getByRole('button', { name: 'Send' }))
     await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies[0].template_id).toBe('tpl_report')
-    expect(bodies[0].template_params).toMatchObject({ to_email: 'eve@acme.example', to_name: 'Eve Executive',
-      from_name: 'Eve Executive', app_url: window.location.origin })
+    expect(bodies[0].template_params).toMatchObject({ to_email: 'eve@acme.example', to_name: 'Moataz Hikal',
+      from_name: 'Moataz Hikal', app_url: window.location.origin })
     const html = bodies[0].template_params.report_html
     expect(html).toContain('Apollo &lt;i&gt;x&lt;/i&gt;')
     expect(html).not.toContain('<i>x</i>')
