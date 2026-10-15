@@ -16,7 +16,8 @@ The owner's feedback after the presentation:
 
 - **Part A:** the employee timesheet (`/timesheet`).
 - **Part B:** the projects list (`/projects`) and the project page (`/projects/:id`).
-- **Built in that order.** Each part ships on its own: tests green, docs updated, pushed to `overwatch`, deployed, smoke-tested live.
+- **Part C:** readable milestone charts: the milestone timeline, a milestones-by-state bar and the cost-by-milestone bars (added 15 Oct at the owner's request).
+- **Built A, then C, then B.** Each part ships on its own: tests green, docs updated, pushed to `overwatch`, deployed, smoke-tested live.
 
 **Not changing:**
 - business rules: proof of work, the 24 h/day stop, the 40 h warning and overtime, timer locks and change requests, closed or on-hold gating, approvals;
@@ -147,6 +148,89 @@ The logic `TimesheetPage.jsx` holds today (values, drafts, notes, locks, totals,
 
 The milestones end-to-end journey moves to the row and panel.
 
+## Part C: readable milestone charts
+
+The owner's request after the presentation: the graphs for project milestones should be easy to read. This is frontend only, with no API change: every field used is already on `GET /projects/{id}/milestones`.
+
+### C1. Milestone timeline (`components/Timeline.jsx`)
+
+Today the names sit above full-width grey tracks, and only the first and last dates are printed. The tracks read like progress bars, and no bar says its own dates.
+
+- **Gantt layout:**
+  - a name column on the left, about 200px wide, holding the name, "after X" under it, and a **You** tag on my milestones (`is_assignee`);
+  - the bars on the right;
+  - under the `sm` breakpoint the name sits above its bar, as today.
+- **Month axis:**
+  - month labels along the top ("Aug", "Sep", …, and "Jan 2027" where the year changes);
+  - thin, recessive gridlines at each month start through every row;
+  - the first and last dates stay at the two ends.
+- **No full-width track** behind each bar. Very light alternate-row shading replaces it, so the eye can follow a row.
+- **Bars:**
+  - the status colour, as today, and striped for waiting or blocked, as today;
+  - an in-progress bar fills up to its `progress_percent` (from the latest update) in the solid status colour, and the rest in a lighter tint of that colour;
+  - without a percent, the whole bar is solid.
+- **Direct label** beside each bar, to its right, or to its left when there's no room:
+  - in text colours, never the bar colour;
+  - short dates and the state, e.g. "Aug 15 – Oct 23 · 60% done", "· Done", "· Ready for review", "· Waiting on Cutover", "· Not started".
+- **Overdue** (not completed, and the end date is before today): "⚠ Overdue" in the label, in the error text colour. It's always an icon plus a word, never colour alone.
+- **Today:** the dashed line is kept, labelled "Today".
+- **Hover or focus on a row** shows a tooltip with:
+  - name, dates and working days;
+  - the state and its progress;
+  - the people;
+  - hours logged against the estimate;
+  - "after …".
+- **Click, or Enter on a focused row,** calls `onOpen(milestone)` when that prop is given:
+  - on today's Milestones tab it sets `?milestone=<id>`, which already scrolls to that card and highlights it;
+  - in Part B it opens the side panel.
+- **Legend:** only the states shown, plus Today, plus "Your milestone" when one of them is mine.
+- **Accessibility:** the existing list, with one full `aria-label` per row, stays. It is this chart's table view.
+- **Edge cases:**
+  - milestones partly outside the project's range are clipped, not dropped;
+  - a one-day range or a single milestone renders without NaN.
+
+### C2. Milestones by state (`components/MilestoneStatusBar.jsx`)
+
+A new single horizontal stacked bar answers "how far along are the milestones?":
+
+- a heading, e.g. "4 of 7 milestones done";
+- one segment per state, in this fixed order: Completed, Ready for review, In progress, Not started, Waiting, Blocked (by `display_status`):
+  - each segment is sized by its count, with 2px gaps between segments and the theme's status colours;
+  - each shows its count when it fits;
+- a legend with the counts;
+- a hover tooltip per segment, e.g. "In progress: 2 milestones".
+- Archived milestones are excluded. With no milestones, the bar isn't shown.
+- **Placement:** above the timeline on today's Milestones tab. Part B moves it into the Overview, under the health strip.
+
+### C3. Cost by milestone (`MilestoneCostTable.jsx`)
+
+Today each milestone's bar is drawn against 100% of the budget, so a 5% milestone is a sliver and the milestones can't be compared.
+
+- The bars are scaled to the most expensive milestone instead.
+- The percent of the budget stays as text.
+- A caption under the table reads "Bars compare the milestones; the percent is each one's share of the budget."
+
+### Tests
+
+- **Timeline:**
+  - month labels across a range;
+  - the direct label with dates and state;
+  - an in-progress bar's progress text;
+  - Overdue;
+  - the You tag;
+  - the tooltip on focus;
+  - `onOpen` on click and on Enter;
+  - no NaN for a one-day range.
+- **Status bar:**
+  - the heading and the counts;
+  - archived milestones excluded;
+  - hidden when there are no milestones.
+- **Cost bars:** the most expensive milestone gets the full bar, and the percent text is unchanged.
+
+### With Part B
+
+`ProjectOverview` reuses `Timeline` (its `onOpen` opens the side panel) and `MilestoneStatusBar`. The tests from C1 and C2 keep passing.
+
 ## Docs, both parts
 
 - README feature tour screenshots and captions.
@@ -155,3 +239,4 @@ The milestones end-to-end journey moves to the row and panel.
 - API.md: `my_hours`.
 - TESTING.md: counts and journeys.
 - DEMO_SCRIPT steps that click the old tabs or grid.
+- Part C: the README milestones and budget screenshots (`docs/images/milestones.png`, `docs/images/budget.png`), and LOGIC_WALKTHROUGH or ARCHITECTURE where they describe the timeline or the charts.
