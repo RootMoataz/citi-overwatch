@@ -100,7 +100,9 @@ export const useRequests = (status) => useQuery({
 })
 export const useSubmitRequest = () => useApiMutation((body) => api.post('/project-requests', body),
   { invalidate: [['requests']], success: 'Request sent to the admins' })
-export const useApproveRequest = () => useApiMutation((id) => api.post(`/project-requests/${id}/approve`),
+// `template: true` starts the new project from its department's template (sent only then: no body otherwise).
+export const useApproveRequest = () => useApiMutation(({ id, template }) =>
+  api.post(`/project-requests/${id}/approve`, template ? { template: true } : undefined),
   { invalidate: [['requests'], ['projects'], ['dashboard']], success: (d) => `Approved — ${d.project.name} created` })
 export const useRejectRequest = () => useApiMutation(({ id, comment }) => api.post(`/project-requests/${id}/reject`, { comment }),
   { invalidate: [['requests']], success: 'Request rejected' })

@@ -1,14 +1,16 @@
 import Add from '@mui/icons-material/Add'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  Button, Card, CardActions, CardContent, Dialog, DialogActions, DialogContent, DialogTitle, Grid, InputAdornment, MenuItem,
-  Stack, Tab, Tabs, TextField, Typography,
+  Button, Card, CardActions, CardContent, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, Grid,
+  InputAdornment, MenuItem, Stack, Tab, Tabs, TextField, Typography,
 } from '@mui/material'
 import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useMediaQuery } from 'react-responsive'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useApproveRequest, useDepartments, useRejectRequest, useRequests, useSubmitRequest } from '../../api/queries.js'
+import {
+  useApproveRequest, useDepartments, useProjectTemplates, useRejectRequest, useRequests, useSubmitRequest,
+} from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -117,12 +119,18 @@ function RequestCard({ request, decide, onReject }) {
   const navigate = useNavigate()
   const approve = useApproveRequest()
   const [confirming, setConfirming] = useState(false)
+  const [useTemplate, setUseTemplate] = useState(true)
   const [failure, setFailure] = useState(null)
   const mode = WORK_MODE[request.work_mode ?? 'push']
+  // The request's department may have a milestone template: offered (ticked by default) in the confirm step.
+  const templates = useProjectTemplates({ enabled: decide && request.status === 'pending' && Boolean(request.department) })
+  const template = request.department
+    ? (templates.data?.items ?? []).find((t) => t.department.toLowerCase() === request.department.name.toLowerCase())
+    : null
   const approveNow = async () => {
     setFailure(null)
     try {
-      const result = await approve.mutateAsync(request.id)
+      const result = await approve.mutateAsync({ id: request.id, template: Boolean(template && useTemplate) })
       navigate(`/projects/${result.project.id}`)
     } catch (err) { setFailure(err); setConfirming(false) }
   }
@@ -150,7 +158,17 @@ function RequestCard({ request, decide, onReject }) {
       ) : null}
       <ConfirmDialog open={confirming} title={`Create ${request.name}?`} destructive={false} busy={approve.isPending}
         body={`It starts as a planned project with ${request.requested_by.name} as its manager.`}
-        confirmLabel="Approve & create project" onConfirm={approveNow} onClose={() => setConfirming(false)} />
+        confirmLabel="Approve & create project" onConfirm={approveNow} onClose={() => setConfirming(false)}>
+        {template ? (
+          <>
+            <FormControlLabel sx={{ mt: 1 }} label={`Start from the ${template.department} template`} control={
+              <Checkbox checked={useTemplate} onChange={(e) => setUseTemplate(e.target.checked)} disabled={approve.isPending} />} />
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Adds {template.milestones.length} milestones across the project dates: {template.milestones.map((m) => m.name).join(', ')}.
+            </Typography>
+          </>
+        ) : null}
+      </ConfirmDialog>
     </Card>
   )
 }

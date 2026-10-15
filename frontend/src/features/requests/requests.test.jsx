@@ -32,7 +32,7 @@ describe('RequestsPage', () => {
       http.get(`${API}/project-requests`, () => HttpResponse.json([pending])),
       http.post(`${API}/project-requests/r1/approve`, async ({ request }) => {
         approvals += 1
-        expect(await request.text()).toBe('')
+        expect(await request.json()).toEqual({ template: true }) // Technology has a template: ticked by default
         return HttpResponse.json({
           request: { ...pending, status: 'approved', project_id: 'p-new' }, project: { id: 'p-new', name: 'Orion Analytics' } })
       }),
@@ -43,9 +43,38 @@ describe('RequestsPage', () => {
     await user.click(within(card).getByRole('button', { name: 'Approve & create project' }))
     const dialog = await screen.findByRole('dialog', { name: /create orion analytics/i })
     expect(within(dialog).queryByRole('textbox')).not.toBeInTheDocument() // nothing to fill in
+    expect(within(dialog).getByRole('checkbox', { name: 'Start from the Technology template' })).toBeChecked()
     await user.click(within(dialog).getByRole('button', { name: 'Approve & create project' }))
     expect(await screen.findByText('project page p-new')).toBeInTheDocument()
     expect(approvals).toBe(1)
+  })
+
+  test('the department template can be left off, and a request without a department is approved with no body', async () => {
+    const bodies = []
+    server.use(
+      http.get(`${API}/project-requests`, () => HttpResponse.json([pending, { ...pending, id: 'r2', name: 'Vega', department: null }])),
+      http.post(`${API}/project-requests/:id/approve`, async ({ request, params }) => {
+        bodies.push([params.id, await request.text()])
+        return HttpResponse.json({ request: { ...pending, id: params.id, status: 'approved' }, project: { id: `p-${params.id}`, name: 'x' } })
+      }),
+    )
+    const user = userEvent.setup()
+    const { unmount } = renderAsUser(<RequestsPage />, { user: users.admin, route: '/requests', path: '/requests' })
+    let card = (await screen.findByText('Orion Analytics')).closest('[data-request]')
+    await user.click(within(card).getByRole('button', { name: 'Approve & create project' }))
+    let dialog = await screen.findByRole('dialog', { name: /create orion analytics/i })
+    await user.click(await within(dialog).findByRole('checkbox', { name: 'Start from the Technology template' }))
+    await user.click(within(dialog).getByRole('button', { name: 'Approve & create project' }))
+    expect(await screen.findByText('project page p-r1')).toBeInTheDocument()
+    unmount()
+    renderAsUser(<RequestsPage />, { user: users.admin, route: '/requests', path: '/requests' })
+    card = (await screen.findByText('Vega')).closest('[data-request]')
+    await user.click(within(card).getByRole('button', { name: 'Approve & create project' }))
+    dialog = await screen.findByRole('dialog', { name: /create vega/i })
+    expect(within(dialog).queryByRole('checkbox')).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: 'Approve & create project' }))
+    expect(await screen.findByText('project page p-r2')).toBeInTheDocument()
+    expect(bodies).toEqual([['r1', ''], ['r2', '']])
   })
 
   test('reject takes an optional short note', async () => {
