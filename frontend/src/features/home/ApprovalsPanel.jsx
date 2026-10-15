@@ -1,6 +1,7 @@
 import { Box, Link, Skeleton, Stack, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { useApprovals } from '../../api/queries.js'
+import CountUp from '../../components/CountUp.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -20,7 +21,7 @@ export default function ApprovalsPanel() {
       {approvals.isLoading ? <Skeleton variant="rounded" height={72} /> : count ? (
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: { xs: 1.5, md: 3 }, alignItems: { md: 'flex-start' } }}>
           <Box sx={{ flexShrink: 0, minWidth: 160 }}>
-            <Typography variant="h2" component="p" sx={{ color: 'warning.main' }}>{count}</Typography>
+            <Typography variant="h2" component="p" sx={{ color: 'warning.main' }}><CountUp value={count} /></Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>{`${count} ${count === 1 ? 'entry' : 'entries'} waiting`}</Typography>
           </Box>
           <Box component="ul" aria-label="Oldest pending entries" sx={{ listStyle: 'none', p: 0, m: 0, flexGrow: 1, minWidth: 0 }}>

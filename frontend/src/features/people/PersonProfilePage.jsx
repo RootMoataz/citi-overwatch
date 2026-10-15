@@ -72,12 +72,12 @@ export default function PersonProfilePage() {
       </Paper>
       <Typography variant="subtitle1" component="h2" sx={{ mb: 1 }}>Week of {formatDate(week.week_start)}</Typography>
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Logged this week" value={formatHours(week.logged)} hint="Pending and approved" /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Logged this week" value={Number(week.logged)} format={formatHours} hint="Pending and approved" /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Overtime this week" value={formatHours(week.overtime)}
           tone={overtime ? 'warning' : undefined} hint={overtime ? 'Over 40h this week' : 'Within 40h'} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Planned this week" value={formatHours(week.planned)} /></Grid>
-        <Grid size={{ xs: 12, sm: 6 }}><StatTile label="Total hours logged" value={formatHours(total.logged)} hint="All time, pending and approved" /></Grid>
-        <Grid size={{ xs: 12, sm: 6 }}><StatTile label="Total hours approved" value={formatHours(total.approved)} hint="All time" /></Grid>
+        <Grid size={{ xs: 12, sm: 6 }}><StatTile label="Total hours logged" value={Number(total.logged)} format={formatHours} hint="All time, pending and approved" /></Grid>
+        <Grid size={{ xs: 12, sm: 6 }}><StatTile label="Total hours approved" value={Number(total.approved)} format={formatHours} hint="All time" /></Grid>
       </Grid>
       {own ? (
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>

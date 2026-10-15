@@ -4,6 +4,14 @@ import {
 } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { BarChart } from '@mui/x-charts/BarChart'
+import WarningAmber from '@mui/icons-material/WarningAmberRounded'
+import EventBusy from '@mui/icons-material/EventBusyOutlined'
+import TrendingUp from '@mui/icons-material/TrendingUpRounded'
+import HourglassBottom from '@mui/icons-material/HourglassBottomOutlined'
+import PlayCircle from '@mui/icons-material/PlayCircleOutlined'
+import PauseCircle from '@mui/icons-material/PauseCircleOutlined'
+import CheckCircle from '@mui/icons-material/CheckCircleOutlined'
+import EventNote from '@mui/icons-material/EventNoteOutlined'
 import { useId } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useAllocations, useDashboard, useDepartments } from '../../api/queries.js'
@@ -19,12 +27,17 @@ import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney, formatPct, mondayOf } from '../../lib/format.js'
 import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
+import Reveal from '../../components/Reveal.jsx'
 import StatTile from '../../components/StatTile.jsx'
 import MissingTimesheets from './MissingTimesheets.jsx'
 import Section from './Section.jsx'
 import SmartInsightsPanel from './SmartInsightsPanel.jsx'
 import LiveActivityCard from '../activity/LiveActivityCard.jsx'
 import EmailReportButton from '../report/EmailReportButton.jsx'
+
+// One icon per risk tile (in RISK_LABELS order, after the total) and per status tile.
+const RISK_ICONS = [<WarningAmber key="all" />, <EventBusy key="a" />, <HourglassBottom key="b" />, <TrendingUp key="c" />]
+const STATUS_ICONS = { planned: <EventNote />, active: <PlayCircle />, on_hold: <PauseCircle />, completed: <CheckCircle /> }
 
 const projectLink = (p, tab) => (
   <Link component={RouterLink} to={`/projects/${p.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{p.name}</Link>
@@ -44,7 +57,7 @@ function BudgetChart({ budgets }) {
   const money = (v) => formatMoney(v)
   return (
     <>
-      <BarChart height={300}
+      <BarChart height={300} borderRadius={4} grid={{ horizontal: true }}
         xAxis={[{ scaleType: 'band', data: budgets.map((b) => b.name), label: 'Project',
           valueFormatter: (name, ctx) => (ctx.location === 'tick' && overNames.has(name) ? `⚠ ${name}` : name) }]}
         yAxis={[{ label: 'US dollars', width: 90, valueFormatter: money }]}
@@ -96,8 +109,10 @@ function Risk({ atRisk }) {
       <Typography id={id} variant="h3" component="h2" sx={{ mb: 1.5 }}>Risk</Typography>
       <Box component="ul" aria-label="At-risk projects by reason" sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2,
         listStyle: 'none', p: 0, m: 0, mb: 2 }}>
-        {counts.map(([label, count]) => (
-          <li key={label}><StatTile label={label} value={count} tone={count ? 'warning' : undefined} /></li>
+        {counts.map(([label, count], i) => (
+          <Reveal as="li" key={label} index={i}>
+            <StatTile label={label} value={count} tone={count ? 'warning' : undefined} icon={RISK_ICONS[i]} />
+          </Reveal>
         ))}
       </Box>
       <Section question="Which projects are at risk of missing their deadlines?">
@@ -179,8 +194,10 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
         <Grid size={12}>
           <Section question="What is the status of each active project?">
             <Grid container spacing={2} sx={{ mb: 2 }}>
-              {Object.entries(d.status_counts).map(([status, count]) => (
-                <Grid key={status} size={{ xs: 6, md: 3 }}><StatTile label={STATUS[status].label} value={count} /></Grid>
+              {Object.entries(d.status_counts).map(([status, count], i) => (
+                <Grid key={status} size={{ xs: 6, md: 3 }}>
+                  <Reveal index={i}><StatTile label={STATUS[status].label} value={count} icon={STATUS_ICONS[status]} /></Reveal>
+                </Grid>
               ))}
             </Grid>
             {active.length ? (

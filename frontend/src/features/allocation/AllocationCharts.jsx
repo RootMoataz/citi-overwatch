@@ -4,7 +4,7 @@ import { BarChart } from '@mui/x-charts/BarChart'
 import { ChartsReferenceLine } from '@mui/x-charts/ChartsReferenceLine'
 import { PieChart } from '@mui/x-charts/PieChart'
 import { Fragment } from 'react'
-import { chartColors } from '../../app/theme.js'
+import { categoryColors, chartColors } from '../../app/theme.js'
 import PersonLink from '../../components/PersonLink.jsx'
 import { formatHours } from '../../lib/format.js'
 
@@ -23,7 +23,7 @@ function PeopleChart({ people }) {
   const nameOf = new Map(people.map((p) => [String(p.user.id), p.user.name]))
   return (
     <>
-      <BarChart height={Math.max(160, people.length * 44 + 80)} layout="horizontal"
+      <BarChart height={Math.max(160, people.length * 44 + 80)} layout="horizontal" borderRadius={4} grid={{ vertical: true }}
         yAxis={[{ scaleType: 'band', data: people.map((p) => String(p.user.id)), width: 140,
           valueFormatter: (id, ctx) => (ctx.location === 'tick' && overIds.has(id) ? `⚠ ${nameOf.get(id)}` : nameOf.get(id)) }]}
         xAxis={[{ label: 'Hours this week', valueFormatter: (v) => `${v}h` }]}
@@ -51,6 +51,7 @@ function PeopleChart({ people }) {
 
 /** Logged hours this week by project. Hours on projects someone has left fall under "Other projects". */
 function ProjectPie({ people }) {
+  const colors = categoryColors(useTheme())
   const byProject = new Map()
   let other = 0
   for (const person of people) {
@@ -67,7 +68,7 @@ function ProjectPie({ people }) {
   if (other > 0) data.push({ id: 'other', label: 'Other projects', value: other })
   if (!data.length) return <Typography variant="body2" sx={{ color: 'text.secondary' }}>No hours logged this week yet.</Typography>
   return (
-    <PieChart height={240}
+    <PieChart height={240} colors={colors}
       series={[{ data, innerRadius: 50, paddingAngle: 1, cornerRadius: 3, valueFormatter: (d) => formatHours(d.value) }]} />
   )
 }

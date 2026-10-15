@@ -37,6 +37,14 @@ export function chartColors(themeOrMode) {
     : { planned: '#9DB6D3', actual: BRAND, forecast: '#B26A00', over: '#C62828' }
 }
 
+/** Categorical colours for charts with one slice or bar per project, starting from the brand blue. */
+export function categoryColors(themeOrMode) {
+  const mode = typeof themeOrMode === 'string' ? themeOrMode : themeOrMode?.palette?.mode
+  return mode === 'dark'
+    ? [TONE.blue, '#4DB6AC', TONE.amber, TONE.purple, '#F48FB1', TONE.green, '#90A4AE']
+    : [BRAND, '#00897B', '#B26A00', '#6B3FA0', '#C2185B', '#1E7D45', '#5B6B7F']
+}
+
 export function buildTheme(mode = 'light') {
   const dark = mode === 'dark'
   const primary = dark ? '#5AA2F0' : BRAND

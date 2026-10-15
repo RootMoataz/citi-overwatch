@@ -24,8 +24,8 @@ export default function BudgetTab({ project }) {
       <PrintHeader title={`${project.name}: budget`} />
       <Stack direction="row" data-print="hide" sx={{ justifyContent: 'flex-end', mb: -1 }}><PrintButton /></Stack>
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Planned budget" value={formatMoney(s.budget)} /></Grid>
-        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Consumed (approved hours)" value={formatMoney(s.consumed)} /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Planned budget" value={Number(s.budget)} format={formatMoney} /></Grid>
+        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Consumed (approved hours)" value={Number(s.consumed)} format={formatMoney} /></Grid>
         <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Remaining" tone={over ? 'error' : undefined}
           value={`${formatMoney(Math.abs(s.remaining))} ${over ? 'over' : 'remaining'}`} /></Grid>
       </Grid>
@@ -33,7 +33,7 @@ export default function BudgetTab({ project }) {
         <Typography variant="h3" component="h2">{formatPct(s.budget_pct)} of the budget used</Typography>
         <LinearProgress variant="determinate" value={Math.min(s.budget_pct, 100)} color={over ? 'error' : 'primary'}
           sx={{ height: 10, borderRadius: 5, my: 2 }} aria-label="Budget used" />
-        <BarChart height={200} layout="horizontal"
+        <BarChart height={200} layout="horizontal" borderRadius={4}
           yAxis={[{ scaleType: 'band', data: ['Planned budget', 'Consumed'], width: 120 }]}
           xAxis={[{ tickNumber: 6, valueFormatter: (v, ctx) => (ctx.location === 'tick' ? compactMoney(v) : formatMoney(v)) }]}
           series={[{ data: [Number(s.budget), Number(s.consumed)], label: 'Amount', valueFormatter: (v) => formatMoney(v),

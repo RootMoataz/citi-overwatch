@@ -6,7 +6,9 @@ import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useClaimMilestone, useMilestonesOf, useProfile, useProjects } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
+import CountUp from '../../components/CountUp.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
+import Reveal from '../../components/Reveal.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -29,7 +31,7 @@ function ThisWeek({ week }) {
   return (
     <Section question="This week" hint={`Week of ${formatDate(week.week_start)} · pending and approved hours`}>
       <Typography variant="h2" component="p" sx={{ color: overtime ? 'warning.main' : 'text.primary' }}>
-        {`${formatHours(logged)} of ${WEEKLY_CAP}h`}
+        <CountUp value={logged} format={(v) => `${formatHours(v === logged ? v : Math.round(v))} of ${WEEKLY_CAP}h`} />
       </Typography>
       <LinearProgress variant="determinate" value={Math.min((logged / WEEKLY_CAP) * 100, 100)}
         color={overtime ? 'warning' : 'primary'} aria-label="Hours logged this week"
@@ -137,10 +139,10 @@ export default function MyWeekPage() {
       <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} sx={{ mb: 2 }} />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
-          {profile.data ? <ThisWeek week={profile.data.this_week} /> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+          {profile.data ? <Reveal><ThisWeek week={profile.data.this_week} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
-          {profile.data ? <MyMilestones milestones={profile.data.milestones} /> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+          {profile.data ? <Reveal index={1}><MyMilestones milestones={profile.data.milestones} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
         </Grid>
         <Grid size={12}>
           <Claimable />
