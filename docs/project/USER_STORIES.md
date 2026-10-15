@@ -437,7 +437,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### N1. Try the demo in one click (U) — Done
 **As** a grader, **I want** one button per role on the sign-in page **so that** I can explore without typing credentials.
-- **Success:** Employee, Manager, Executive and Admin buttons sign in to the published demo accounts and land on that role's home.
+- **Success:** Employee, Manager, Executive and Admin buttons sign in to the published demo accounts and land on that role's home. A **View the source on GitHub** link under them opens the repository in a new tab.
 - **Failure:** "Too many demo sign-ins from your network" (`429`) after 20 Admin-demo sign-ins a minute from one address; the demo accounts never lock.
 
 #### N2. Search and jump anywhere (U) — Done

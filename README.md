@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,087 backend (364 unit · 723 integration, 97% coverage) · 793 frontend component (65 files) · 6 end-to-end (3 journeys × desktop + mobile, last run 13 Oct) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,087 backend (364 unit · 723 integration, 97% coverage) · 794 frontend component (65 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -48,8 +48,8 @@ Screenshots from the live site with the demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![Sign-in page: the ACME Scout brand panel on the left, the sign-in form and four one-click demo buttons on the right](docs/images/login.png) | ![The same sign-in page in dark mode](docs/images/login-dark.png) |
-| Sign-in with one-click demo logins | Dark mode follows the system or the account menu |
+| ![Sign-in page: the ACME Scout brand panel on the left, the sign-in form, four one-click demo buttons and a View the source on GitHub link on the right](docs/images/login.png) | ![The same sign-in page in dark mode](docs/images/login-dark.png) |
+| Sign-in with one-click demo logins and a link to this repository | Dark mode follows the system or the account menu |
 
 ### Employee
 
@@ -167,7 +167,7 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 
 ```bash
 cd backend/v1 && python -m pytest --cov=app              # 1,087 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 793 component tests (Vitest + Testing Library)
+cd frontend && npm test                                  # 794 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

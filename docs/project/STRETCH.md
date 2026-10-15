@@ -8,26 +8,26 @@ These items come from the repo's [full-stack guide](../full-stack.md) and the pr
 
 ## Candidates
 
-| # | Item | Source | Effort | Value | Notes |
-|---|---|---|---|---|---|
-| 1 | Token refresh (silent renewal before expiry) | Guide, auth checklist | S | High | Token expiry itself is in the minimum |
-| 2 | Progressive web app (installable, cached shell) | Guide, frontend checklist | S | Medium | `vite-plugin-pwa` |
-| 3 | Live auto-refresh of dashboard data | Email ("real-time visibility") | S | High | Polling plus refresh on tab focus. Could move to minimum |
-| 4 | Dark mode toggle | Owner, UI quality | S | Medium | Free with a well-built MUI theme |
-| 5 | Dependency graph view (visual chain) | Email Q6 | M | High | Minimum is a list view of the chain |
-| 6 | Gantt or timeline view of deliverables | Owner, UI | M | High | Strong visual for "delivery timelines" |
-| 7 | CSV export of list views | Owner | S | Medium | Stakeholder reporting |
-| 8 | Audit log (who changed what) | Object Structure V2 doc | M | Medium | Admin-only view |
-| 9 | Soft delete and restore | Object Structure V2 doc | M | Low | Real deletes are in the minimum |
-| 10 | Coverage targets: 80% backend, 80% frontend, 90% API and errors | Guide, test coverage goals | M | High | Minimum is good coverage of critical logic |
-| 11 | End-to-end tests for every critical path | Guide, test coverage goals | M | High | Minimum is one main journey |
-| 12 | Load test (Artillery) with results | Guide, performance testing | S | Medium | |
-| 13 | Full WCAG 2.1 AA accessibility audit | Guide, frontend checklist | M | Medium | Minimum is basic accessibility |
-| 14 | AI feature, e.g. "summarize project risk" | Guide, frontend checklist | M | Medium | Needs an LLM API key and cost approval |
-| 15 | Async tasks via SQS (e.g. scheduled at-risk recalculation) | Guide, backend checklist | M | Low | |
-| 16 | Monitoring dashboard (CloudWatch metrics and alarms) | Guide, backend attributes | M | Low | Minimum is structured logs |
-| 17 | Email or in-app notifications for at-risk projects | Owner | M | Medium | |
-| 18 | Kanban pull board for milestones | Owner, after the build | L | High | Designed, not built. See [Kanban pull board](#kanban-pull-board) |
+| # | Item | Source | Effort | Value | Notes | Status |
+|---|---|---|---|---|---|---|
+| 1 | Token refresh (silent renewal before expiry) | Guide, auth checklist | S | High | Token expiry itself is in the minimum | Done (`POST /auth/refresh`) |
+| 2 | Progressive web app (installable, cached shell) | Guide, frontend checklist | S | Medium | `vite-plugin-pwa` | Not built |
+| 3 | Live auto-refresh of dashboard data | Email ("real-time visibility") | S | High | Polling plus refresh on tab focus. Could move to minimum | Done (polling and refresh on tab focus) |
+| 4 | Dark mode toggle | Owner, UI quality | S | Medium | Free with a well-built MUI theme | Done |
+| 5 | Dependency graph view (visual chain) | Email Q6 | M | High | Minimum is a list view of the chain | Partly: the timeline shows "after …" chains and automatic blocked status; no graph view |
+| 6 | Gantt or timeline view of deliverables | Owner, UI | M | High | Strong visual for "delivery timelines" | Done (each project's timeline) |
+| 7 | CSV export of list views | Owner | S | Medium | Stakeholder reporting | Done (CSV export, plus print/PDF) |
+| 8 | Audit log (who changed what) | Object Structure V2 doc | M | Medium | Admin-only view | Done (audit log and per-record timeline) |
+| 9 | Soft delete and restore | Object Structure V2 doc | M | Low | Real deletes are in the minimum | Done (archive and restore; nothing is hard-deleted) |
+| 10 | Coverage targets: 80% backend, 80% frontend, 90% API and errors | Guide, test coverage goals | M | High | Minimum is good coverage of critical logic | Backend done (97%); see [TESTING.md](./TESTING.md) |
+| 11 | End-to-end tests for every critical path | Guide, test coverage goals | M | High | Minimum is one main journey | Partly: 3 journeys on desktop and mobile |
+| 12 | Load test (Artillery) with results | Guide, performance testing | S | Medium | | Not done |
+| 13 | Full WCAG 2.1 AA accessibility audit | Guide, frontend checklist | M | Medium | Minimum is basic accessibility | Not done (tests query by role and label; no audit) |
+| 14 | AI feature, e.g. "summarize project risk" | Guide, frontend checklist | M | Medium | Needs an LLM API key and cost approval | Not built (Puppy is rule-based, no AI service) |
+| 15 | Async tasks via SQS (e.g. scheduled at-risk recalculation) | Guide, backend checklist | M | Low | | Not built |
+| 16 | Monitoring dashboard (CloudWatch metrics and alarms) | Guide, backend attributes | M | Low | Minimum is structured logs | Not built |
+| 17 | Email or in-app notifications for at-risk projects | Owner | M | Medium | | In-app done (bell alerts); email waits on SES access |
+| 18 | Kanban pull board for milestones | Owner, after the build | L | High | See [Kanban pull board](#kanban-pull-board) | Partly: pull mode, claiming and the planning board; see below |
 
 ## Decision rule
 
@@ -35,7 +35,9 @@ When the minimum is complete, pick the remaining items with the best value for t
 
 ## Kanban pull board
 
-Today, work is **pushed**: a manager assigns people to milestones, and the 40-hour planned cap stops anyone being overloaded. Dependencies already form a graph, so a milestone is blocked only by its own predecessors and independent work can run in parallel. What's missing is a way for people to **pull** that work themselves. This design adds it. It isn't built.
+Today, work is **pushed**: a manager assigns people to milestones, and the 40-hour planned cap stops anyone being overloaded. Dependencies already form a graph, so a milestone is blocked only by its own predecessors and independent work can run in parallel. This design lets people **pull** that work themselves.
+
+**Status (15 Oct):** partly built. Pull mode per project (`work_mode`), claiming (`POST /milestones/{id}/claim`, [LOGIC_WALKTHROUGH §11](LOGIC_WALKTHROUGH.md#11-pull-mode-claiming-a-milestone)) and the planning board ([§25](LOGIC_WALKTHROUGH.md#25-the-planning-board-and-finalizing-a-plan)) are live. Not built: `/unclaim`, the WIP limit, `max_claimers`, auto-assign and the stale-card alert.
 
 ### Cards and columns
 

@@ -45,5 +45,7 @@ test('admin creates user → user logs in with emailed temp password → forced 
   await change.getByRole('button', { name: 'Save password' }).click()
 
   await expect(change).toBeHidden()
-  await expect(page.getByRole('heading', { name: /status of each active project/i, level: 2 })).toBeVisible()
+  // An employee's dashboard is "My week", with the manager chosen in the wizard.
+  await expect(page.getByRole('heading', { name: 'My week', level: 1 })).toBeVisible()
+  await expect(page.getByRole('region', { name: 'Your manager' })).toContainText('Morgan Manager')
 })

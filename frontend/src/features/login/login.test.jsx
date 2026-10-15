@@ -99,6 +99,15 @@ describe('login page brand and demo', () => {
     expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute('href', '/forgot-password')
   })
 
+  test('links to the source code on GitHub in a new tab', async () => {
+    server.use(noSession())
+    renderWithProviders(<App />, { route: '/login' })
+    const source = await screen.findByRole('link', { name: /view the source on github/i })
+    expect(source).toHaveAttribute('href', 'https://github.com/RootMoataz/citi-overwatch')
+    expect(source).toHaveAttribute('target', '_blank')
+    expect(source).toHaveAttribute('rel', expect.stringContaining('noopener'))
+  })
+
   test.each([
     ['Employee', 'employee.demo', users.employee],
     ['Manager', 'manager.demo', users.manager],
