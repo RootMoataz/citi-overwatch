@@ -280,6 +280,8 @@ def create_project(conn, ctx: Ctx, body: dict, *, audit_action: str = "create") 
     data["manager_id"] = _check_manager(conn, body["manager_id"])
     _check_dates(data["start_date"], data["predicted_end_date"])
     template = _template_plan(conn, body, data)
+    if template:
+        data["status"] = "planned"  # a template's milestones are a plan: it is arranged and finalized on the Plan tab
     try:
         with transaction(conn):
             row = query_one(conn, """

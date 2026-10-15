@@ -95,6 +95,8 @@ def curate(conn, today: date, *, audit: bool = True, archive_test_items: bool = 
     out["timesheets"] = _timesheets(conn, today, out["warnings"])
     for name, result in out["projects"].items():
         result["estimates_set"] = _estimates(conn, ids[name], departments[name])  # after the hours are in
+        if result["added"]:
+            _renumber(conn, ids[name])
         result["pending_added"] = out["timesheets"]["by_project"].get(name, {}).get("pending", 0)
         result["rejected_added"] = out["timesheets"]["by_project"].get(name, {}).get("rejected", 0)
         changed = result["added"] or result["team_added"] or result["pending_added"] or result["rejected_added"] \
@@ -107,6 +109,15 @@ def curate(conn, today: date, *, audit: bool = True, archive_test_items: bool = 
                 "pending_added": result["pending_added"], "rejected_added": result["rejected_added"],
                 "estimates_set": len(result["estimates_set"])})
     return out
+
+
+def _renumber(conn, project_id: str) -> None:
+    """New steps join the planning board's Scheduled column in date order (as migration 010 numbers existing
+    milestones), so the workflow's "next milestone" follows the plan. Backlog and Ready cards are left alone."""
+    conn.run("""UPDATE milestones m SET sequence = ranked.n
+                FROM (SELECT id, row_number() OVER (ORDER BY end_date, start_date, lower(name), id) AS n
+                      FROM milestones WHERE project_id = :p AND plan_column = 'scheduled') ranked
+                WHERE ranked.id = m.id AND m.sequence <> ranked.n""", p=project_id)
 
 
 # ---------- a. the leftover test items ----------

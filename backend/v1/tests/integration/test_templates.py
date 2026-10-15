@@ -109,3 +109,30 @@ def test_approving_a_request_can_start_the_project_from_a_template(client, conn)
     status, out, _, _ = client.request("POST", f"/project-requests/{req2['id']}/approve", token=token_for(conn, admin))
     assert status == 200 and out["project"]["department"] is None
     assert milestones_of(conn, out["project"]["id"]) == []
+
+
+def test_a_template_project_starts_planned_and_goes_through_the_plan(client, conn):
+    admin, manager = make_user(conn, role="admin"), make_user(conn, role="manager")
+    tech = department(conn, "Technology")
+    status, body, _, _ = client.request("POST", "/projects", token=token_for(conn, admin),
+                                        json=body_for(manager, tech, template=True, status="active"))
+    assert status == 201, body
+    assert body["status"] == "planned" and body["plan_finalized_at"] is None
+    status, out, _, _ = client.request("PUT", f"/projects/{body['id']}", token=token_for(conn, admin),
+                                       json={"status": "active"})
+    assert (status, out["error"]["code"]) == (409, "PLAN_NOT_FINALIZED")
+
+
+def test_approving_a_request_uses_its_department_for_the_template(client, conn):
+    admin, manager = make_user(conn, role="admin"), make_user(conn, role="manager")
+    ops = department(conn, "Operations")
+    status, req, _, _ = client.request("POST", "/project-requests", token=token_for(conn, manager), json={
+        "name": "Orion Ops", "proposed_start": "2026-02-01", "proposed_end": "2026-05-31",
+        "department_id": str(ops["id"]), "work_mode": "pull"})
+    assert status == 201, req
+    status, out, _, _ = client.request("POST", f"/project-requests/{req['id']}/approve", token=token_for(conn, admin),
+                                       json={"template": True})
+    assert status == 200, out
+    project = out["project"]
+    assert (project["department"]["name"], project["work_mode"], project["status"]) == ("Operations", "pull", "planned")
+    assert [m["name"] for m in milestones_of(conn, project["id"])][-1] == "Post-implementation review"
