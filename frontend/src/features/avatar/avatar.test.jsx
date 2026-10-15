@@ -1,10 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import AvatarStack from '../../components/AvatarStack.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { colourFor, initials, initialsFor, initialsStyle } from '../../lib/avatarLook.js'
-import { blobToBase64, centerSquare, sourceProblem } from '../../lib/avatarImage.js'
+import { blobToBase64, centerSquare, decodeImage, renderAvatarPng, sourceProblem } from '../../lib/avatarImage.js'
 import { renderWithProviders, users } from '../../test/render.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import AvatarDialog from './AvatarDialog.jsx'
@@ -13,9 +13,14 @@ const PNG_BYTES = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
 
 vi.mock('../../lib/avatarImage.js', async (importOriginal) => {
   const real = await importOriginal()
-  // jsdom can't decode or draw images; the crop returns a fixed "PNG" so the dialog flow can be tested.
-  return { ...real, cropToSquarePng: vi.fn(async () => new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])],
-    { type: 'image/png' })) }
+  // jsdom can't decode or draw images: decoding reports a 1200x800 photo and drawing returns a fixed "PNG", so
+  // the dialog flow and the exact square handed to the encoder can be tested.
+  return {
+    ...real,
+    decodeImage: vi.fn(async () => ({ image: { close: vi.fn() }, width: 1200, height: 800 })),
+    renderAvatarPng: vi.fn(async () => new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])],
+      { type: 'image/png' })),
+  }
 })
 
 const photoIndex = (items) => server.use(http.get(`${API}/avatars`, () => HttpResponse.json({ items })))
@@ -160,5 +165,90 @@ describe('AvatarDialog', () => {
     renderDialog(onClose)
     await userEvent.click(await screen.findByRole('button', { name: /remove photo/i }))
     await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+
+  const lastRect = () => renderAvatarPng.mock.calls.at(-1)[1]
+  const chooseAndOpenEditor = async () => {
+    // The upload is refused so the dialog stays open and the framing can be saved (and inspected) repeatedly.
+    server.use(http.put(`${API}/me/avatar`, () => HttpResponse.json({ error: { code: 'VALIDATION_ERROR',
+      message: 'Refused for the test.', request_id: 'r-1' } }, { status: 400 })))
+    renderDialog()
+    await userEvent.upload(screen.getByTestId('avatar-file'), file('image/jpeg'))
+    return screen.findByRole('group', { name: 'Photo crop area' })
+  }
+  const saveAndGetRect = async () => {
+    renderAvatarPng.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(renderAvatarPng).toHaveBeenCalled())
+    await screen.findByText('Refused for the test.')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+    return lastRect()
+  }
+
+  test('the crop area explains itself and starts on the centred square', async () => {
+    const area = await chooseAndOpenEditor()
+    expect(decodeImage).toHaveBeenCalled()
+    expect(area).toHaveAccessibleDescription(/drag to reposition, use the slider to zoom/i)
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveAttribute('aria-valuenow', '1')
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled()
+    // 1200x800 at zoom 1: the middle 800px square.
+    expect(await saveAndGetRect()).toEqual({ sx: 200, sy: 0, side: 800 })
+  })
+
+  test('dragging the photo changes the square handed to the encoder, and stops at the edge', async () => {
+    const area = await chooseAndOpenEditor()
+    // The photo shows at 360x240 in the 240px frame, so 30px of drag is 100 source pixels.
+    fireEvent.pointerDown(area, { pointerId: 1, clientX: 100, clientY: 100, button: 0, pointerType: 'mouse' })
+    fireEvent.pointerMove(area, { pointerId: 1, clientX: 130, clientY: 140, pointerType: 'mouse' })
+    fireEvent.pointerUp(area, { pointerId: 1, clientX: 130, clientY: 140, pointerType: 'mouse' })
+    const moved = await saveAndGetRect()
+    expect(moved.sx).toBeCloseTo(100)
+    expect(moved.sy).toBe(0) // no vertical room at zoom 1
+    expect(moved.side).toBe(800)
+  })
+
+  test('dragging far past the edge is clamped so the photo still fills the circle', async () => {
+    const area = await chooseAndOpenEditor()
+    fireEvent.pointerDown(area, { pointerId: 2, clientX: 0, clientY: 0, button: 0, pointerType: 'touch' })
+    fireEvent.pointerMove(area, { pointerId: 2, clientX: -900, clientY: 0, pointerType: 'touch' })
+    fireEvent.pointerUp(area, { pointerId: 2, pointerType: 'touch' })
+    expect(await saveAndGetRect()).toEqual({ sx: 400, sy: 0, side: 800 })
+  })
+
+  test('keyboard: arrows pan (Shift for bigger steps), + and - zoom, Reset puts it back', async () => {
+    const area = await chooseAndOpenEditor()
+    area.focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect((await saveAndGetRect()).sx).toBeCloseTo(200 - 8 * (1200 / 360))
+    area.focus()
+    await userEvent.keyboard('{Shift>}{ArrowLeft}{/Shift}')
+    expect((await saveAndGetRect()).sx).toBeCloseTo(200 + 32 * (1200 / 360))
+    area.focus()
+    await userEvent.keyboard('++')
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveAttribute('aria-valuenow', '1.5')
+    expect((await saveAndGetRect()).side).toBeCloseTo(800 / 1.5)
+    area.focus()
+    await userEvent.keyboard('{ArrowDown}-')
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveAttribute('aria-valuenow', '1.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveAttribute('aria-valuenow', '1')
+    expect(await saveAndGetRect()).toEqual({ sx: 200, sy: 0, side: 800 })
+  })
+
+  test('the wheel zooms in and the zoom never passes 4x', async () => {
+    const area = await chooseAndOpenEditor()
+    fireEvent.wheel(area, { deltaY: -100000 })
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveAttribute('aria-valuenow', '4')
+    expect((await saveAndGetRect()).side).toBe(200)
+  })
+
+  test('a photo that encodes too large is explained and nothing is uploaded', async () => {
+    let uploads = 0
+    await chooseAndOpenEditor()
+    server.use(http.put(`${API}/me/avatar`, () => { uploads += 1; return HttpResponse.json({}) }))
+    renderAvatarPng.mockRejectedValueOnce(new Error('That photo is too detailed to store. Choose a simpler one.'))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/too detailed/i)
+    expect(uploads).toBe(0)
   })
 })
