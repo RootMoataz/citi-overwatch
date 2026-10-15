@@ -869,7 +869,9 @@ flowchart TD
 - **What counts as new** (`detector.js`): the first load is silent. After that, a notification is new the first time its
   `id` + `created_at` is seen, so reading notifications never alerts, one read plus one arrival in the same poll still
   alerts, and a refreshed message alert (someone wrote again) alerts. An alert about you (`subject_user` = you) that
-  shows up within 5 seconds of a save you made is treated as your own action and stays silent.
+  shows up within 5 seconds of a save you made is treated as your own action and stays silent, and so does what that
+  save reports itself (`OWN_RESULT_TYPES`: auto-assignment and routing results, support routing, a finalized plan), so
+  the save's own toast ("Completed. Auto-assigned Ben Okafor to Cutover") isn't replaced by Puppy's. They stay in the bell.
 - **At most one alert per 5 seconds** (`createAlertGate`): a burst is added up and announced once when the gap ends.
 - **Sound is never the only signal:** the bell's badge, Puppy's dot and raised ears, a toast and a polite screen-reader
   announcement always come, with or without sound. The tab title shows "(3) Scout" while notifications are unread

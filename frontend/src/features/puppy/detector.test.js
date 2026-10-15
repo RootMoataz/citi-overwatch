@@ -40,6 +40,17 @@ describe('new-notification detector', () => {
     expect(run([[n('m', { type: 'MESSAGE_RECEIVED' })], [n('m', { type: 'MESSAGE_RECEIVED', ...later })]])).toEqual([0, 1])
   })
 
+  test("what your own save reports (auto-routing, a finalized plan) stays silent, so the save's toast stays", () => {
+    let state = detectNew(initialDetector(), [], { me: ME }).state
+    const result = detectNew(state, [n('a', { type: 'AUTO_ROUTED', subject_user: { id: 'u-ben' } })],
+      { me: ME, now: 5000, ownActionAt: 4000 })
+    expect(result.fresh).toEqual([])
+    state = result.state
+    const later = detectNew(state, [n('b', { type: 'AUTO_ROUTED', subject_user: { id: 'u-ben' } })],
+      { me: ME, now: 60000, ownActionAt: 60000 - OWN_ACTION_MS - 1 })
+    expect(later.fresh.map((x) => x.id)).toEqual(['b'])
+  })
+
   test('your own action is not news: an alert about you right after your own save stays silent', () => {
     let state = detectNew(initialDetector(), [], { me: ME, now: 0 }).state
     const own = detectNew(state, [n('x', { subject_user: { id: ME } })], { me: ME, now: 5000, ownActionAt: 4000 })

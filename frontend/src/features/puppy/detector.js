@@ -6,8 +6,13 @@
 //   (same id, newer time) when someone writes again, so that counts as new too.
 // - Your own actions aren't news: an alert about you (subject = you) that turns up within a few seconds of a save
 //   you made stays silent. The same alert type arriving later (a manager rejected your hours) is news.
+// - Neither is the result your save reports itself: auto-routing after a completion, support routing and a finalized
+//   plan (OWN_RESULT_TYPES) that turn up within those seconds already have the save's own toast, which Puppy's toast
+//   would replace. They stay in the bell.
 
 export const OWN_ACTION_MS = 5000
+export const OWN_RESULT_TYPES = new Set(['AUTO_ASSIGNED', 'AUTO_ROUTED', 'NO_QUALIFIED_PERSON', 'SUPPORT_ASSIGNED',
+  'SUPPORT_ROUTED', 'PLAN_FINALIZED'])
 export const ALERT_GAP_MS = 5000
 
 export const initialDetector = () => ({ primed: false, seen: new Set() })
@@ -21,7 +26,7 @@ export function detectNew(state, notifications, { me, now = Date.now(), ownActio
   if (!state.primed) return { state: { primed: true, seen }, fresh: [] }
   const ownMoment = now - ownActionAt <= OWN_ACTION_MS
   const fresh = notifications.filter((n) => !state.seen.has(keyOf(n))
-    && !(ownMoment && me != null && String(n.subject_user?.id) === String(me)))
+    && !(ownMoment && ((me != null && String(n.subject_user?.id) === String(me)) || OWN_RESULT_TYPES.has(n.type))))
   return { state: { primed: true, seen }, fresh }
 }
 
