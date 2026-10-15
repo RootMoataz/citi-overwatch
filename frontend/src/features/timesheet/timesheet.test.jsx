@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import Layout from '../../app/Layout.jsx'
 import NotificationBell from '../../components/NotificationBell.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
@@ -29,6 +29,9 @@ function weekHandler(entries = [], seen = {}) {
 const renderSheet = () => renderAsUser(<TimesheetPage />, { user: users.employee, route: `/timesheet?week=${WEEK}`, path: '/timesheet' })
 
 describe('TimesheetPage', () => {
+  // These tests drive the week grid; the day view has its own in dayView.test.jsx.
+  beforeEach(() => { localStorage.setItem('overwatch.timesheet.view', 'week') })
+
   test("timesheet rows are the employee's assigned milestones", async () => {
     const seen = {}
     server.use(weekHandler([], seen))
@@ -58,7 +61,7 @@ describe('TimesheetPage', () => {
     expect(screen.getByTestId('week-total')).toHaveTextContent('47h / 40h')
     expect(await screen.findByText('More than 24h on Wed Oct 14')).toBeInTheDocument()
     await user.clear(screen.getByLabelText('Build, Wed Oct 14'))
-    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     await waitFor(() => expect(puts).toBe(1))
     expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: '2026-10-13', hours: 9 }] })
   })
@@ -107,13 +110,13 @@ describe('TimesheetPage', () => {
     await user.type(tue, '0.1')
     expect(tue).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText(/at least 0.25 hours/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /save week/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^submit/i })).toBeDisabled()
     await user.clear(tue)
     const cell = screen.getByLabelText('Build, Mon Oct 12')
     await user.type(cell, '7.25')
     expect(cell).toHaveAttribute('inputmode', 'decimal')
     expect(cell).toHaveAttribute('aria-invalid', 'false')
-    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WEEK, hours: 7.25 }] }))
   })
 
@@ -142,7 +145,7 @@ describe('TimesheetPage', () => {
     }))
     renderSheet()
     const user = userEvent.setup()
-    const save = await screen.findByRole('button', { name: /save week/i })
+    const save = await screen.findByRole('button', { name: /^submit/i })
     expect(save).toBeDisabled()
     await user.click(await screen.findByRole('button', { name: /resubmit schema mapping, wed oct 14/i }))
     expect(save).toBeEnabled()
@@ -181,7 +184,7 @@ describe('TimesheetPage', () => {
     await user.type(field, ' no more: wired the settings form')
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.getByRole('button', { name: 'Edit work note, Build, Mon Oct 12' })).not.toHaveAttribute('data-attention')
-    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WEEK, hours: 6,
       note: 'too short no more: wired the settings form' }] }))
   })
@@ -202,7 +205,7 @@ describe('TimesheetPage', () => {
     await user.type(await screen.findByLabelText(/what did you work on/i), 'Mapped the address tables')
     await user.click(screen.getByRole('button', { name: 'Done' }))
     expect(screen.queryByText('Add a note')).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WEEK, hours: 8,
       note: 'Mapped the address tables' }] }))
   })
@@ -227,7 +230,7 @@ describe('TimesheetPage', () => {
     const user = userEvent.setup()
     await user.type(await screen.findByLabelText('Build, Mon Oct 12'), '6')
     await user.type(screen.getByLabelText('Schema Mapping, Tue Oct 13'), '2')
-    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Add a work note before saving')
     expect(within(alert).getByText('Build, Mon Oct 12')).toBeInTheDocument()

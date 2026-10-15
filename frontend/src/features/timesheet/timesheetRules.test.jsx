@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import TimesheetPage from './TimesheetPage.jsx'
@@ -26,6 +26,9 @@ function sheetWith({ rows = openRows, entries = [] } = {}) {
 const renderSheet = () => renderAsUser(<TimesheetPage />, { user: users.employee, route: `/timesheet?week=${WEEK}`, path: '/timesheet' })
 
 describe('Timesheet rules', () => {
+  // These tests drive the week grid; the day view has its own in dayView.test.jsx.
+  beforeEach(() => { localStorage.setItem('overwatch.timesheet.view', 'week') })
+
   test('a day over 24h across milestones is flagged on that day and blocks Save', async () => {
     server.use(sheetWith())
     renderSheet()
@@ -41,11 +44,11 @@ describe('Timesheet rules', () => {
     expect(screen.getByLabelText('Build, Tue Oct 13')).toHaveAttribute('aria-invalid', 'false')
     expect(screen.getByTestId('day-total-2026-10-14')).toHaveTextContent('26h')
     expect(screen.getByTestId('day-total-2026-10-14')).toHaveAttribute('data-over', 'true')
-    expect(screen.getByRole('button', { name: /save week/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^submit/i })).toBeDisabled()
     await user.clear(b)
     await user.type(b, '10')
     expect(screen.queryByText(/more than 24h/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /save week/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^submit/i })).toBeEnabled()
   })
 
   test('saved hours on another milestone count toward the day; rejected ones do not', async () => {
@@ -68,7 +71,7 @@ describe('Timesheet rules', () => {
     renderSheet()
     const user = userEvent.setup()
     await user.type(await screen.findByLabelText('Build, Wed Oct 14'), '4')
-    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(/couldn't save your week/i)
     expect(alert).toHaveTextContent('More than 24h on Wed 14 Oct (26h across your milestones)')
@@ -86,7 +89,7 @@ describe('Timesheet rules', () => {
     expect(screen.getByText('This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request.'))
       .toBeInTheDocument()
     expect(screen.getByTestId('week-total')).toHaveAttribute('data-over', 'true')
-    expect(screen.getByRole('button', { name: /save week/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^submit/i })).toBeEnabled()
   })
 
   test('rows on an on-hold project are greyed out and read-only, completed ones are closed', async () => {

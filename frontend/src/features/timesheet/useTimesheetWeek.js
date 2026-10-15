@@ -89,7 +89,7 @@ export function useTimesheetWeek(week) {
   }, [])
 
   return {
-    sheet, rows, groups, allDays, entries, locks,
+    week, sheet, rows, groups, allDays, entries, locks,
     valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal,
     total, overDays, tooMany, tooFew, changed,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, discard,

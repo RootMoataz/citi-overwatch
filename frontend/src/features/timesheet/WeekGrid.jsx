@@ -8,23 +8,12 @@ import { useState } from 'react'
 import SourceChip from '../timer/SourceChip.jsx'
 import TimerButton from '../timer/TimerButton.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
+import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
 import { STATUS, statusColor } from '../../app/theme.js'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import { formatDate, formatDayLabel, formatHours } from '../../lib/format.js'
-
-// Hours are plain numbers: digits and one point, at most 2 digits either side, so "-", "+" and "e" never get in.
-// Typed and pasted text both arrive through onChange, so both are cleaned here.
-const cleanHours = (raw) => {
-  const [whole, ...rest] = String(raw).replace(/[^\d.]/g, '').split('.')
-  return rest.length ? `${whole.slice(0, 2)}.${rest.join('').slice(0, 2)}` : whole.slice(0, 2)
-}
-// A paste is taken only when it is already a clean value; anything else ("-3", "1e1", "7.5h") is refused whole
-// rather than half-cleaned into a different number.
-const CLEAN_PASTE = /^\d{1,2}(\.\d{1,2})?$/
-// Keys that could start a negative, an exponent or a letter never reach the cell.
-const allowedKey = (e) => e.ctrlKey || e.metaKey || e.altKey || e.key.length > 1 || /[\d.]/.test(e.key)
 
 /** The work note of one cell: an icon that shows whether there is one, opening a small editor.
  * attention: this cell needs a note (the server asked for proof, or a timer saved hours without one). */
@@ -65,16 +54,22 @@ function NoteButton({ cellLabel, note, onChange, attention, disabled }) {
   )
 }
 
-function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed }) {
+/** The saved entry's status, source and Resubmit. inlineReason: print a rejection's reason instead of hiding it in a tooltip. */
+export function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed, inlineReason }) {
   if (!entry) return null
   const meta = STATUS[entry.status] ?? STATUS.pending
   const label = (
     <Typography variant="caption" sx={{ display: 'block', color: (t) => statusColor(meta, t), lineHeight: 1.2, mt: 0.5 }}>{entry.label}</Typography>
   )
+  const reason = entry.status === 'rejected' ? entry.rejection_reason : null
   return (
     <>
-      {entry.status === 'rejected' && entry.rejection_reason
-        ? <Tooltip title={`Rejected: ${entry.rejection_reason}`}><span>{label}</span></Tooltip> : label}
+      {reason && !inlineReason ? <Tooltip title={`Rejected: ${reason}`}><span>{label}</span></Tooltip> : label}
+      {reason && inlineReason ? (
+        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', lineHeight: 1.2, mt: 0.25 }}>
+          Reason: {reason}
+        </Typography>
+      ) : null}
       {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ mt: 0.5, height: 18 }} /> : null}
       <SourceChip source={entry.source} hours={entry.hours} trackedHours={entry.tracked_hours} sx={{ mt: 0.5 }} />
       {entry.status === 'rejected' && !resubmitting && !closed ? (
@@ -92,7 +87,7 @@ export default function WeekGrid({ state, days, thisWeek, onRequest }) {
   const { groups, overDays, dayTotal, total } = state
   return (
     <TableContainer component={Paper} variant="outlined">
-      <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.allDays[0])}`}>
+      <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.week)}`}>
         <TableHead>
           <TableRow>
             <TableCell sx={{ minWidth: 160 }}>Milestone</TableCell>
@@ -159,17 +154,8 @@ function GroupRows({ group, days, state, thisWeek, onRequest }) {
                   {locks[k] ? (
                     <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
                       onRequest={() => onRequest({ milestoneId: r.milestone.id, date: d, hours: locks[k].hours, label })} />
-                  ) : <TextField value={value} onChange={(e) => setHours(k, cleanHours(e.target.value))} disabled={Boolean(closed)}
-                    onKeyDown={(e) => { if (!allowedKey(e)) e.preventDefault() }}
-                    onPaste={(e) => {
-                      e.preventDefault()
-                      const text = e.clipboardData.getData('text').trim()
-                      if (CLEAN_PASTE.test(text)) setHours(k, text)
-                    }}
-                    error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(d)) || (isDraft(k) && tooLow(value))}
-                    slotProps={{ htmlInput: { inputMode: 'decimal', pattern: '[0-9]{0,2}([.][0-9]{0,2})?',
-                      'aria-label': `${r.milestone.name}, ${formatDayLabel(d)}`, style: { textAlign: 'center' } } }}
-                    sx={{ width: 76 }} />}
+                  ) : <HoursField value={value} label={label} onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
+                    error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(d)) || (isDraft(k) && tooLow(value))} />}
                   {num(value) > 0 || entries[k] ? (
                     <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'center', mt: 0.25, gap: 0.5 }}>
                       <NoteButton cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`} note={noteOf(k)} disabled={Boolean(closed)}

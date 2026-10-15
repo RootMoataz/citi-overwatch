@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import ChangeRequests from '../timesheets/ChangeRequests.jsx'
@@ -46,7 +46,10 @@ describe('limits on the screen', () => {
   })
 })
 
-describe('timesheet: timer drafts are pre-filled, locked and submitted with Save week', () => {
+describe('timesheet: timer drafts are pre-filled, locked and submitted with the Submit button', () => {
+  // These tests drive the week grid; the day view has its own in dayView.test.jsx.
+  beforeEach(() => { localStorage.setItem('overwatch.timesheet.view', 'week') })
+
   test('the cell shows saved + timer hours, read-only, with the banner', async () => {
     server.use(weekWithDraft())
     renderSheet()
@@ -63,14 +66,14 @@ describe('timesheet: timer drafts are pre-filled, locked and submitted with Save
     expect(screen.getByLabelText('Build, Tue Oct 13')).toBeEnabled()
   })
 
-  test('Save week submits the draft with the timer note', async () => {
+  test('Submit sends the draft with the timer note', async () => {
     let body = null
     server.use(weekWithDraft(), http.put(`${API}/time-entries`, async ({ request }) => {
       body = await request.json()
       return HttpResponse.json({ week_start: WEEK, rows, entries: [], drafts: [], locks: [], totals: { logged: 2.5, approved: 0, draft: 0 } })
     }))
     renderSheet()
-    const save = await screen.findByRole('button', { name: 'Save week' })
+    const save = await screen.findByRole('button', { name: /^submit/i })
     await waitFor(() => expect(save).toBeEnabled())
     await userEvent.click(save)
     await waitFor(() => expect(body).toEqual({ week: WEEK,
@@ -116,7 +119,7 @@ describe('timesheet: timer drafts are pre-filled, locked and submitted with Save
     renderSheet()
     const user = userEvent.setup()
     await user.type(await screen.findByLabelText('Schema Mapping, Tue Oct 13'), '1')
-    await user.click(screen.getByRole('button', { name: 'Save week' }))
+    await user.click(screen.getByRole('button', { name: /^submit/i }))
     const alert = (await screen.findByText("Timer hours can't be edited")).closest('[role=alert]')
     expect(alert).toHaveTextContent('Schema Mapping, Tue Oct 13 — use Request a change on those cells instead.')
   })

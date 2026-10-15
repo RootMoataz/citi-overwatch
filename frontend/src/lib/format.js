@@ -29,6 +29,11 @@ export function mondayOf(date = new Date()) {
   return d.toISOString().slice(0, 10)
 }
 
+/** Today's date (YYYY-MM-DD) on the viewer's own calendar. */
+export function todayIso(date = new Date()) {
+  return addDays(mondayOf(date), (date.getDay() + 6) % 7)
+}
+
 export function addDays(iso, days) {
   const [y, m, d] = iso.split('-').map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d + days))
@@ -43,3 +48,16 @@ export function formatDayLabel(iso) {
   const month = dt.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })
   return `${day} ${month} ${d}`
 }
+
+const dayPart = (iso, options) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })
+}
+
+/** "2026-10-14" → "Wed 14 Oct" */
+export const formatDayShort = (iso) =>
+  `${dayPart(iso, { weekday: 'short' })} ${dayPart(iso, { day: 'numeric' })} ${dayPart(iso, { month: 'short' })}`
+
+/** "2026-10-14" → "Wednesday 14 October 2026" */
+export const formatDayFull = (iso) => `${dayPart(iso, { weekday: 'long' })} ${dayPart(iso, { day: 'numeric' })} `
+  + `${dayPart(iso, { month: 'long' })} ${dayPart(iso, { year: 'numeric' })}`
