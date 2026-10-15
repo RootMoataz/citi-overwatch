@@ -162,11 +162,12 @@ def test_every_project_gets_its_department_plan_around_what_it_had(live):
         names = {r["name"] for r in rows}
         preset = {s.name for s in preset_for(department)}
         added = {a["name"] for a in result["projects"][name]["added"]}
-        assert added <= preset and not (added & {r["name"] for r in rows if r["name"] not in added and False})
+        assert added <= preset and added <= names  # only plan steps, and all of them really there
         assert len(rows) >= 5, name
         for r in rows:  # inside the project's dates, never zero-length (end on or after start)
             assert project["start_date"] <= r["start_date"] <= r["end_date"] <= project["predicted_end_date"]
-        assert names >= {"Discovery", "Schema Mapping", "Cutover"} if name == "Apollo Data Migration" else True
+        if name == "Apollo Data Migration":
+            assert names >= {"Discovery", "Schema Mapping", "Cutover"}  # kept under their own names
     apollo = {a["name"]: a for a in result["projects"]["Apollo Data Migration"]["added"]}
     assert set(apollo) == {"Solution architecture", "Build: frontend", "QA & user acceptance testing", "Hypercare"}
     # Beacon works in pull mode: its new steps are unassigned and Design is still there to claim.
