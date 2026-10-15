@@ -3,11 +3,13 @@ import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useMe, useUpdateMe } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
+import DemoLock from '../../components/DemoLock.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import AvatarDialog from '../avatar/AvatarDialog.jsx'
 import { formatMoney } from '../../lib/format.js'
+import { demoBlocks } from '../../lib/permissions.js'
 import { EMAIL_RE } from '../../lib/schemas.js'
 
 const ROLE = { admin: 'Admin', manager: 'Manager', employee: 'Employee', executive: 'Executive' }
@@ -25,7 +27,8 @@ function ReadOnly({ label, value }) {
 export default function ProfilePage() {
   const me = useMe()
   const update = useUpdateMe()
-  const { setUser } = useSession()
+  const { user, setUser } = useSession()
+  const locked = demoBlocks(user, 'profile.edit')
   const [draft, setDraft] = useState(null)
   const [failure, setFailure] = useState(null)
   const [photoOpen, setPhotoOpen] = useState(false)
@@ -56,21 +59,25 @@ export default function ProfilePage() {
           <Stack sx={{ gap: 0.5, alignItems: 'flex-start' }}>
             <Typography variant="subtitle1">Profile photo</Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>Shown next to your name across the app.</Typography>
-            <Button size="small" onClick={() => setPhotoOpen(true)}>Change photo</Button>
+            <DemoLock user={user} action="avatar.own">
+              <Button size="small" onClick={() => setPhotoOpen(true)}>Change photo</Button>
+            </DemoLock>
           </Stack>
         </Stack>
       </Paper>
       {photoOpen ? <AvatarDialog open user={p} onClose={() => setPhotoOpen(false)} /> : null}
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 6 }}><TextField label="First name" value={form.first_name} onChange={set('first_name')} /></Grid>
-          <Grid size={{ xs: 12, sm: 6 }}><TextField label="Last name" value={form.last_name} onChange={set('last_name')} /></Grid>
-          <Grid size={12}><TextField label="Email" type="email" value={form.email} onChange={set('email')} error={emailError}
+          <Grid size={{ xs: 12, sm: 6 }}><TextField label="First name" value={form.first_name} onChange={set('first_name')} disabled={locked} /></Grid>
+          <Grid size={{ xs: 12, sm: 6 }}><TextField label="Last name" value={form.last_name} onChange={set('last_name')} disabled={locked} /></Grid>
+          <Grid size={12}><TextField label="Email" type="email" value={form.email} onChange={set('email')} error={emailError} disabled={locked}
             helperText={emailError ? 'Enter a valid email address' : ' '} /></Grid>
         </Grid>
         <Stack direction="row" sx={{ justifyContent: 'flex-end', gap: 1 }}>
           {draft ? <Button onClick={() => setDraft(null)}>Discard</Button> : null}
-          <Button variant="contained" onClick={save} disabled={!draft || emailError || update.isPending}>Save</Button>
+          <DemoLock user={user} action="profile.edit">
+            <Button variant="contained" onClick={save} disabled={!draft || emailError || update.isPending}>Save</Button>
+          </DemoLock>
         </Stack>
       </Paper>
       <Paper variant="outlined" sx={{ p: 2 }}>

@@ -93,7 +93,7 @@ function refresh() {
       })
       .catch((err) => {
         token = null
-        expiredHandler()
+        expiredHandler(err)
         throw err
       })
       .finally(() => { refreshing = null })
@@ -129,6 +129,7 @@ export const api = {
   refresh: () => refresh().then((data) => data.user),
   setToken(next) { token = next },
   getToken() { return token },
+  /** fn(err) runs when the session can't be refreshed; err.code DEMO_SESSION_EXPIRED means a public demo ran out. */
   onSessionExpired(fn) { expiredHandler = fn },
   onSessionRefreshed(fn) { sessionListeners.add(fn); return () => sessionListeners.delete(fn) },
 }

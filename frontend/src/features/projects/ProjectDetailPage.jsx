@@ -6,6 +6,7 @@ import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'rea
 import { useArchiveProject, useProject, useRestoreProject, useUpdateProject } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DemoLock from '../../components/DemoLock.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -50,10 +51,16 @@ export default function ProjectDetailPage() {
         </Stack>}
         actions={<>
           {manage ? <Button variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button> : null}
-          {can(user, 'project.archive') && !p.is_archived
-            ? <Button color="error" onClick={() => setConfirmArchive(true)}>Archive</Button> : null}
-          {can(user, 'project.archive') && p.is_archived
-            ? <Button variant="contained" onClick={() => restore.mutate()}>Restore</Button> : null}
+          {can(user, 'project.archive') && !p.is_archived ? (
+            <DemoLock user={user} action="project.archive">
+              <Button color="error" onClick={() => setConfirmArchive(true)}>Archive</Button>
+            </DemoLock>
+          ) : null}
+          {can(user, 'project.archive') && p.is_archived ? (
+            <DemoLock user={user} action="project.archive">
+              <Button variant="contained" onClick={() => restore.mutate()}>Restore</Button>
+            </DemoLock>
+          ) : null}
         </>} />
       <Tabs value={tab} onChange={(_, value) => setParams({ tab: value }, { replace: true })} variant="scrollable"
         allowScrollButtonsMobile aria-label="Project sections" sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>

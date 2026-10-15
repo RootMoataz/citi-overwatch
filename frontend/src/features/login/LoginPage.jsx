@@ -1,4 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import AdminPanelSettings from '@mui/icons-material/AdminPanelSettingsOutlined'
 import BusinessCenter from '@mui/icons-material/BusinessCenterOutlined'
 import Person from '@mui/icons-material/PersonOutlined'
 import SupervisorAccount from '@mui/icons-material/SupervisorAccountOutlined'
@@ -18,42 +19,45 @@ const KNOWN = {
     const until = err.details?.until ? new Date(err.details.until).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null
     return `Too many failed attempts. Try again${until ? ` after ${until}` : ' in 15 minutes'}.`
   },
+  RATE_LIMITED: () => 'Too many demo sign-ins from your network. Wait a minute and try again.',
 }
 
-// Public demo accounts (documented in the README). Admin is deliberately not here: its password is private.
+// Public demo accounts (documented in the README). Admin is the public demo admin demo.admin, never the real admin
+// account (its password is private): the server disables its risky actions and ends its session after 5 minutes.
 const DEMO_PASSWORD = 'Demo123!'
 const DEMOS = [
   { label: 'Employee', username: 'employee.demo', icon: <Person /> },
   { label: 'Manager', username: 'manager.demo', icon: <SupervisorAccount /> },
   { label: 'Executive', username: 'executive.demo', icon: <BusinessCenter /> },
+  { label: 'Admin', username: 'demo.admin', icon: <AdminPanelSettings /> },
 ]
+const DEMO_ENDED = 'Your 5-minute demo session has ended.'
 
-/** One click signs in as a demo role. */
+/** One click signs in as a demo role. Four roles sit in a two-by-two grid so every label fits on a phone. */
 function DemoButtons({ pending, disabled, onPick }) {
   return (
     <Box role="group" aria-labelledby="demo-heading">
       <Divider sx={{ my: 3, color: 'text.secondary', fontSize: '0.8125rem' }}>
         <span id="demo-heading">Try the demo</span>
       </Divider>
-      <Stack direction="row" sx={{ gap: 1 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
         {DEMOS.map((d) => (
           <Button key={d.username} variant="outlined" startIcon={d.icon} disabled={disabled} loading={pending === d.username}
-            loadingPosition="start" onClick={() => onPick(d.username)}
-            sx={{ flex: 1, minWidth: 0, px: 1, flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.25, sm: 0 },
-              '& .MuiButton-startIcon': { m: { xs: 0, sm: '0 6px 0 -2px' } } }}>
+            loadingPosition="start" onClick={() => onPick(d.username)} sx={{ minWidth: 0, px: 1 }}>
             {d.label}
           </Button>
         ))}
-      </Stack>
+      </Box>
       <Typography variant="caption" component="p" sx={{ color: 'text.secondary', textAlign: 'center', mt: 1.25 }}>
-        Signs in with a public demo account, filled with sample projects.
+        Signs in with a public demo account, filled with sample projects. The Admin demo signs you out after 5 minutes
+        and has some actions disabled.
       </Typography>
     </Box>
   )
 }
 
 export default function LoginPage() {
-  const { status, login } = useSession()
+  const { status, login, ended } = useSession()
   const navigate = useNavigate()
   const location = useLocation()
   const [failure, setFailure] = useState(null)
@@ -92,6 +96,7 @@ export default function LoginPage() {
     <AuthCard title="Sign in" subtitle="Welcome back. Sign in with your ACME account.">
       <Stack component="form" noValidate onSubmit={handleSubmit(onSubmit)} sx={{ gap: 2 }}>
         {location.state?.notice ? <Alert severity="success">{location.state.notice}</Alert> : null}
+        {ended === 'demo' && !failure ? <Alert severity="info" role="status">{DEMO_ENDED}</Alert> : null}
         {known ? <Alert severity="error" role="alert">{known(failure)}</Alert> : <ErrorAlert error={failure} />}
         <TextField label="Username" autoComplete="username" autoFocus required {...register('username')}
           error={Boolean(errors.username)} helperText={errors.username?.message} disabled={busy} />

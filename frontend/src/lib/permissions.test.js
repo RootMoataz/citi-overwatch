@@ -1,6 +1,27 @@
 import { describe, expect, test } from 'vitest'
-import { can, canViewProfile, isReadOnly } from './permissions.js'
+import { DEMO_BLOCKED, can, canViewProfile, demoBlocks, isPublicDemo, isReadOnly } from './permissions.js'
 import { users } from '../test/render.jsx'
+
+describe('public demo admin (mirrors backend app/public_demo.py)', () => {
+  test('keeps admin rights for the normal workflow', () => {
+    for (const action of ['project.create', 'project.manage', 'request.decide', 'milestone.restore', 'people.view']) {
+      expect(can(users.demoAdmin, action)).toBe(true)
+      expect(demoBlocks(users.demoAdmin, action)).toBe(false)
+    }
+  })
+
+  test('blocks people, departments, project archiving and its own account', () => {
+    expect([...DEMO_BLOCKED].sort()).toEqual(['avatar.own', 'departments.manage', 'profile.edit', 'project.archive',
+      'user.manage'])
+    for (const action of DEMO_BLOCKED) {
+      expect(demoBlocks(users.demoAdmin, action)).toBe(true)
+      expect(demoBlocks(users.admin, action)).toBe(false)
+    }
+    expect(isPublicDemo(users.demoAdmin)).toBe(true)
+    expect(isPublicDemo(users.admin)).toBe(false)
+    expect(isPublicDemo(null)).toBe(false)
+  })
+})
 
 const { admin, manager, employee } = users
 const ownProject = { managerId: manager.id }

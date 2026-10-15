@@ -102,6 +102,7 @@ describe('login page brand and demo', () => {
     ['Employee', 'employee.demo', users.employee],
     ['Manager', 'manager.demo', users.manager],
     ['Executive', 'executive.demo', users.executive],
+    ['Admin', 'demo.admin', { ...users.employee, is_public_demo: true }],
   ])('the %s demo button signs in as %s', async (label, username, who) => {
     let sent = null
     server.use(noSession(), dashboardStub(),
@@ -112,15 +113,56 @@ describe('login page brand and demo', () => {
     renderWithProviders(<App />, { route: '/login' })
     const demo = await screen.findByRole('group', { name: /try the demo/i })
     await userEvent.click(within(demo).getByRole('button', { name: label }))
+    if (who.is_public_demo) await userEvent.click(await screen.findByRole('button', { name: /got it/i }))
     expect(await screen.findByRole('navigation', { name: /main/i })).toBeInTheDocument()
     expect(sent).toEqual({ username, password: 'Demo123!' })
   })
 
-  test('admin has no demo button: its password stays private', async () => {
+  test('the Admin demo button is the public demo admin, never the real admin', async () => {
     server.use(noSession())
     renderWithProviders(<App />, { route: '/login' })
     const demo = await screen.findByRole('group', { name: /try the demo/i })
-    expect(within(demo).getAllByRole('button').map((b) => b.textContent)).toEqual(['Employee', 'Manager', 'Executive'])
+    expect(within(demo).getAllByRole('button').map((b) => b.textContent))
+      .toEqual(['Employee', 'Manager', 'Executive', 'Admin'])
+    expect(demo).toHaveTextContent(/admin demo signs you out after 5 minutes/i)
+  })
+
+  // A public demo session the server ends 5 minutes after sign-in. The user is an employee-shaped account so the
+  // home page needs nothing beyond the dashboard stub; what matters is is_public_demo and session_expires_at.
+  const demoUser = (msLeft) => ({ ...users.employee, username: 'demo.admin', must_change_password: false,
+    is_public_demo: true, session_expires_at: new Date(Date.now() + msLeft).toISOString() })
+
+  test('when the demo session runs out the app signs out and says why', async () => {
+    let loggedOut = false
+    server.use(noSession(), dashboardStub(), loginReturns(demoUser(1500)),
+      http.post(`${API}/auth/logout`, () => { loggedOut = true; return new HttpResponse(null, { status: 204 }) }))
+    renderWithProviders(<App />, { route: '/login' })
+    const demo = await screen.findByRole('group', { name: /try the demo/i })
+    await userEvent.click(within(demo).getByRole('button', { name: 'Admin' }))
+    expect(await screen.findByRole('dialog', { name: /public demo admin/i })).toBeInTheDocument()
+    expect(await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    expect(loggedOut).toBe(true)
+  })
+
+  test('a refresh the server refuses because the demo ended shows the same message', async () => {
+    server.use(http.post(`${API}/auth/refresh`, () => HttpResponse.json(
+      { error: { code: 'DEMO_SESSION_EXPIRED', message: 'Your 5-minute demo session has ended.' } }, { status: 401 })))
+    renderWithProviders(<App />, { route: '/' })
+    expect(await screen.findByText('Your 5-minute demo session has ended.')).toBeInTheDocument()
+  })
+
+  test('the message goes away on the next sign-in', async () => {
+    server.use(noSession(), dashboardStub(), loginReturns(demoUser(1500)),
+      http.post(`${API}/auth/logout`, () => new HttpResponse(null, { status: 204 })))
+    renderWithProviders(<App />, { route: '/login' })
+    await userEvent.click(within(await screen.findByRole('group', { name: /try the demo/i }))
+      .getByRole('button', { name: 'Admin' }))
+    await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })
+    server.use(loginReturns({ ...users.employee, must_change_password: false }))
+    await userEvent.click(within(screen.getByRole('group', { name: /try the demo/i })).getByRole('button', { name: 'Employee' }))
+    expect(await screen.findByRole('navigation', { name: /main/i })).toBeInTheDocument()
+    expect(screen.queryByText('Your 5-minute demo session has ended.')).not.toBeInTheDocument()
   })
 
   test('a failed demo sign-in shows the error', async () => {

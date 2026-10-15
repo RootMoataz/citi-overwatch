@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useArchive, useRestoreArchived } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -29,6 +30,9 @@ const CSV_COLUMNS = [
   { header: 'Archived by', value: (i) => i.archived_by?.name },
   { header: 'You can restore it', value: (i) => Boolean(i.can_restore) },
 ]
+
+// What restoring each type needs from a public demo account; milestones are always fine (backend app/public_demo.py).
+const DEMO_ACTION = { project: 'project.archive', user: 'user.manage' }
 
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '—')
 
@@ -97,7 +101,9 @@ export default function ArchivePage() {
                   <TableCell>{i.archived_by ? <PersonLink person={i.archived_by} /> : '—'}</TableCell>
                   <TableCell align="right">
                     {i.can_restore ? (
-                      <Button size="small" variant="outlined" aria-label={`Restore ${i.name}`} onClick={() => setConfirm(i)}>Restore</Button>
+                      <DemoLock user={user} action={DEMO_ACTION[i.type]}>
+                        <Button size="small" variant="outlined" aria-label={`Restore ${i.name}`} onClick={() => setConfirm(i)}>Restore</Button>
+                      </DemoLock>
                     ) : (
                       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                         {i.type === 'project' ? 'Only an admin can restore a project' : 'Restore its project first'}
