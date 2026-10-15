@@ -40,7 +40,7 @@ def _check_policy(password: str) -> None:
 def forgot_password(conn, body: dict) -> dict:
     require(body, "username")
     user = _active_user(conn, body["username"])
-    if not user or user["username"] in PUBLISHED_DEMO:  # demo logins keep their published password
+    if not user or user["username"] in PUBLISHED_DEMO or user["is_public_demo"]:  # demo logins keep their password
         return GENERIC
     recent = query_one(conn, """SELECT 1 AS ok FROM password_reset_codes WHERE user_id = :u
                                 AND created_at > now() - make_interval(secs => :s)""",

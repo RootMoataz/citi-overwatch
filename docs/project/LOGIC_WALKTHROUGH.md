@@ -774,3 +774,70 @@ The cards show the same problems before anyone presses Finalize (`cardWarnings()
 - **Who:** the project's manager or an admin edit and finalize (`load_project(manage=True)`; executives are refused by the router like every write). Team members and executives see the board read-only.
 - **UI:** [`frontend/src/features/planning/`](../../frontend/src/features/planning/): `PlanTab.jsx` (the board, built on `@dnd-kit` with pointer and keyboard sensors), `PlanColumn.jsx`, `PlanCard.jsx`, `FinalizeDialog.jsx` (the checklist) and `planningApi.js`. Cards read the same milestone list as the Milestones tab, so edits in the milestone dialog show on the board at once. On a phone the columns scroll sideways inside the board, one column at a time.
 - **Example (demo data):** *Beacon Mobile App* is planned, and its board holds the Technology department plan. Discovery & requirements, Design, Prototype and Build: backend services are scheduled in that order (Hugo on Prototype; the pull project's other steps have nobody yet); QA & user acceptance testing is in Ready, Release & cutover and Hypercare in Backlog. Finalizing shows two failing checks: cards left outside Scheduled, and nobody on Discovery, Design or Build: backend services. Scheduling every card and assigning someone to each makes the plan pass. `demo_curate` numbers the steps it adds to the other projects' Scheduled column by date, as migration 010 does for existing milestones.
+## 22. The public demo admin
+
+The sign-in page's **Admin** button signs in as `demo.admin` (Dana Demo-Admin) with the published password `Demo123!`.
+Anyone can use it, so the account is flagged `users.is_public_demo` (migration `012_demo_accounts.sql`) and the server
+treats it as untrusted: guard rails on what it may change, a hard 5-minute session, and sign-in rules nobody can use
+to lock others out. The real `admin.demo` account is a normal admin with a private password.
+
+```mermaid
+flowchart TD
+  R[write request from a public demo account] --> N{path mentions password,<br/>credential or an hr segment?}
+  N -- yes --> D["403 DEMO_RESTRICTED (handler never runs)"]
+  N -- no --> L{in DENIED?}
+  L -- yes --> D
+  L -- no --> A{in ALLOWED?}
+  A -- no --> D
+  A -- yes --> H[role checks, then the handler]
+```
+
+**Guard rails.** [`app/public_demo.py`](../../backend/v1/app/public_demo.py) holds both lists, each entry with the
+reason; [`app/router.py`](../../backend/v1/app/router.py) checks them in `_guard`, after the executive check and
+before the role check, for every `POST`, `PUT`, `PATCH` and `DELETE`. Reads are never restricted.
+
+| Denied (`403 DEMO_RESTRICTED`, "Disabled in the public demo.") | Allowed |
+|---|---|
+| Its own account: password, name, email, photo (`/auth/change-password`, `PUT /me`, `/me/avatar`), so the next visitor finds it as published | Every read |
+| People: create (admins included), edit (role, salary, manager, email, username, details), archive, restore, password resets, removing someone's photo | Approving and rejecting hours; logging its own hours |
+| Projects: archive and restore | Creating and editing projects; deciding project requests |
+| Departments: create, rename, archive, restore | Staffing: adding, changing and removing project members |
+| By name, for routes added later too: anything with `password`, `credential` or an `hr` path segment (submitting timesheets to HR, which doesn't exist yet) | Milestones: create, edit, archive and restore, dependencies, assignees, progress, claim, notes |
+| Any write route not reviewed yet (in neither list) | Messages, milestone discussions and notifications |
+
+Why a denylist plus an allowlist rather than a per-route flag: a forgotten flag on a new route would quietly open it.
+Here a new write route is refused for the demo until someone decides, and
+[`tests/integration/test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any
+registered write route is in neither list (and when a listed route no longer exists). The same file calls every denied
+route as the demo admin (refused, nothing in the database changes) and as the real admin (it still works).
+
+**The 5-minute session.** At sign-in the server sets the session end (sign-in time + 5 minutes, whole seconds):
+
+- the access token carries it as `sxp` and its `exp` is never later (normally 15 minutes);
+- the refresh token row stores it in `refresh_tokens.session_expires_at` and expires with it; a refresh copies the
+  same end onto the new token, so refreshing can't extend it, and after it the refresh answers
+  `401 DEMO_SESSION_EXPIRED`;
+- a demo account's token without `sxp` (issued before the account was flagged) is refused, and so is a refresh token
+  without an end.
+
+The sign-in, refresh and `/me` responses carry `is_public_demo` and `session_expires_at` for the app. Code:
+[`app/features/auth/service.py`](../../backend/v1/app/features/auth/service.py) (`_issue`, `refresh`),
+[`app/security.py`](../../backend/v1/app/security.py) and [`app/ctx.py`](../../backend/v1/app/ctx.py).
+
+**Sign-in.** Like the other published demo logins, wrong passwords never lock it (a lock would let one visitor shut
+everyone else out) and forgotten-password codes are never sent. Instead each client address gets 20 sign-ins to a public
+demo account per rolling minute (`429 RATE_LIMITED`), counted in `demo_login_attempts`. The address is CloudFront's
+`CloudFront-Viewer-Address` header when present, else the Function URL's source IP. Both are best effort: a direct
+caller can set the header to dodge the limit, but can't limit anyone else without knowing their address.
+
+**In the app.** [`app/DemoSession.jsx`](../../frontend/src/app/DemoSession.jsx) shows a one-time welcome dialog and a
+banner "Demo admin — for demonstration only. You'll be signed out in 4:32." with a live countdown; hiding it leaves a
+counting chip in the header that brings it back. [`auth/SessionProvider.jsx`](../../frontend/src/auth/SessionProvider.jsx)
+signs out at `session_expires_at` (or when a refresh answers `DEMO_SESSION_EXPIRED`) and the sign-in page says "Your
+5-minute demo session has ended." [`lib/permissions.js`](../../frontend/src/lib/permissions.js) mirrors the denylist
+(`demoBlocks`), and [`components/DemoLock.jsx`](../../frontend/src/components/DemoLock.jsx) shows those buttons
+disabled with the tooltip "Disabled in the public demo". The server check is what protects the account; the screen
+only explains it.
+
+**Creating it.** `seed` creates it with the rest of the demo data; on an existing database `demo_backfill` adds it only
+if no `demo.admin` exists, and never flags an existing ordinary account of that name.

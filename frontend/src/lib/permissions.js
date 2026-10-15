@@ -17,6 +17,24 @@ export function isReadOnly(user) {
   return isExecutive(user)
 }
 
+/** A public demo account (the sign-in page's Admin button): its password is published, so the server refuses its
+ * risky writes with DEMO_RESTRICTED and ends its session after 5 minutes (backend app/public_demo.py). */
+export function isPublicDemo(user) {
+  return Boolean(user?.is_public_demo)
+}
+
+export const DEMO_DISABLED = 'Disabled in the public demo'
+
+/** Actions a public demo account sees but can't take: shown disabled with DEMO_DISABLED as the tooltip.
+ * user.manage: creating, editing, archiving or restoring people and resetting passwords. project.archive: archiving
+ * or restoring projects (milestones stay fine). departments.manage: every department change. profile.edit and
+ * avatar.own: the demo account's own name, email and photo, so the next visitor finds it as published. */
+export const DEMO_BLOCKED = new Set(['user.manage', 'project.archive', 'departments.manage', 'profile.edit', 'avatar.own'])
+
+export function demoBlocks(user, action) {
+  return isPublicDemo(user) && DEMO_BLOCKED.has(action)
+}
+
 export function can(user, action, resource = {}) {
   if (!user) return false
   switch (action) {

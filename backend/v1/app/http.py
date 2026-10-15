@@ -58,6 +58,7 @@ class Request:
     def __init__(self, event: dict):
         http = event.get("requestContext", {}).get("http", {})
         self.method = http.get("method", "GET").upper()
+        self._source_ip = http.get("sourceIp")
         raw_path = event.get("rawPath") or "/"
         if raw_path.startswith(API_PREFIX):
             raw_path = raw_path[len(API_PREFIX):]
@@ -86,3 +87,15 @@ class Request:
         if not isinstance(data, dict):
             raise ApiError(400, "INVALID_JSON", "Request body must be a JSON object")
         return data
+
+    @property
+    def client_address(self) -> str:
+        """The caller's IP address, best effort, for rate limits only (never for access decisions).
+
+        CloudFront's CloudFront-Viewer-Address ("ip:port") when it is forwarded, else the Function URL's source IP
+        (behind CloudFront that is the edge's address, shared by many visitors). A direct caller can set the header,
+        so this can be dodged but not used to limit someone else without knowing their address."""
+        viewer = self.headers.get("cloudfront-viewer-address", "").strip()
+        if viewer:
+            return viewer.rsplit(":", 1)[0].strip("[]") if ":" in viewer else viewer
+        return self._source_ip or "unknown"

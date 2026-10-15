@@ -10,7 +10,9 @@ import {
 } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DemoLock from '../../components/DemoLock.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
+import { demoBlocks } from '../../lib/permissions.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -102,10 +104,16 @@ export default function UserDetailPage() {
       <PageHeader breadcrumb={back} title={fullName(p)} subtitle={p.is_archived ? <StatusChip status="blocked" label="Archived" /> : p.email}
         actions={<>
           <Button component={RouterLink} to={`/people/${p.id}/profile`}>History</Button>
-          {!p.is_archived ? <Button onClick={() => setConfirm('reset')}>Reset password</Button> : null}
-          {!p.is_archived && !self ? <Button color="error" onClick={() => setConfirm('archive')}>Archive</Button> : null}
-          {p.is_archived ? <Button variant="contained" onClick={() => run('restore')}>Restore</Button> : null}
+          {!p.is_archived ? <DemoLock user={me} action="user.manage">
+            <Button onClick={() => setConfirm('reset')}>Reset password</Button></DemoLock> : null}
+          {!p.is_archived && !self ? <DemoLock user={me} action="user.manage">
+            <Button color="error" onClick={() => setConfirm('archive')}>Archive</Button></DemoLock> : null}
+          {p.is_archived ? <DemoLock user={me} action="user.manage">
+            <Button variant="contained" onClick={() => run('restore')}>Restore</Button></DemoLock> : null}
         </>} />
+      {demoBlocks(me, 'user.manage')
+        ? <Alert severity="info" sx={{ mb: 2 }}>Changing people is disabled in the public demo. You can look around.</Alert>
+        : null}
       <Dependents error={failure} />
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Grid container spacing={2}>
@@ -153,7 +161,9 @@ export default function UserDetailPage() {
         </Grid>
         <Stack direction="row" sx={{ justifyContent: 'flex-end', gap: 1, mt: 2 }}>
           {draft ? <Button onClick={() => setDraft(null)}>Discard</Button> : null}
-          <Button variant="contained" onClick={save} disabled={!draft || update.isPending}>Save changes</Button>
+          <DemoLock user={me} action="user.manage">
+            <Button variant="contained" onClick={save} disabled={!draft || update.isPending}>Save changes</Button>
+          </DemoLock>
         </Stack>
       </Paper>
       <ConfirmDialog open={confirm === 'archive'} title="Archive this account?" confirmLabel="Archive" busy={archive.isPending}

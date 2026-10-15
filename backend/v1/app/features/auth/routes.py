@@ -26,7 +26,7 @@ def admin_reset_password(req, ctx, conn):
 
 @router.route("POST", "/auth/login", auth=False)
 def login(req, ctx, conn):
-    body, cookies = service.login(conn, req.json(), req.request_id)
+    body, cookies = service.login(conn, req.json(), req.request_id, client=req.client_address)
     return json_response(200, body, cookies=cookies)
 
 

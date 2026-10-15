@@ -6,11 +6,14 @@ import { useId, useState } from 'react'
 import {
   useArchiveDepartment, useCreateDepartment, useDepartments, useRenameDepartment, useRestoreDepartment,
 } from '../../api/queries.js'
+import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import { demoBlocks } from '../../lib/permissions.js'
 
 const TAKEN = 'A department with this name already exists'
 const nameError = (err) => (err?.details?.name === 'taken' ? TAKEN : null)
@@ -49,6 +52,8 @@ function RenameDialog({ department, onClose }) {
 
 /** Admins add, rename, archive and restore departments; people and projects are put in one from their own forms. */
 export default function DepartmentsPage() {
+  const { user } = useSession()
+  const locked = demoBlocks(user, 'departments.manage')
   const departments = useDepartments({ includeArchived: true })
   const create = useCreateDepartment()
   const archive = useArchiveDepartment()
@@ -84,8 +89,10 @@ export default function DepartmentsPage() {
         <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 2, alignItems: { sm: 'flex-start' } }}>
           <TextField label="New department" value={name} onChange={(e) => setName(e.target.value)}
             error={Boolean(nameError(addFailure))} helperText={nameError(addFailure)} sx={{ minWidth: 280 }}
-            slotProps={{ htmlInput: { maxLength: 80 } }} />
-          <Button type="submit" variant="contained" disabled={create.isPending || !name.trim()} sx={{ mt: { sm: 1 } }}>Add</Button>
+            slotProps={{ htmlInput: { maxLength: 80 } }} disabled={locked} />
+          <DemoLock user={user} action="departments.manage">
+            <Button type="submit" variant="contained" disabled={create.isPending || !name.trim()} sx={{ mt: { sm: 1 } }}>Add</Button>
+          </DemoLock>
         </Stack>
         {addFailure && !nameError(addFailure) ? <ErrorAlert error={addFailure} sx={{ mt: 2 }} /> : null}
       </Paper>
@@ -111,14 +118,18 @@ export default function DepartmentsPage() {
                   <TableCell align="right">{d.project_count}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end' }}>
-                      <Button size="small" aria-label={`Rename ${d.name}`} onClick={() => setRenaming(d)}>Rename</Button>
-                      {d.is_archived ? (
-                        <Button size="small" variant="outlined" aria-label={`Restore ${d.name}`}
-                          disabled={restore.isPending} onClick={() => act(restore, d)}>Restore</Button>
-                      ) : (
-                        <Button size="small" color="error" aria-label={`Archive ${d.name}`}
-                          onClick={() => setArchiving(d)}>Archive</Button>
-                      )}
+                      <DemoLock user={user} action="departments.manage">
+                        <Button size="small" aria-label={`Rename ${d.name}`} onClick={() => setRenaming(d)}>Rename</Button>
+                      </DemoLock>
+                      <DemoLock user={user} action="departments.manage">
+                        {d.is_archived ? (
+                          <Button size="small" variant="outlined" aria-label={`Restore ${d.name}`}
+                            disabled={restore.isPending} onClick={() => act(restore, d)}>Restore</Button>
+                        ) : (
+                          <Button size="small" color="error" aria-label={`Archive ${d.name}`}
+                            onClick={() => setArchiving(d)}>Archive</Button>
+                        )}
+                      </DemoLock>
                     </Stack>
                   </TableCell>
                 </TableRow>

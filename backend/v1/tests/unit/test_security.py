@@ -74,6 +74,27 @@ def test_access_token_roundtrip_and_claims():
     assert claims["jti"]
 
 
+def test_access_token_never_outlives_a_demo_session():
+    ends = NOW + timedelta(minutes=5)
+    token = create_access_token(user_id="u1", role="admin", restricted=False, secret=SECRET, now=NOW,
+                                session_expires_at=ends)
+    claims = decode_access_token(token, SECRET, NOW)
+    assert claims["sxp"] == claims["exp"] == int(ends.timestamp())
+    with pytest.raises(ApiError) as caught:
+        decode_access_token(token, SECRET, ends)
+    assert caught.value.code == "TOKEN_EXPIRED"
+    # Minted near the end: it still ends with the session, not 15 minutes later.
+    late = create_access_token(user_id="u1", role="admin", restricted=False, secret=SECRET,
+                               now=ends - timedelta(seconds=30), session_expires_at=ends)
+    assert decode_access_token(late, SECRET, ends - timedelta(seconds=1))["exp"] == int(ends.timestamp())
+
+
+def test_normal_access_tokens_have_no_session_end():
+    token = create_access_token(user_id="u1", role="admin", restricted=False, secret=SECRET, now=NOW)
+    claims = decode_access_token(token, SECRET, NOW)
+    assert "sxp" not in claims and claims["exp"] - claims["iat"] == 15 * 60
+
+
 def test_access_token_expired_raises_token_expired():
     token = create_access_token(user_id="u1", role="employee", restricted=False, secret=SECRET, now=NOW)
     with pytest.raises(ApiError) as exc:

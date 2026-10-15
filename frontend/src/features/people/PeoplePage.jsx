@@ -4,6 +4,8 @@ import { Button, Checkbox, FormControlLabel, InputAdornment, MenuItem, Paper, St
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUsers } from '../../api/queries.js'
+import { useSession } from '../../auth/sessionContext.js'
+import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -32,6 +34,7 @@ const CSV_COLUMNS = [
 
 export default function PeoplePage() {
   const navigate = useNavigate()
+  const { user: me } = useSession()
   const [search, setSearch] = useState('')
   const [q, setQ] = useState('')
   const [role, setRole] = useState('')
@@ -59,7 +62,9 @@ export default function PeoplePage() {
       <PageHeader title="People" subtitle="Create accounts, set roles and salaries, and archive people who've left."
         actions={<>
           <ExportCsvButton name={archived ? 'people-archived' : 'people'} columns={CSV_COLUMNS} rows={rows} />
-          <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreating(true)}>New account</Button>
+          <DemoLock user={me} action="user.manage">
+            <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreating(true)}>New account</Button>
+          </DemoLock>
         </>} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>

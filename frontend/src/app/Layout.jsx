@@ -22,7 +22,9 @@ import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { ROLE_LABEL } from '../lib/labels.js'
 import { EASE, useCalmMotion } from '../lib/motion.js'
-import { can } from '../lib/permissions.js'
+import { DEMO_DISABLED, can, demoBlocks } from '../lib/permissions.js'
+import { useDemoNotice } from '../lib/demoSession.js'
+import { DemoBanner, DemoChip, DemoWelcome } from './DemoSession.jsx'
 import { useColorMode } from './colorMode.js'
 import { COLLAPSED_WIDTH, DRAWER_WIDTH, NAV } from './nav.jsx'
 import { SIDEBAR_SHORTCUT, useSidebarCollapsed } from './sidebar.js'
@@ -134,6 +136,8 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
   const [collapsedChoice, toggleCollapsed] = useSidebarCollapsed(desktop)
   const collapsed = desktop && collapsedChoice
   const sidebarWidth = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH
+  const demo = useDemoNotice(user)
+  const photoLocked = demoBlocks(user, 'avatar.own')
 
   const brand = (compact) => (
     <Toolbar disableGutters sx={{ px: '18px', overflow: 'hidden' }}>
@@ -154,6 +158,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           ) : null}
           {!desktop ? <BrandLogo size={30} /> : null}
           <Box sx={{ flexGrow: 1 }} />
+          <DemoChip notice={demo} />
           <Box sx={{ mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
           {topBarExtras}
           <IconButton aria-label="Account menu" onClick={(e) => setMenuAnchor(e.currentTarget)} sx={{ p: 0.5 }}>
@@ -171,7 +176,11 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
             </Stack>
             <Divider />
             <MenuItem component={NavLink} to="/profile" onClick={() => setMenuAnchor(null)}>My profile</MenuItem>
-            <MenuItem onClick={() => { setMenuAnchor(null); setPhotoOpen(true) }}>Profile photo</MenuItem>
+            {photoLocked ? (
+              <MenuItem disabled><ListItemText primary="Profile photo" secondary={DEMO_DISABLED} /></MenuItem>
+            ) : (
+              <MenuItem onClick={() => { setMenuAnchor(null); setPhotoOpen(true) }}>Profile photo</MenuItem>
+            )}
             <Divider />
             <ListSubheader disableSticky sx={{ lineHeight: '32px', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em',
               textTransform: 'uppercase', color: 'text.secondary', bgcolor: 'transparent' }}>Theme</ListSubheader>
@@ -192,6 +201,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
         </Toolbar>
       </AppBar>
       {photoOpen ? <AvatarDialog open user={user} onClose={() => setPhotoOpen(false)} /> : null}
+      <DemoWelcome notice={demo} />
 
       {desktop ? (
         <Drawer variant="permanent" data-testid="sidebar" data-collapsed={String(collapsed)}
@@ -214,6 +224,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
 
       <Box component="main" key={pageKey(location.pathname)}
         sx={{ flexGrow: 1, minWidth: 0, px: { xs: 2, md: 4 }, pt: { xs: 10, md: 11 }, pb: 6, maxWidth: 1440 }}>
+        <DemoBanner notice={demo} />
         {/* Each page fades and rises in; nothing waits for it, and reduced motion skips it. */}
         <motion.div initial={calm ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: EASE }}>
