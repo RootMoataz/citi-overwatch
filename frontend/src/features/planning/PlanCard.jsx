@@ -39,7 +39,7 @@ export function CardBody({ m, names, warnings, handle, menu }) {
         {menu}
       </Stack>
       <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-        <PriorityChip priority={m.priority} />
+        <PriorityChip priority={m.priority} hideDefault />
         <DifficultyChip difficulty={m.difficulty} />
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>Due {formatDate(m.end_date)}</Typography>
       </Stack>
@@ -54,7 +54,7 @@ export function CardBody({ m, names, warnings, handle, menu }) {
         </Stack>
       ) : null}
       {people.length ? (
-        <AvatarStack people={people} max={4} label={`People on ${m.name}`} sx={{ justifyContent: 'flex-start', ml: '-2px' }} />
+        <AvatarStack people={people} max={4} label={`People on ${m.name}`} sx={{ alignSelf: 'flex-start', ml: '-2px' }} />
       ) : (
         <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>Nobody assigned</Typography>
       )}
