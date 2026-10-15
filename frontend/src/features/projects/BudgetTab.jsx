@@ -7,7 +7,7 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import { formatMoney, formatPct } from '../../lib/format.js'
 import MilestoneCostTable from './MilestoneCostTable.jsx'
-import StatTile from './StatTile.jsx'
+import StatTile from '../../components/StatTile.jsx'
 
 const compactMoney = (v) => `$${Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(v)}`
 

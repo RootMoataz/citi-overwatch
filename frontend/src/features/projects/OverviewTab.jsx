@@ -4,7 +4,7 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import { RISK_LABELS, WORK_MODE } from '../../lib/labels.js'
 import { formatDate, formatMoney, formatPct } from '../../lib/format.js'
-import StatTile from './StatTile.jsx'
+import StatTile from '../../components/StatTile.jsx'
 
 /** Who else may approve this project's hours, and until when. */
 function DelegateLine({ delegate }) {

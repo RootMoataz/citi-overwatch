@@ -11,6 +11,7 @@ import Schedule from '@mui/icons-material/ScheduleOutlined'
 import ViewTimeline from '@mui/icons-material/ViewTimelineOutlined'
 
 export const DRAWER_WIDTH = 248
+export const COLLAPSED_WIDTH = 72
 
 const HOME_LABEL = { employee: 'My week', admin: 'Control centre' }
 

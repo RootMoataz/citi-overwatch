@@ -63,7 +63,7 @@ export function buildTheme(mode = 'light') {
       text: dark ? { primary: '#E8EEF5', secondary: '#AEBBCA' } : { primary: '#111C27', secondary: '#3F4D5D' },
       action: { selected: alpha(primary, dark ? 0.2 : 0.1), hover: alpha(primary, dark ? 0.12 : 0.06) },
     },
-    shape: { borderRadius: 8 },
+    shape: { borderRadius: 10 },
     spacing: 8,
     typography: {
       fontFamily: '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
@@ -118,7 +118,9 @@ export function buildTheme(mode = 'light') {
       MuiCard: {
         defaultProps: { variant: 'outlined' },
         // Clickable cards lift a little on hover.
-        styleOverrides: { root: { transition: 'box-shadow 120ms ease', '&:has(.MuiCardActionArea-root:hover)': { boxShadow: hoverShadow } } },
+        styleOverrides: { root: { transition: 'box-shadow 160ms ease, transform 160ms ease, border-color 160ms ease',
+          '&:has(.MuiCardActionArea-root:hover)': { boxShadow: hoverShadow, transform: 'translateY(-2px)',
+            borderColor: alpha(primary, dark ? 0.5 : 0.35) } } },
       },
       MuiCardActionArea: {
         styleOverrides: {

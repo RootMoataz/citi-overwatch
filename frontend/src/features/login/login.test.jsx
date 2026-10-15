@@ -87,6 +87,52 @@ describe('login', () => {
   })
 })
 
+describe('login page brand and demo', () => {
+  test('shows the ACME Scout brand and the slogan', async () => {
+    server.use(noSession())
+    renderWithProviders(<App />, { route: '/login' })
+    expect(await screen.findByRole('heading', { name: /sign in/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('img', { name: /acme scout/i }).length).toBeGreaterThan(0)
+    expect(screen.getByText(/before it slips/i)).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/overwatch/i)
+    expect(screen.getByRole('link', { name: /forgot password/i })).toHaveAttribute('href', '/forgot-password')
+  })
+
+  test.each([
+    ['Employee', 'employee.demo', users.employee],
+    ['Manager', 'manager.demo', users.manager],
+    ['Executive', 'executive.demo', users.executive],
+  ])('the %s demo button signs in as %s', async (label, username, who) => {
+    let sent = null
+    server.use(noSession(), dashboardStub(),
+      http.post(`${API}/auth/login`, async ({ request }) => {
+        sent = await request.json()
+        return HttpResponse.json({ access_token: 'tok', user: { ...who, must_change_password: false } })
+      }))
+    renderWithProviders(<App />, { route: '/login' })
+    const demo = await screen.findByRole('group', { name: /try the demo/i })
+    await userEvent.click(within(demo).getByRole('button', { name: label }))
+    expect(await screen.findByRole('navigation', { name: /main/i })).toBeInTheDocument()
+    expect(sent).toEqual({ username, password: 'Demo123!' })
+  })
+
+  test('admin has no demo button: its password stays private', async () => {
+    server.use(noSession())
+    renderWithProviders(<App />, { route: '/login' })
+    const demo = await screen.findByRole('group', { name: /try the demo/i })
+    expect(within(demo).getAllByRole('button').map((b) => b.textContent)).toEqual(['Employee', 'Manager', 'Executive'])
+  })
+
+  test('a failed demo sign-in shows the error', async () => {
+    server.use(noSession(), http.post(`${API}/auth/login`, () => HttpResponse.json(
+      { error: { code: 'INVALID_CREDENTIALS', message: 'x' } }, { status: 401 })))
+    renderWithProviders(<App />, { route: '/login' })
+    const demo = await screen.findByRole('group', { name: /try the demo/i })
+    await userEvent.click(within(demo).getByRole('button', { name: 'Manager' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect username or password')
+  })
+})
+
 describe('forced password change', () => {
   test('restricted user sees non-dismissible ForcePasswordChange', async () => {
     server.use(noSession(), loginReturns({ ...users.employee, must_change_password: true }))

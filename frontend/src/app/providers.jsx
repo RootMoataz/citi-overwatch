@@ -3,6 +3,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
 import { QueryClientProvider } from '@tanstack/react-query'
+import { MotionConfig } from 'framer-motion'
 import { useCallback, useMemo, useState } from 'react'
 import { makeQueryClient } from './queryClient.js'
 import { ColorModeContext, readPreference, resolveMode, storePreference, usePrinting, useSystemDark } from './colorMode.js'
@@ -54,7 +55,10 @@ export function AppProviders({ children, queryClient, mode: pinned }) {
         <PrintStyles />
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <QueryClientProvider client={client}>
-            <ToastProvider>{children}</ToastProvider>
+            {/* framer-motion follows the system's reduced-motion setting everywhere. */}
+            <MotionConfig reducedMotion="user">
+              <ToastProvider>{children}</ToastProvider>
+            </MotionConfig>
           </QueryClientProvider>
         </LocalizationProvider>
       </ThemeProvider>
