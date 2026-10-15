@@ -9,7 +9,7 @@ import ProjectsPage from '../features/projects/ProjectsPage.jsx'
 import RequestsPage from '../features/requests/RequestsPage.jsx'
 import ApprovalsPage from '../features/approvals/ApprovalsPage.jsx'
 import TimesheetPage from '../features/timesheet/TimesheetPage.jsx'
-import DashboardPage from '../features/dashboard/DashboardPage.jsx'
+import HomePage from '../features/home/HomePage.jsx'
 import AllocationPage from '../features/allocation/AllocationPage.jsx'
 import PeoplePage from '../features/people/PeoplePage.jsx'
 import UserDetailPage from '../features/people/UserDetailPage.jsx'
@@ -41,7 +41,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route element={<RequireAuth><Shell /></RequireAuth>}>
-          <Route index element={<DashboardPage />} />
+          <Route index element={<HomePage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="timesheet" element={<TimesheetPage />} />
@@ -55,7 +55,7 @@ export default function App() {
           <Route path="profile" element={<ProfilePage />} />
           <Route path="departments" element={<RequireAuth roles={['admin']}><DepartmentsPage /></RequireAuth>} />
           <Route path="audit" element={<RequireAuth roles={['admin']}><AuditPage /></RequireAuth>} />
-          <Route path="archive" element={<RequireAuth roles={['admin']}><ArchivePage /></RequireAuth>} />
+          <Route path="archive" element={<RequireAuth roles={['admin', 'manager']}><ArchivePage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

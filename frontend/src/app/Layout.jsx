@@ -2,10 +2,10 @@ import AccountCircle from '@mui/icons-material/AccountCircle'
 import FactCheck from '@mui/icons-material/FactCheckOutlined'
 import MenuIcon from '@mui/icons-material/Menu'
 import {
-  AppBar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, Menu,
+  AppBar, Box, Chip, Divider, Drawer, IconButton, List, ListItemButton, ListItemIcon, ListItemText, ListSubheader, Menu,
   MenuItem, Toolbar, Typography,
 } from '@mui/material'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
@@ -16,22 +16,52 @@ import { DRAWER_WIDTH, NAV } from './nav.jsx'
 
 const ROLE_LABEL = { admin: 'Admin', manager: 'Manager', employee: 'Employee' }
 
-function NavList({ user, onNavigate, badges = {} }) {
+const resolve = (value, user) => (typeof value === 'function' ? value(user) : value)
+
+function NavItem({ item, user, onNavigate, badge }) {
+  const label = resolve(item.label, user)
   return (
-    <Box component="nav" aria-label="Main navigation">
-      <List sx={{ px: 1 }}>
-        {NAV.filter((item) => !item.action || can(user, item.action)).map((item) => (
-          <ListItemButton key={item.label} component={NavLink} to={typeof item.to === 'function' ? item.to(user) : item.to}
-            end={item.end} onClick={onNavigate}
-            sx={{ borderRadius: 1, mb: 0.5, '&.active': { bgcolor: 'action.selected', color: 'primary.main',
-              '& .MuiListItemIcon-root': { color: 'primary.main' } } }}>
-            <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
-            <ListItemText primary={item.label} />
-            {badges[item.to] ? <Chip size="small" color="warning" label={badges[item.to]}
-              aria-label={`${badges[item.to]} waiting`} /> : null}
-          </ListItemButton>
-        ))}
-      </List>
+    <ListItemButton component={NavLink} to={resolve(item.to, user)} end={item.end} onClick={onNavigate}
+      sx={{ borderRadius: 1, mb: 0.5, color: 'text.secondary', '& .MuiListItemIcon-root': { color: 'inherit' },
+        '&:hover': { color: 'text.primary' },
+        // The selected page: tinted background, primary text and a left accent bar.
+        '&.active': { bgcolor: 'action.selected', color: 'primary.main', fontWeight: 600,
+          '&::before': { content: '""', position: 'absolute', left: 0, top: 6, bottom: 6, width: 4, borderRadius: 2,
+            bgcolor: 'primary.main' } } }}>
+      <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+      <ListItemText primary={label} slotProps={{ primary: { sx: { fontWeight: 'inherit' } } }} />
+      {badge ? <Chip size="small" color="warning" label={badge} aria-label={`${badge} waiting`} /> : null}
+    </ListItemButton>
+  )
+}
+
+function NavGroup({ title, items, user, onNavigate, badges }) {
+  const id = useId()
+  return (
+    <List aria-labelledby={id} sx={{ px: 1 }}
+      subheader={<ListSubheader id={id} disableSticky sx={{ bgcolor: 'transparent', lineHeight: '32px', fontSize: '0.75rem',
+        fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'text.secondary' }}>{title}</ListSubheader>}>
+      {items.map((item) => <NavItem key={resolve(item.to, user)} item={item} user={user} onNavigate={onNavigate}
+        badge={badges[resolve(item.to, user)]} />)}
+    </List>
+  )
+}
+
+/** Work items first; for admins the admin-only pages sit in their own "Admin" group underneath. */
+function NavList({ user, onNavigate, badges = {} }) {
+  const visible = NAV.filter((item) => !item.action || can(user, item.action))
+  const grouped = user?.role === 'admin'
+  const work = grouped ? visible.filter((item) => !item.admin) : visible
+  const admin = grouped ? visible.filter((item) => item.admin) : []
+  return (
+    <Box component="nav" aria-label="Main navigation" sx={{ py: 1 }}>
+      <NavGroup title="Work" items={work} user={user} onNavigate={onNavigate} badges={badges} />
+      {admin.length ? (
+        <>
+          <Divider sx={{ mx: 2, my: 1 }} />
+          <NavGroup title="Admin" items={admin} user={user} onNavigate={onNavigate} badges={badges} />
+        </>
+      ) : null}
     </Box>
   )
 }

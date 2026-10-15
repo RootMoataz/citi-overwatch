@@ -1,5 +1,5 @@
 // TanStack Query hooks for every API resource. Mutations invalidate what they change and toast success.
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../app/toast.js'
 import { api } from './client.js'
 
@@ -94,6 +94,16 @@ export const useRejectRequest = () => useApiMutation(({ id, comment }) => api.po
 // ---------- milestones ----------
 export const useMilestones = (projectId) =>
   useQuery({ queryKey: ['milestones', projectId], queryFn: () => api.get(`/projects/${projectId}/milestones`) })
+// Milestones of several projects at once (same cache entries as useMilestones), flattened into one list.
+export const useMilestonesOf = (projectIds) => useQueries({
+  queries: projectIds.map((id) => ({ queryKey: ['milestones', id], queryFn: () => api.get(`/projects/${id}/milestones`) })),
+  combine: (results) => ({
+    data: results.flatMap((r) => r.data ?? []),
+    isLoading: results.some((r) => r.isLoading),
+    error: results.find((r) => r.error)?.error ?? null,
+    refetch: () => Promise.all(results.map((r) => r.refetch())),
+  }),
+})
 const milestoneKeys = (projectId) => [['milestones', projectId], ['project', projectId], ['project-summary', projectId],
   ['milestone-costs', projectId], ['projects'], ['dashboard']]
 export const useSaveMilestone = (projectId) => useApiMutation(async ({ id, fields, predecessorIds, assigneeIds }) => {

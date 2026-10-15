@@ -77,11 +77,14 @@ describe('ArchivePage', () => {
     expect(screen.getByText(/don't have access/i)).toBeInTheDocument()
   })
 
-  test('Archive is in the admin navigation only', () => {
+  test('Archive is in the admin and manager navigation, not the employee one', () => {
     const { unmount } = renderWithProviders(<Routes><Route path="*" element={<Layout user={users.admin} />} /></Routes>)
     expect(screen.getByRole('navigation', { name: /main/i })).toHaveTextContent('Archive')
     unmount()
-    renderWithProviders(<Routes><Route path="*" element={<Layout user={users.manager} />} /></Routes>)
+    const again = renderWithProviders(<Routes><Route path="*" element={<Layout user={users.manager} />} /></Routes>)
+    expect(screen.getByRole('navigation', { name: /main/i })).toHaveTextContent('Archive')
+    again.unmount()
+    renderWithProviders(<Routes><Route path="*" element={<Layout user={users.employee} />} /></Routes>)
     expect(screen.getByRole('navigation', { name: /main/i })).not.toHaveTextContent('Archive')
   })
 })

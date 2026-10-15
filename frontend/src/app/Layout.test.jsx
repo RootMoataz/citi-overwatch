@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, test, vi } from 'vitest'
@@ -20,7 +20,8 @@ describe('Layout', () => {
   test('desktop shows the navigation filtered by role', () => {
     renderLayout(users.employee)
     const nav = screen.getByRole('navigation', { name: /main/i })
-    expect(nav).toHaveTextContent('Dashboard')
+    expect(screen.getByRole('link', { name: /my week/i })).toHaveAttribute('href', '/')
+    expect(nav).not.toHaveTextContent('Dashboard')
     expect(nav).toHaveTextContent('My timesheet')
     expect(nav).not.toHaveTextContent('Approvals')
     expect(nav).not.toHaveTextContent('People')
@@ -42,6 +43,30 @@ describe('Layout', () => {
     for (const item of ['Approvals', 'Allocation', 'Project requests', 'People', 'Audit log']) {
       expect(nav).toHaveTextContent(item)
     }
+  })
+
+  test('admins get an Admin group, separate from the work items', () => {
+    renderLayout(users.admin)
+    const admin = screen.getByRole('list', { name: /^admin$/i })
+    expect(within(admin).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(['People', 'Departments', 'Project requests', 'Archive', 'Audit log'])
+    const work = screen.getByRole('list', { name: /^work$/i })
+    expect(within(work).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(['Control centre', 'Projects', 'My timesheet', 'Approvals', 'Allocation'])
+  })
+
+  test('managers have no Admin group and keep Project requests and Archive with their work', () => {
+    renderLayout(users.manager)
+    expect(screen.queryByRole('list', { name: /^admin$/i })).not.toBeInTheDocument()
+    const work = screen.getByRole('list', { name: /^work$/i })
+    expect(within(work).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(['Dashboard', 'Projects', 'My timesheet', 'Approvals', 'Allocation', 'Project requests', 'Archive'])
+  })
+
+  test('the current page is marked in the navigation', () => {
+    renderLayout(users.manager)
+    expect(screen.getByRole('link', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Projects' })).not.toHaveAttribute('aria-current')
   })
 
   test('Layout shows drawer button on mobile width', async () => {

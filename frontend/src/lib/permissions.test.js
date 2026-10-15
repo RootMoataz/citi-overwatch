@@ -15,6 +15,12 @@ describe('permissions mirror spec §2', () => {
     }
   })
 
+  test('admins and managers open the archive; employees do not', () => {
+    expect(can(admin, 'archive.view')).toBe(true)
+    expect(can(manager, 'archive.view')).toBe(true)
+    expect(can(employee, 'archive.view')).toBe(false)
+  })
+
   test('only managers submit project requests', () => {
     expect(can(manager, 'request.submit')).toBe(true)
     expect(can(admin, 'request.submit')).toBe(false)
