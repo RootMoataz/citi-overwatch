@@ -107,4 +107,14 @@ describe('workflow alerts', () => {
     await userEvent.click(item)
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects/p1?tab=milestones&milestone=m9'))
   })
+
+  test('the public demo admin reads the catalogue but cannot change it', async () => {
+    server.use(http.get(`${API}/skills`, () => HttpResponse.json({ items: [{ ...qa, is_archived: false, user_count: 1,
+      milestone_count: 2 }] })))
+    renderAsUser(<SkillsPage />, { user: users.demoAdmin, route: '/skills' })
+    const table = await screen.findByRole('table', { name: 'Skills' })
+    expect(within(table).getByRole('button', { name: 'Rename QA' })).toBeDisabled()
+    expect(within(table).getByRole('button', { name: 'Archive QA' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+  })
 })

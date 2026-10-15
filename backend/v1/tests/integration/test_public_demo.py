@@ -359,3 +359,20 @@ def test_client_address_prefers_the_cloudfront_viewer_address():
     del event["headers"]["CloudFront-Viewer-Address"]
     assert Request(event).client_address == "10.0.0.1"
     assert Request({"requestContext": {"http": {}}}).client_address == "unknown"
+
+
+def test_the_demo_admin_can_use_the_workflow_planning_and_week_approval_but_not_skills_or_hr(client, conn, org):
+    tok = demo_token(client)
+    status, body, _, _ = client.request("POST", "/approvals/approve-week", token=tok, json={
+        "entries": [{"id": str(org["pending"]["id"]), "expected_hours": 6}]})
+    assert (status, body["approved"]) == (200, 1), body
+    status, body, _, _ = client.request("POST", f"/milestones/{org['ms']['id']}/updates", token=tok,
+                                        json={"body": "Halfway there", "percent_complete": 50})
+    assert status in (200, 201), body
+    status, body, _, _ = client.request("GET", f"/projects/{org['project']['id']}/plan", token=tok)
+    assert status == 200, body
+    for method, path, payload in (("POST", "/skills", {"name": "Juggling"}),
+                                  ("PUT", f"/users/{org['emp']['id']}/skills", {"skill_ids": []}),
+                                  ("POST", "/hr-submissions", {})):
+        status, body, _, _ = client.request(method, path, token=tok, json=payload)
+        assert (status, body["error"]["code"]) == (403, "DEMO_RESTRICTED"), path

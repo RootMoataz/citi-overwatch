@@ -5,7 +5,9 @@ import {
 import { useId, useState } from 'react'
 import { useArchiveSkill, useCreateSkill, useRenameSkill, useRestoreSkill, useSkills } from '../../api/workflow.js'
 import { useRedirectOnDenied } from '../../app/access.js'
+import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -49,6 +51,7 @@ function RenameDialog({ skill, onClose }) {
 /** Admins keep the skills catalogue: add, rename, archive and restore. Managers then give people skills on their
  * profiles, and milestones list the skills they need for auto-routing. */
 export default function SkillsPage() {
+  const { user } = useSession()
   const skills = useSkills({ includeArchived: true })
   const create = useCreateSkill()
   const archive = useArchiveSkill()
@@ -85,7 +88,9 @@ export default function SkillsPage() {
           <TextField label="New skill" value={name} onChange={(e) => setName(e.target.value)}
             error={Boolean(nameError(addFailure))} helperText={nameError(addFailure)} sx={{ minWidth: 280 }}
             slotProps={{ htmlInput: { maxLength: MAX } }} />
-          <Button type="submit" variant="contained" disabled={create.isPending || !name.trim()} sx={{ mt: { sm: 1 } }}>Add</Button>
+          <DemoLock user={user} action="skills.manage">
+            <Button type="submit" variant="contained" disabled={create.isPending || !name.trim()} sx={{ mt: { sm: 1 } }}>Add</Button>
+          </DemoLock>
         </Stack>
         {addFailure && !nameError(addFailure) ? <ErrorAlert error={addFailure} sx={{ mt: 2 }} /> : null}
       </Paper>
@@ -111,13 +116,19 @@ export default function SkillsPage() {
                   <TableCell align="right">{s.milestone_count}</TableCell>
                   <TableCell align="right">
                     <Stack direction="row" sx={{ gap: 1, justifyContent: 'flex-end' }}>
-                      <Button size="small" aria-label={`Rename ${s.name}`} onClick={() => setRenaming(s)}>Rename</Button>
+                      <DemoLock user={user} action="skills.manage">
+                        <Button size="small" aria-label={`Rename ${s.name}`} onClick={() => setRenaming(s)}>Rename</Button>
+                      </DemoLock>
                       {s.is_archived ? (
-                        <Button size="small" variant="outlined" aria-label={`Restore ${s.name}`}
-                          disabled={restore.isPending} onClick={() => act(restore, s)}>Restore</Button>
+                        <DemoLock user={user} action="skills.manage">
+                          <Button size="small" variant="outlined" aria-label={`Restore ${s.name}`}
+                            disabled={restore.isPending} onClick={() => act(restore, s)}>Restore</Button>
+                        </DemoLock>
                       ) : (
-                        <Button size="small" color="error" aria-label={`Archive ${s.name}`}
-                          onClick={() => setArchiving(s)}>Archive</Button>
+                        <DemoLock user={user} action="skills.manage">
+                          <Button size="small" color="error" aria-label={`Archive ${s.name}`}
+                            onClick={() => setArchiving(s)}>Archive</Button>
+                        </DemoLock>
                       )}
                     </Stack>
                   </TableCell>

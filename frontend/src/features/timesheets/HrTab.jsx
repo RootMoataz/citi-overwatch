@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { fetchHrSubmissionEntries, useHrChanges, useHrPreview, useHrSubmissions, useSubmitHr } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
@@ -35,6 +36,7 @@ function Section({ title, children, action }) {
 
 /** Pick a pay period, see what it would send, and submit it (one confirm). */
 function SubmitPanel() {
+  const { user } = useSession()
   const lastMonday = addDays(mondayOf(), -7)
   const [start, setStart] = useState(lastMonday)
   const [end, setEnd] = useState(addDays(lastMonday, 6))
@@ -85,7 +87,9 @@ function SubmitPanel() {
             </Typography>
           ) : null}
           <Box>
-            <Button variant="contained" disabled={nothing || submit.isPending} onClick={() => setConfirming(true)}>Submit to HR</Button>
+            <DemoLock user={user} action="hr.submit">
+              <Button variant="contained" disabled={nothing || submit.isPending} onClick={() => setConfirming(true)}>Submit to HR</Button>
+            </DemoLock>
           </Box>
         </Stack>
       ) : null}

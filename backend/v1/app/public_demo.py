@@ -54,6 +54,14 @@ DENIED = {
     ("PUT", "/departments/{id}"): "renaming a department",
     ("DELETE", "/departments/{id}"): "archiving a department",
     ("POST", "/departments/{id}/restore"): "restoring a department",
+    # Skills: the catalogue (adding, renaming, archiving, restoring) and what a person is recorded as able to do.
+    ("POST", "/skills"): "adding a skill to the catalogue",
+    ("PUT", "/skills/{id}"): "renaming a skill",
+    ("DELETE", "/skills/{id}"): "archiving a skill",
+    ("POST", "/skills/{id}/restore"): "restoring a skill",
+    ("PUT", "/users/{id}/skills"): "changing a person's skills",
+    # Payroll: sending approved hours to HR (also refused by name).
+    ("POST", "/hr-submissions"): "submitting approved hours to HR",
 }
 
 ALLOWED = {
@@ -84,10 +92,17 @@ ALLOWED = {
     ("POST", "/milestones/{id}/status"): "updating milestone progress",
     ("POST", "/milestones/{id}/claim"): "claiming a milestone",
     ("POST", "/milestones/{id}/notes"): "adding a milestone note",
+    ("POST", "/milestones/{id}/updates"): "posting a progress update",
+    ("POST", "/milestones/{id}/kickback"): "kicking a milestone back to its manager",
+    ("POST", "/milestones/{id}/kickback/resolve"): "resolving a kickback",
+    # The planning board: ordering cards and finalizing a plan (which starts the project).
+    ("PUT", "/projects/{id}/plan/order"): "arranging the planning board",
+    ("POST", "/projects/{id}/plan/finalize"): "finalizing a plan",
     # Hours.
     ("PUT", "/time-entries"): "logging the demo account's own hours",
     ("POST", "/time-entries/{id}/approve"): "approving hours",
     ("POST", "/time-entries/{id}/reject"): "rejecting hours",
+    ("POST", "/approvals/approve-week"): "approving a person's week of hours",
 }
 
 

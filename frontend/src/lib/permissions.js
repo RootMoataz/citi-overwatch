@@ -28,8 +28,10 @@ export const DEMO_DISABLED = 'Disabled in the public demo'
 /** Actions a public demo account sees but can't take: shown disabled with DEMO_DISABLED as the tooltip.
  * user.manage: creating, editing, archiving or restoring people and resetting passwords. project.archive: archiving
  * or restoring projects (milestones stay fine). departments.manage: every department change. profile.edit and
- * avatar.own: the demo account's own name, email and photo, so the next visitor finds it as published. */
-export const DEMO_BLOCKED = new Set(['user.manage', 'project.archive', 'departments.manage', 'profile.edit', 'avatar.own'])
+ * avatar.own: the demo account's own name, email and photo, so the next visitor finds it as published.
+ * skills.manage and skills.edit: the skills catalogue and people's skills. hr.submit: sending hours to HR. */
+export const DEMO_BLOCKED = new Set(['user.manage', 'project.archive', 'departments.manage', 'profile.edit', 'avatar.own',
+  'skills.manage', 'skills.edit', 'hr.submit'])
 
 export function demoBlocks(user, action) {
   return isPublicDemo(user) && DEMO_BLOCKED.has(action)

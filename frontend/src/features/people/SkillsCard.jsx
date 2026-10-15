@@ -4,6 +4,8 @@ import {
 } from '@mui/material'
 import { useId, useState } from 'react'
 import { useSetUserSkills, useSkills } from '../../api/workflow.js'
+import { useSession } from '../../auth/sessionContext.js'
+import DemoLock from '../../components/DemoLock.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import SkillChips from '../../components/SkillChips.jsx'
 
@@ -53,13 +55,16 @@ function SkillsDialog({ person, skills, onClose }) {
 
 /** A person's skills on their profile; admins, and managers for the employees they manage, can change them. */
 export default function SkillsCard({ person, skills = [], canEdit }) {
+  const { user } = useSession()
   const [editing, setEditing] = useState(false)
   return (
     <Paper variant="outlined" component="section" aria-label="Skills" sx={{ p: 2, mb: 2 }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
         <Typography variant="subtitle1" component="h2">Skills</Typography>
         {canEdit ? (
-          <Button size="small" startIcon={<EditIcon />} onClick={() => setEditing(true)}>Edit skills</Button>
+          <DemoLock user={user} action="skills.edit">
+            <Button size="small" startIcon={<EditIcon />} onClick={() => setEditing(true)}>Edit skills</Button>
+          </DemoLock>
         ) : null}
       </Stack>
       <SkillChips skills={skills} label={`Skills of ${person.name}`} empty="No skills recorded yet." />

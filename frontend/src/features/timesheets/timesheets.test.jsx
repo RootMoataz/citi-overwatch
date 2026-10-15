@@ -140,6 +140,13 @@ describe('Timesheets tabs by role', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  test('the public demo admin sees HR submission but its submit button is disabled', async () => {
+    api()
+    open(users.demoAdmin, '/timesheets?tab=hr')
+    expect(await screen.findByText(/12 approved entries/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit to HR' })).toBeDisabled()
+  })
+
   test('admins download a payroll CSV from a submission row', async () => {
     api()
     downloads.length = 0
