@@ -261,6 +261,38 @@ A missing field:
 ```
 
 `reason` is `null` for new requests; requests made before it was dropped keep theirs (read-only, not shown in the app).
+Every milestone also has `plan_column` (`backlog`, `ready` or `scheduled`) and `sequence` (its place in that column, from 1): where it sits on the planning board below.
+
+## Planning board
+
+While a project is `planned` and its plan isn't finalized, its manager or an admin arranges the milestones on a board (Backlog → Ready → Scheduled) and then finalizes the plan, which moves the project to `active` ([rules](LOGIC_WALKTHROUGH.md#22-the-planning-board-and-finalizing-a-plan)). Cards are created, edited and archived with the milestone endpoints above.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/projects/{id}/plan` | Anyone who can see the project. `{project_id, status, plan_finalized_at, editable, ready, checks}`: `editable` is true for the project's manager or an admin while the project is `planned` and not finalized; `ready` is true when every check passes; `checks` is the finalize checklist below |
+| PUT | `/projects/{id}/plan/order` | The project's manager or an admin (`403 FORBIDDEN` otherwise; executives `403 READ_ONLY`). `{items: [{milestone_id, plan_column, sequence}]}`, 1 to 500 items, each milestone once; cards left out stay where they are. All or nothing, audited as `plan_order` on the project → the project's milestone list. `400 VALIDATION_ERROR` for a bad column, a sequence that isn't a whole number ≥ 0, a repeated milestone or an empty list; `400 UNKNOWN_MILESTONE` when an id isn't a live (non-archived) milestone of this project; `409 PROJECT_NOT_PLANNED` unless the project is `planned`; `409 PLAN_FINALIZED` once the plan is finalized |
+| POST | `/projects/{id}/plan/finalize` | The project's manager or an admin. Runs the checks; when they all pass it sets `plan_finalized_at`, moves the project `planned` → `active`, audits `finalize_plan` and sends `PLAN_FINALIZED` to the team → `{project, first_milestone: {id, name}}`. `422 PLAN_INVALID` with `details.checks` (every check, passing or not) when any fails; `409 PROJECT_NOT_PLANNED` / `409 PLAN_FINALIZED` as above |
+
+Each check is `{code, label, ok, problems: [{milestone_id, name, message}]}`, always in this order:
+
+| `code` | Passes when |
+|---|---|
+| `HAS_SCHEDULED` | At least one milestone is in Scheduled |
+| `ALL_SCHEDULED` | Nothing is left in Backlog or Ready |
+| `DATES_IN_RANGE` | Every scheduled milestone's dates fall within the project's start and predicted end dates |
+| `HAS_ASSIGNEE` | Every scheduled milestone has at least one assignee |
+| `DEPENDENCIES_VALID` | No dependency points to another project's milestone and none forms a loop |
+| `SEQUENCE_MATCHES_DEPENDENCIES` | No scheduled milestone is ordered before a milestone it depends on |
+
+```json
+{"error": {"code": "PLAN_INVALID", "message": "The plan isn't ready to finalize yet", "details": {"checks": [
+  {"code": "HAS_SCHEDULED", "label": "At least one milestone is scheduled", "ok": true, "problems": []},
+  {"code": "ALL_SCHEDULED", "label": "Nothing is left in Backlog or Ready", "ok": false,
+   "problems": [{"milestone_id": "5d1e…", "name": "User Research", "message": "User Research is still in Backlog"}]},
+  …]}, "request_id": "…"}}
+```
+
+`PUT /projects/{id}` with `{"status": "active"}` on a `planned` project that has live milestones and no finalized plan is refused with `409 PLAN_NOT_FINALIZED` "Finalize the plan on the Plan tab to start this project"; a planned project without milestones can still start directly. Every project view has `plan_finalized_at` (`null` until the plan is finalized).
 
 ## Time entries and approvals
 
@@ -358,7 +390,7 @@ Admins hand the approved hours of a pay period (a week, up to 31 days) to HR. Th
 | `SUPPORT_ROUTED` | That milestone's project manager | "*Name* was auto-routed to support *milestone*" | Same as `SUPPORT_ASSIGNED` |
 | `MILESTONE_CLAIMED` | The project's manager (not when they claim it themselves) | "*Name* claimed *milestone* (*project*)" | `name`, `milestone {id, name}`, `project {id, name}` |
 | `DELEGATE_ASSIGNED` | The newly named delegate approver (not when the same delegate is saved again) | "*Name* made you the delegate approver for *project*: you can approve hours for *manager* until *date*" (or "until further notice") | `project {id, name}`, `manager {id, name}`, `until` |
-
+| `PLAN_FINALIZED` | Everyone on the project (active members and assignees) and its manager, except whoever finalized the plan | "*Project* plan finalized: your first milestone is *milestone*" (or "the first milestone is …" for someone on no milestone) | `project {id, name}`, `milestone {id, name}` (their first by plan order, else the project's first), `assigned` |
 | `MESSAGE_RECEIVED` | Every other active participant of a conversation when a message arrives; at most one unread per conversation per person (a newer message refreshes it, reading the conversation marks it read) | "*Name* sent you a message" | `conversation_id`, `name`, `subject`, `is_group` (never the text) |
 | `TIMESHEET_EMPTY` | An active employee or manager on at least one active project with no pending or approved hours this week, from Friday 14:00 to the end of Sunday, New York time | "Your timesheet for the week of Mon 12 Oct is empty" | `week_start` |
 
@@ -476,3 +508,4 @@ These run only through an IAM-authorized `aws lambda invoke`, never through the 
 | `{"op": "create_admins", "users": [{"username", "first_name", "last_name"}, ...]}` | `{"created": [{"username", "password"}], "skipped": [...]}`: adds ready-to-use admin logins with random passwords (no forced change on first login); usernames that already exist are skipped. Used to create the live demo admins `admin.demo2`–`admin.demo4` |
 | `{"op": "demo_curate", "dry_run": true}` | A **dry run unless `dry_run` is exactly `false`**: the dry run does everything in a transaction and rolls it back. Rounds the five demo projects out into their department plans and archives the two leftover test items ([rules](LOGIC_WALKTHROUGH.md#23-curating-the-demo-data-demo_curate)). Additive and archive-only: never deletes, never changes existing time entries, passwords, roles, salaries or planned hours. Returns `{dry_run, today, archived: [{type, name, id}], projects: {<name>: {department, added: [{name, start_date, end_date, status, difficulty, priority, assignees: [{name, role}]}], dependencies_added: ["X after Y"], team_added: [{name, job_title, planned_hours}], hours_added: {entries, hours, cost}, pending_added, rejected_added, estimates_set: [{name, status, estimated_hours, logged_hours}], skipped: [{name, reason}], before/after: {at_risk, budget_pct, progress_pct}}}, timesheets: {pending_added, rejected_added, hours, notifications, scenarios: [{kind, person, week, pending, rejected, pending_hours, week_total}], by_project, by_manager}, warnings: [...]}`. One `curate_demo_plan` audit entry per changed project, by System. A second run adds nothing |
 | `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "priorities_updated": ["Apollo Data Migration / Cutover", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode, difficulty and priority up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty and priority on demo milestones (matched by project and milestone name), each only while still `medium` (priorities: Apollo Cutover critical, Schema Mapping high, Atlas Build critical, Atlas Launch high, Delta Audit Fieldwork low). Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |
+| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "priorities_updated": ["Apollo Data Migration / Cutover", ...], "plan_cards_created": ["Beacon Mobile App / User Research", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode, difficulty and priority up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty and priority on demo milestones (matched by project and milestone name), each only while still `medium` (priorities: Apollo Cutover critical, Schema Mapping high, Atlas Build critical, Atlas Launch high, Delta Audit Fieldwork low); adds Beacon's planning cards (User Research and Offline Sync in Backlog, Push Notifications in Ready) one by one, only while Beacon is still `planned` with no finalized plan (otherwise `skipped` reason `plan_closed`) and has no milestone of that name, archived ones included. Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |

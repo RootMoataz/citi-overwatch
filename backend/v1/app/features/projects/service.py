@@ -111,7 +111,7 @@ def decorate(project: dict, milestones: list[dict], consumed: Decimal) -> dict:
         "work_mode": project["work_mode"],
         "delegate": _delegate(project),
         "is_archived": project["is_archived"], "completed_at": project["completed_at"],
-        "created_at": project["created_at"],
+        "created_at": project["created_at"], "plan_finalized_at": project.get("plan_finalized_at"),
         **_time_frame(project, milestones),
     }
 
@@ -337,6 +337,9 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
             if (before["status"], target) not in TRANSITIONS:
                 raise ApiError(400, "INVALID_TRANSITION",
                                f"A {before['status']} project can't move to {target}")
+            if (before["status"], target) == ("planned", "active"):
+                from app.features.planning.service import require_finalized_plan  # planning imports this module
+                require_finalized_plan(conn, before)
             if target == "completed":
                 open_count = query_one(conn, """SELECT count(*) AS n FROM milestones
                                                 WHERE project_id = CAST(:p AS uuid) AND NOT is_archived

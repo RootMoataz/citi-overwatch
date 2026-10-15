@@ -5,7 +5,7 @@ from app.db import query, query_one
 from app.rules.at_risk import at_risk_reasons
 from app.rules.cycles import dependency_order
 from app.presets import preset_for
-from app.seed import DEMO_PASSWORD, PEOPLE, PROJECT_DEPARTMENTS, seed
+from app.seed import DEMO_PASSWORD, PEOPLE, PLAN_CARDS, PROJECT_DEPARTMENTS, seed
 
 
 def match_preset(project: str, milestone: str) -> bool:
@@ -147,7 +147,10 @@ def test_seed_milestones_have_demo_priorities(conn):
     assert {(r["project"], r["name"]): r["priority"] for r in rows} == {
         ("Apollo Data Migration", "Cutover"): "critical", ("Apollo Data Migration", "Schema Mapping"): "high",
         ("Atlas Customer Portal", "Build"): "critical", ("Atlas Customer Portal", "Launch"): "high",
-        ("Delta Compliance Audit", "Audit Fieldwork"): "low"}
+        ("Delta Compliance Audit", "Audit Fieldwork"): "low",
+        # Beacon's planning cards carry their own priorities.
+        ("Beacon Mobile App", "User Research"): "high", ("Beacon Mobile App", "Offline Sync"): "critical",
+        ("Beacon Mobile App", "Push Notifications"): "low"}
 
 
 def test_seed_puts_people_and_projects_in_departments(conn):
@@ -172,6 +175,49 @@ def test_seed_has_a_pull_project_with_a_claimable_milestone(conn):
 
 
 DEMO_USERNAMES = [u for u, *_ in PEOPLE]
+PLAN_CARD_NAMES = [card[0] for card in PLAN_CARDS]
+
+
+def beacon_board(conn) -> dict:
+    return {r["name"]: (r["plan_column"], r["sequence"]) for r in query(conn, """
+        SELECT m.name, m.plan_column, m.sequence FROM milestones m JOIN projects p ON p.id = m.project_id
+        WHERE p.name = 'Beacon Mobile App' AND NOT m.is_archived""")}
+
+
+def test_seed_beacon_is_a_plan_in_progress_that_cannot_be_finalized_yet(client, conn):
+    seed(conn)
+    assert beacon_board(conn) == {"Design": ("scheduled", 1), "Prototype": ("scheduled", 2),
+                                  "User Research": ("backlog", 1), "Offline Sync": ("backlog", 2),
+                                  "Push Notifications": ("ready", 1)}
+    beacon = query_one(conn, "SELECT id, status::text AS status, plan_finalized_at FROM projects "
+                             "WHERE name = 'Beacon Mobile App'")
+    assert (beacon["status"], beacon["plan_finalized_at"]) == ("planned", None)
+    _, body, _, _ = client.request("POST", "/auth/login", json={"username": "manager.demo", "password": DEMO_PASSWORD})
+    status, plan, _, _ = client.request("GET", f"/projects/{beacon['id']}/plan", token=body["access_token"])
+    failing = {c["code"]: [p["name"] for p in c["problems"]] for c in plan["checks"] if not c["ok"]}
+    # Cards still to schedule, and Design (claimable in pull mode) has nobody on it yet.
+    assert failing == {"ALL_SCHEDULED": ["User Research", "Offline Sync", "Push Notifications"],
+                       "HAS_ASSIGNEE": ["Design"]}
+    priorities = {r["name"]: r["priority"] for r in query(conn, "SELECT name, priority FROM milestones "
+                                                              "WHERE name = ANY(:n)", n=PLAN_CARD_NAMES)}
+    assert len(set(priorities.values())) >= 2
+
+
+def test_demo_backfill_adds_beacons_planning_cards_once_and_only_while_planning(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    board = beacon_board(conn)
+    conn.run("DELETE FROM milestones WHERE name = 'Offline Sync'")
+    assert demo_backfill(conn)["plan_cards_created"] == ["Beacon Mobile App / Offline Sync"]
+    assert beacon_board(conn) == board
+    assert demo_backfill(conn)["plan_cards_created"] == []
+    # Once the plan is finalized, the backfill leaves the board alone.
+    conn.run("DELETE FROM milestones WHERE name = 'Offline Sync'")
+    conn.run("UPDATE projects SET plan_finalized_at = now() WHERE name = 'Beacon Mobile App'")
+    result = demo_backfill(conn)
+    assert result["plan_cards_created"] == []
+    assert {"item": "Beacon Mobile App plan", "reason": "plan_closed"} in result["skipped"]
 
 
 def demo_state(conn) -> dict:
@@ -200,6 +246,8 @@ def seed_the_old_way(conn) -> dict:
     expected = demo_state(conn)
     conn.run("""DELETE FROM milestone_dependencies
                 WHERE milestone_id IN (SELECT id FROM milestones WHERE name = 'Prototype')""")
+    conn.run("""DELETE FROM milestone_assignees
+                WHERE milestone_id IN (SELECT id FROM milestones WHERE name = 'Prototype')""")
     conn.run("DELETE FROM milestones WHERE name = 'Prototype'")
     conn.run("DELETE FROM users WHERE username = 'executive.demo'")  # the executive came later still
     conn.run("UPDATE users SET department_id = NULL")
@@ -208,6 +256,7 @@ def seed_the_old_way(conn) -> dict:
     conn.run("DELETE FROM departments")
     conn.run("DELETE FROM conversations")  # messages came later too
     conn.run("DELETE FROM notifications WHERE type = 'MESSAGE_RECEIVED'")
+    conn.run("DELETE FROM milestones WHERE name = ANY(:n)", n=PLAN_CARD_NAMES)  # and the planning board's cards
     del expected["milestones"][("Beacon Mobile App", "Prototype")]
     del expected["priorities"][("Beacon Mobile App", "Prototype")]
     return expected
@@ -249,7 +298,8 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
     # Design is claimable by Beacon's team, as in today's seed.
     beacon_ms = query(conn, """SELECT m.name FROM milestones m JOIN projects p ON p.id = m.project_id
                                WHERE p.name = 'Beacon Mobile App'""")
-    assert [m["name"] for m in beacon_ms] == ["Design"]
+    assert sorted(m["name"] for m in beacon_ms) == sorted(["Design", *PLAN_CARD_NAMES])
+    assert sorted(result["plan_cards_created"]) == sorted(f"Beacon Mobile App / {n}" for n in PLAN_CARD_NAMES)
     assert query_one(conn, """SELECT count(*) AS n FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id
                               WHERE m.name = 'Design'""")["n"] == 0
 
@@ -263,10 +313,11 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     result = function.handler({"op": "demo_backfill"})
     assert (demo_state(conn), counts(conn)) == (state, before)
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
-                "difficulties_updated", "priorities_updated"):
+                "difficulties_updated", "priorities_updated", "plan_cards_created"):
         assert result[key] == [], key
-    # departments of people and projects, Beacon, difficulties, the executive login, the demo messages, priorities
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 5
+    # departments of people and projects, Beacon, difficulties, the executive login, the demo messages, priorities,
+    # Beacon's planning cards
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 5 + len(PLAN_CARDS)
     assert result["users_created"] == [] and result["conversations_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
 

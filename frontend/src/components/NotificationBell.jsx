@@ -13,6 +13,7 @@ const TARGETS = {
   MILESTONE_CLAIMED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   DELEGATE_ASSIGNED: (n) => [`/timesheets?project=${n.payload.project.id}`, "Review the project's hours in Timesheets"],
   TIMESHEET_EMPTY: (n) => [`/timesheet?week=${n.week_start}`, 'Log your hours for that week'],
+  PLAN_FINALIZED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   MESSAGE_RECEIVED: (n) => [`/messages/${n.payload.conversation_id}`, 'Open the conversation'],
 }
 const target = (n) => (TARGETS[n.type] ?? TARGETS.OVER_40H)(n)

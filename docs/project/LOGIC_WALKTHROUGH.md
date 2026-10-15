@@ -665,3 +665,49 @@ project overview has an **Estimated effort** tile.
 `demo_curate` fills in estimates only where there are none: a completed milestone's estimate lands within 15% of
 its logged hours, an open one's stays above them (at least 1.25 × logged), and one without hours gets the plan
 step's estimate for its dates (or about 4h per working day per person for a milestone that isn't a plan step).
+## 22. The planning board and finalizing a plan
+
+A new project starts **Planned**. While it is planned and its plan isn't finalized, the project page opens on a **Plan** tab: a Kanban board of the project's milestones in three columns, **Backlog → Ready → Scheduled**. The project's manager or an admin shapes the plan there; everyone else who can see the project (team members, executives) sees it read-only. Finalizing the plan checks it, moves the project to **Active** ("into execution") and locks the board.
+
+```mermaid
+flowchart TD
+  B["Plan tab (project planned, plan not finalized)"] --> D["Drag a card, or use its menu: Move to… / Up / Down"]
+  D --> O["Board moves at once (optimistic)<br/>PUT /projects/{id}/plan/order {items}"]
+  O -- "400 / 409" --> R[Cards jump back, error toast]
+  O -- 200 --> S[Milestone list refreshed]
+  B --> F["Finalize plan → checklist (GET /projects/{id}/plan)"]
+  F --> P["POST /projects/{id}/plan/finalize"]
+  P --> L["BEGIN; SELECT the project … FOR UPDATE<br/>still planned and not finalized?"]
+  L -- no --> E1["409 PROJECT_NOT_PLANNED / PLAN_FINALIZED"]
+  L -- yes --> C["plan_checks(): every check"]
+  C -- any fails --> E2["422 PLAN_INVALID + the checklist; ROLLBACK"]
+  C -- all pass --> W["plan_finalized_at = now(), status planned → active<br/>audit finalize_plan<br/>PLAN_FINALIZED to the team; COMMIT"]
+  W --> M["Board read-only: 'Plan finalized on …'; the page opens the Milestones tab"]
+```
+
+**Cards and order.** Each card is a milestone (name, priority, difficulty, due date, assignees, "after *X*" for its dependencies, required-skill chips when the milestone has them, and a warning icon listing anything that would fail a check). Its column is `milestones.plan_column` and its place in the column is `milestones.sequence` (from 1); the Scheduled column's order is the order the work happens. A card is created with **Add a card** in a column (a name only, dated across the whole project, then the milestone dialog opens to fill in dates, people and dependencies), edited in the usual milestone dialog, given a priority from its menu and archived from its menu (with a confirmation). Milestones added elsewhere land at the end of Scheduled.
+
+**Moving cards.** Drag a card by its handle with the mouse or a finger, or from the keyboard: focus the handle, Space or Enter to lift, arrow keys to move within and between columns, Space or Enter to drop, Escape to cancel; a screen reader hears where the card is at each step. Every card also has **Move to…** (another column), **Up one place** and **Down one place** in its menu. Each move sends the whole board's order in one `PUT /projects/{id}/plan/order`, applied in one transaction with the project row locked, so a move can't land after the plan was finalized. The screen moves the card before the server answers and puts it back if the server refuses.
+
+**The checks** are a pure function, `plan_checks()` in [`app/rules/planning.py`](../../backend/v1/app/rules/planning.py), over the project's live (non-archived) milestones. The checklist always lists all six, in this order:
+
+| Check | Fails when |
+|---|---|
+| At least one milestone is scheduled | Scheduled is empty |
+| Nothing is left in Backlog or Ready | Any card is still in Backlog or Ready. Finalizing is blocked until every card is scheduled (or archived): the plan is the whole plan |
+| Dates inside the project | A scheduled milestone starts before the project's start date or ends after its predicted end date |
+| Someone assigned | A scheduled milestone has nobody on it: the initial assignment is part of the plan, in pull projects too |
+| Dependencies stay inside this project and form no loop | A dependency points to another project's milestone, or milestones depend on each other in a loop (`in_cycles()`, built on `creates_cycle()` from [section 7](#7-dependency-loop-detection)) |
+| No milestone is ordered before one it depends on | In Scheduled, a milestone sits above (has a lower `sequence` than) a milestone it depends on |
+
+The cards show the same problems before anyone presses Finalize (`cardWarnings()` in [`board.js`](../../frontend/src/features/planning/board.js)), and the Plan tab shows how many checks still fail.
+
+**Finalizing** (`finalize()` in [`app/features/planning/service.py`](../../backend/v1/app/features/planning/service.py)) re-runs the checks inside the transaction that changes the project, so what is checked is what is finalized. On success the project gets `plan_finalized_at`, moves from planned to active, and the audit log records `finalize_plan` with the before and after. Everyone on the project (active members and assignees) and its manager, except whoever finalized, gets a `PLAN_FINALIZED` bell alert, "Beacon Mobile App plan finalized: your first milestone is Design", naming their own first milestone by plan order (`next_milestone_order_key()` in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py)), or the project's first milestone if they are on none. The alert opens the project's Milestones tab.
+
+**After finalizing** the Plan tab stays, read-only, with "Plan finalized on *date*"; day-to-day work happens on the Milestones tab. A project that was never planned on the board (it was already active, or started without milestones) has no Plan tab.
+
+**The status hook.** A planned project with live milestones can't be switched to active through the project dialog (`PUT /projects/{id}`): that returns `409 PLAN_NOT_FINALIZED`, because finalizing is the way into execution. A planned project with no milestones has nothing to plan and can still be started directly, as before the board.
+
+- **Who:** the project's manager or an admin edit and finalize (`load_project(manage=True)`; executives are refused by the router like every write). Team members and executives see the board read-only.
+- **UI:** [`frontend/src/features/planning/`](../../frontend/src/features/planning/): `PlanTab.jsx` (the board, built on `@dnd-kit` with pointer and keyboard sensors), `PlanColumn.jsx`, `PlanCard.jsx`, `FinalizeDialog.jsx` (the checklist) and `planningApi.js`. Cards read the same milestone list as the Milestones tab, so edits in the milestone dialog show on the board at once. On a phone the columns scroll sideways inside the board, one column at a time.
+- **Example (demo data):** *Beacon Mobile App* is planned. Design and Prototype are scheduled (Prototype after Design, Hugo on it); User Research and Offline Sync are in Backlog and Push Notifications in Ready. Finalizing shows two failing checks: cards left outside Scheduled, and nobody on Design. Moving every card to Scheduled and assigning someone to each makes the plan pass.
