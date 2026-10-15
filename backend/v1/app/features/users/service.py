@@ -60,7 +60,8 @@ def _check_manager(conn, role: str, manager_id, user_id: str | None = None) -> s
         return None
     manager_id = as_uuid(manager_id, "manager_id")
     manager = query_one(conn, """SELECT 1 AS ok FROM users WHERE id = CAST(:i AS uuid)
-                                 AND role IN ('manager', 'admin') AND NOT is_archived""", i=manager_id)
+                                 AND role IN ('manager', 'admin') AND NOT is_archived
+                                 AND NOT is_public_demo""", i=manager_id)  # a shared demo login manages nobody
     if not manager or manager_id == user_id:
         raise ApiError(400, "VALIDATION_ERROR", "Pick an active manager or admin", {"manager_id": "invalid"})
     return manager_id

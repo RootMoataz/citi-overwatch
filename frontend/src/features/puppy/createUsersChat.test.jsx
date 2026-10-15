@@ -15,7 +15,8 @@ import Puppy from './Puppy.jsx'
 const SLOW = { timeout: 30000 }
 
 const MANAGERS = [{ id: 'u-mgr', first_name: 'Morgan', last_name: 'Manager', role: 'manager' }]
-const ADMINS = [{ id: 'u-admin', first_name: 'Avery', last_name: 'Admin', role: 'admin' }]
+const ADMINS = [{ id: 'u-admin', first_name: 'Avery', last_name: 'Admin', role: 'admin' },
+  { id: 'u-demo', first_name: 'Dana', last_name: 'Demo-Admin', role: 'admin', is_public_demo: true }]
 const DEPARTMENTS = [{ id: 'd1', name: 'Technology' }, { id: 'd2', name: 'Operations' }]
 
 let posted
@@ -72,7 +73,7 @@ beforeEach(() => {
     http.get(`${API}/users`, ({ request }) => {
       const url = new URL(request.url)
       if (url.searchParams.get('role') === 'manager') return HttpResponse.json({ items: MANAGERS, total: 1 })
-      if (url.searchParams.get('role') === 'admin') return HttpResponse.json({ items: ADMINS, total: 1 })
+      if (url.searchParams.get('role') === 'admin') return HttpResponse.json({ items: ADMINS, total: 2 })
       const q = (url.searchParams.get('q') ?? '').toLowerCase()
       const items = q ? usedEmails.filter((e) => e.toLowerCase() === q).map((email) => ({ id: 'u-old', email })) : []
       return HttpResponse.json({ items, total: items.length })
@@ -205,6 +206,7 @@ describe('the conversation', SLOW, () => {
     expect(await screen.findByText('Person 1 of 4 · John Doe · john@example.com')).toBeInTheDocument()
     await user.click(await chip('Employee'))
     await screen.findByRole('textbox', { name: /Who will John Doe report to\?/ })
+    expect(screen.queryByRole('button', { name: 'Dana Demo-Admin' })).toBeNull() // the shared demo login manages nobody
     await user.click(await chip('Morgan Manager'))
     await screen.findByRole('textbox', { name: /Department for John Doe\?/ })
     await user.click(await chip('Technology'))

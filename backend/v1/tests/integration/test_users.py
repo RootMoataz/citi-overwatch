@@ -93,6 +93,17 @@ def test_employee_requires_manager(client, conn, outbox):
     assert status == 201 and body["user"]["manager_id"] == str(mgr["id"])
 
 
+def test_the_public_demo_admin_manages_nobody(client, conn, outbox):
+    _, token = admin_token(conn)
+    demo = make_user(conn, role="admin", username="shared.demo")
+    conn.run("UPDATE users SET is_public_demo = true WHERE id = :i", i=demo["id"])
+    status, body, _, _ = client.request("POST", "/users", token=token,
+                                        json=new_user_body(role="employee", manager_id=str(demo["id"])))
+    assert (status, body["error"]["details"]) == (400, {"manager_id": "invalid"})
+    status, body, _, _ = client.request("GET", "/users?role=admin", token=token)
+    assert [u["is_public_demo"] for u in body["items"] if u["username"] == "shared.demo"] == [True]
+
+
 def test_availability_suggestions_exclude_taken(client, conn):
     _, token = admin_token(conn)
     make_user(conn, username="jsmith")

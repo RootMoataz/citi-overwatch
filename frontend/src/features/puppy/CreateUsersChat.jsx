@@ -234,7 +234,9 @@ export default function CreateUsersChat({ guardRef, onExit, onLeave, onClosePane
   const queryClient = useQueryClient()
   const managersQuery = useManagers()
   const departmentsQuery = useDepartments()
-  const managers = (managersQuery.data ?? []).map((m) => ({ id: String(m.id), label: fullName(m) }))
+  // The public demo admin is a shared presentation login, never someone's real manager.
+  const managers = (managersQuery.data ?? []).filter((m) => !m.is_public_demo)
+    .map((m) => ({ id: String(m.id), label: fullName(m) }))
   const departments = (departmentsQuery.data?.items ?? []).map((d) => ({ id: String(d.id), label: d.name }))
 
   const [step, setStep] = useState({ name: 'names', idx: 0 })

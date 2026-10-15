@@ -3,7 +3,8 @@
 from app.dberrors import UNIQUE_FIELDS, conflict_from  # noqa: F401  (shared mapping)
 
 USER_FIELDS = ("id", "username", "first_name", "last_name", "email", "role", "job_title",
-               "manager_id", "department_id", "must_change_password", "is_archived", "created_at", "tracks_own_hours")
+               "manager_id", "department_id", "must_change_password", "is_archived", "created_at", "tracks_own_hours",
+               "is_public_demo")
 
 
 def avatar_version(updated_at) -> str | None:
