@@ -137,3 +137,59 @@ The app must answer every one of these questions in the UI.
 - [x] Logic walkthrough explaining how the key rules work
 - [x] API reference
 - [x] Decision log (why each major choice was made)
+
+---
+
+## Part 3 – Built after the first release
+
+Requirements the owner (**U**) added once the minimum was live, grouped by role. Every item is done and deployed; the matching stories are in [USER_STORIES.md](USER_STORIES.md#stories-added-after-the-first-release).
+
+### Everyone
+
+- [x] One-click demo sign-in for each role; demo accounts never lock, with a per-address sign-in rate limit
+- [x] Ctrl+K command palette over pages, projects, people, milestones and actions, with fixed plain-English phrases (no AI)
+- [x] Puppy, a rule-based assistant: summary of what needs you, confirmed actions, help answers, alert sounds, privacy allow-list
+- [x] Messages: one-to-one conversations and milestone Discuss threads, unread counts, read receipts, bell alerts without the text, 20 messages a minute
+- [x] Light, dark or system theme
+- [x] Profile photos, cropped in the browser and rebuilt by a server-side PNG sanitiser
+- [x] Live activity feed and readable audit sentences
+
+### Employee
+
+- [x] My week home page: hours against 40, milestones by urgency, milestones to claim
+- [x] Start/stop timer: one at a time, header clock, quarter-hour rounding, midnight auto-stop, Tracked/Manual/Mixed labels
+- [x] Proof of work: a 10–500 character note or a same-day progress update on new or changed hours
+- [x] Kick back a milestone with a category and reason; see the resolution
+- [x] Auto-routing: support on *Ready for review*, next ready milestone as primary on *Completed*, skill- and capacity-aware
+- [x] Pull mode: claim a ready, unowned milestone
+- [x] Friday timesheet reminder
+
+### Manager
+
+- [x] Timesheets → To review grouped by person-week, Approve week, Approved weeks, tracked share
+- [x] Red flags for approvers (same hours daily, long day, closed milestone, backdated, over plan, no activity, no proof) and an Only flagged filter
+- [x] Planning board (Backlog → Ready → Scheduled) with a six-check Finalize that moves the project to Active
+- [x] Department presets and project templates (Technology, Operations, Risk & Compliance)
+- [x] Milestone priority, difficulty and estimates, labelled in words with distinct colours
+- [x] Delegate approver with an end date
+- [x] Resolve kickbacks; skills for the employees they manage
+- [x] Email this report (browser relay) and Print / PDF; Missing timesheets card; department filter on the dashboard
+
+### Admin
+
+- [x] Control centre home with admin shortcuts
+- [x] HR submissions per pay period with payroll CSV and corrections for entries changed after sending
+- [x] Departments and skills catalogue
+- [x] "Tracks own hours" switch: managers and admins keep a timesheet only when turned on
+- [x] Executive accounts; one reporting manager per person
+- [x] Welcome and reset emails relayed from the admin's browser (EmailJS) while the Lambda has no email route
+
+### Executive
+
+- [x] Read-only role: organisation dashboard, every project, allocation, archive and audit log; every write refused by the router; salaries and rates stripped from every response
+
+### Public demo and operations
+
+- [x] Public demo admin (`demo.admin`): 5-minute sessions, fail-closed allow list of writes, disabled controls with a tooltip, countdown banner
+- [x] Fail-closed route tests: every write route must be classified for the public demo and the executive guard
+- [x] Additive demo-data operations (`demo_backfill`, `demo_curate` with a dry run); the live data is never reset

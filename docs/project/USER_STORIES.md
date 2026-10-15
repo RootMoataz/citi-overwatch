@@ -20,17 +20,21 @@ Shared behaviour on every page (so it isn't repeated in each story):
 
 ## Roles at a glance
 
-| Can… | Admin | Manager | Employee |
-|---|---|---|---|
-| Create, edit, archive and restore accounts; change usernames; reset passwords; edit salaries | ✅ | — | — |
-| See other people's salaries | ✅ | — | — |
-| Create projects, approve or reject project requests | ✅ | — | — |
-| Submit a project request | — | ✅ | — |
-| Edit a project, staff it, manage its milestones, approve its hours | every project | projects they manage | — |
-| Move an assigned milestone to *in progress* / *ready for review*, add notes | ✅ | ✅ | milestones assigned to them |
-| Log their own hours | ✅ | ✅ | ✅ |
-| See the audit log | ✅ | — | — |
-| See someone's profile and history | anyone | themselves and people on their projects | themselves |
+| Can… | Admin | Manager | Employee | Executive (read-only) |
+|---|---|---|---|---|
+| Create, edit, archive and restore accounts; change usernames; reset passwords; edit salaries | ✅ | — | — | — |
+| See other people's salaries | ✅ | — | — | — (never, not even their own) |
+| Create projects, approve or reject project requests | ✅ | — | — | — |
+| Submit a project request | — | ✅ | — | — |
+| Edit a project, plan it on the board, staff it, manage its milestones, approve its hours | every project | projects they manage (and hours of projects delegated to them) | — | sees every project, changes nothing |
+| Move an assigned milestone to *in progress* / *ready for review*, kick it back, post updates | ✅ | ✅ | milestones assigned to them | — |
+| Log their own hours (timesheet and timer) | only with "Tracks own hours" | only with "Tracks own hours" | ✅ | — |
+| Submit approved pay periods to HR | ✅ | — | — | sees the list of submissions |
+| Start a conversation | with anyone active | with anyone active | with their managers and other employees | with anyone active |
+| See the audit log | ✅ | — | — | ✅ (no pay fields) |
+| See someone's profile and history | anyone | themselves and people on their projects | themselves | anyone |
+
+The **public demo admin** (`demo.admin`) is an admin whose password is published: it signs out after 5 minutes and every write that changes people, credentials, departments, skills, project archiving or HR is refused (`403 DEMO_RESTRICTED`). See story [V1](#v1-try-the-admin-view-without-the-real-admin-password-u--done).
 
 ---
 
@@ -420,3 +424,150 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - Status is shown by text as well as colour.
 - Dashboard panels are labelled regions.
 - Colours come from one theme, with contrast checked against WCAG AA.
+
+---
+
+## Stories added after the first release
+
+Everything below was built after the first deploy and is live. **Status** is **Done** for every story here; the requirements checklist in [REQUIREMENTS.md](REQUIREMENTS.md#part-3--built-after-the-first-release) lists the same items. Shared behaviour (loading skeletons, toasts, error banners with a request ID, empty states, disabled controls with a reason) applies as described at the top of this file.
+
+### Everyone
+
+#### N1. Try the demo in one click (U) — Done
+**As** a grader, **I want** one button per role on the sign-in page **so that** I can explore without typing credentials.
+- **Success:** Employee, Manager, Executive and Admin buttons sign in to the published demo accounts and land on that role's home.
+- **Failure:** "Too many demo sign-ins from your network" (`429`) after 20 Admin-demo sign-ins a minute from one address; the demo accounts never lock.
+
+#### N2. Search and jump anywhere (U) — Done
+**As** anyone, **I want** Ctrl+K to search pages, projects, people, milestones and actions, and to understand phrases like "at-risk projects in Technology" **so that** I get there without clicking through menus.
+- **Success:** results are scoped to what I may open; a matched phrase shows as an "Interpreted" chip (e.g. *Projects · At risk · Technology*) and Enter opens the filtered page.
+- **Empty:** "No matches" with the phrases I can try. Nothing leaves the browser.
+
+#### N3. Ask Puppy what needs me (U) — Done
+**As** anyone, **I want** a small assistant that summarises what needs my attention **so that** I don't have to visit every page.
+- **Success:** the panel's Summary lists "What needs you" (approvals waiting, red-flagged entries, people over 40 hours, missing timesheets), tips and the top insights; Do it runs a confirmed action; Ask answers fixed help questions; Sound picks an alert sound for new notifications.
+- **Privacy:** Puppy reads only what my role already sees, through an allow-list, and says "Puppy follows rules from your data — no AI service involved."
+
+#### N4. Message the people I work with (U) — Done
+**As** anyone, **I want** one-to-one conversations and a discussion thread per milestone **so that** questions stay next to the work.
+- **Success:** an inbox with unread counts, threads grouped by day, "Seen" receipts, a bell alert per conversation (never the text), and a **Discuss** button on each milestone.
+- **Rules:** admins, executives and managers can start a conversation with anyone active; an employee with their own manager, the managers and active delegates of their projects, and other employees.
+- **Failure:** "Employees can message their manager, their project managers and other employees." (`403`); "You're sending messages too fast" after 20 a minute (`429`).
+
+#### N5. Choose light or dark (U) — Done
+**As** anyone, **I want** the app to follow my system theme, or a theme I pick in the account menu, **so that** it's comfortable to read.
+
+#### N6. Add a profile photo (U) — Done
+**As** anyone, **I want** to upload and crop a photo **so that** people recognise me in lists and threads.
+- **Failure:** anything but a well-formed PNG of 16–512 px under 300 KB is refused with the reason; the server rebuilds the image from its pixels, dropping metadata.
+
+### Employee
+
+#### E1. See my week at a glance (U) — Done
+**As** an employee, **I want** a home page with my hours this week and the milestones on my plate **so that** I know what to do next.
+- **Success:** "31.75h of 40h" with logged and planned bars, my milestones ordered overdue first then by priority and due date (status, priority and difficulty chips), and milestones I can claim on pull-mode projects.
+
+#### E2. Time my work with a start/stop timer (U) — Done
+**As** an employee, **I want** to start a timer on a milestone and stop it when I'm done **so that** my hours are logged for me.
+- **Success:** one running timer at a time, a live clock in the header, hours rounded to the nearest quarter hour and added to that day's entry ("Logged 2.25h on Schema Mapping"); entries show Tracked, Manual or Mixed.
+- **Failure:** starting a second timer is refused (`409 TIMER_RUNNING`); a timer left running stops at midnight New York time and tells me to check my hours; if the hours can't be logged (the day would pass 24h, the project was paused) the timer still stops and says why.
+
+#### E3. Explain my hours (U) — Done
+**As** an employee, **I want** to add a short work note to new or changed hours **so that** my manager can approve them with confidence.
+- **Failure:** a save with new hours and neither a 10–500 character note nor a progress update that day is refused (`400 PROOF_REQUIRED`), listing the cells and highlighting each note icon.
+
+#### E4. Kick back a milestone I can't progress (U) — Done
+**As** an assignee, **I want** to send a milestone back to my manager with a category and reason **so that** blockers are visible instead of silent.
+- **Success:** the milestone becomes **Blocked**, my manager (and the active delegate) gets an alert, the project shows "Kicked back – needs review" in its risk reasons, and the resolution comes back to everyone on it.
+- **Failure:** a reason under 10 characters is blocked; work already handed in can't be kicked back.
+
+#### E5. Be routed to the next piece of work (U) — Done
+**As** an employee, **I want** to be added where I'm needed when I hand work in or it's completed **so that** I'm never idle while urgent work waits.
+- **Success:** after *Ready for review* I'm added as **Supporting** on the most urgent in-progress milestone I have the skills for; after *Completed* I may become primary on the next ready milestone. I get an alert naming it; my 40-hour plan and skills are respected.
+
+#### E6. Claim work on a pull-mode project (U) — Done
+**As** a team member, **I want** to claim a ready milestone nobody owns **so that** the team pulls work instead of waiting to be assigned.
+
+#### E7. Be reminded on Friday (U) — Done
+**As** someone who keeps a timesheet, **I want** a reminder when my week is empty **so that** my hours reach payroll on time.
+- **Success:** from Friday 14:00 New York time, if I am on an active project and have no pending or approved hours that week, my bell shows one reminder linking to that week (once per week, cleared when I log hours). Managers and admins see the same people on a **Missing timesheets** card.
+
+### Manager
+
+#### G1. Review timesheets week by week (U) — Done
+**As** a manager, **I want** pending hours grouped by person-week with red flags **so that** I approve fast and look closer only where it matters.
+- **Success:** each week shows entries, hours waiting, hours logged, "Tracked 68% · Manual 32%" and a red-flag count; each entry shows its note or progress update and its flags (same hours daily, long day, closed milestone, backdated, over plan, no activity, no proof). **Only flagged** filters the list; **Approve week** approves a whole person-week; **Approved** lists approved weeks.
+- **Failure:** an entry changed since I loaded it is refused (`409 STALE_ENTRY`) and reloads; I can never approve my own hours.
+
+#### G2. Plan a project on a board and finalize it (U) — Done
+**As** a manager, **I want** to move milestones from Backlog through Ready to Scheduled and finalize the plan **so that** a project starts only when it's ready.
+- **Success:** cards show priority, difficulty, dates, dependencies, skills and assignees, with a warning icon for problems; **Finalize plan** lists six checks (something scheduled, nothing left in Backlog or Ready, dates inside the project, everyone staffed, no cross-project or looping dependencies, order respects dependencies) and moves the project from Planned to Active, telling the team where they start.
+- **Failure:** finalize stays disabled while any check fails, with each problem listed.
+
+#### G3. Start a project from my department's template (U) — Done
+**As** a manager or admin, **I want** a new project to start from its department's milestone plan **so that** I don't build the same steps every time.
+- **Success:** Technology, Operations and Risk & Compliance each have six steps with objectives, done-when checklists, skills, estimates and dependencies, laid over the project's dates; the project starts Planned.
+
+#### G4. Tell urgency from effort (U) — Done
+**As** a manager, **I want** priority (how urgent) and difficulty (how much it weighs in progress) as separate, clearly labelled chips **so that** nobody mistakes one for the other.
+- **Success:** "Critical Priority" in red with a flag, "High Priority" in amber, "Hard Difficulty" in teal with weight dots; insights say "High Severity". Priority orders routing, lists and insights; difficulty weights progress.
+
+#### G5. Hand approvals to a delegate (U) — Done
+**As** a manager, **I want** to name another manager or admin to approve a project's hours until a date **so that** approvals don't stall while I'm away.
+- **Success:** the delegate sees the hours labelled "Delegated from *manager*" and gets an alert; I keep every right.
+- **Failure:** a delegate who isn't an active manager or admin, is the project's manager, or an end date in the past is refused.
+
+#### G6. Resolve a kickback (U) — Done
+**As** a manager (or delegate, or admin), **I want** to answer a kickback with instructions **so that** the person can carry on or the milestone goes back in the queue.
+
+#### G7. Keep my employees' skills current (U) — Done
+**As** a manager, **I want** to set the skills of the employees I manage **so that** routing picks the right people.
+
+#### G8. Email or print the dashboard (U) — Done
+**As** a manager, admin or executive, **I want** to email the dashboard report to myself or someone else, or print it **so that** stakeholders get the numbers without signing in.
+- **Success:** a per-recipient result ("Sent to …"); the report follows the department filter.
+- **Failure:** without the EmailJS template configured, the button explains that email isn't set up.
+
+### Admin
+
+#### AD1. Start from a control centre (U) — Done
+**As** an admin, **I want** shortcuts (people, departments, open requests, archive, audit) above the organisation dashboard **so that** my daily tasks are one click away.
+
+#### AD2. Submit pay periods to HR, with corrections (U) — Done
+**As** an admin, **I want** to submit a week, fortnight or month of approved hours to HR and download its payroll CSV **so that** payroll gets exactly what was approved.
+- **Success:** a preview of entries, hours, cost and people; each approved entry is sent once; a sent entry edited later goes back to pending, is listed under **Needs re-submission**, and the next submission re-sends it as a correction.
+- **Failure:** entries still waiting for approval are excluded and called out; two admins can't send the same entry (row locks).
+
+#### AD3. Manage departments and the skills catalogue (U) — Done
+**As** an admin, **I want** to add, rename, archive and restore departments and skills **so that** filters, presets and routing match the organisation.
+
+#### AD4. Decide who keeps a timesheet (U) — Done
+**As** an admin, **I want** managers and admins to log hours only when I switch on "Tracks own hours" **so that** their timesheets and reminders don't nag people who don't bill time.
+
+#### AD5. Create executives (U) — Done
+**As** an admin, **I want** to create read-only executive accounts **so that** sponsors can see everything without changing anything or seeing pay.
+
+#### AD6. Read the audit log as sentences (U) — Done
+**As** an admin or executive, **I want** audit entries grouped by day as readable sentences with before → after changes **so that** I can tell what happened without reading JSON (raw JSON stays behind a toggle).
+
+#### AD7. See live activity (U) — Done
+**As** anyone with a dashboard, **I want** a Live activity card of recent changes I'm allowed to see **so that** I notice what moved since I last looked.
+
+### Executive
+
+#### EX1. See the whole organisation, read-only (U) — Done
+**As** an executive sponsor, **I want** an organisation dashboard, every project, allocation, the archive and the audit log **so that** I can follow delivery without asking for reports.
+- **Success:** the dashboard is marked **Read-only view** and shows projects by status, risk, insights and budgets; every write control is hidden.
+- **Failure:** any write I attempt directly is `403 READ_ONLY`; no response ever contains a salary or hourly rate.
+
+### Public demo visitor
+
+#### V1. Try the admin view without the real admin password (U) — Done
+**As** a visitor, **I want** a public Admin demo **so that** I can see the admin experience safely.
+- **Success:** a welcome dialog, then a countdown banner ("You'll be signed out in 4:49"); approving hours, deciding requests, editing projects and milestones, staffing and messages work normally.
+- **Failure:** restricted actions are disabled with "Disabled in the public demo." (`403 DEMO_RESTRICTED` if called directly); after 5 minutes the session ends with "Your 5-minute demo session has ended."
+
+### Operator
+
+#### O1. Improve the live demo data without resetting it (U) — Done
+**As** the owner, **I want** additive operations (`demo_backfill`, `demo_curate`, dry run first) **so that** the demo stays rich without wiping what graders did.
