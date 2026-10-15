@@ -327,4 +327,23 @@ def list_projects(conn, ctx: Ctx, params: dict) -> dict:
     items = decorated(conn, rows)
     if params.get("at_risk") == "true":
         items = [i for i in items if i["at_risk_reasons"]]
-    return {"items": items[(page - 1) * size: page * size], "total": len(items)}
+    total = len(items)
+    items = items[(page - 1) * size: page * size]
+    teams = _teams(conn, [str(i["id"]) for i in items])
+    for item in items:
+        item["team"] = teams.get(str(item["id"]), [])  # who's on it, for the list's avatar group
+    return {"items": items, "total": total}
+
+
+def _teams(conn, project_ids: list[str]) -> dict[str, list[dict]]:
+    """Active members of each project (one query for the whole page), ordered by name."""
+    if not project_ids:
+        return {}
+    rows = query(conn, """SELECT pm.project_id, u.id, u.first_name, u.last_name
+                          FROM project_members pm JOIN users u ON u.id = pm.user_id
+                          WHERE pm.project_id = ANY(CAST(:ids AS uuid[])) AND NOT pm.is_archived
+                          ORDER BY lower(u.last_name), lower(u.first_name)""", ids=project_ids)
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        out.setdefault(str(r["project_id"]), []).append({"id": r["id"], "name": f"{r['first_name']} {r['last_name']}"})
+    return out

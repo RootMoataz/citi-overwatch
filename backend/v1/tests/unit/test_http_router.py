@@ -123,3 +123,30 @@ def test_auth_route_without_token_is_401(r):
     resp = dispatch(r, evt("GET", "/api/v1/private"))
     assert resp["statusCode"] == 401
     assert body_of(resp)["error"]["code"] == "AUTH_REQUIRED"
+
+
+def test_binary_response_is_base64_with_safe_headers():
+    from app.http import binary_response
+
+    payload = b"\x89PNG\r\n\x1a\n\x00\xff"
+    resp = binary_response(payload, content_type="image/png", headers={"cache-control": "private, max-age=300"})
+    assert resp["statusCode"] == 200 and resp["isBase64Encoded"] is True
+    assert base64.b64decode(resp["body"]) == payload
+    assert resp["headers"]["content-type"] == "image/png"
+    assert resp["headers"]["x-content-type-options"] == "nosniff"
+    assert resp["headers"]["content-security-policy"] == "default-src 'none'"
+    assert resp["headers"]["cache-control"] == "private, max-age=300"
+
+
+def test_router_passes_binary_responses_through():
+    from app.http import binary_response
+
+    router = Router()
+
+    @router.route("GET", "/img", auth=False)
+    def img(req, ctx, conn):
+        return binary_response(b"\x00\x01", content_type="image/png")
+
+    resp = dispatch(router, evt("GET", "/api/v1/img"))
+    assert resp["isBase64Encoded"] is True and base64.b64decode(resp["body"]) == b"\x00\x01"
+    assert "x-request-id" in resp["headers"]

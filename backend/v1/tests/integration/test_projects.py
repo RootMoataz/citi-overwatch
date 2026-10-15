@@ -268,3 +268,19 @@ def test_progress_is_weighted_by_difficulty(client, conn):
     assert client.request("GET", f"{url}/summary", token=token_for(conn, mgr))[1]["progress_pct"] == 25.0
     listed = client.request("GET", "/projects", token=token_for(conn, mgr))[1]["items"]
     assert [p["progress_pct"] for p in listed] == [25.0]
+
+
+def test_list_items_carry_the_active_team_for_avatars(client, conn):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    project = make_project(conn, mgr, name="Teamed")
+    ada = make_user(conn, first_name="Ada", last_name="Byron")
+    bob = make_user(conn, first_name="Bob", last_name="Ames")
+    gone = make_user(conn, first_name="Gone", last_name="Away")
+    for person in (ada, bob, gone):
+        add_member(conn, project, person)
+    conn.run("UPDATE project_members SET is_archived = true WHERE user_id = :u", u=gone["id"])
+    make_project(conn, mgr, name="Empty")
+    items = {p["name"]: p for p in client.request("GET", "/projects", token=token_for(conn, admin))[1]["items"]}
+    assert items["Teamed"]["team"] == [{"id": str(bob["id"]), "name": "Bob Ames"},
+                                       {"id": str(ada["id"]), "name": "Ada Byron"}]
+    assert items["Empty"]["team"] == []

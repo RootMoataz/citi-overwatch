@@ -45,6 +45,7 @@ class Client:
     """Calls function.handler with a Function URL event, like CloudFront would."""
 
     def request(self, method, path, json=None, token=None, cookies=None, headers=None):
+        import base64
         import json as _json
 
         import function
@@ -64,7 +65,10 @@ class Client:
             "requestContext": {"http": {"method": method.upper()}},
         }
         resp = function.handler(event, None)
-        body = _json.loads(resp["body"]) if resp.get("body") else None
+        if resp.get("isBase64Encoded"):  # binary responses (avatars) come back as raw bytes
+            body = base64.b64decode(resp["body"])
+        else:
+            body = _json.loads(resp["body"]) if resp.get("body") else None
         return resp["statusCode"], body, resp.get("headers", {}), resp.get("cookies", [])
 
 

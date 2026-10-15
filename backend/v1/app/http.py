@@ -41,6 +41,14 @@ def json_response(status: int, body=None, *, headers: dict | None = None,
     return resp
 
 
+def binary_response(body: bytes, *, content_type: str, status: int = 200, headers: dict | None = None) -> dict:
+    """Raw bytes for a Function URL: base64 in the body with isBase64Encoded, which Lambda decodes for the client.
+    The browser must take the bytes as exactly `content_type` (nosniff) and never run anything in them (CSP)."""
+    return {"statusCode": status, "isBase64Encoded": True, "body": base64.b64encode(body).decode("ascii"),
+            "headers": {"content-type": content_type, "x-content-type-options": "nosniff",
+                        "content-security-policy": "default-src 'none'", **(headers or {})}}
+
+
 def error_body(err: ApiError, request_id: str) -> dict:
     return {"error": {"code": err.code, "message": err.message,
                       "details": err.details, "request_id": request_id}}
