@@ -2,14 +2,15 @@
 // a stale link, or a page whose data the server refuses. They go to their home page with a short message.
 import { useCallback, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { can } from '../lib/permissions.js'
 import { useToast } from './toast.js'
 
 /** Routes limited to some roles (paths as in App.jsx). The rest are open to every signed-in user; the server
  * still decides per record (a project you're not on, a profile you may not see). Kept in step with the
- * navigation's permission checks by a test. */
+ * navigation's permission checks by a test. /approvals (the old address) redirects to /timesheets. */
 export const ROUTE_ROLES = {
-  timesheet: ['admin', 'manager', 'employee'], // executives don't log hours
-  approvals: ['admin', 'manager'],
+  timesheet: ['admin', 'manager', 'employee'], // executives don't log hours; see ROUTE_CHECKS too
+  timesheets: ['admin', 'manager', 'executive'], // review and approve hours; HR submissions (executives: read-only)
   requests: ['admin', 'manager'],
   allocation: ['admin', 'manager', 'executive'],
   archive: ['admin', 'manager', 'executive'],
@@ -19,6 +20,19 @@ export const ROUTE_ROLES = {
   audit: ['admin', 'executive'],
   messages: ['admin', 'manager', 'employee', 'executive'], // everyone; employees write only to their managers
   'messages/:id': ['admin', 'manager', 'employee', 'executive'],
+}
+
+/** Routes that also depend on the person, not just the role: a manager or admin has My timesheet only when an
+ * admin turned on "Tracks own hours" for them. */
+export const ROUTE_CHECKS = {
+  timesheet: (user) => can(user, 'timesheet.use'),
+}
+
+/** May this person open the route (a key of ROUTE_ROLES / ROUTE_CHECKS, or any other path)? */
+export function mayOpenRoute(user, route) {
+  const roles = ROUTE_ROLES[route]
+  if (roles && !roles.includes(user?.role)) return false
+  return ROUTE_CHECKS[route] ? ROUTE_CHECKS[route](user) : true
 }
 
 export const NO_ACCESS = "You don't have access to that page."

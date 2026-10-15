@@ -14,7 +14,7 @@ export function pagesFor(user) {
     { label: 'Projects', to: '/projects', keywords: 'portfolio list' },
     can(user, 'timesheet.use') && { label: 'My timesheet', to: '/timesheet', keywords: 'hours log time week' },
     can(user, 'history.own') && { label: 'My history', to: `/people/${user.id}/profile`, keywords: 'hours past' },
-    mayOpen(user, 'approvals') && { label: 'Approvals', to: '/approvals', keywords: 'pending hours approve' },
+    mayOpen(user, 'timesheets') && { label: 'Timesheets', to: '/timesheets', keywords: 'approvals pending hours approve hr payroll' },
     mayOpen(user, 'allocation') && { label: 'Allocation', to: '/allocation', keywords: 'workload capacity utilization' },
     mayOpen(user, 'people') && { label: 'People', to: '/people', keywords: 'users accounts staff' },
     mayOpen(user, 'departments') && { label: 'Departments', to: '/departments', keywords: 'teams' },

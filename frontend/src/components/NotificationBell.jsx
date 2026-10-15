@@ -6,12 +6,12 @@ import { useMarkAllRead, useMarkRead, useNotifications } from '../api/queries.js
 
 /** Where each alert type leads, and the hint shown under its message. */
 const TARGETS = {
-  OVER_40H: (n) => [`/approvals?user=${n.subject_user.id}`, 'Review their hours in Approvals'],
+  OVER_40H: (n) => [`/timesheets?user=${n.subject_user.id}`, 'Review their hours in Timesheets'],
   ENTRY_REJECTED: (n) => [`/timesheet?week=${n.week_start}`, 'Open your timesheet for that week'],
   SUPPORT_ASSIGNED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   SUPPORT_ROUTED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
   MILESTONE_CLAIMED: (n) => [`/projects/${n.payload.project.id}?tab=milestones`, "Open the project's milestones"],
-  DELEGATE_ASSIGNED: (n) => [`/approvals?project=${n.payload.project.id}`, "Review the project's hours in Approvals"],
+  DELEGATE_ASSIGNED: (n) => [`/timesheets?project=${n.payload.project.id}`, "Review the project's hours in Timesheets"],
   TIMESHEET_EMPTY: (n) => [`/timesheet?week=${n.week_start}`, 'Log your hours for that week'],
   MESSAGE_RECEIVED: (n) => [`/messages/${n.payload.conversation_id}`, 'Open the conversation'],
 }

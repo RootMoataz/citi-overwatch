@@ -200,4 +200,28 @@ describe('UserDetailPage', () => {
     await user.click(screen.getByRole('button', { name: /save changes/i }))
     await waitFor(() => expect(put).toEqual({ department_id: 'd1' }))
   })
+
+  test('admin turns on "Tracks own hours" for a manager; employees always keep a timesheet', async () => {
+    let put = null
+    const mona = { id: 'u-mona', username: 'mona', first_name: 'Mona', last_name: 'Lisa', email: 'mona@acme.example',
+      role: 'manager', job_title: 'Lead', salary: 120000, manager_id: null, department_id: null, is_archived: false,
+      tracks_own_hours: false }
+    const eli = { ...mona, id: 'u-eli', role: 'employee', manager_id: 'u-mgr', tracks_own_hours: true }
+    server.use(managers,
+      http.get(`${API}/users/u-mona`, () => HttpResponse.json(mona)),
+      http.get(`${API}/users/u-eli`, () => HttpResponse.json(eli)),
+      http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })),
+      http.put(`${API}/users/u-mona`, async ({ request }) => { put = await request.json(); return HttpResponse.json({ ...mona, ...put }) }))
+    const { unmount } = renderAsUser(<UserDetailPage />, { user: users.admin, route: '/people/u-mona', path: '/people/:id' })
+    const user = userEvent.setup()
+    const toggle = await screen.findByRole('switch', { name: /tracks own hours/i })
+    expect(toggle).not.toBeChecked()
+    await user.click(toggle)
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(put).toEqual({ tracks_own_hours: true }))
+    unmount()
+    renderAsUser(<UserDetailPage />, { user: users.admin, route: '/people/u-eli', path: '/people/:id' })
+    expect(await screen.findByLabelText(/first name/i)).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: /tracks own hours/i })).not.toBeInTheDocument()
+  })
 })

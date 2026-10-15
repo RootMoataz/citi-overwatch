@@ -35,7 +35,15 @@ export function can(user, action, resource = {}) {
     case 'messages.use':
       return true // every role; who they may write to is the server's contact list (backend rules/messaging.py)
     case 'timesheet.use':
-      return !isExecutive(user)
+      // Employees log hours; managers and admins only when an admin turned on "Tracks own hours" for them
+      // (backend app/rules/timesheets.py). Executives never: they're read-only.
+      return user.role === 'employee' || ((isAdmin(user) || isManager(user)) && Boolean(user.tracks_own_hours))
+    case 'timesheets.view':
+      return isAdmin(user) || isManager(user) || isExecutive(user)
+    case 'hr.view':
+      return isAdmin(user) || isExecutive(user)
+    case 'hr.submit':
+      return isAdmin(user)
     case 'audit.view':
       return isAdmin(user) || isExecutive(user)
     case 'allocation.view':

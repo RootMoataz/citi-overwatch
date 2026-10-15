@@ -23,7 +23,7 @@ describe('Layout', () => {
     expect(screen.getByRole('link', { name: /my week/i })).toHaveAttribute('href', '/')
     expect(nav).not.toHaveTextContent('Dashboard')
     expect(nav).toHaveTextContent('My timesheet')
-    expect(nav).not.toHaveTextContent('Approvals')
+    expect(nav).not.toHaveTextContent('Timesheets')
     expect(nav).not.toHaveTextContent('People')
     expect(screen.getByText('Home content')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /open navigation/i })).not.toBeInTheDocument()
@@ -40,7 +40,7 @@ describe('Layout', () => {
   test('admins see every section', () => {
     renderLayout(users.admin)
     const nav = screen.getByRole('navigation', { name: /main/i })
-    for (const item of ['Approvals', 'Allocation', 'Project requests', 'People', 'Audit log']) {
+    for (const item of ['Timesheets', 'Allocation', 'Project requests', 'People', 'Audit log']) {
       expect(nav).toHaveTextContent(item)
     }
   })
@@ -52,7 +52,7 @@ describe('Layout', () => {
       .toEqual(['People', 'Departments', 'Project requests', 'Archive', 'Audit log'])
     const work = screen.getByRole('list', { name: /^work$/i })
     expect(within(work).getAllByRole('link').map((a) => a.textContent))
-      .toEqual(['Control centre', 'Messages', 'Projects', 'My timesheet', 'Approvals', 'Allocation'])
+      .toEqual(['Control centre', 'Messages', 'Projects', 'Timesheets', 'Allocation'])
   })
 
   test('managers have no Admin group and keep Project requests and Archive with their work', () => {
@@ -60,7 +60,23 @@ describe('Layout', () => {
     expect(screen.queryByRole('list', { name: /^admin$/i })).not.toBeInTheDocument()
     const work = screen.getByRole('list', { name: /^work$/i })
     expect(within(work).getAllByRole('link').map((a) => a.textContent))
-      .toEqual(['Dashboard', 'Messages', 'Projects', 'My timesheet', 'Approvals', 'Allocation', 'Project requests', 'Archive'])
+      .toEqual(['Dashboard', 'Messages', 'Projects', 'Timesheets', 'Allocation', 'Project requests', 'Archive'])
+  })
+
+  test('a manager or admin who tracks their own hours also gets My timesheet', () => {
+    const { unmount } = renderLayout({ ...users.manager, tracks_own_hours: true })
+    expect(within(screen.getByRole('list', { name: /^work$/i })).getAllByRole('link').map((a) => a.textContent))
+      .toEqual(['Dashboard', 'Messages', 'Projects', 'My timesheet', 'Timesheets', 'Allocation', 'Project requests', 'Archive'])
+    unmount()
+    renderLayout({ ...users.admin, tracks_own_hours: true })
+    expect(screen.getByRole('navigation', { name: /main/i })).toHaveTextContent('My timesheet')
+  })
+
+  test('executives get Timesheets (HR submissions, read-only) and no My timesheet', () => {
+    renderLayout(users.executive)
+    const nav = screen.getByRole('navigation', { name: /main/i })
+    expect(nav).toHaveTextContent('Timesheets')
+    expect(nav).not.toHaveTextContent('My timesheet')
   })
 
   test('the current page is marked in the navigation', () => {
@@ -74,7 +90,7 @@ describe('Layout', () => {
     renderLayout(users.manager)
     expect(screen.queryByRole('navigation', { name: /main/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /open navigation/i }))
-    expect(await screen.findByRole('navigation', { name: /main/i })).toHaveTextContent('Approvals')
+    expect(await screen.findByRole('navigation', { name: /main/i })).toHaveTextContent('Timesheets')
   })
 
   test('user menu signs out', async () => {
@@ -155,13 +171,13 @@ describe('collapsible sidebar', () => {
   })
 
   test('waiting approvals show as a count when expanded and as a labelled dot when collapsed', async () => {
-    renderLayout(users.manager, () => {}, { badges: { '/approvals': 3 } })
-    const approvals = screen.getByRole('link', { name: /approvals/i })
+    renderLayout(users.manager, () => {}, { badges: { '/timesheets': 3 } })
+    const approvals = screen.getByRole('link', { name: /timesheets/i })
     expect(within(approvals).getByText('3')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /collapse sidebar/i }))
-    const collapsed = screen.getByRole('link', { name: /approvals/i })
+    const collapsed = screen.getByRole('link', { name: /timesheets/i })
     expect(within(collapsed).queryByText('3')).not.toBeInTheDocument()
-    expect(collapsed).toHaveAccessibleName('Approvals (3 waiting)')
+    expect(collapsed).toHaveAccessibleName('Timesheets (3 waiting)')
     expect(collapsed.querySelector('.MuiBadge-dot')).not.toBeNull()
   })
 

@@ -6,8 +6,9 @@ import ForcePasswordChange from './ForcePasswordChange.jsx'
 import { useSession } from './sessionContext.js'
 
 /** Guards app routes: sign-in first, then the forced password change, then the role check (a role that can't
- * open the page is sent home with a message; see ROUTE_ROLES). */
-export default function RequireAuth({ roles, children }) {
+ * open the page is sent home with a message; see ROUTE_ROLES) and, for pages that depend on the person, `allow`
+ * (see ROUTE_CHECKS). */
+export default function RequireAuth({ roles, allow, children }) {
   const { user, status } = useSession()
   const location = useLocation()
 
@@ -23,5 +24,6 @@ export default function RequireAuth({ roles, children }) {
   }
   if (status === 'restricted') return <ForcePasswordChange />
   if (roles && !roles.includes(user.role)) return <RedirectHome message={NO_ACCESS} />
+  if (allow && !allow(user)) return <RedirectHome message={NO_ACCESS} />
   return children ?? <Outlet />
 }

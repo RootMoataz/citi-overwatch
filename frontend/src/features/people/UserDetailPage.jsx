@@ -1,6 +1,7 @@
 import ArrowBack from '@mui/icons-material/ArrowBack'
 import {
-  Alert, Box, Button, Grid, InputAdornment, Link, List, ListItem, ListItemText, MenuItem, Paper, Skeleton, Stack, TextField,
+  Alert, Box, Button, FormControlLabel, FormHelperText, Grid, InputAdornment, Link, List, ListItem, ListItemText, MenuItem, Paper,
+  Skeleton, Stack, Switch, TextField,
 } from '@mui/material'
 import { useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
@@ -20,6 +21,9 @@ import { useToast } from '../../app/toast.js'
 import { ROLE_OPTIONS } from '../../lib/labels.js'
 
 const FIELDS = ['first_name', 'last_name', 'email', 'username', 'role', 'job_title', 'salary', 'manager_id', 'department_id']
+// Who keeps a personal timesheet: employees always; a manager or admin only with this on (executives never log).
+const TRACKS_ROLES = ['manager', 'admin']
+const tracksByDefault = (role) => role === 'employee'
 
 function Dependents({ error }) {
   if (error?.code !== 'HAS_DEPENDENTS') return <ErrorAlert error={error} sx={{ mb: 2 }} />
@@ -37,7 +41,7 @@ function Dependents({ error }) {
 
 export default function UserDetailPage() {
   const { id } = useParams()
-  const { user: me } = useSession()
+  const { user: me, setUser } = useSession()
   const person = useUser(id)
   const managers = useManagers()
   const departments = useDepartments({ includeArchived: true })
@@ -58,16 +62,24 @@ export default function UserDetailPage() {
   if (person.isLoading) return <Box>{back}<Skeleton variant="rounded" height={320} /></Box>
   if (person.error) return <Box>{back}<ErrorAlert error={person.error} /></Box>
   const p = person.data
-  const form = draft ?? Object.fromEntries(FIELDS.map((f) => [f, p[f] == null ? '' : String(p[f])]))
-  const set = (k) => (e) => setDraft({ ...form, [k]: e.target.value })
+  const form = draft ?? { ...Object.fromEntries(FIELDS.map((f) => [f, p[f] == null ? '' : String(p[f])])),
+    tracks_own_hours: Boolean(p.tracks_own_hours) }
+  // A new role starts from its own timesheet default (the server does the same).
+  const set = (k) => (e) => setDraft({ ...form, [k]: e.target.value,
+    ...(k === 'role' ? { tracks_own_hours: e.target.value === p.role ? Boolean(p.tracks_own_hours) : tracksByDefault(e.target.value) } : {}) })
   const self = String(p.id) === String(me.id)
 
   const save = async () => {
     setFailure(null)
     const body = {}
     for (const f of FIELDS) if (form[f] !== (p[f] == null ? '' : String(p[f]))) body[f] = f === 'salary' ? Number(form[f]) : form[f] || null
+    if (form.tracks_own_hours !== Boolean(p.tracks_own_hours)) body.tracks_own_hours = form.tracks_own_hours
     if (!Object.keys(body).length) return
-    try { await update.mutateAsync(body); setDraft(null) } catch (err) { setFailure(err) }
+    try {
+      const saved = await update.mutateAsync(body)
+      if (self) setUser?.({ tracks_own_hours: Boolean(saved?.tracks_own_hours) }) // My timesheet shows or hides now
+      setDraft(null)
+    } catch (err) { setFailure(err) }
   }
   const run = async (action) => {
     setFailure(null)
@@ -128,6 +140,16 @@ export default function UserDetailPage() {
               helperText={self ? "You can't change your own salary" : 'Used for project cost (salary ÷ 2,080 per hour)'}
               slotProps={{ input: { startAdornment: <InputAdornment position="start">$</InputAdornment> } }} />
           </Grid>
+          {TRACKS_ROLES.includes(form.role) ? (
+            <Grid size={12}>
+              <FormControlLabel label="Tracks own hours" control={
+                <Switch checked={form.tracks_own_hours} onChange={(e) => setDraft({ ...form, tracks_own_hours: e.target.checked })} />} />
+              <FormHelperText sx={{ mt: 0 }}>
+                Gives this {form.role === 'admin' ? 'admin' : 'manager'} a personal timesheet (My timesheet) to log hours on the
+                milestones they work on. Off by default: managing isn't logged.
+              </FormHelperText>
+            </Grid>
+          ) : null}
         </Grid>
         <Stack direction="row" sx={{ justifyContent: 'flex-end', gap: 1, mt: 2 }}>
           {draft ? <Button onClick={() => setDraft(null)}>Discard</Button> : null}

@@ -31,3 +31,8 @@ export const WORK_MODE = {
   push: { label: 'Push', help: 'The manager assigns people to milestones' },
   pull: { label: 'Pull', help: 'Team members claim milestones that are ready to start and have nobody on them' },
 }
+
+/** Hours already sent to HR that changed since: payroll needs them again (an admin re-sends them). */
+export const HR_CHANGED = 'Changed after HR submission — re-send'
+/** What an HR submission is, since there's no HR system to send to: a record and a payroll CSV. */
+export const HR_SUBMITTED = 'Submitted to HR (export ready)'

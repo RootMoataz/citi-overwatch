@@ -117,5 +117,5 @@ test("the delegate's alert opens the project's hours in Approvals", async () => 
   renderAsUser(<NotificationBell />, { user: users.admin, route: '/', path: '/' })
   await userEvent.click(await screen.findByRole('button', { name: 'Notifications, 1 unread' }))
   await userEvent.click(await screen.findByRole('menuitem', { name: /delegate approver for apollo/i }))
-  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/approvals?project=p1'))
+  await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/timesheets?project=p1'))
 })
