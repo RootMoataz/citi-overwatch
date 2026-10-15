@@ -18,6 +18,7 @@ import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import StatTile from '../projects/StatTile.jsx'
 import Section from './Section.jsx'
+import SmartInsightsPanel from './SmartInsightsPanel.jsx'
 
 const projectLink = (p, tab) => (
   <Link component={RouterLink} to={`/projects/${p.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{p.name}</Link>
@@ -128,6 +129,10 @@ export default function DashboardPage() {
       <Grid container spacing={2}>
         <Grid size={12}>
           <Risk atRisk={d.at_risk} />
+        </Grid>
+
+        <Grid size={12}>
+          <SmartInsightsPanel />
         </Grid>
 
         <Grid size={12}>

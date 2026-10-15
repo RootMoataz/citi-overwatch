@@ -1,5 +1,5 @@
 import { screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import AllocationPage from '../allocation/AllocationPage.jsx'
@@ -26,6 +26,8 @@ const allocations = [{ user: { id: 'u-emp', name: 'Eli Employee', job_title: 'En
     { id: 'p2', name: 'Atlas', planned: 10, logged: 0, approved: 0 }] }]
 
 describe('DashboardPage', () => {
+  beforeEach(() => server.use(http.get(`${API}/insights/smart`, () => HttpResponse.json([]))))
+
   test('dashboard renders a section for each of the seven questions', async () => {
     server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),
       http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
@@ -62,7 +64,8 @@ describe('DashboardPage', () => {
     const list = within(risk).getByRole('region', { name: /at risk of missing/i })
     expect(within(list).getAllByRole('link').map((a) => a.textContent)).toEqual(['Atlas', 'Zephyr', 'Orion'])
     const order = screen.getAllByRole('region').map((r) => r.getAttribute('aria-labelledby') && document.getElementById(r.getAttribute('aria-labelledby')).textContent)
-    expect(order.slice(0, 3)).toEqual(['Risk', 'Which projects are at risk of missing their deadlines?', 'What is the status of each active project?'])
+    expect(order.slice(0, 4)).toEqual(['Risk', 'Which projects are at risk of missing their deadlines?', 'Smart insights',
+      'What is the status of each active project?'])
   })
 
   test('with nothing at risk the counts are zero and the empty state shows', async () => {
