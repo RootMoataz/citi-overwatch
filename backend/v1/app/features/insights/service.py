@@ -15,8 +15,18 @@ DUE_SOON_DAYS = 14
 TENTH = Decimal("0.1")
 
 
-def _people_scope(conn, ctx: Ctx) -> list[dict]:
-    """Who the caller may see workload for: admins everyone; managers their projects' people and reports."""
+def _people_scope(conn, ctx: Ctx, department: str | None = None) -> list[dict]:
+    """Who the caller may see workload for: admins everyone; managers their projects' people and reports.
+    `department` (an id) keeps only that department's people."""
+    people = _people_in_reach(conn, ctx)
+    if department:
+        in_dept = {str(r["id"]) for r in query(conn, "SELECT id FROM users WHERE department_id = CAST(:d AS uuid)",
+                                               d=department)}
+        people = [p for p in people if str(p["id"]) in in_dept]
+    return people
+
+
+def _people_in_reach(conn, ctx: Ctx) -> list[dict]:
     if ctx.is_admin:
         return query(conn, """SELECT id, first_name, last_name, job_title, department_id FROM users
                               WHERE NOT is_archived AND role IN ('employee', 'manager')
@@ -59,11 +69,7 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
                 due_soon.append(entry)
 
     start = week_start(today)
-    people = {str(p["id"]): p for p in _people_scope(conn, ctx)}
-    if department:
-        in_dept = {str(r["id"]) for r in query(conn, "SELECT id FROM users WHERE department_id = CAST(:d AS uuid)",
-                                               d=department)}
-        people = {k: v for k, v in people.items() if k in in_dept}
+    people = {str(p["id"]): p for p in _people_scope(conn, ctx, department)}
     totals = query(conn, """SELECT t.user_id, sum(t.hours) AS h FROM time_entries t
                             JOIN milestones lm ON lm.id = t.milestone_id AND NOT lm.is_archived
                             JOIN projects lp ON lp.id = t.project_id AND NOT lp.is_archived

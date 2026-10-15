@@ -303,5 +303,5 @@ Admins keep a list of departments (the **Departments** page); people (set by an 
 - **Why the server:** the response's milestone lists and budgets are built from the visible projects, so filtering the rows once there keeps every widget consistent, and nothing outside the department is sent.
 - **Allocation widget:** `/allocations` returns each person's `department_id`, and the dashboard's "busiest people" table hides people from other departments.
 - **The choice is in the URL** (`/?department=<id>`), so a filtered dashboard can be shared or reloaded. "All departments" removes it. The filter only appears once there's at least one department.
-- **Not filtered:** the Smart insights panel (section 10) still covers everything you can see.
+- **Smart insights follow it too:** the panel (section 10) sends `GET /insights/smart?department=<id>`, which uses the same `visible_projects(department=)` for the project, budget and milestone insights, keeps only that department's people for the hours and rejection insights, and counts only its projects' entries in the approval backlog.
 - **Code:** [`DashboardPage.jsx`](../../frontend/src/features/dashboard/DashboardPage.jsx), [`app/features/departments/`](../../backend/v1/app/features/departments/) and [`DepartmentsPage.jsx`](../../frontend/src/features/departments/DepartmentsPage.jsx).

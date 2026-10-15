@@ -283,7 +283,7 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 |---|---|---|
 | GET | `/dashboard?department=` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals`. `department` (an ID) keeps only that department's projects in every project-based number, only its people in `over_allocated`, and only its projects' entries in `pending_approvals` ([department filter](LOGIC_WALKTHROUGH.md#12-the-dashboards-department-filter)) |
 | GET | `/allocations?week=` | Admins and managers. Per person (with their `department_id`): projects with planned, logged and approved hours, totals and `utilization_pct` |
-| GET | `/insights/smart` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
+| GET | `/insights/smart?department=` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. `department` (an ID) narrows them the way it narrows `/dashboard`: only that department's projects and people; `400 VALIDATION_ERROR` (`department: invalid_id`) if it isn't an ID. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
 | GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first. `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
 
 ```json

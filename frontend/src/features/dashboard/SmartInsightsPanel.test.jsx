@@ -46,6 +46,28 @@ describe('SmartInsightsPanel', () => {
     expect(within(panel).queryAllByRole('listitem')).toHaveLength(0)
   })
 
+  test('asks for every department when none is picked', async () => {
+    const asked = []
+    server.use(http.get(`${API}/insights/smart`, ({ request }) => {
+      asked.push(new URL(request.url).searchParams.get('department'))
+      return HttpResponse.json([])
+    }))
+    renderAsUser(<SmartInsightsPanel />, { user: users.manager, route: '/dashboard-under-test' })
+    expect(await screen.findByText('No suggestions right now')).toBeInTheDocument()
+    expect(asked).toEqual([null])
+  })
+
+  test('asks for the department it is given, and for everything without one', async () => {
+    const asked = []
+    server.use(http.get(`${API}/insights/smart`, ({ request }) => {
+      asked.push(new URL(request.url).searchParams.get('department'))
+      return HttpResponse.json(insights)
+    }))
+    renderAsUser(<SmartInsightsPanel department="d1" />, { user: users.manager, route: '/dashboard-under-test' })
+    expect(await screen.findAllByRole('listitem')).toHaveLength(4)
+    expect(asked).toEqual(['d1'])
+  })
+
   test('shows an error with a retry when the insights fail to load', async () => {
     render({ error: { code: 'INTERNAL_ERROR', message: 'Internal server error' } }, 500)
     const panel = await screen.findByRole('region', { name: 'Smart insights' })

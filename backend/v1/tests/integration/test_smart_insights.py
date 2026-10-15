@@ -126,3 +126,39 @@ def test_never_reveals_salary_or_rates(client, conn):
         user = query_one(conn, "SELECT * FROM users WHERE username = :u", u=username)
         text = json.dumps(smart(client, conn, user)).lower()
         assert "salary" not in text and "rate" not in text
+
+
+def test_department_filter_narrows_insights_like_the_dashboard(client, conn):
+    admin = make_user(conn, role="admin")
+    tech = query_one(conn, "INSERT INTO departments (name) VALUES ('Technology') RETURNING *")
+    ops = query_one(conn, "INSERT INTO departments (name) VALUES ('Operations') RETURNING *")
+    start, end = TODAY - timedelta(days=60), TODAY + timedelta(days=60)
+    teams = {}
+    for dept, label, first in ((tech, "tech", "Tess"), (ops, "ops", "Otto")):
+        project = make_project(conn, admin, name=f"In {label}", start=start, end=end)
+        person = make_user(conn, first_name=first, last_name=label.title())
+        for table, row in (("projects", project), ("users", person)):
+            conn.run(f"UPDATE {table} SET department_id = :d WHERE id = :i", d=dept["id"], i=row["id"])
+        add_member(conn, project, person)
+        make_milestone(conn, project, name=f"Late {label}", end=TODAY - timedelta(days=2), status="in_progress")
+        week_of_overtime(conn, person, make_milestone(conn, project, status="in_progress"))
+        teams[label] = (project, person)
+    stale = make_milestone(conn, teams["ops"][0], name="Stale ops", status="in_progress")
+    log_entry(conn, teams["ops"][1], stale, TODAY - timedelta(days=10), 4, status="pending")
+
+    token = token_for(conn, admin)
+    everything = json.dumps(client.request("GET", "/insights/smart", token=token)[1])
+    assert "Late ops" in everything and "Otto" in everything
+
+    status, body, _, _ = client.request("GET", f"/insights/smart?department={tech['id']}", token=token)
+    assert status == 200 and body
+    text = json.dumps(body)
+    assert "Late tech" in text and "Tess" in text
+    assert "ops" not in text.lower() and "Otto" not in text
+    assert "approval_backlog" not in by_kind(body)
+
+    status, body, _, _ = client.request("GET", "/insights/smart?department=nope", token=token)
+    assert (status, body["error"]["details"]) == (400, {"department": "invalid_id"})
+    emp_token = token_for(conn, teams["tech"][1])
+    status, body, _, _ = client.request("GET", "/insights/smart?department=nope", token=emp_token)
+    assert (status, body["error"]["details"]) == (400, {"department": "invalid_id"})

@@ -151,7 +151,7 @@ export default function DashboardPage() {
         </Grid>
 
         <Grid size={12}>
-          <SmartInsightsPanel />
+          <SmartInsightsPanel department={department} />
         </Grid>
 
         <Grid size={12}>

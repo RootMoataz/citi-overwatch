@@ -16,6 +16,7 @@ from app.features.projects.service import decorated, visible_projects
 from app.features.time.service import _today, _weekly_costs, week_start
 from app.rules.insights import REJECTION_WINDOW_DAYS, smart_insights
 from app.rules.overtime import forecast_total
+from app.validation import as_uuid
 
 
 def _name(row: dict) -> str:
@@ -76,15 +77,18 @@ def _people(conn, people: list[dict], today) -> list[dict]:
             for p in people]
 
 
-def _pending_dates(conn, ctx: Ctx) -> list:
+def _pending_dates(conn, ctx: Ctx, department: str | None) -> list:
     """Work dates of the entries waiting for this manager (the same set the dashboard counts)."""
     if not ctx.is_manager:
         return []
     manager_filter = "" if ctx.is_admin else " AND p.manager_id = CAST(:me AS uuid)"
+    if department:
+        manager_filter += " AND p.department_id = CAST(:dept AS uuid)"
     rows = query(conn, f"""SELECT t.work_date FROM time_entries t JOIN projects p ON p.id = t.project_id
                            JOIN milestones m ON m.id = t.milestone_id
                            WHERE t.status = 'pending' AND t.user_id <> CAST(:me AS uuid)
-                             AND NOT p.is_archived AND NOT m.is_archived{manager_filter}""", me=ctx.user_id)
+                             AND NOT p.is_archived AND NOT m.is_archived{manager_filter}""",
+                 me=ctx.user_id, **({"dept": department} if department else {}))
     return [r["work_date"] for r in rows]
 
 
@@ -101,13 +105,17 @@ def _rejections(conn, people: list[dict], today) -> list[dict]:
     return [{"user": {"id": r["id"], "name": _name(r)}, "decided_on": r["decided_on"]} for r in rows]
 
 
-def smart(conn, ctx: Ctx) -> list[dict]:
+def smart(conn, ctx: Ctx, params: dict | None = None) -> list[dict]:
+    """`department` (an id) narrows it like the dashboard: that department's projects and people only."""
+    department = (params or {}).get("department") or None
+    if department:
+        department = as_uuid(department, "department")
     today = _today()
-    people = _people_scope(conn, ctx)
+    people = _people_scope(conn, ctx, department)
     projects, milestones = [], []
     if ctx.is_manager:
-        rows = visible_projects(conn, ctx)
+        rows = visible_projects(conn, ctx, department=department)
         projects, milestones = _projects(conn, rows, today), _milestones(conn, rows)
     return smart_insights(today=today, projects=projects, milestones=milestones,
-                          people=_people(conn, people, today), pending_dates=_pending_dates(conn, ctx),
+                          people=_people(conn, people, today), pending_dates=_pending_dates(conn, ctx, department),
                           rejections=_rejections(conn, people, today))

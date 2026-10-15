@@ -34,6 +34,11 @@ describe('DashboardPage', () => {
 
   test('the department filter asks the server for that department and keeps it in the URL', async () => {
     const asked = []
+    const insightsAsked = []
+    server.use(http.get(`${API}/insights/smart`, ({ request }) => {
+      insightsAsked.push(new URL(request.url).searchParams.get('department'))
+      return HttpResponse.json([])
+    }))
     server.use(http.get(`${API}/dashboard`, ({ request }) => {
       const dept = new URL(request.url).searchParams.get('department')
       asked.push(dept)
@@ -49,6 +54,8 @@ describe('DashboardPage', () => {
     await user.click(screen.getByRole('option', { name: 'Technology' }))
     await waitFor(() => expect(asked).toContain('d1'))
     expect(asked[0]).toBeNull()
+    await waitFor(() => expect(insightsAsked).toContain('d1'))
+    expect(insightsAsked[0]).toBeNull()
     expect(screen.getByTestId('location')).toHaveTextContent('/?department=d1')
     await waitFor(() => expect(screen.queryByText('Nothing at risk')).toBeInTheDocument())
     const allocation = screen.getByRole('region', { name: /resources allocated/i })

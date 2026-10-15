@@ -10,7 +10,7 @@ def dashboard(req, ctx, conn):
 
 @router.route("GET", "/insights/smart")
 def smart_insights(req, ctx, conn):
-    return json_response(200, smart.smart(conn, ctx))
+    return json_response(200, smart.smart(conn, ctx, req.query))
 
 
 @router.route("GET", "/allocations", roles={"admin", "manager"})

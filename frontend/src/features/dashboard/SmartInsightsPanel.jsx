@@ -11,7 +11,9 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import Section from './Section.jsx'
 
 // Under the 'dashboard' key, so anything that refreshes the dashboard (approvals, project edits) refreshes these too.
-const useSmartInsights = () => useQuery({ queryKey: ['dashboard', 'smart'], queryFn: () => api.get('/insights/smart') })
+const useSmartInsights = (department) => useQuery({
+  queryKey: ['dashboard', 'smart', department], queryFn: () => api.get('/insights/smart', { department }),
+})
 
 const SEVERITY = {
   high: { label: 'High', color: 'error', Icon: ErrorOutline },
@@ -43,9 +45,10 @@ function InsightRow({ insight }) {
   )
 }
 
-/** Rule-based suggestions (no AI): ranked by severity, at most six, each linking to where to act. */
-export default function SmartInsightsPanel() {
-  const insights = useSmartInsights()
+/** Rule-based suggestions (no AI): ranked by severity, at most six, each linking to where to act.
+ *  `department` (an id, or '' for all) narrows them like the rest of the dashboard. */
+export default function SmartInsightsPanel({ department = '' }) {
+  const insights = useSmartInsights(department)
   let body
   if (insights.isLoading) body = <Skeleton variant="rounded" height={120} />
   else if (insights.error) body = <ErrorAlert error={insights.error} onRetry={() => insights.refetch()} />
