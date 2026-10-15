@@ -1,7 +1,8 @@
 import Schedule from '@mui/icons-material/ScheduleOutlined'
 import {
-  Box, Button, Chip, Grid, LinearProgress, Link, Skeleton, Stack, Typography,
+  Box, Button, Chip, Grid, Link, Skeleton, Stack, Typography,
 } from '@mui/material'
+import { useTheme } from '@mui/material/styles'
 import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useClaimMilestone, useMilestonesOf, useProfile, useProjects } from '../../api/queries.js'
@@ -13,6 +14,7 @@ import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import { chartPalette } from '../../app/chartColors.js'
 import { formatDate, formatHours } from '../../lib/format.js'
 import Section from '../dashboard/Section.jsx'
 
@@ -24,22 +26,56 @@ const projectLink = (project) => (
   <Link component={RouterLink} to={`/projects/${project.id}?tab=milestones`} underline="hover">{project.name}</Link>
 )
 
+/** Logged hours as a bar against the 40h week (dashed), with the planned hours as an ink marker. Past 40h the bar runs
+ * over the line in the alert colour; the chips below say the same in words. */
+function WeekMeter({ logged, planned, over }) {
+  const palette = chartPalette(useTheme())
+  const max = Math.max(WEEKLY_CAP, logged, planned)
+  const at = (v) => `${Math.min((v / max) * 100, 100)}%`
+  return (
+    <Box sx={{ my: 1.5 }}>
+      <Box role="progressbar" aria-label="Hours logged this week" aria-valuemin={0} aria-valuemax={100}
+        aria-valuenow={Math.round((logged / WEEKLY_CAP) * 100)} aria-valuetext={`${formatHours(logged)} of ${WEEKLY_CAP}h, ${formatHours(planned)} planned`}
+        sx={{ position: 'relative', height: 22 }}>
+        <Box sx={{ position: 'absolute', left: 0, top: 3, bottom: 3, width: at(WEEKLY_CAP), bgcolor: palette.track, borderRadius: '0 4px 4px 0' }} />
+        <Box sx={{ position: 'absolute', left: 0, top: 5, bottom: 5, width: at(logged), minWidth: logged > 0 ? 3 : 0,
+          bgcolor: over ? palette.alert : palette.ok, borderRadius: '0 4px 4px 0', transition: 'width 600ms ease' }} />
+        <Box sx={{ position: 'absolute', top: -2, bottom: -2, left: at(WEEKLY_CAP), borderLeft: `2px dashed ${palette.reference}`,
+          transform: 'translateX(-1px)' }} />
+        {planned > 0 ? (
+          <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: at(planned), width: 3, transform: 'translateX(-1.5px)',
+            bgcolor: palette.marker, borderRadius: 1, boxShadow: (t) => `0 0 0 2px ${t.palette.background.paper}` }} />
+        ) : null}
+      </Box>
+      <Stack direction="row" useFlexGap aria-hidden sx={{ gap: 2, mt: 0.75, flexWrap: 'wrap' }}>
+        {[['bar', 'Logged'], ['marker', 'Planned'], ['reference', '40h week']].map(([kind, label]) => (
+          <Stack key={kind} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+            <Box sx={{ flexShrink: 0, ...{
+              bar: { width: 14, height: 8, borderRadius: '0 3px 3px 0', bgcolor: over ? palette.alert : palette.ok },
+              marker: { width: 3, height: 14, borderRadius: 1, bgcolor: palette.marker },
+              reference: { height: 14, borderLeft: `2px dashed ${palette.reference}` } }[kind] }} />
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{label}</Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  )
+}
+
 /** This week's logged hours against the 40-hour week, with a way into the timesheet. */
 function ThisWeek({ week }) {
   const logged = Number(week.logged)
   const overtime = Number(week.overtime) > 0
   return (
     <Section question="This week" hint={`Week of ${formatDate(week.week_start)} · pending and approved hours`}>
-      <Typography variant="h2" component="p" sx={{ color: overtime ? 'warning.main' : 'text.primary' }}>
+      <Typography variant="h2" component="p" sx={{ color: overtime ? 'error.main' : 'text.primary' }}>
         <CountUp value={logged} format={(v) => `${formatHours(v === logged ? v : Math.round(v))} of ${WEEKLY_CAP}h`} />
       </Typography>
-      <LinearProgress variant="determinate" value={Math.min((logged / WEEKLY_CAP) * 100, 100)}
-        color={overtime ? 'warning' : 'primary'} aria-label="Hours logged this week"
-        sx={{ height: 10, borderRadius: 5, my: 1.5 }} />
+      <WeekMeter logged={logged} planned={Number(week.planned)} over={overtime} />
       <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', mb: 2 }}>
         <Chip size="small" variant="outlined" label={`${formatHours(week.planned)} planned`} />
         {overtime
-          ? <Chip size="small" color="warning" label={`${formatHours(week.overtime)} over 40h`} />
+          ? <Chip size="small" color="error" label={`⚠ ${formatHours(week.overtime)} over 40h`} />
           : <Chip size="small" variant="outlined" label={`${formatHours(Math.max(WEEKLY_CAP - logged, 0))} left`} />}
       </Stack>
       <Button component={RouterLink} to="/timesheet" variant="contained" startIcon={<Schedule />}>Open my timesheet</Button>

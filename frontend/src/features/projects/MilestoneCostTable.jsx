@@ -2,6 +2,7 @@ import { Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, Ta
 import { useMilestoneCosts } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import ExportCsvButton from '../../components/ExportCsvButton.jsx'
+import DataBar from '../../components/DataBar.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { STATUS } from '../../app/theme.js'
 import { num } from '../../lib/csv.js'
@@ -36,7 +37,8 @@ export default function MilestoneCostTable({ project }) {
         <Typography variant="h3" component="h2">Cost by milestone</Typography>
         <ExportCsvButton name={`${slug(project.name)}-milestone-costs`} columns={csvColumns(showHours)} rows={[...items, total]} />
       </Stack>
-      <Table size="small" aria-label={`Cost by milestone on ${project.name}`}>
+      <Table size="small" aria-label={`Cost by milestone on ${project.name}`}
+        sx={{ '& td, & th': { fontVariantNumeric: 'tabular-nums' }, '& tbody tr:not([data-total-row]):nth-of-type(even)': { bgcolor: 'action.hover' } }}>
         <TableHead>
           <TableRow>
             <TableCell>Milestone</TableCell>
@@ -51,15 +53,15 @@ export default function MilestoneCostTable({ project }) {
               {showHours ? <><TableCell align="right">{formatHours(r.approved_hours)}</TableCell>
                 <TableCell align="right">{formatHours(r.pending_hours)}</TableCell></> : null}
               <TableCell align="right">{formatMoney(r.approved_cost)}</TableCell>
-              <TableCell align="right">{formatPct(r.budget_pct)}</TableCell>
+              <TableCell align="right"><DataBar value={r.budget_pct} label={`${r.milestone.name} share of budget`} /></TableCell>
             </TableRow>
           ))}
-          <TableRow data-total-row>
+          <TableRow data-total-row sx={{ '& th, & td': { borderTop: 2, borderColor: 'divider', borderBottom: 0 } }}>
             <TableCell component="th" scope="row" sx={bold}>Total (consumed)</TableCell>
             {showHours ? <><TableCell align="right" sx={bold}>{formatHours(total.approved_hours)}</TableCell>
               <TableCell align="right" sx={bold}>{formatHours(total.pending_hours)}</TableCell></> : null}
             <TableCell align="right" sx={bold}>{formatMoney(total.approved_cost)}</TableCell>
-            <TableCell align="right" sx={bold}>{formatPct(total.budget_pct)}</TableCell>
+            <TableCell align="right" sx={{ ...bold, pr: 2 }}>{formatPct(total.budget_pct)}</TableCell>
           </TableRow>
         </TableBody>
       </Table>

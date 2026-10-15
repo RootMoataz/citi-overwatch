@@ -20,6 +20,8 @@ import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { num } from '../../lib/csv.js'
 import { formatDate, formatPct } from '../../lib/format.js'
+import { budgetTone } from '../../lib/chartData.js'
+import DataBar from '../../components/DataBar.jsx'
 import { PROGRESS_WEIGHTING, RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import ProjectForm from './ProjectForm.jsx'
@@ -100,8 +102,9 @@ export default function ProjectsPage() {
       renderCell: ({ row }) => <TeamAvatars project={row} /> },
     { field: 'progress_pct', headerName: 'Progress', description: `Milestones done, weighted by difficulty. ${PROGRESS_WEIGHTING}`,
       width: 104, renderCell: ({ value }) => <Progress value={value} compact /> },
-    { field: 'budget_pct', headerName: 'Budget', description: 'Share of the budget used so far', width: 84,
-      renderCell: ({ value }) => formatPct(value) },
+    { field: 'budget_pct', headerName: 'Budget', description: 'Share of the budget used so far', width: 132,
+      align: 'right', headerAlign: 'right',
+      renderCell: ({ row, value }) => <DataBar value={value} tone={budgetTone(value)} label={`${row.name} budget used`} minWidth={0} /> },
     { field: 'predicted_end_date', headerName: 'Due', width: 120, valueFormatter: (value) => formatDate(value) },
     { field: 'at_risk_reasons', headerName: 'Risk', flex: 1.2, minWidth: 172, sortable: false,
       renderCell: ({ value }) => <Box sx={{ py: 0.5 }}><RiskBadges reasons={value} /></Box> },

@@ -1,9 +1,7 @@
 import {
-  Box, Button, Chip, Grid, LinearProgress, Link, List, ListItem, ListItemText, MenuItem, Skeleton, Stack, Table, TableBody,
+  Box, Button, Chip, Grid, Link, List, ListItem, ListItemText, MenuItem, Skeleton, Stack, Table, TableBody,
   TableCell, TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
-import { BarChart } from '@mui/x-charts/BarChart'
 import WarningAmber from '@mui/icons-material/WarningAmberRounded'
 import EventBusy from '@mui/icons-material/EventBusyOutlined'
 import TrendingUp from '@mui/icons-material/TrendingUpRounded'
@@ -16,7 +14,9 @@ import { useId } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useAllocations, useDashboard, useDepartments } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
-import { chartColors, STATUS } from '../../app/theme.js'
+import { STATUS } from '../../app/theme.js'
+import BulletChart from '../../components/BulletChart.jsx'
+import DataBar from '../../components/DataBar.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -25,6 +25,7 @@ import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney, formatPct, mondayOf } from '../../lib/format.js'
+import { budgetRows, budgetTone, niceMax, ticksTo, utilizationTone } from '../../lib/chartData.js'
 import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import Reveal from '../../components/Reveal.jsx'
@@ -45,33 +46,38 @@ const projectLink = (p, tab) => (
 
 // The over-40h and busiest lists only hold the viewer's own people (the server scopes them).
 const MANAGED = { managed: true }
-const overBudget = (b) => Number(b.budget) > 0 && Number(b.forecast) > Number(b.budget)
+const NUM = { fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
 
-/** Q7: planned vs consumed vs forecast per project. Over-budget forecasts are red, marked ⚠ on the axis,
- * flagged in the tooltip and named in the note under the chart, so colour is never the only signal. */
+/** Q7: consumed vs budget per project as bullets on a shared "% of budget" scale, so a $250K project doesn't dwarf a
+ * $60K one. Budget is the track, consumed the bar, the forecast at the end date the ink marker; most used first.
+ * Spent past the budget is red, a forecast past it amber, and both are named in the row and the note under the chart. */
 function BudgetChart({ budgets }) {
-  const colors = chartColors(useTheme())
-  const over = budgets.filter(overBudget)
-  const overNames = new Set(over.map((b) => b.name))
-  const isOver = (i) => overBudget(budgets[i])
-  const money = (v) => formatMoney(v)
+  const rows = budgetRows(budgets)
+  const over = rows.filter((r) => r.hasBudget && r.forecastPct > 100)
+  const max = Math.min(niceMax(Math.max(100, ...rows.map((r) => Math.max(r.usedPct, r.forecastPct))), 25), 200)
+  const status = (r) => (r.tone === 'alert' ? ' · ⚠ over budget' : r.tone === 'warning' ? ' · ⚠ forecast over budget' : '')
   return (
     <>
-      <BarChart height={300} borderRadius={4} grid={{ horizontal: true }}
-        xAxis={[{ scaleType: 'band', data: budgets.map((b) => b.name), label: 'Project',
-          valueFormatter: (name, ctx) => (ctx.location === 'tick' && overNames.has(name) ? `⚠ ${name}` : name) }]}
-        yAxis={[{ label: 'US dollars', width: 90, valueFormatter: money }]}
-        series={[
-          { data: budgets.map((b) => Number(b.budget)), label: 'Budget (planned)', color: colors.planned, valueFormatter: money },
-          { data: budgets.map((b) => Number(b.consumed)), label: 'Consumed (approved hours)', color: colors.actual,
-            valueFormatter: money },
-          { data: budgets.map((b) => Number(b.forecast)), label: 'Forecast at end date', color: colors.forecast,
-            colorGetter: ({ dataIndex }) => (isOver(dataIndex) ? colors.over : colors.forecast),
-            valueFormatter: (v, { dataIndex }) => `${formatMoney(v)}${isOver(dataIndex) ? ' (over budget)' : ''}` },
-        ]} />
-      <Typography role="note" variant="body2" sx={{ mt: 1, color: over.length ? 'error.main' : 'text.secondary' }}>
+      <BulletChart ariaLabel="Budget used per project" max={max} ticks={ticksTo(max, max > 100 ? 50 : 25)}
+        tickFormat={(v) => `${v}%`} axisLabel="Share of budget (100% = the whole budget)"
+        legend={[{ kind: 'track', label: 'Budget' }, { kind: 'bar', label: 'Consumed (approved hours)' },
+          { kind: 'marker', label: 'Forecast at end date' },
+          ...(rows.some((r) => r.tone === 'warning') ? [{ kind: 'bar', tone: 'warning', label: 'Forecast over budget' }] : []),
+          ...(rows.some((r) => r.tone === 'alert') ? [{ kind: 'bar', tone: 'alert', label: 'Over budget' }] : [])]}
+        rows={rows.map((r) => ({
+          id: r.id, label: r.name, tone: r.tone,
+          track: r.hasBudget ? 100 : null, value: r.hasBudget ? r.usedPct : null, marker: r.hasBudget ? r.forecastPct : null,
+          valueText: r.hasBudget ? `${formatPct(r.usedPct)} used` : 'No budget',
+          detail: r.hasBudget
+            ? `${formatMoney(r.consumed)} of ${formatMoney(r.budget)} · forecast ${formatMoney(r.forecast)} (${formatPct(r.forecastPct)})${status(r)}`
+            : `${formatMoney(r.consumed)} consumed, no budget set`,
+          summary: r.hasBudget
+            ? `${r.name}\nBudget ${formatMoney(r.budget)}\nConsumed ${formatMoney(r.consumed)} (${formatPct(r.usedPct)})\nForecast at end date ${formatMoney(r.forecast)} (${formatPct(r.forecastPct)})${status(r)}`
+            : `${r.name}\nNo budget set\nConsumed ${formatMoney(r.consumed)}`,
+        }))} />
+      <Typography role="note" variant="body2" sx={{ mt: 1.5, color: over.length ? 'error.main' : 'text.secondary' }}>
         {over.length
-          ? <>⚠ Forecast over budget: {over.map((b) => `${b.name} (${formatMoney(b.forecast)} forecast vs ${formatMoney(b.budget)} budget)`).join('; ')}. Their forecast bars are red.</>
+          ? <>⚠ Forecast over budget: {over.map((r) => `${r.name} (${formatMoney(r.forecast)} forecast vs ${formatMoney(r.budget)} budget)`).join('; ')}.</>
           : 'Every forecast is within budget.'}
       </Typography>
     </>
@@ -202,19 +208,15 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
             </Grid>
             {active.length ? (
               <TableScroll><Table size="small" aria-label="Active projects">
-                <TableHead><TableRow><TableCell>Project</TableCell><TableCell>Progress (weighted by difficulty)</TableCell>
-                  <TableCell>Budget used</TableCell><TableCell>Due</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell>Project</TableCell><TableCell align="right">Progress (weighted by difficulty)</TableCell>
+                  <TableCell align="right">Budget used</TableCell><TableCell align="right">Due</TableCell></TableRow></TableHead>
                 <TableBody>
                   {active.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell>{projectLink(p)}</TableCell>
-                      <TableCell sx={{ minWidth: 140 }}>
-                        <LinearProgress variant="determinate" value={Math.min(p.progress_pct, 100)} sx={{ height: 6, borderRadius: 3 }}
-                          aria-label={`${p.name} progress`} />
-                        <Typography variant="caption">{formatPct(p.progress_pct)}</Typography>
-                      </TableCell>
-                      <TableCell>{formatPct(p.budget_pct)}</TableCell>
-                      <TableCell>{formatDate(p.predicted_end_date)}</TableCell>
+                      <TableCell align="right"><DataBar value={p.progress_pct} label={`${p.name} progress`} minWidth={100} /></TableCell>
+                      <TableCell align="right"><DataBar value={p.budget_pct} tone={budgetTone(p.budget_pct)} label={`${p.name} budget used`} minWidth={100} /></TableCell>
+                      <TableCell align="right" sx={NUM}>{formatDate(p.predicted_end_date)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -246,13 +248,15 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
             {approver ? (busiest.length ? (
               <TableScroll><Table size="small" aria-label="Busiest people this week">
                 <TableHead><TableRow><TableCell>Person</TableCell><TableCell align="right">Planned</TableCell>
-                  <TableCell align="right">Logged</TableCell><TableCell align="right">Utilization</TableCell></TableRow></TableHead>
+                  <TableCell align="right">Logged</TableCell><TableCell align="right">Utilization of 40h</TableCell></TableRow></TableHead>
                 <TableBody>
                   {busiest.map((r) => (
                     <TableRow key={r.user.id}>
-                      <TableCell><PersonWithAvatar person={r.user} context={MANAGED} /></TableCell><TableCell align="right">{formatHours(r.planned_total)}</TableCell>
-                      <TableCell align="right">{formatHours(r.logged_total)}</TableCell>
-                      <TableCell align="right" sx={{ color: r.utilization_pct > 100 ? 'warning.main' : undefined }}>{formatPct(r.utilization_pct)}</TableCell>
+                      <TableCell><PersonWithAvatar person={r.user} context={MANAGED} /></TableCell>
+                      <TableCell align="right" sx={NUM}>{formatHours(r.planned_total)}</TableCell>
+                      <TableCell align="right" sx={NUM}>{formatHours(r.logged_total)}</TableCell>
+                      <TableCell align="right"><DataBar value={r.utilization_pct} tone={utilizationTone(r.utilization_pct)}
+                        label={`${r.user.name} utilization`} minWidth={110} /></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

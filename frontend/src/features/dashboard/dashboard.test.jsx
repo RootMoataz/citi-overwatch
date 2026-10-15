@@ -119,6 +119,12 @@ describe('DashboardPage', () => {
     const note = within(section).getByRole('note')
     expect(note).toHaveTextContent('Forecast over budget: Atlas ($70,000 forecast vs $60,000 budget)')
     expect(note).not.toHaveTextContent('Apollo')
+    // One bullet per project on a % of budget scale, most used first; the over-budget forecast is said in words too.
+    const rows = within(within(section).getByRole('list', { name: /budget used per project/i })).getAllByRole('listitem')
+    expect(rows.map((r) => r.getAttribute('aria-label'))).toEqual([
+      'Atlas. Budget $60,000. Consumed $58,000 (96.7%). Forecast at end date $70,000 (116.7%) · ⚠ forecast over budget',
+      'Apollo. Budget $250,000. Consumed $50,000 (20%). Forecast at end date $120,000 (48%)'])
+    expect(within(rows[0]).getByText('96.7% used')).toBeInTheDocument()
   })
 
   test('budget chart says when every forecast is within budget', async () => {
@@ -152,7 +158,8 @@ describe('AllocationPage', () => {
   test('shows planned vs logged per person with utilization', async () => {
     server.use(http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
     renderAsUser(<AllocationPage />, { user: users.manager, route: '/allocation', path: '/allocation' })
-    const row = (await screen.findByText('Eli Employee')).closest('tr')
+    const grid = await screen.findByRole('table', { name: /allocation by person and project/i })
+    const row = within(grid).getByText('Eli Employee').closest('tr')
     expect(within(row).getByText('112.5%')).toBeInTheDocument()
     expect(within(row).getByText('30h planned · 45h logged')).toBeInTheDocument()
   })
@@ -167,6 +174,9 @@ describe('AllocationPage', () => {
     expect(note).toHaveTextContent('Over 40h this week: Eli Employee (45h)')
     expect(note).not.toHaveTextContent('Ada')
     expect(within(note).getByRole('link', { name: /eli employee/i })).toHaveAttribute('href', '/people/u-emp/profile')
+    const bars = within(within(chart).getByRole('list', { name: /logged and planned hours per person/i })).getAllByRole('listitem')
+    expect(bars.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Eli Employee. Logged 45h (over 40h). Planned 40h', 'Ada Lovelace. Logged 12h. Planned 20h'])
     expect(screen.getByRole('region', { name: /logged hours by project/i })).toBeInTheDocument()
     const grid = screen.getByRole('table', { name: /allocation by person and project/i })
     expect(within(grid).getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')

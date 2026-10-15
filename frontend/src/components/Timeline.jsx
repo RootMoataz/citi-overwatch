@@ -15,6 +15,8 @@ export default function Timeline({ items, range }) {
   const [today] = useState(() => Date.now()) // read the clock once, not on every render
   const todayPct = ((today - start) / span) * 100
   const names = Object.fromEntries(items.map((i) => [String(i.id), i.name]))
+  // The key lists only the statuses on this timeline, in the order they first appear.
+  const shown = [...new Set(items.map((i) => (STATUS[i.display_status] ? i.display_status : 'not_started')))]
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
@@ -24,9 +26,9 @@ export default function Timeline({ items, range }) {
       </Stack>
       <Box sx={{ position: 'relative' }}>
         {todayPct >= 0 && todayPct <= 100 ? (
-          <Box aria-hidden sx={{ position: 'absolute', top: 0, bottom: 0, left: `${todayPct}%`, width: 2,
-            bgcolor: 'error.main', opacity: 0.6, zIndex: 1 }}>
-            <Typography variant="caption" sx={{ position: 'absolute', top: -18, left: 4, color: 'error.main' }}>Today</Typography>
+          <Box aria-hidden sx={{ position: 'absolute', top: 0, bottom: 0, left: `${todayPct}%`, width: 0,
+            borderLeft: 2, borderLeftStyle: 'dashed', borderColor: 'text.secondary', zIndex: 1 }}>
+            <Typography variant="caption" sx={{ position: 'absolute', top: -18, left: 4, color: 'text.secondary', fontWeight: 600 }}>Today</Typography>
           </Box>
         ) : null}
         <Box component="ul" aria-label="Milestone timeline" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 1.5 }}>
@@ -57,6 +59,22 @@ export default function Timeline({ items, range }) {
           })}
         </Box>
       </Box>
+      {shown.length ? (
+        <Stack component="ul" direction="row" useFlexGap aria-label="Status colours"
+          sx={{ listStyle: 'none', p: 0, m: 0, mt: 2, gap: 2, flexWrap: 'wrap' }}>
+          {shown.map((status) => (
+            <Stack component="li" key={status} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+              <Box aria-hidden sx={{ width: 16, height: 8, borderRadius: 4, bgcolor: (t) => statusColor(STATUS[status], t),
+                backgroundImage: status === 'blocked' ? 'repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 3px, transparent 3px 6px)' : 'none' }} />
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{STATUS[status].label}</Typography>
+            </Stack>
+          ))}
+          {todayPct >= 0 && todayPct <= 100 ? <Stack component="li" direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+            <Box aria-hidden sx={{ height: 12, borderLeft: 2, borderLeftStyle: 'dashed', borderColor: 'text.secondary' }} />
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>Today</Typography>
+          </Stack> : null}
+        </Stack>
+      ) : null}
     </Paper>
   )
 }

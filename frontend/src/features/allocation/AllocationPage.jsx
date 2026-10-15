@@ -1,7 +1,7 @@
 import ChevronLeft from '@mui/icons-material/ChevronLeft'
 import ChevronRight from '@mui/icons-material/ChevronRight'
 import {
-  Card, CardContent, IconButton, LinearProgress, Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer,
+  Card, CardContent, IconButton, Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Typography,
 } from '@mui/material'
 import { useMediaQuery } from 'react-responsive'
@@ -14,8 +14,10 @@ import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import { num } from '../../lib/csv.js'
-import { addDays, formatDate, formatHours, formatPct, mondayOf } from '../../lib/format.js'
+import { addDays, formatDate, formatHours, mondayOf } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
+import { utilizationTone } from '../../lib/chartData.js'
+import DataBar from '../../components/DataBar.jsx'
 import AllocationCharts from './AllocationCharts.jsx'
 
 // The server lists only the viewer's own people here, so a manager may open each profile.
@@ -37,17 +39,10 @@ const CSV_COLUMNS = [
   { header: 'Person utilization (%)', value: (r) => num(r.person.utilization_pct) },
 ]
 
-function Utilization({ value }) {
-  return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 140 }}>
-      <LinearProgress variant="determinate" value={Math.min(value, 100)} color={value > 100 ? 'warning' : 'primary'}
-        sx={{ flexGrow: 1, height: 8, borderRadius: 4 }} aria-label="Utilization" />
-      <Typography variant="body2" sx={{ minWidth: 52, textAlign: 'right', color: value > 100 ? 'warning.main' : undefined }}>
-        {formatPct(value)}
-      </Typography>
-    </Stack>
-  )
-}
+/** Logged hours as a share of the 40h week, with an inline bar; over 100% is the alert colour and flagged ⚠. */
+const Utilization = ({ value, name }) => (
+  <DataBar value={value} tone={utilizationTone(value)} label={`${name} utilization`} minWidth={140} />
+)
 
 export default function AllocationPage() {
   const desktop = useMediaQuery(DESKTOP_QUERY)
@@ -75,13 +70,13 @@ export default function AllocationPage() {
       {people.length ? <AllocationCharts people={people} /> : null}
       {!allocations.isLoading && !people.length ? <EmptyState title="Nobody to show" description="People appear once they're on a project you manage." /> : null}
       {people.length && desktop ? (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small" aria-label="Allocation by person and project">
+        <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: '75vh' }}>
+          <Table size="small" stickyHeader aria-label="Allocation by person and project">
             <TableHead>
               <TableRow>
                 <TableCell>Person</TableCell>
                 {projects.map((p) => <TableCell key={p.id}>{p.name}</TableCell>)}
-                <TableCell>Utilization</TableCell>
+                <TableCell align="right">Utilization of 40h</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -93,9 +88,9 @@ export default function AllocationPage() {
                   </TableCell>
                   {projects.map((p) => {
                     const c = cell(person, p)
-                    return <TableCell key={p.id}>{c ? `${formatHours(c.planned)} planned · ${formatHours(c.logged)} logged` : '—'}</TableCell>
+                    return <TableCell key={p.id} sx={{ fontVariantNumeric: 'tabular-nums' }}>{c ? `${formatHours(c.planned)} planned · ${formatHours(c.logged)} logged` : '—'}</TableCell>
                   })}
-                  <TableCell><Utilization value={person.utilization_pct} /></TableCell>
+                  <TableCell align="right"><Utilization value={person.utilization_pct} name={person.user.name} /></TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -108,7 +103,7 @@ export default function AllocationPage() {
             <Card key={person.user.id}>
               <CardContent>
                 <Typography variant="subtitle1" component="div"><PersonWithAvatar person={person.user} context={MANAGED} /></Typography>
-                <Utilization value={person.utilization_pct} />
+                <Utilization value={person.utilization_pct} name={person.user.name} />
                 {person.projects.map((c) => (
                   <Typography key={c.id} variant="body2" sx={{ color: 'text.secondary' }}>
                     {c.name}: {formatHours(c.planned)} planned · {formatHours(c.logged)} logged

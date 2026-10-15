@@ -239,6 +239,9 @@ describe('ProjectDetailPage', () => {
     expect(within(total).getByText('$50,000')).toBeInTheDocument()
     expect(screen.getAllByText('$50,000')).toHaveLength(2)                 // the Consumed tile and the total row
     expect(screen.queryByText(/hourly rate:/i)).not.toBeInTheDocument()
+    const bullet = screen.getByRole('list', { name: /consumed against budget/i })
+    expect(within(bullet).getByRole('listitem')).toHaveAccessibleName(/^Budget \$250,000\. Consumed \$50,000 \(20%\)/)
+    expect(within(row).getByRole('meter', { name: /schema mapping share of budget/i })).toHaveAttribute('aria-valuenow', '12')
   })
 
   test('budget tab hides milestone hours from employees but keeps the costs', async () => {
