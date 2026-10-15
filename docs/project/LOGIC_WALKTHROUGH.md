@@ -180,16 +180,19 @@ flowchart LR
   P[project, not completed, not archived] --> R1{any milestone past its end date<br/>and not completed?}
   P --> R2{today > predicted end date?}
   P --> R3{"budget > 0 and<br/>% budget used − weighted % milestones completed ≥ 20?"}
+  P --> R4{any milestone kicked back<br/>and waiting for review?}
   R1 -- yes --> A1[OVERDUE_MILESTONE]
   R2 -- yes --> A2[PAST_DUE]
   R3 -- yes --> A3[BUDGET_BURN]
-  A1 & A2 & A3 --> OUT[at_risk_reasons = every reason that applies<br/>at risk ⇔ list is non-empty]
+  R4 -- yes --> A4[BLOCKED_MILESTONE]
+  A1 & A2 & A3 & A4 --> OUT[at_risk_reasons = every reason that applies<br/>at risk ⇔ list is non-empty]
 ```
 
 - **Code:** [`app/rules/at_risk.py`](../../backend/v1/app/rules/at_risk.py), a pure function of dates and numbers.
 - **The inputs** (milestone counts, consumed budget) are gathered in one query by [`app/features/insights/`](../../backend/v1/app/features/insights/) and [`projects/`](../../backend/v1/app/features/projects/).
 - **Completed % is weighted by difficulty** (easy 1, medium 2, hard 3), the same figure as the project's progress.
 - **A project with no milestones** counts as 0% complete, so spending on it can flag burn.
+- **`BLOCKED_MILESTONE`** (a milestone with status `blocked`, see [§9b](#9b-kickbacks-and-escalation)): the dashboard's Risk tiles count these one by one (`blocked_count` per at-risk project) and list them under `milestones.blocked`.
 - **Each reason is shown as a badge** by [`RiskBadges.jsx`](../../frontend/src/components/RiskBadges.jsx), on the dashboard, in the project list and on the project overview.
 
 **Worked example:**
@@ -207,11 +210,11 @@ flowchart TD
   D --> F{reached id itself?}
   F -- yes --> CE[400 DEPENDENCY_CYCLE<br/>'That dependency would create a loop']
   F -- no --> OK[replace the edges, audit]
-  OK --> B["display_status = blocked while any<br/>predecessor isn't completed (computed, not stored)"]
+  OK --> B["display_status = waiting while any<br/>predecessor isn't completed (computed, not stored)"]
 ```
 
 - **Code:** `creates_cycle()` and `dependency_order()` in [`app/rules/cycles.py`](../../backend/v1/app/rules/cycles.py). `dependency_order()` is a topological sort that the timeline uses, with ties broken by start date.
-- **The blocked status** is computed in [`app/rules/milestone_status.py`](../../backend/v1/app/rules/milestone_status.py). A blocked milestone can't move out of `not_started`.
+- **Waiting on dependencies** is computed (the view's `blocked: true`, shown as `display_status: "waiting"`, "Waiting on dependencies"). A waiting milestone can't move out of `not_started` ([`app/rules/milestone_status.py`](../../backend/v1/app/rules/milestone_status.py)). Until migration 009 this showed as "Blocked"; *blocked* now means a kickback ([§9b](#9b-kickbacks-and-escalation)).
 - **Example:** with *Discovery → Schema Mapping → Cutover*, making *Discovery* depend on *Cutover* walks Cutover → Schema Mapping → Discovery. That reaches the milestone being edited, so the change is rejected.
 - **UI:** the dependency picker is in [`MilestoneDialog.jsx`](../../frontend/src/features/milestones/MilestoneDialog.jsx), and the date bars in [`Timeline.jsx`](../../frontend/src/components/Timeline.jsx).
 
@@ -230,29 +233,89 @@ flowchart TD
 - **Code:** [`app/rules/capacity.py`](../../backend/v1/app/rules/capacity.py) holds the rule, and [`app/features/members/service.py`](../../backend/v1/app/features/members/service.py) runs the overlap query.
 - **The cap is planned vs logged:** planned hours are a hard cap, while *logged* hours over 40 are only a warning (section 5). Allocation answers "who is over-planned?", and the dashboard's Q5 answers "who actually worked over 40?".
 
-## 9. Auto-routing after "Ready for review"
+## 9. Auto-routing after "Ready for review" and "Completed"
 
 ```mermaid
 flowchart TD
   A["POST /milestones/{id}/status {ready_for_review}"] --> B{sent by one of<br/>its assignees?}
   B -- no --> Done[status change only]
   B -- yes --> C[candidates: milestones on projects<br/>where the person is a member]
-  C --> D["pick_support_milestone():<br/>in progress, not archived, active non-archived project,<br/>not already assigned, not this milestone"]
+  C --> D["pick_support_milestone():<br/>in progress, not archived, active non-archived project,<br/>not already assigned, not this milestone,<br/>at least one required skill (if it lists any)"]
   D --> E{any left?}
   E -- no --> Done
-  E -- yes --> F[most urgent: overdue first,<br/>then priority critical → high → medium → low,<br/>then nearest end date, then name]
+  E -- yes --> F[most urgent: overdue first,<br/>then priority critical → high → medium → low,<br/>then workflow order, then nearest end date, then name]
   F --> G{"fits_weekly_plan(other planned, planned here)?"}
   G -- no --> Done
   G -- yes --> H["INSERT milestone_assignees role = 'supporting'<br/>audit auto_assign_support (actor = the employee)<br/>SUPPORT_ASSIGNED to them, SUPPORT_ROUTED to that project's manager"]
 ```
 
-- **Code:** the choice is a pure function in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py). `_route_to_support()` in [`app/features/milestones/service.py`](../../backend/v1/app/features/milestones/service.py) gathers the candidates and writes the result inside the status change's transaction, so either all of it happens or none of it does.
+- **Code:** the choice is a pure function in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py). `route_to_support()` in [`app/features/milestones/routing.py`](../../backend/v1/app/features/milestones/routing.py) gathers the candidates and writes the result inside the status change's transaction, so either all of it happens or none of it does.
 - **Planned hours don't change:** the person is already a member of the project, so they're only routed while their existing plan fits under 40 hours ([`app/rules/capacity.py`](../../backend/v1/app/rules/capacity.py), with the same overlap query as section 8).
-- **Order:** overdue milestones first; then priority (critical, high, medium, low); then the nearest end date; then the name, so the choice is stable. So a *critical* milestone due in 40 days beats a *medium* one due in 3, but any overdue milestone beats both. Priority never changes progress; that's difficulty's job.
+- **Skills:** a milestone that lists required skills only takes someone with at least one of them; one that lists none can take anyone on the team.
+- **Order:** overdue milestones first; then priority (critical, high, medium, low); then `next_milestone_order_key()` (the planned workflow order, see below); then the nearest end date; then the name, so the choice is stable. So a *critical* milestone due in 40 days beats a *medium* one due in 3, but any overdue milestone beats both. Priority never changes progress; that's difficulty's job.
 - **They stay on the reviewed milestone**, in case the manager sends it back.
 - **A manager moving the milestone** isn't routed anywhere unless they're one of its assignees.
 - **Example:** Ada marks *Discovery* ready for review. The in-progress milestones on her projects that she isn't on are *Build* (ended 3 days ago) and *Cutover* (due in 5 days), so she's added to *Build* as support. She sees "You've been added as support on Build (Apollo), due …", and the project's manager sees "Ada Lovelace was auto-routed to support Build".
 - **UI:** the toast after **Ready for review** names the milestone, and a "Supporting" chip ([`SupportingChip.jsx`](../../frontend/src/components/SupportingChip.jsx)) appears next to the person's name on the milestone card and on their timesheet row.
+
+### 9a. After "Completed": the next milestone as primary
+
+When the manager (or an admin) marks a milestone **Completed**, everyone who was on it (primary or supporting) frees up and may be made the **primary** assignee of the next ready milestone in the same project. It's assigned straight away (no accept step): the employee and the manager are told, and the manager can undo or change it with the normal assignee picker.
+
+```mermaid
+flowchart TD
+  A["POST /milestones/{id}/status {completed}"] --> P{project active,<br/>push mode, not archived?}
+  P -- no --> Done[status change only]
+  P -- yes --> F["freed: the people on it, still active and on the team,<br/>with skills, load (open milestones they're on)<br/>and whether the project fits their 40h plan"]
+  F --> R["ready milestones in the project:<br/>not started · not archived · every predecessor completed ·<br/>no primary assignee yet"]
+  R --> L["plan_completion_routing(): most urgent ready milestone first<br/>(overdue → priority → workflow order → end date → name)"]
+  L --> Q{"anyone free who fits?<br/>on the team, under 40h, not on it already,<br/>≥ 1 required skill (if any listed)"}
+  Q -- no --> U[unfilled]
+  Q -- yes --> T["best person: most required skills matched,<br/>then lowest load, then name"]
+  T --> K["lock the milestone row (FOR UPDATE), re-check it's still free"]
+  K -- taken meanwhile --> L
+  K -- free --> W["INSERT primary · audit auto_assign ·<br/>AUTO_ASSIGNED to them, AUTO_ROUTED to the manager"]
+  W --> L
+  U --> N{"did this completion unblock it?"}
+  N -- yes --> M["NO_QUALIFIED_PERSON to the manager:<br/>'No qualified person for Testing (needs QA) in Apollo'"]
+```
+
+- **Code:** the decision is pure: `plan_completion_routing()`, `ready_for_routing()`, `person_fits()`, `tie_break()` and `next_milestone_order_key()` in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py), unit tested in `tests/unit/test_rules_routing_completion.py`. `route_after_completion()` in [`app/features/milestones/routing.py`](../../backend/v1/app/features/milestones/routing.py) gathers the facts and writes inside the status change's transaction.
+- **Never bypassed:** a milestone with any non-archived predecessor not completed isn't ready. Nor is one that already has a primary assignee (no duplicate or conflicting assignments), one the person is already on, an archived one, or one on a planned, on-hold, completed, archived or **pull** project (in pull mode the team claims work, §11).
+- **Status stays Not started.** Being assigned isn't starting: the person presses Start when they begin, which keeps "in progress" honest for the dashboard, the idle-milestone insight and the timeline.
+- **Several people at once:** the most urgent ready milestone is filled first, by the person with the most of its required skills, then the lowest current load, then the name; each person gets at most one. The others go on to the next ready milestone.
+- **Two completions at once** (different transactions) can pick the same milestone. Each locks the milestone row and re-reads it before inserting; the second waits for the first, sees its primary and moves on. Across transactions the first to commit wins; within one completion the tie-break above decides. Tested with two connections in `tests/integration/test_completion_routing.py`.
+- **Nobody qualified:** milestones this completion unblocked that nobody could take get one `NO_QUALIFIED_PERSON` alert to the project manager, naming the missing skills.
+- **Audit:** `auto_assign` (actor = whoever completed it), read as "Morgan Manager auto-assigned Ben Okafor to Cutover after Schema Mapping was completed (skill: Backend Development, DevOps)".
+- **Workflow order:** `next_milestone_order_key(m)` returns `(m["sequence"] or 0,)`. Nothing selects a `sequence` yet, so every milestone ties and the end date decides; when milestones gain a workflow-order column, selecting it into the candidate rows is all it takes.
+- **Demo:** completing *Schema Mapping* (Eli, Ana, Ben) unblocks *Cutover*, which needs Backend Development or DevOps. Ben has both, so he gets it.
+- **UI:** the toast after **Complete** names who went where; the bell links straight to the milestone (`?tab=milestones&milestone=<id>`), where the manager can reassign it.
+
+## 9b. Kickbacks and escalation
+
+```mermaid
+stateDiagram-v2
+  not_started --> blocked: assignee kicks back (category + reason)
+  in_progress --> blocked: assignee kicks back
+  blocked --> in_progress: manager / delegate / admin "Return to employee" (instructions)
+  blocked --> not_started: "Put back in the queue" (e.g. after reassigning)
+```
+
+- **Who:** only the milestone's assignees kick back, and only work not yet handed in (`not_started`, `in_progress`). The project's manager, an admin, or the project's active delegate resolves it, with a note (instructions) that goes to the person who raised it and everyone on the milestone.
+- **Never via the status endpoint:** `blocked` can't be set or left with `POST /status` (`can_transition()` refuses both), so every blocked milestone has exactly one open kickback (a partial unique index allows one open per milestone). While it's blocked the manager can still edit it and change its assignees.
+- **Reason:** category `blocker`, `technical_issue`, `unclear_requirement` or `other`, and an explanation of 10 to 2,000 characters.
+- **Alerts:** `KICKBACK_RAISED` to the manager and the active delegate ("Ben Okafor kicked back Cutover (Apollo Data Migration): Technical issue – …"); `KICKBACK_RESOLVED` back to the team.
+- **Risk:** a blocked milestone adds `BLOCKED_MILESTONE` to its project's at-risk reasons (§6) and a high-severity `milestone_blocked` smart insight that leads the list (§10).
+- **History:** `GET /milestones/{id}/history` returns every kickback with its resolution, and the milestone's audit events as sentences (status changes, assignment changes including auto-routing and claims, kickbacks, resolutions, edits, updates).
+- **Code:** [`app/rules/milestone_status.py`](../../backend/v1/app/rules/milestone_status.py) (states), [`app/features/milestones/workflow.py`](../../backend/v1/app/features/milestones/workflow.py) (kickbacks, progress updates, history). UI: [`KickbackDialog.jsx`](../../frontend/src/features/milestones/KickbackDialog.jsx), [`KickbackPanel.jsx`](../../frontend/src/features/milestones/KickbackPanel.jsx), [`MilestoneHistory.jsx`](../../frontend/src/features/milestones/MilestoneHistory.jsx).
+
+### Progress updates (the work log)
+
+Assignees, the project's manager and admins post an update (1–2,000 characters, optional whole-number percent 0–100); anyone who can see the milestone reads them, newest first. The card shows the latest percent. The manager gets one `MILESTONE_UPDATE` alert per milestone, refreshed by each new update while unread. Audited as `post_update` ("Eli Employee posted an update on Schema Mapping").
+
+### Skills
+
+Admins keep the catalogue (`/skills`; migration 009 seeds eight). Admins set anyone's skills; a manager sets those of the **employees** they manage: direct reports and people on live projects they manage (the profile-visibility rule without the pending-hours clause), never their own or another manager's. Skills show on profiles, the people list and the project team. Archived skills stay attached but stop showing and stop counting for routing.
 
 ## 10. Smart insights
 

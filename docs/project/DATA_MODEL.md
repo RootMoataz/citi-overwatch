@@ -23,6 +23,12 @@ erDiagram
   milestones ||--o{ milestone_assignees : "assigned to"
   users ||--o{ milestone_assignees : "works on"
   milestones ||--o{ milestone_notes : has
+  milestones ||--o{ milestone_updates : "work log"
+  milestones ||--o{ milestone_kickbacks : "kicked back"
+  milestones ||--o{ milestone_skills : needs
+  skills ||--o{ milestone_skills : ""
+  users ||--o{ user_skills : has
+  skills ||--o{ user_skills : ""
   users ||--o{ milestone_notes : writes
   users ||--o{ time_entries : logs
   milestones ||--o{ time_entries : "logged to"
@@ -78,7 +84,9 @@ erDiagram
     uuid project_id FK
     date start_date
     date end_date "≥ start_date"
-    milestone_status status "not_started | in_progress | ready_for_review | completed"
+    milestone_status status "not_started | in_progress | ready_for_review | completed | blocked"
+    text objective "≤ 300"
+    text completion_criteria "one item per line, ≤ 4000"
     text difficulty "easy | medium | hard"
     text priority "low | medium | high | critical"
   }
@@ -121,17 +129,27 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `milestones` | The brief's deliverables. The stored status is one of four values; **blocked is never stored**, it's computed from the predecessors. The service checks that both dates fall within the project's dates.<br>• `difficulty` is `easy`, `medium` (the default) or `hard` (a `CHECK`), weighted 1 / 2 / 3 in progress. Only the project's manager or an admin sets it.<br>• `priority` is `low`, `medium` (the default) or `high` / `critical` (a `CHECK`): how urgent the milestone is, separate from difficulty and never part of progress. It orders auto-routing and the dashboard's deliverables and raises deadline insights. Set by the same people as difficulty. |
+| `milestones` | The brief's deliverables. The stored status is `not_started`, `in_progress`, `ready_for_review`, `completed` or `blocked` (kicked back and waiting for the manager's review; migration 009 added it with `ALTER TYPE … ADD VALUE`). **Waiting on predecessors is never stored**, it's computed.<br>• `objective` (≤ 300) and `completion_criteria` (≤ 4,000, one checklist item per line) default to `''` (migration 009). The service checks that both dates fall within the project's dates.<br>• `difficulty` is `easy`, `medium` (the default) or `hard` (a `CHECK`), weighted 1 / 2 / 3 in progress. Only the project's manager or an admin sets it.<br>• `priority` is `low`, `medium` (the default) or `high` / `critical` (a `CHECK`): how urgent the milestone is, separate from difficulty and never part of progress. It orders auto-routing and the dashboard's deliverables and raises deadline insights. Set by the same people as difficulty. |
 | `milestone_dependencies` | Directed edges: `milestone_id` depends on `depends_on_id`.<br>• The primary key is the pair.<br>• `CHECK` forbids self-dependency.<br>• The service enforces the same-project and no-loop rules (see [LOGIC_WALKTHROUGH §7](LOGIC_WALKTHROUGH.md#7-dependency-loop-detection)). |
-| `milestone_assignees` | Who works on a milestone; the primary key is the pair. The person must be a project member. Removing someone from the team removes these links too.<br>• `role` is `primary` (the default, and every assignment a manager makes) or `supporting` (added by [auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)). Re-saving a milestone's assignees keeps the role of the people who stay. |
+| `milestone_assignees` | Who works on a milestone; the primary key is the pair. The person must be a project member. Removing someone from the team removes these links too.<br>• `role` is `primary` (the default, and every assignment a manager makes) or `supporting` (added by [auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review-and-completed)). Re-saving a milestone's assignees keeps the role of the people who stay. |
 | `milestone_notes` | Append-only progress notes, 1–2,000 characters, with `author_id` and the time. |
+| `milestone_updates` | The work log (migration 009): `author_id`, `body` (`CHECK` 1–2,000), optional `percent_complete` (`CHECK` 0–100), `created_at`. Indexed on `(milestone_id, created_at DESC)`. |
+| `milestone_kickbacks` | Escalations (migration 009): `raised_by`, `category` (`blocker`, `technical_issue`, `unclear_requirement`, `other`), `reason` (`CHECK` 10–2,000), `previous_status`, `raised_at`; then `resolved_by`, `resolution` (`returned` or `requeued`), `resolution_note`, `resolved_at`, all set together (`CHECK`). A partial unique index allows **one open kickback per milestone**. See [LOGIC_WALKTHROUGH §9b](LOGIC_WALKTHROUGH.md#9b-kickbacks-and-escalation). |
+| `milestone_skills` | A milestone's required skills, `PRIMARY KEY (milestone_id, skill_id)`. None: anyone on the team qualifies for auto-routing. |
+
+### Skills (migration 009)
+
+| Table | Purpose and notes |
+|---|---|
+| `skills` | The admin-managed catalogue: `name` (1–60, unique regardless of case via `lower(name)`), `is_archived`. The migration seeds QA, Frontend Development, Backend Development, UI/UX Design, DevOps, Data Engineering, Business Analysis and Project Management. |
+| `user_skills` | `PRIMARY KEY (user_id, skill_id)`, `added_by`, `created_at`. Set by admins, or managers for the employees they manage. |
 
 ### Time and money
 
 | Table | Purpose and notes |
 |---|---|
 | `time_entries` | One row per person, milestone and day (`UNIQUE (user_id, milestone_id, work_date)`).<br>• `project_id` is copied from the milestone, so budget queries need no join.<br>• `over_40` is frozen at save time.<br>• `edited_after_decision` drives the "Edited" tag.<br>• `hourly_rate` (salary ÷ 2,080) is copied on approval.<br>• `CHECK` requires a `rejection_reason` on rejected rows.<br>• Indexed on `(user_id, work_date)` for weekly totals and `(project_id, status)` for consumed budget. |
-| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY`, `DELEGATE_ASSIGNED` or `MESSAGE_RECEIVED` (`payload.conversation_id`; at most one unread per conversation and recipient, refreshed by each new message).<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
+| `notifications` | In-app alerts. `type` is plain text: `OVER_40H`, `ENTRY_REJECTED`, `SUPPORT_ASSIGNED`, `SUPPORT_ROUTED`, `MILESTONE_CLAIMED`, `TIMESHEET_EMPTY`, `DELEGATE_ASSIGNED`, `AUTO_ASSIGNED`, `AUTO_ROUTED`, `NO_QUALIFIED_PERSON`, `MILESTONE_UPDATE` (one unread per milestone and recipient), `KICKBACK_RAISED`, `KICKBACK_RESOLVED` or `MESSAGE_RECEIVED` (`payload.conversation_id`; at most one unread per conversation and recipient, refreshed by each new message).<br>• `UNIQUE (type, subject_user_id, week_start)` guarantees one `OVER_40H` alert per person-week, even if two saves race.<br>• The other types leave `week_start` NULL (NULLs never clash), because they can repeat within a week. A rejection keeps its week in `payload`.<br>• `read_at` marks it read. |
 
 ### Messages (migration 007)
 
