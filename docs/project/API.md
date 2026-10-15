@@ -262,12 +262,31 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 |---|---|---|
 | GET | `/dashboard` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals` |
 | GET | `/allocations?week=` | Admins and managers. Per person: projects with planned, logged and approved hours, totals and `utilization_pct` |
+| GET | `/insights/smart` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
 | GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admin. Newest first. `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject` |
 
 ```json
 [{"user": {"id": "81c483ea-…", "name": "Eli Employee", "job_title": "Software Engineer"},
   "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "planned": 30.0, "logged": 45.0, "approved": 0.0}],
   "planned_total": 30.0, "logged_total": 45.0, "utilization_pct": 112.5}, "…"]
+```
+
+`GET /insights/smart` as `manager.demo`. `link.to` is `project` (with `id`, and `tab` for milestone insights), `person` (`id`) or `approvals`. Salaries and rates are never included:
+
+```json
+[{"id": "over_allocated:81c483ea-…", "kind": "over_allocated", "severity": "high",
+  "title": "Eli Employee is over 40 hours",
+  "detail": "Eli Employee has logged 45h this week, 5h over the 40h cap.",
+  "link": {"to": "person", "id": "81c483ea-…"}},
+ {"id": "rebalance:81c483ea-…>5d0e7b12-…", "kind": "rebalance", "severity": "medium",
+  "title": "Rebalance work from Eli Employee to Ana Ruiz",
+  "detail": "Ana Ruiz has 0h this week while Eli Employee is at 45h; consider shifting some work to Ana Ruiz.",
+  "link": {"to": "person", "id": "5d0e7b12-…"}},
+ {"id": "approval_backlog:pending", "kind": "approval_backlog", "severity": "medium", "title": "Approvals are piling up",
+  "detail": "1 time entry is waiting for approval from more than 3 days ago (the oldest is 7 days old).",
+  "link": {"to": "approvals"}},
+ {"id": "rejections:5d0e7b12-…", "kind": "rejections", "severity": "low", "title": "Ana Ruiz keeps getting hours rejected",
+  "detail": "Ana Ruiz has had 2 time entries rejected in the last 30 days.", "link": {"to": "person", "id": "5d0e7b12-…"}}]
 ```
 
 ## Archive

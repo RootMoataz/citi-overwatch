@@ -218,6 +218,14 @@ def _load(conn) -> None:
     log("ana.ruiz", apollo, mapping, rejected_day, 4, "rejected",
         reason="Logged to the wrong milestone. Please move these hours to Discovery.")
 
+    # Smart insights: a second rejection for Ana (a pattern) and last week's hours still awaiting approval.
+    for username, day, status, reason in (
+            ("ana.ruiz", monday - timedelta(days=10), "rejected", "Duplicate of hours already logged that day."),
+            ("ben.okafor", monday - timedelta(days=4), "pending", None)):
+        conn.run("DELETE FROM time_entries WHERE user_id = :u AND milestone_id = :m AND work_date = :d",
+                 u=people[username]["id"], m=mapping["id"], d=day)
+        log(username, apollo, mapping, day, 4, status, reason=reason)
+
     # This week: Eli logs 9h a day, so Friday crosses 40h and the manager is alerted once.
     total = Decimal(0)
     for offset in WEEKDAYS:

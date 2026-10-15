@@ -232,3 +232,37 @@ flowchart TD
 - **A manager moving the milestone** isn't routed anywhere unless they're one of its assignees.
 - **Example:** Ada marks *Discovery* ready for review. The in-progress milestones on her projects that she isn't on are *Build* (ended 3 days ago) and *Cutover* (due in 5 days), so she's added to *Build* as support. She sees "You've been added as support on Build (Apollo), due …", and the project's manager sees "Ada Lovelace was auto-routed to support Build".
 - **UI:** the toast after **Ready for review** names the milestone, and a "Supporting" chip ([`SupportingChip.jsx`](../../frontend/src/components/SupportingChip.jsx)) appears next to the person's name on the milestone card and on their timesheet row.
+
+## 10. Smart insights
+
+A "Smart insights" panel under the dashboard's Risk section, labelled *Rule-based suggestions from your live data*. It's plain rules over our own data: no AI and no outside calls (the Lambda has no internet access).
+
+```mermaid
+flowchart TD
+  A["GET /insights/smart"] --> S{role}
+  S -- admin --> ALL[every project and person]
+  S -- manager --> MINE["projects they can see (as on /dashboard)<br/>their reports and their projects' people<br/>pending entries on projects they manage"]
+  S -- employee --> ME[only their own hours and rejections]
+  ALL & MINE & ME --> R["smart_insights(): seven pure rules"]
+  R --> K["rank(): high → medium → low, rule order breaks ties<br/>at most 2 per kind, 6 in all"]
+```
+
+| Rule (`kind`) | Fires when | Severity | Links to |
+|---|---|---|---|
+| `budget_overrun` | Not completed, budget > 0, and the forecast at the end date (the dashboard's forecast) is above the budget | high | project |
+| `milestone_overdue` | A milestone on a non-completed project is past its end date and still *not started* or *in progress* | high | project's milestones |
+| `over_allocated` | Someone has more than 40 logged hours (pending + approved) this week | high | person |
+| `budget_burn` | Not completed, budget > 0, and % budget used − weighted % complete ≥ 20 points (the at-risk `BUDGET_BURN` threshold) | medium | project |
+| `milestone_due_soon` | Due in the next 0–7 days and still *not started* or *in progress* | medium | project's milestones |
+| `rebalance` | Paired with each over-40 person: the least-loaded person under 20h (50% of 40h), preferring someone who shares a project with them, each suggested once | medium | the person with spare time |
+| `approval_backlog` | Entries waiting for this manager (not their own) whose work date is more than 3 days ago | medium | approvals |
+| `idle_milestone` | An *in progress* milestone on a project that isn't on hold has had no pending or approved hours for 14+ days (counted from its start if nobody ever logged) | medium | project's milestones |
+| `rejections` | Someone has had 2+ entries rejected in the last 30 days | low | person |
+
+- **Code:** the rules and thresholds are pure functions and constants in [`app/rules/insights.py`](../../backend/v1/app/rules/insights.py), unit-tested in `tests/unit/test_rules_insights.py`. [`app/features/insights/smart.py`](../../backend/v1/app/features/insights/smart.py) gathers the data with the dashboard's own scoping helpers (`visible_projects`, `_people_scope`, the same forecast).
+- **Each insight** is `{id, kind, severity, title, detail, link}`; `detail` is one sentence with the actual numbers and names.
+- **Employees get insights, not a 403:** `/dashboard` is open to every role and filtered to what you may see, so this follows the same pattern. An employee only hears about themselves (over 40 hours, repeated rejections), never about budgets, projects or colleagues.
+- **No salary or rate leaves the server.** Rates only feed the cost totals that `/dashboard` already shows as money.
+- **UI:** [`SmartInsightsPanel.jsx`](../../frontend/src/features/dashboard/SmartInsightsPanel.jsx). Each row has a severity icon and colour plus a *High/Medium/Low* chip (so colour isn't the only signal), the title, the detail and a link. With nothing to say it shows "No suggestions right now". It shares the dashboard's query key, so approvals and project edits refresh it.
+
+**Worked example (demo data, as `manager.demo`):** Eli has 45h logged this week (*high*); Ana, on the same project, has 0h, so she's suggested to take some of his work (*medium*); Ben's hours from last Thursday are still pending (*medium*); and Ana has had two entries rejected this month (*low*).
