@@ -160,6 +160,95 @@ describe('TimesheetPage', () => {
     expect(within(screen.getByRole('rowheader', { name: /schema mapping/i })).queryByText('Supporting')).not.toBeInTheDocument()
   })
 
+  test('a note added through the note popover is saved with the hours', async () => {
+    let body = null
+    server.use(weekHandler(), http.put(`${API}/time-entries`, async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ week_start: WEEK, rows, entries: [], totals: { logged: 6, approved: 0 },
+        user: { id: users.employee.id, name: 'Eli Employee' } })
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Mon Oct 12'), '6')
+    // A new cell with hours and no note: its note icon asks for attention before saving.
+    const noteButton = screen.getByRole('button', { name: 'Add work note, Build, Mon Oct 12' })
+    expect(noteButton).toHaveAttribute('data-attention', 'true')
+    await user.click(noteButton)
+    const field = await screen.findByLabelText(/what did you work on/i)
+    await user.type(field, 'too short')
+    expect(screen.getByText('At least 10 characters')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeDisabled()
+    await user.type(field, ' no more: wired the settings form')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByRole('button', { name: 'Edit work note, Build, Mon Oct 12' })).not.toHaveAttribute('data-attention')
+    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WEEK, hours: 6,
+      note: 'too short no more: wired the settings form' }] }))
+  })
+
+  test('a note alone changes an existing entry', async () => {
+    let body = null
+    server.use(weekHandler([entry({ needs_note: true, source: 'tracked', tracked_hours: 8 })]),
+      http.put(`${API}/time-entries`, async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({ week_start: WEEK, rows, entries: [], totals: { logged: 8, approved: 0 },
+          user: { id: users.employee.id, name: 'Eli Employee' } })
+      }))
+    renderSheet()
+    const user = userEvent.setup()
+    expect(await screen.findByText('Add a note')).toBeInTheDocument()
+    expect(screen.getByText('Tracked')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add work note, Schema Mapping, Mon Oct 12' }))
+    await user.type(await screen.findByLabelText(/what did you work on/i), 'Mapped the address tables')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.queryByText('Add a note')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /save week/i }))
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WEEK, hours: 8,
+      note: 'Mapped the address tables' }] }))
+  })
+
+  test('cells say where their hours came from', async () => {
+    server.use(weekHandler([entry({ source: 'manual', tracked_hours: 0 }),
+      entry({ id: 'e2', work_date: '2026-10-13', source: 'mixed', tracked_hours: 3, note: 'Reviewed the mapping' })]))
+    renderSheet()
+    expect(await screen.findByText('Manual')).toBeInTheDocument()
+    expect(screen.getByText('Mixed')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit work note, Schema Mapping, Tue Oct 13' })).toBeInTheDocument()
+  })
+
+  test('a save refused for missing proof lists the cells that need a note', async () => {
+    server.use(weekHandler(), http.put(`${API}/time-entries`, () => HttpResponse.json({ error: {
+      code: 'PROOF_REQUIRED', message: 'Add a work note (10-500 characters) or post a progress update that day for: ...',
+      details: { cells: [
+        { milestone_id: 'm2', milestone: 'Build', work_date: WEEK, reason: 'no_note' },
+        { milestone_id: 'm1', milestone: 'Schema Mapping', work_date: '2026-10-13', reason: 'note_too_short' }] },
+      request_id: 'r1' } }, { status: 400 })))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Mon Oct 12'), '6')
+    await user.type(screen.getByLabelText('Schema Mapping, Tue Oct 13'), '2')
+    await user.click(screen.getByRole('button', { name: /save week/i }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Add a work note before saving')
+    expect(within(alert).getByText('Build, Mon Oct 12')).toBeInTheDocument()
+    expect(within(alert).getByText('Schema Mapping, Tue Oct 13 (note too short)')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add work note, Build, Mon Oct 12' })).toHaveAttribute('data-attention', 'true')
+  })
+
+  test('timer buttons sit on the rows of the current week only', async () => {
+    server.use(weekHandler())
+    renderAsUser(<TimesheetPage />, { user: users.employee, route: '/timesheet', path: '/timesheet' })
+    expect(await screen.findByRole('button', { name: 'Start timer on Schema Mapping' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start timer on Build' })).toBeInTheDocument()
+  })
+
+  test('past weeks have no timer buttons', async () => {
+    server.use(weekHandler())
+    renderAsUser(<TimesheetPage />, { user: users.employee, route: '/timesheet?week=2026-09-28', path: '/timesheet' })
+    expect(await screen.findByRole('rowheader', { name: /schema mapping/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /start timer/i })).not.toBeInTheDocument()
+  })
+
   test('changing week updates the URL', async () => {
     server.use(weekHandler())
     renderSheet()

@@ -7,6 +7,8 @@ import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatDayLabel, formatHours } from '../../lib/format.js'
 import { HR_CHANGED } from '../../lib/labels.js'
+import FlagChips from '../timer/FlagChips.jsx'
+import SourceChip from '../timer/SourceChip.jsx'
 import BreakdownPanel from './BreakdownPanel.jsx'
 
 function RejectDialog({ item, onClose }) {
@@ -38,6 +40,18 @@ function RejectDialog({ item, onClose }) {
   )
 }
 
+/** The proof of work beside an entry: its work note, or the progress update the person posted that day. */
+function Proof({ item }) {
+  const note = (item.entry.note ?? '').trim()
+  const update = item.progress_update?.body
+  if (!note && !update) return null
+  return (
+    <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.25, overflowWrap: 'anywhere' }}>
+      {note ? `“${note}”` : `Progress update: ${update}`}
+    </Typography>
+  )
+}
+
 /** One pending entry: who, when, how much, the label, approve/reject, and the budget impact. */
 export default function ApprovalRow({ item, showContext = true }) {
   const approve = useApproveEntry()
@@ -65,6 +79,10 @@ export default function ApprovalRow({ item, showContext = true }) {
             <Chip size="small" variant="outlined" color="info" label={`Delegated from ${item.delegated_from.name}`}
               sx={{ ml: 1, height: 20 }} />
           ) : null}
+          <SourceChip source={item.entry.source} hours={item.entry.hours} trackedHours={item.entry.tracked_hours}
+            sx={{ ml: 1 }} />
+          <Proof item={item} />
+          <FlagChips flags={item.flags} sx={{ mt: 0.5 }} />
         </Box>
         <Stack direction="row" sx={{ gap: 1, flexShrink: 0 }}>
           <Button size="small" onClick={() => setOpen((o) => !o)} aria-expanded={open}>Budget impact</Button>

@@ -50,7 +50,9 @@ export function pickNotification(n) {
 export const pickInsight = (i) => ({ id: i?.id, severity: i?.severity, title: redactText(i?.title ?? ''),
   detail: redactText(i?.detail ?? ''), link: pick(i?.link ?? {}, ['to', 'id', 'tab']) })
 
-export const pickApproval = (a) => ({ entry: { id: a?.entry?.id, work_date: a?.entry?.work_date }, user: { id: a?.user?.id } })
+// flagged: only whether the server raised a red flag on it (no flag text, note or hours), for "N entries have red flags".
+export const pickApproval = (a) => ({ entry: { id: a?.entry?.id, work_date: a?.entry?.work_date }, user: { id: a?.user?.id },
+  flagged: Array.isArray(a?.flags) && a.flags.length > 0 })
 
 export const pickProject = (p) => ({ id: p?.id, name: redactText(p?.name ?? ''), status: p?.status,
   at_risk_reasons: Array.isArray(p?.at_risk_reasons) ? p.at_risk_reasons.filter((r) => typeof r === 'string') : [] })

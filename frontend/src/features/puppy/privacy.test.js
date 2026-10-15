@@ -40,6 +40,19 @@ const raw = () => ({
   contacts: [{ id: 'u-mgr', name: 'Morgan Manager', ...secrets() }],
 })
 
+describe('pickApproval', () => {
+  test('keeps only whether an entry is flagged, never the flag text, note or hours', () => {
+    const view = puppyView({ approvals: [
+      { entry: { id: 'e1', work_date: '2026-10-12', hours: 9, note: 'secret note' }, user: { id: 'u-a', name: 'Ann' },
+        flags: [{ code: 'LONG_DAY', severity: 'warn', message: '11h logged on Mon 12 Oct' }],
+        progress_update: { body: 'secret update' } },
+      { entry: { id: 'e2', work_date: '2026-10-13' }, user: { id: 'u-a' }, flags: [] }] })
+    expect(view.approvals).toEqual([
+      { entry: { id: 'e1', work_date: '2026-10-12' }, user: { id: 'u-a' }, flagged: true },
+      { entry: { id: 'e2', work_date: '2026-10-13' }, user: { id: 'u-a' }, flagged: false }])
+  })
+})
+
 describe('redact', () => {
   test('drops every sensitive key at any depth', () => {
     const out = redact({ a: 1, salary: 2, nested: { hourly_rate: 3, list: [{ email: 'x', keep: 'y' }] } })

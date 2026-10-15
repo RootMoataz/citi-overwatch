@@ -11,6 +11,7 @@ import { num } from '../../lib/csv.js'
 import { addDays, formatDate, formatHours, formatMoney, mondayOf } from '../../lib/format.js'
 import { HR_CHANGED } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
+import { shareText } from '../timer/timerClock.js'
 
 const SPANS = [4, 8, 13, 26] // weeks back, this week included
 
@@ -40,6 +41,7 @@ export default function ApprovedTab() {
     { header: 'Week of', value: (w) => w.week_start },
     { header: 'Hours', value: (w) => num(w.hours) },
     { header: 'Entries', value: (w) => w.entry_count },
+    { header: 'Tracked hours', value: (w) => num(w.tracked_hours ?? 0) },
     { header: 'Projects', value: (w) => w.projects.join('; ') },
     { header: 'HR status', value: (w) => hrStatus(w).label },
     ...(admin ? [{ header: 'Cost', value: (w) => num(w.cost) }] : []),
@@ -68,7 +70,8 @@ export default function ApprovedTab() {
               <TableHead>
                 <TableRow>
                   <TableCell>Person</TableCell><TableCell>Week of</TableCell><TableCell align="right">Hours</TableCell>
-                  <TableCell align="right">Entries</TableCell><TableCell>Projects</TableCell><TableCell>HR status</TableCell>
+                  <TableCell align="right">Entries</TableCell><TableCell>Timer share</TableCell><TableCell>Projects</TableCell>
+                  <TableCell>HR status</TableCell>
                   {admin ? <TableCell align="right">Cost</TableCell> : null}
                 </TableRow>
               </TableHead>
@@ -81,6 +84,9 @@ export default function ApprovedTab() {
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(w.week_start)}</TableCell>
                       <TableCell align="right">{formatHours(w.hours)}</TableCell>
                       <TableCell align="right">{w.entry_count}</TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>
+                        {shareText([{ hours: w.hours, tracked_hours: w.tracked_hours ?? 0 }])}
+                      </TableCell>
                       <TableCell>{w.projects.join(', ')}</TableCell>
                       <TableCell><StatusChip status={hr.status} label={hr.label} /></TableCell>
                       {admin ? <TableCell align="right">{formatMoney(w.cost, { exact: true })}</TableCell> : null}

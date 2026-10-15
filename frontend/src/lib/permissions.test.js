@@ -10,9 +10,9 @@ describe('public demo admin (mirrors backend app/public_demo.py)', () => {
     }
   })
 
-  test('blocks people, departments, project archiving, skills, HR submissions and its own account', () => {
+  test('blocks people, departments, project archiving, skills, HR submissions, timers and its own account', () => {
     expect([...DEMO_BLOCKED].sort()).toEqual(['avatar.own', 'departments.manage', 'hr.submit', 'profile.edit',
-      'project.archive', 'skills.edit', 'skills.manage', 'user.manage'])
+      'project.archive', 'skills.edit', 'skills.manage', 'timer.use', 'user.manage'])
     for (const action of DEMO_BLOCKED) {
       expect(demoBlocks(users.demoAdmin, action)).toBe(true)
       expect(demoBlocks(users.admin, action)).toBe(false)

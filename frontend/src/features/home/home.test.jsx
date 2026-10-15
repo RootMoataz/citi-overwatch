@@ -104,6 +104,21 @@ describe('HomePage by role', () => {
     expect(within(region).getByText('Assigned to you: overdue first, then by priority and due date.')).toBeInTheDocument()
   })
 
+  test('My milestones have a Start timer button where hours can be logged this week', async () => {
+    server.use(
+      http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json(profile)),
+      http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
+      http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: '2026-10-12', entries: [], totals: { logged: 0, approved: 0 },
+        user: { id: 'u-emp', name: 'Eli Employee' },
+        rows: [{ milestone: { id: 'm1', name: 'Design' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true },
+          { milestone: { id: 'm3', name: 'Review' }, project: { id: 'p2', name: 'Beacon', status: 'on_hold' }, open: false }] })),
+    )
+    renderAsUser(<HomePage />, { user: users.employee, route: '/' })
+    const region = await screen.findByRole('region', { name: /my milestones/i })
+    expect(await within(region).findByRole('button', { name: 'Start timer on Design' })).toBeInTheDocument()
+    expect(within(region).queryByRole('button', { name: 'Start timer on Review' })).not.toBeInTheDocument()
+  })
+
   test('employees with nothing to claim are told so', async () => {
     server.use(
       http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [] })),

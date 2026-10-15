@@ -106,6 +106,72 @@ describe('Timesheets: To review', () => {
   })
 })
 
+const SAME = { code: 'SAME_HOURS_DAILY', severity: 'warn', message: 'Same 8h on 4 weekdays this week on Schema Mapping' }
+const LATE = { code: 'BACKDATED', severity: 'info', message: 'Logged 10 days after the day worked' }
+const flaggedQueue = [
+  { ...item('e1', eli, '2026-10-12', 8, { source: 'tracked', tracked_hours: 8, note: 'Mapped the address fields' }), flags: [SAME, LATE] },
+  { ...item('e2', eli, '2026-10-13', 8, { source: 'manual', tracked_hours: 0 }), flags: [SAME],
+    progress_update: { body: 'Address mapping is 80% done', created_at: '2026-10-13T20:00:00Z' } },
+  { ...item('e5', ana, '2026-10-12', 4, { source: 'manual', tracked_hours: 0, note: 'Reviewed the test load' }), flags: [] },
+]
+
+describe('Timesheets: proof of work, tracked share and red flags', () => {
+  test('each entry shows its source, its proof and its red flags; each week its tracked share and flag count', async () => {
+    api({ approvals: flaggedQueue })
+    open(users.manager)
+    const user = userEvent.setup()
+    const week = await screen.findByRole('region', { name: /eli employee, week of oct 12, 2026/i })
+    expect(within(week).getByText(/Tracked 50% · Manual 50%/)).toBeInTheDocument()
+    expect(within(week).getByText('⚠ 3 red flags')).toBeInTheDocument()
+    expect(within(week).getByText('Tracked')).toBeInTheDocument()
+    expect(within(week).getByText('“Mapped the address fields”')).toBeInTheDocument()
+    expect(within(week).getByText('Progress update: Address mapping is 80% done')).toBeInTheDocument()
+    expect(within(week).getAllByText('⚠ Same hours daily')).toHaveLength(2)
+    await user.hover(within(week).getByText('⚠ Backdated'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Logged 10 days after the day worked')
+    const ana_ = screen.getByRole('region', { name: /ana ruiz, week of oct 12, 2026/i })
+    expect(within(ana_).getByText(/Tracked 0% · Manual 100%/)).toBeInTheDocument()
+    expect(within(ana_).queryByText(/red flag/)).not.toBeInTheDocument()
+  })
+
+  test('"Only flagged" keeps the person-weeks with a red flag', async () => {
+    api({ approvals: flaggedQueue })
+    open(users.manager)
+    const user = userEvent.setup()
+    await screen.findByRole('region', { name: /ana ruiz, week of oct 12, 2026/i })
+    await user.click(screen.getByRole('switch', { name: 'Only flagged' }))
+    expect(screen.getByRole('region', { name: /eli employee, week of oct 12, 2026/i })).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /ana ruiz/i })).not.toBeInTheDocument()
+  })
+
+  test('"Only flagged" with nothing flagged says so', async () => {
+    api({ approvals: [{ ...item('e5', ana, '2026-10-12', 4), flags: [] }] })
+    open(users.manager)
+    await screen.findByRole('region', { name: /ana ruiz/i })
+    await userEvent.click(screen.getByRole('switch', { name: 'Only flagged' }))
+    expect(screen.getByText('No red flags')).toBeInTheDocument()
+  })
+
+  test('the CSV carries the source and the flags', async () => {
+    api({ approvals: flaggedQueue })
+    downloads.length = 0
+    open(users.manager)
+    await screen.findByRole('region', { name: /eli employee/i })
+    await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
+    await waitFor(() => expect(downloads).toHaveLength(1))
+    expect(downloads[0].csv).toContain('Source,Tracked hours,Red flags')
+    expect(downloads[0].csv).toContain('Tracked,8,Same hours daily; Backdated')
+  })
+
+  test('approved weeks show how much came from timers', async () => {
+    api()
+    server.use(http.get(`${API}/timesheets/approved`, () => HttpResponse.json([{ ...weeks[0], tracked_hours: 27.2 }])))
+    open(users.manager, '/timesheets?tab=approved')
+    const table = await screen.findByRole('table', { name: /approved weeks/i })
+    expect(within(table).getByText('Tracked 68% · Manual 32%')).toBeInTheDocument()
+  })
+})
+
 describe('Timesheets tabs by role', () => {
   test('managers review and see approved weeks, without costs or HR submission', async () => {
     const seen = api()

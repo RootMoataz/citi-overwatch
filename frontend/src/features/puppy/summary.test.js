@@ -55,6 +55,18 @@ describe('summary sentences', () => {
     expect(items[1].to).toBe('/timesheets?user=u-eli')
   })
 
+  test('approvers hear how many waiting entries have red flags; employees never do', () => {
+    const flagged = (userId, workDate) => ({ ...pending(userId, workDate), flagged: true })
+    const approvals = [flagged('u-a', '2026-10-12'), flagged('u-a', '2026-10-13'), pending('u-b', '2026-10-12')]
+    const items = buildSummary({ user: users.manager, today: TODAY, approvals })
+    expect(texts(items)).toEqual(['2 timesheets are waiting for your approval',
+      '2 entries have red flags worth a second look'])
+    expect(items[1].to).toBe('/timesheets')
+    expect(texts(buildSummary({ user: users.manager, today: TODAY, approvals: [flagged('u-a', '2026-10-12')] })))
+      .toContain('1 entry has red flags worth a second look')
+    expect(texts(buildSummary({ user: users.employee, today: TODAY, approvals }))).toEqual([])
+  })
+
   test('singular and plural read naturally', () => {
     const one = buildSummary({ user: users.manager, today: TODAY, approvals: [pending('u-a', '2026-10-12')],
       missing: { week_start: '2026-10-12', due: true, people: [{ id: 'p1' }] } })

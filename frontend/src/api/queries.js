@@ -151,8 +151,8 @@ export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/m
 // ---------- time, approvals, notifications ----------
 const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['milestone-costs'], ['projects'], ['allocations'],
   ['notifications'], ['profile'], ['timesheet-reminders'], ['approved-weeks'], ['hr']]
-export const useWeek = (week, userId) => useQuery({
-  queryKey: ['time', week, userId ?? 'me'], queryFn: () => api.get('/time-entries', { week, user: userId }),
+export const useWeek = (week, userId, enabled = true) => useQuery({
+  queryKey: ['time', week, userId ?? 'me'], enabled, queryFn: () => api.get('/time-entries', { week, user: userId }),
   placeholderData: keepPreviousData,
 })
 export const useSaveWeek = () => useApiMutation((body) => api.put('/time-entries', body),
@@ -183,6 +183,17 @@ export const useApprovedWeeks = (range, enabled = true) => useQuery({
   queryKey: ['approved-weeks', range], enabled, queryFn: () => api.get('/timesheets/approved', range),
   placeholderData: keepPreviousData,
 })
+
+// ---------- timers: one running per person; stopping one logs its hours ----------
+// The running timer (or null) with the server's clock; a timer left past midnight is stopped by this read.
+export const useCurrentTimer = (enabled = true) => useQuery({
+  queryKey: ['timer'], enabled, queryFn: () => api.get('/timers/current'), staleTime: 30_000,
+})
+export const useStartTimer = () => useApiMutation((milestoneId) => api.post('/timers', { milestone_id: milestoneId }),
+  { invalidate: [['timer'], ['time'], ['notifications']], success: (d) => `Timer started on ${d.timer.milestone.name}` })
+// The result says what was logged (or why nothing was); the caller shows it, so there's no generic toast.
+export const useStopTimer = () => useApiMutation((note) => api.post('/timers/stop', note ? { note } : {}),
+  { invalidate: [['timer'], ...timeKeys] })
 
 // ---------- HR submissions (admins submit; executives read the list) ----------
 export const useHrSubmissions = (enabled = true) =>

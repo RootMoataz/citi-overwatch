@@ -5,7 +5,7 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { useClaimMilestone, useMilestonesOf, useProfile, useProjects } from '../../api/queries.js'
+import { useClaimMilestone, useMilestonesOf, useProfile, useProjects, useWeek } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import CountUp from '../../components/CountUp.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
@@ -16,8 +16,10 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { chartPalette } from '../../app/chartColors.js'
-import { formatDate, formatHours } from '../../lib/format.js'
+import { formatDate, formatHours, mondayOf } from '../../lib/format.js'
 import { priorityRank } from '../../lib/labels.js'
+import { can } from '../../lib/permissions.js'
+import TimerButton from '../timer/TimerButton.jsx'
 import Section from '../dashboard/Section.jsx'
 
 const WEEKLY_CAP = 40
@@ -120,13 +122,27 @@ function byUrgency(a, b) {
     || String(a.end_date).localeCompare(String(b.end_date))
 }
 
+/** Milestones the person can log on today, from this week's timesheet rows (the server's rules: assigned, inside the
+ * dates, project open). Empty for anyone who keeps no timesheet. */
+function useLoggable() {
+  const { user } = useSession()
+  const enabled = can(user, 'timer.use')
+  const week = useWeek(mondayOf(new Date()), undefined, enabled)
+  if (!enabled) return new Set()
+  return new Set((week.data?.rows ?? []).filter((r) => r.open !== false).map((r) => String(r.milestone.id)))
+}
+
 function MyMilestones({ milestones }) {
   const mine = milestones.filter((m) => m.role && !m.is_archived && !m.project?.is_archived).sort(byUrgency)
+  const loggable = useLoggable()
   return (
     <Section question="My milestones" hint="Assigned to you: overdue first, then by priority and due date.">
       {mine.length ? (
         <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-          {mine.map((m) => <MilestoneItem key={m.id} m={m} />)}
+          {mine.map((m) => (
+            <MilestoneItem key={m.id} m={m}
+              action={loggable.has(String(m.id)) ? <TimerButton milestone={m} /> : null} />
+          ))}
         </Box>
       ) : <EmptyState title="Nothing assigned to you right now" description="Milestones your manager gives you, or that you claim, show up here." />}
     </Section>

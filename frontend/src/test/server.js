@@ -9,6 +9,7 @@ export const API = '/api/v1'
 // Dashboards show Live activity; by default nothing has happened.
 // New projects can start from a department template (Technology and Operations here).
 // Messages: by default nobody has written and the viewer may message nobody (no Message or Discuss buttons).
+// Timers: by default none is running.
 // The department templates a new project can start from (a short version of the server's presets).
 export const PROJECT_TEMPLATES = [
   { department: 'Technology', milestones: [{ name: 'Discovery & requirements' }, { name: 'Solution architecture' },
@@ -24,4 +25,8 @@ export const server = setupServer(http.get(`${API}/avatars`, () => HttpResponse.
   http.get(`${API}/messages/contacts`, () => HttpResponse.json({ items: [], can_group: false })),
   http.get(`${API}/timesheet-reminders`, () => HttpResponse.json({ week_start: '2026-10-05', due: false, people: [] })),
   http.get(`${API}/activity`, () => HttpResponse.json({ items: [] })),
-  http.get(`${API}/project-templates`, () => HttpResponse.json({ items: PROJECT_TEMPLATES })))
+  http.get(`${API}/project-templates`, () => HttpResponse.json({ items: PROJECT_TEMPLATES })),
+  // Nobody has a timer running unless a test says so, and My week's timer buttons find an empty timesheet.
+  http.get(`${API}/timers/current`, () => HttpResponse.json({ timer: null, now: new Date().toISOString(), stopped: null })),
+  http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: null, user: null, rows: [], entries: [],
+    totals: { logged: 0, approved: 0 } })))

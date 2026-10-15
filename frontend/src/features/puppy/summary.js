@@ -4,7 +4,7 @@
 // buildSummary({ user, today, notifications, unreadMessages, approvals, missing }) → [{ id, text, to }]
 //   notifications   the unread list from GET /notifications
 //   unreadMessages  the unread message count from GET /messages/unread-count
-//   approvals       pending hours from GET /approvals (approvers only)
+//   approvals       pending hours from GET /approvals (approvers only), cut down by privacy.pickApproval
 //   missing         GET /timesheet-reminders: {week_start, people} (managers and admins only)
 // Types Puppy doesn't know yet (new ones are being added) get a generic sentence, never an error.
 import { formatDate } from '../../lib/format.js'
@@ -47,6 +47,14 @@ function approvalsSentence(approvals) {
   if (!timesheets) return null
   return { id: 'approvals', to: '/timesheets',
     text: `${timesheets} ${plural(timesheets, 'timesheet is', 'timesheets are')} waiting for your approval` }
+}
+
+/** "3 entries have red flags": pending entries the server flagged for a second look (approvers only). */
+function flagsSentence(approvals) {
+  const n = approvals.filter((a) => a?.flagged).length
+  if (!n) return null
+  return { id: 'approval-flags', to: '/timesheets',
+    text: `${n} ${plural(n, 'entry has', 'entries have')} red flags worth a second look` }
 }
 
 function emptyTimesheet(items, today) {
@@ -166,6 +174,7 @@ export function buildSummary({ user, today = new Date().toISOString().slice(0, 1
 
   const sentences = [
     can(user, 'approvals.view') ? approvalsSentence(approvals ?? []) : null,
+    can(user, 'approvals.view') ? flagsSentence(approvals ?? []) : null,
     when(of('TIMESHEET_EMPTY'), (items) => emptyTimesheet(items, today)),
     when(of('ENTRY_REJECTED'), rejected),
     messages(of('MESSAGE_RECEIVED'), unreadMessages),
