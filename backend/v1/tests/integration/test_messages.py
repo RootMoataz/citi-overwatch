@@ -20,6 +20,9 @@ def org(conn):
     stranger = make_user(conn, role="manager", first_name="Stan", last_name="Stranger")
     emp = make_user(conn, first_name="Eli", last_name="Employee", manager_id=boss["id"])
     peer = make_user(conn, first_name="Pia", last_name="Peer", manager_id=boss["id"])
+    colleague = make_user(conn, first_name="Cara", last_name="Coworker", manager_id=stranger["id"])
+    engineering = query_one(conn, "INSERT INTO departments (name) VALUES ('Engineering') RETURNING id")
+    conn.run("UPDATE users SET department_id = :d WHERE id = :i", d=engineering["id"], i=colleague["id"])
     gone = make_user(conn, first_name="Gus", last_name="Gone")
     conn.run("UPDATE users SET is_archived = true, archived_at = now() WHERE id = :i", i=gone["id"])
     project = make_project(conn, pm, name="Apollo", start=TODAY - timedelta(days=30), end=TODAY + timedelta(days=60))
@@ -31,7 +34,7 @@ def org(conn):
     for person in (emp, peer):
         conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=ms["id"], u=person["id"])
     people = {"admin": admin, "exe": exe, "boss": boss, "pm": pm, "delegate": delegate, "stranger": stranger,
-              "emp": emp, "peer": peer, "gone": gone}
+              "emp": emp, "peer": peer, "colleague": colleague, "gone": gone}
     return {**people, "project": project, "ms": ms, "tok": {k: token_for(conn, v) for k, v in people.items()
                                                              if k != "gone"}}
 
@@ -81,13 +84,32 @@ def test_an_employee_may_message_each_of_their_managers(client, org, manager):
     assert status == 201, body
 
 
-@pytest.mark.parametrize("recipient", ["admin", "exe", "peer", "stranger"])
-def test_an_employee_may_not_message_anyone_else(client, conn, org, recipient):
+@pytest.mark.parametrize("recipient", ["peer", "colleague"])
+def test_an_employee_may_message_any_other_employee(client, org, recipient):
+    # A teammate on the same project, and an employee from another team they share nothing with.
+    status, body, _, _ = start(client, org, "emp", recipient)
+    assert status == 201, body
+
+
+@pytest.mark.parametrize("recipient", ["admin", "exe", "stranger"])
+def test_an_employee_may_not_message_admins_executives_or_unrelated_managers(client, conn, org, recipient):
     status, body, _, _ = start(client, org, "emp", recipient)
     assert status == 403
     assert body["error"]["code"] == "MESSAGING_NOT_ALLOWED"
-    assert body["error"]["message"] == "You can only message your managers."
+    assert body["error"]["message"] == "Employees can message their manager, their project managers and other employees."
     assert query_one(conn, "SELECT count(*) AS n FROM conversations")["n"] == 0
+
+
+def test_an_employee_who_reports_to_an_admin_may_message_them(client, conn, org):
+    conn.run("UPDATE users SET manager_id = :a WHERE id = :e", a=org["admin"]["id"], e=org["emp"]["id"])
+    assert start(client, org, "emp", "admin")[0] == 201
+    assert start(client, org, "emp", "exe")[0] == 403
+
+
+def test_an_employee_may_not_message_an_archived_colleague(client, conn, org):
+    conn.run("UPDATE users SET is_archived = true, archived_at = now() WHERE id = :i", i=org["colleague"]["id"])
+    status, body, _, _ = start(client, org, "emp", "colleague")
+    assert (status, body["error"]["code"]) == (403, "MESSAGING_NOT_ALLOWED")
 
 
 def test_an_expired_delegate_is_no_longer_an_employees_manager(client, conn, org):
@@ -129,8 +151,9 @@ def test_unknown_people_are_refused(client, org):
     assert status == 400
 
 
-def test_employees_cannot_start_group_threads(client, org):
-    status, body, _, _ = start(client, org, "emp", "boss", "pm")
+@pytest.mark.parametrize("recipients", [("boss", "pm"), ("peer", "colleague")])
+def test_employees_cannot_start_group_threads(client, org, recipients):
+    status, body, _, _ = start(client, org, "emp", *recipients)
     assert status == 403
     assert body["error"]["code"] == "MESSAGING_NOT_ALLOWED"
 
@@ -194,16 +217,29 @@ def test_executives_may_message_though_they_are_read_only(client, org):
 
 # ---------- contacts ----------
 
-def test_contacts_for_an_employee_are_only_their_managers(client, org):
+def test_contacts_for_an_employee_are_their_managers_then_other_employees(client, org):
     status, body, _, _ = client.request("GET", "/messages/contacts", token=org["tok"]["emp"])
     assert status == 200
-    assert {str(c["id"]) for c in body["items"]} == {str(org[k]["id"]) for k in ("boss", "pm", "delegate")}
     assert body["can_group"] is False
-    reasons = {c["name"]: c["relation"] for c in body["items"]}
-    assert reasons["Bo Boss"] == "Your manager"
-    assert reasons["Pat Pm"] == "Manages Apollo"
-    assert reasons["Dee Delegate"] == "Delegate approver for Apollo"
+    # Their manager first, then project managers and delegates, then colleagues by name; never admins, executives,
+    # unrelated managers, archived people or themselves.
+    assert [(c["name"], c["relation"]) for c in body["items"]] == [
+        ("Bo Boss", "Your manager"),
+        ("Pat Pm", "Manages Apollo"),
+        ("Dee Delegate", "Delegate approver for Apollo"),
+        ("Cara Coworker", "Colleague · Engineering"),
+        ("Pia Peer", "Colleague"),
+    ]
     assert set(body["items"][0]) >= {"id", "name", "first_name", "last_name", "role", "job_title", "avatar_url"}
+    assert "salary" not in str(body)
+
+
+def test_an_employees_contacts_match_who_they_may_message(client, org):
+    _, body, _, _ = client.request("GET", "/messages/contacts", token=org["tok"]["emp"])
+    listed = {str(c["id"]) for c in body["items"]}
+    for key in ("admin", "exe", "boss", "pm", "delegate", "stranger", "peer", "colleague"):
+        status = start(client, org, "emp", key)[0]
+        assert (status in (200, 201)) == (str(org[key]["id"]) in listed), key
 
 
 @pytest.mark.parametrize("who", ["admin", "exe", "boss"])
@@ -213,7 +249,7 @@ def test_contacts_for_everyone_else_are_all_active_people_but_themselves(client,
     assert str(org[who]["id"]) not in ids
     assert str(org["gone"]["id"]) not in ids
     assert ids == {str(v["id"]) for k, v in org.items() if k in ("admin", "exe", "boss", "pm", "delegate", "stranger",
-                                                                   "emp", "peer") and k != who}
+                                                                   "emp", "peer", "colleague") and k != who}
     assert body["can_group"] is True
     assert "salary" not in str(body)
 

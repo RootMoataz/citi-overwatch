@@ -1,9 +1,9 @@
 """Who may message whom (LOGIC_WALKTHROUGH §21), as pure checks of facts the service has already loaded.
 
 Admins, executives and managers may start a conversation with any active person and start group threads.
-An employee may only start a one-to-one conversation with their own managers: the person they report to, the
-manager of every live project they're on and that project's delegate approver while the delegation runs.
-Anyone may read and reply in a conversation they're already in. Nobody messages themselves or an archived person.
+An employee may only start a one-to-one conversation with their own managers (the person they report to, the
+manager of every live project they're on and that project's delegate approver while the delegation runs) or with
+any other employee; never with an admin or executive who isn't one of their managers. Anyone may read and reply in a conversation they're already in. Nobody messages themselves or an archived person.
 """
 
 MAX_BODY = 2000
@@ -41,11 +41,13 @@ def managers_of(user_id, *, reports_to, projects: list[dict], today) -> set:
     return out
 
 
-def start_blocker(*, sender_role: str, sender_id, recipient_id, recipient_active: bool, my_managers: set) -> str | None:
+def start_blocker(*, sender_role: str, sender_id, recipient_id, recipient_active: bool, recipient_role: str | None,
+                  my_managers: set) -> str | None:
     """Why the sender may not start a conversation with the recipient, or None when they may.
 
-    SELF: messaging yourself. INACTIVE: the recipient is archived. NOT_MY_MANAGER: an employee writing to anyone
-    who isn't one of their managers. Checked in that order."""
+    SELF: messaging yourself. INACTIVE: the recipient is archived (or unknown). NOT_ALLOWED: an employee writing to
+    someone who is neither one of their managers nor another employee (an admin, an executive or an unrelated
+    manager). Checked in that order."""
     if str(recipient_id) == str(sender_id):
         return "SELF"
     if not recipient_active:
@@ -54,7 +56,9 @@ def start_blocker(*, sender_role: str, sender_id, recipient_id, recipient_active
         return None
     if str(recipient_id) in {str(m) for m in my_managers}:
         return None
-    return "NOT_MY_MANAGER"
+    if recipient_role == "employee":
+        return None
+    return "NOT_ALLOWED"
 
 
 def can_start_group(role: str) -> bool:

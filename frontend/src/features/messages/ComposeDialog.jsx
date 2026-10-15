@@ -8,7 +8,7 @@ import { useContacts, useStartConversation } from '../../api/messages.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { ROLE_LABEL } from '../../lib/labels.js'
-import { BODY_LIMIT, ONLY_MANAGERS, counterText } from '../../lib/messaging.js'
+import { BODY_LIMIT, EMPLOYEE_HINT, EMPLOYEE_NOT_ALLOWED, counterText } from '../../lib/messaging.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
 const same = (a, b) => a != null && b != null && String(a) === String(b)
@@ -53,17 +53,15 @@ function Form({ contacts, initialTo, onClose, titleId }) {
       <DialogTitle id={titleId}>New message</DialogTitle>
       <DialogContent>
         <Stack sx={{ gap: 2, pt: 1 }}>
-          {refused ? <Alert severity="warning" role="alert">{canGroup ? "You can't message this person." : ONLY_MANAGERS}</Alert> : null}
+          {refused ? <Alert severity="warning" role="alert">{canGroup ? "You can't message this person." : EMPLOYEE_NOT_ALLOWED}</Alert> : null}
           {!canGroup ? (
-            <Alert severity="info" role="note">
-              You can message your managers: the person you report to, the managers of your projects and their delegate approvers.
-            </Alert>
+            <Alert severity="info" role="note">{EMPLOYEE_HINT}</Alert>
           ) : null}
           <ErrorAlert error={failure} />
           <Autocomplete multiple={canGroup} options={items} value={canGroup ? picked : (picked[0] ?? null)}
             onChange={(_, value) => setPicked(canGroup ? value : (value ? [value] : []))}
             getOptionLabel={(c) => c.name} isOptionEqualToValue={(a, b) => same(a.id, b.id)} disabled={start.isPending}
-            noOptionsText={canGroup ? 'Nobody matches' : 'No managers to message right now'}
+            noOptionsText={canGroup ? 'Nobody matches' : 'Nobody matches'}
             renderOption={(props, c) => {
               const { key, ...rest } = props
               return (
@@ -77,7 +75,7 @@ function Form({ contacts, initialTo, onClose, titleId }) {
               )
             }}
             renderInput={(params) => (
-              <TextField {...params} label={canGroup ? 'To' : 'To (one of your managers)'}
+              <TextField {...params} label={canGroup ? 'To' : 'To (one person)'}
                 error={touched && !picked.length} helperText={touched && !picked.length ? 'Pick who to message' : undefined} />
             )} />
           {group ? (
@@ -98,7 +96,7 @@ function Form({ contacts, initialTo, onClose, titleId }) {
   )
 }
 
-/** Start a conversation. Recipients come from /messages/contacts, so employees only ever see their managers.
+/** Start a conversation. Recipients come from /messages/contacts, so employees only ever see their managers and other employees.
  * `initialTo` preselects someone (the Message buttons); if they aren't someone the viewer may message, it says so. */
 export default function ComposeDialog({ open, onClose, initialTo }) {
   const titleId = useId()

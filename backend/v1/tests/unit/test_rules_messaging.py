@@ -17,9 +17,9 @@ def project(**overrides):
     return facts
 
 
-def blocker(sender_role="employee", recipient="x", *, active=True, managers=frozenset()):
+def blocker(sender_role="employee", recipient="x", *, active=True, role="manager", managers=frozenset()):
     return start_blocker(sender_role=sender_role, sender_id=ME, recipient_id=recipient, recipient_active=active,
-                         my_managers=set(managers))
+                         recipient_role=role, my_managers=set(managers))
 
 
 # ---------- who an employee's managers are ----------
@@ -65,8 +65,9 @@ def test_all_sources_combine_without_duplicates():
 # ---------- who may start a conversation with whom ----------
 
 @pytest.mark.parametrize("role", ["admin", "executive", "manager"])
-def test_admins_executives_and_managers_may_message_anyone_active(role):
-    assert blocker(role, OTHER) is None
+@pytest.mark.parametrize("recipient_role", ["admin", "executive", "manager", "employee"])
+def test_admins_executives_and_managers_may_message_anyone_active(role, recipient_role):
+    assert blocker(role, OTHER, role=recipient_role) is None
 
 
 def test_an_employee_may_message_their_managers():
@@ -74,10 +75,25 @@ def test_an_employee_may_message_their_managers():
     assert blocker("employee", PM, managers={BOSS, PM}) is None
 
 
-def test_an_employee_may_not_message_anyone_else():
-    # Admins, executives, other employees and unrelated managers are all simply "not my manager".
-    assert blocker("employee", OTHER, managers={BOSS}) == "NOT_MY_MANAGER"
-    assert blocker("employee", OTHER) == "NOT_MY_MANAGER"
+def test_an_employee_may_message_any_other_employee():
+    assert blocker("employee", OTHER, role="employee") is None
+    assert blocker("employee", OTHER, role="employee", managers={BOSS}) is None
+
+
+@pytest.mark.parametrize("role", ["admin", "executive", "manager"])
+def test_an_employee_may_not_message_an_admin_executive_or_manager_who_isnt_theirs(role):
+    assert blocker("employee", OTHER, role=role, managers={BOSS}) == "NOT_ALLOWED"
+    assert blocker("employee", OTHER, role=role) == "NOT_ALLOWED"
+
+
+@pytest.mark.parametrize("role", ["admin", "executive"])
+def test_an_admin_or_executive_who_is_one_of_my_managers_is_reachable(role):
+    # Someone can report to an admin, and an admin can be a project's delegate approver.
+    assert blocker("employee", BOSS, role=role, managers={BOSS}) is None
+
+
+def test_an_unknown_recipient_role_is_refused():
+    assert blocker("employee", OTHER, role=None) == "NOT_ALLOWED"
 
 
 @pytest.mark.parametrize("role", ["admin", "executive", "manager", "employee"])
@@ -94,8 +110,9 @@ def test_self_is_reported_before_anything_else():
     assert blocker("employee", ME, active=False) == "SELF"
 
 
-def test_inactive_is_reported_before_not_my_manager():
+def test_inactive_is_reported_before_not_allowed():
     assert blocker("employee", OTHER, active=False) == "INACTIVE"
+    assert blocker("employee", OTHER, active=False, role="employee") == "INACTIVE"
 
 
 def test_only_admins_executives_and_managers_start_groups():

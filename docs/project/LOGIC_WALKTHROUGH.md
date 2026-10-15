@@ -512,18 +512,19 @@ who moves a project to Completed (not when re-saving a project that already was)
 ## 21. Messages: who may message whom
 
 `app/rules/messaging.py` decides, from facts the service loads; the server enforces it on every request and the
-screen only offers what `GET /messages/contacts` returns.
+screen only offers what `GET /messages/contacts` returns (the compose picker and every **Message** button).
+`start_blocker` takes the recipient's role and the employee's managers (`managers_of`) and is pure.
 
 | Sender | May start a one-to-one with | May start a group | May reply |
 |---|---|---|---|
 | Admin | Any active person | Yes | In any conversation they're in |
 | Executive | Any active person (messaging is a personal action, so these routes opt in to `allow_executive`) | Yes | In any conversation they're in |
 | Manager | Any active person | Yes | In any conversation they're in |
-| Employee | Only their managers: the person they report to (`users.manager_id`), the manager of every live project they're on (not archived, not completed, still on the team) and that project's delegate approver while the delegation runs | No | In any conversation they're in, e.g. a group or Discuss thread a manager started |
+| Employee | Their own manager (the one person they report to, `users.manager_id`), the manager of every live project they're on (not archived, not completed, still on the team) and that project's delegate approver while the delegation runs, and any other active employee. Never an admin or executive (unless one is their own manager or a delegate approver) or a manager they have no link to | No | In any conversation they're in, e.g. a group or Discuss thread a manager started |
 
 Nobody may message themselves (`400`) or an archived person (`403 MESSAGING_NOT_ALLOWED`). An employee naming anyone
-else (an admin, an executive, another employee, an unrelated manager) gets `403 MESSAGING_NOT_ALLOWED` "You can only
-message your managers."; a group request is refused whole if any one recipient is refused. Someone who isn't a
+else (an admin, an executive, an unrelated manager) gets `403 MESSAGING_NOT_ALLOWED` "Employees can message their
+manager, their project managers and other employees."; a group request is refused whole if any one recipient is refused. Someone who isn't a
 participant gets `404` for the conversation, so ids reveal nothing. Replying to a one-to-one whose other person has
 been archived is refused; the screen shows that thread read-only.
 

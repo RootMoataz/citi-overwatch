@@ -25,7 +25,7 @@ PREVIEW_CHARS = 140
 MAX_SUBJECT = 120
 DEFAULT_PAGE, MAX_PAGE = 50, 100
 
-NOT_MY_MANAGER = "You can only message your managers."
+NOT_ALLOWED = "Employees can message their manager, their project managers and other employees."
 INACTIVE = "You can't message someone who isn't active."
 NO_GROUPS = "Only managers, admins and executives can start group conversations."
 
@@ -76,20 +76,21 @@ def _my_managers(conn, ctx: Ctx) -> set[str]:
     return managers_of(ctx.user_id, reports_to=reports_to, projects=projects, today=_today())
 
 
-def _relations(conn, ctx: Ctx) -> dict[str, str]:
-    """For an employee: each manager's id -> why they're one ("Your manager", "Manages Apollo", ...)."""
+def _relations(conn, ctx: Ctx) -> dict[str, tuple[int, str]]:
+    """For an employee: each manager's id -> (rank, why they're one): 0 "Your manager", 1 "Manages Apollo",
+    2 "Delegate approver for Apollo"."""
     reports_to, projects = _manager_facts(conn, ctx.user_id)
     today = _today()
     allowed = managers_of(ctx.user_id, reports_to=reports_to, projects=projects, today=today)
     out: dict[str, str] = {}
     if reports_to in allowed:
-        out[reports_to] = "Your manager"
+        out[reports_to] = (0, "Your manager")
     live = [p for p in projects if not p["is_archived"] and p["member_active"] and p["status"] in LIVE_PROJECT_STATUSES]
     for p in live:
-        out.setdefault(p["manager_id"], f"Manages {p['name']}")
+        out.setdefault(p["manager_id"], (1, f"Manages {p['name']}"))
     for p in live:
         if p["delegate_approver_id"] in allowed:
-            out.setdefault(p["delegate_approver_id"], f"Delegate approver for {p['name']}")
+            out.setdefault(p["delegate_approver_id"], (2, f"Delegate approver for {p['name']}"))
     return out
 
 
@@ -102,28 +103,42 @@ def contacts(conn, ctx: Ctx) -> dict:
                                WHERE NOT u.is_archived AND u.id <> CAST(:me AS uuid)
                                ORDER BY lower(u.last_name), lower(u.first_name)""", me=ctx.user_id)
         return {"items": [{**_person(r), "relation": None} for r in rows], "can_group": True}
+    # An employee: their managers (own manager first, then project managers and delegates), then every other
+    # active employee as a colleague. Within each group, by name.
     relations = _relations(conn, ctx)
-    rows = query(conn, f"""SELECT {PERSON_COLS} FROM users u
-                           WHERE u.id = ANY(CAST(:ids AS uuid[])) AND NOT u.is_archived
-                           ORDER BY lower(u.last_name), lower(u.first_name)""", ids=list(relations))
-    return {"items": [{**_person(r), "relation": relations[str(r["id"])]} for r in rows], "can_group": False}
+    rows = query(conn, f"""SELECT {PERSON_COLS}, d.name AS department_name FROM users u
+                           LEFT JOIN departments d ON d.id = u.department_id
+                           WHERE NOT u.is_archived AND u.id <> CAST(:me AS uuid)
+                             AND (u.id = ANY(CAST(:ids AS uuid[])) OR u.role = 'employee')
+                           ORDER BY lower(u.last_name), lower(u.first_name)""", ids=list(relations), me=ctx.user_id)
+    COLLEAGUE = 3
+
+    def entry(r):
+        rank, relation = relations.get(str(r["id"]), (COLLEAGUE, None))
+        if relation is None:
+            relation = f"Colleague · {r['department_name']}" if r["department_name"] else "Colleague"
+        return rank, {**_person(r), "relation": relation}
+
+    items = [item for _, item in sorted((entry(r) for r in rows), key=lambda pair: pair[0])]
+    return {"items": items, "can_group": False}
 
 
 def _check_recipients(conn, ctx: Ctx, ids: list[str]) -> None:
     """Refuse the whole request if any one recipient may not be messaged by the caller."""
-    found = {str(r["id"]): r for r in query(conn, "SELECT id, is_archived FROM users WHERE id = ANY(CAST(:ids AS uuid[]))",
-                                            ids=ids)}
+    found = {str(r["id"]): r for r in query(conn, """SELECT id, is_archived, role::text AS role FROM users
+                                                     WHERE id = ANY(CAST(:ids AS uuid[]))""", ids=ids)}
     managers = _my_managers(conn, ctx) if not can_start_group(ctx.role) else set()
     for rid in ids:
         row = found.get(rid)
         code = start_blocker(sender_role=ctx.role, sender_id=ctx.user_id, recipient_id=rid,
-                             recipient_active=bool(row) and not row["is_archived"], my_managers=managers)
+                             recipient_active=bool(row) and not row["is_archived"],
+                             recipient_role=row["role"] if row else None, my_managers=managers)
         if code == "SELF":
             raise ApiError(400, "VALIDATION_ERROR", "You can't message yourself", {"participant_ids": "self"})
         if code == "INACTIVE":
             raise _not_allowed(INACTIVE)
-        if code == "NOT_MY_MANAGER":
-            raise _not_allowed(NOT_MY_MANAGER)
+        if code == "NOT_ALLOWED":
+            raise _not_allowed(NOT_ALLOWED)
 
 
 # ---------- validation ----------

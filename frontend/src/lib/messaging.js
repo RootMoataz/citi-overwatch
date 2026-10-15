@@ -2,8 +2,10 @@
 // The server decides who may message whom (backend app/rules/messaging.py); the screen asks it through
 // /messages/contacts instead of guessing.
 
-/** What the server says when an employee writes to someone who isn't one of their managers. */
-export const ONLY_MANAGERS = 'You can only message your managers.'
+/** What the server says when an employee writes to an admin, an executive or a manager who isn't theirs. */
+export const EMPLOYEE_NOT_ALLOWED = 'Employees can message their manager, their project managers and other employees.'
+/** The compose dialog's reminder for employees of who they can write to. */
+export const EMPLOYEE_HINT = 'You can message your manager, your project managers and other employees.'
 /** The server's limit on a message, after trimming. */
 export const BODY_LIMIT = 2000
 /** Show the character counter once a message gets this close to the limit. */
@@ -11,6 +13,14 @@ const COUNTER_FROM = 200
 
 const same = (a, b) => a != null && b != null && String(a) === String(b)
 const firstName = (name) => String(name ?? '').split(' ')[0]
+
+/** Whether the viewer may start a conversation with `person`: never themselves, otherwise only someone on the
+ * server's contact list (/messages/contacts). For an employee that is their manager, their project managers and
+ * delegate approvers, and every other active employee; for everyone else, any active person. */
+export function canMessage(contacts, person, me) {
+  if (!person?.id || same(person.id, me?.id)) return false
+  return (contacts?.items ?? []).some((c) => same(c.id, person.id))
+}
 
 /** Everyone in the conversation except the viewer. */
 export const others = (conversation, me) => (conversation?.participants ?? []).filter((p) => !same(p.id, me?.id))

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import { mergeMessages } from '../api/messages.js'
 import {
-  BODY_LIMIT, bubbleGroups, conversationTitle, counterText, dayLabel, directWith, isSeen, others, previewLine,
+  BODY_LIMIT, bubbleGroups, canMessage, conversationTitle, counterText, dayLabel, directWith, isSeen, others, previewLine,
   shouldSendOnKey,
 } from './messaging.js'
 
@@ -9,6 +9,23 @@ const me = { id: 'u-me', first_name: 'Morgan', last_name: 'Manager' }
 const eli = { id: 'u-eli', name: 'Eli Employee', last_read_at: null }
 const ana = { id: 'u-ana', name: 'Ana Ruiz', last_read_at: null }
 const self = { id: 'u-me', name: 'Morgan Manager', last_read_at: '2026-10-14T10:00:00Z' }
+
+describe('who the Message button shows for', () => {
+  const contacts = { items: [{ id: 'u-boss' }, { id: 'u-eli' }], can_group: false }
+
+  test('anyone on the contact list, and nobody else', () => {
+    expect(canMessage(contacts, { id: 'u-boss' }, me)).toBe(true)
+    expect(canMessage(contacts, { id: 'u-eli' }, me)).toBe(true)
+    expect(canMessage(contacts, { id: 'u-admin' }, me)).toBe(false)
+  })
+
+  test('never yourself, nobody before the list loads and nobody without an id', () => {
+    expect(canMessage({ items: [{ id: 'u-me' }] }, { id: 'u-me' }, me)).toBe(false)
+    expect(canMessage(undefined, { id: 'u-boss' }, me)).toBe(false)
+    expect(canMessage(contacts, {}, me)).toBe(false)
+    expect(canMessage(contacts, null, me)).toBe(false)
+  })
+})
 
 describe('conversation titles', () => {
   test('a one-to-one conversation is named after the other person', () => {

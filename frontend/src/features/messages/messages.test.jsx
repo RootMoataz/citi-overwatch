@@ -170,11 +170,13 @@ describe('a conversation', () => {
 })
 
 describe('a new message', () => {
-  const managersOnly = { items: [{ ...mgr, relation: 'Your manager' }, { ...person({ id: 'u-pm', first_name: 'Pat', last_name: 'Pm', role: 'manager' }), relation: 'Manages Apollo' }], can_group: false }
+  const employeeContacts = { items: [{ ...mgr, relation: 'Your manager' },
+    { ...person({ id: 'u-pm', first_name: 'Pat', last_name: 'Pm', role: 'manager' }), relation: 'Manages Apollo' },
+    { ...ana, relation: 'Colleague · Engineering' }], can_group: false }
 
-  test('employees pick only from their managers, with a hint, and land in the new conversation', async () => {
+  test('employees pick from their managers and colleagues, with a hint, and land in the new conversation', async () => {
     let posted
-    server.use(inbox([]), http.get(`${API}/messages/contacts`, () => HttpResponse.json(managersOnly)),
+    server.use(inbox([]), http.get(`${API}/messages/contacts`, () => HttpResponse.json(employeeContacts)),
       http.post(`${API}/conversations`, async ({ request }) => {
         posted = await request.json()
         return HttpResponse.json({ ...direct, id: 'c9' }, { status: 201 })
@@ -182,13 +184,15 @@ describe('a new message', () => {
     renderPage(users.employee)
     await userEvent.click(await screen.findByRole('button', { name: 'New message' }))
     const dialog = await screen.findByRole('dialog', { name: 'New message' })
-    expect(await within(dialog).findByText(/You can message your managers/)).toBeInTheDocument()
+    expect(await within(dialog).findByText('You can message your manager, your project managers and other employees.'))
+      .toBeInTheDocument()
     expect(within(dialog).queryByLabelText(/subject/i)).not.toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('combobox', { name: /to/i }))
     const options = await screen.findAllByRole('option')
-    expect(options).toHaveLength(2)
+    expect(options).toHaveLength(3)
     expect(options[0]).toHaveTextContent('Morgan ManagerYour manager')
     expect(options[1]).toHaveTextContent('Pat PmManages Apollo')
+    expect(options[2]).toHaveTextContent('Ana RuizColleague · Engineering')
     await userEvent.click(options[0])
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Message' }), 'Can we talk about Thursday?')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
@@ -197,9 +201,10 @@ describe('a new message', () => {
   })
 
   test('a Message link to someone an employee may not write to explains why', async () => {
-    server.use(inbox([]), http.get(`${API}/messages/contacts`, () => HttpResponse.json(managersOnly)))
+    server.use(inbox([]), http.get(`${API}/messages/contacts`, () => HttpResponse.json(employeeContacts)))
     renderPage(users.employee, '/messages?to=u-admin')
-    expect(await screen.findByRole('alert')).toHaveTextContent('You can only message your managers.')
+    expect(await screen.findByRole('alert'))
+      .toHaveTextContent('Employees can message their manager, their project managers and other employees.')
   })
 
   test('a Message link opens the existing one-to-one instead of a new one', async () => {
@@ -223,7 +228,7 @@ describe('a new message', () => {
     await userEvent.click(await screen.findByRole('option', { name: /Eli Employee/ }))
     await userEvent.click(to)
     await userEvent.click(await screen.findByRole('option', { name: /Ana Ruiz/ }))
-    expect(within(dialog).queryByText(/You can message your managers/)).not.toBeInTheDocument()
+    expect(within(dialog).queryByText(/You can message your manager/)).not.toBeInTheDocument()
     await userEvent.type(within(dialog).getByLabelText(/subject/i), 'Release plan')
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Message' }), 'Kick-off at 10')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
@@ -231,26 +236,33 @@ describe('a new message', () => {
   })
 
   test('the server refusing a recipient is shown in the dialog', async () => {
-    server.use(inbox([]), http.get(`${API}/messages/contacts`, () => HttpResponse.json(managersOnly)),
+    server.use(inbox([]), http.get(`${API}/messages/contacts`, () => HttpResponse.json(employeeContacts)),
       http.post(`${API}/conversations`, () => HttpResponse.json(
-        { error: { code: 'MESSAGING_NOT_ALLOWED', message: 'You can only message your managers.' } }, { status: 403 })))
+        { error: { code: 'MESSAGING_NOT_ALLOWED',
+          message: 'Employees can message their manager, their project managers and other employees.' } }, { status: 403 })))
     renderPage(users.employee, '/messages?compose')
     const dialog = await screen.findByRole('dialog', { name: 'New message' })
     await userEvent.click(await within(dialog).findByRole('combobox', { name: /to/i }))
     await userEvent.click((await screen.findAllByRole('option'))[1])
     await userEvent.type(within(dialog).getByRole('textbox', { name: 'Message' }), 'Hi')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }))
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('You can only message your managers.')
+    expect(await within(dialog).findByRole('alert'))
+      .toHaveTextContent('Employees can message their manager, their project managers and other employees.')
   })
 })
 
 describe('Message buttons', () => {
   test('only appear for people the viewer may message', async () => {
-    server.use(http.get(`${API}/messages/contacts`, () => HttpResponse.json({ items: [mgr], can_group: false })))
-    renderAsUser(<><MessageButton person={mgr} /><MessageButton person={ana} /></>, { user: users.employee })
+    const admin = person(users.admin)
+    server.use(http.get(`${API}/messages/contacts`, () => HttpResponse.json(
+      { items: [{ ...mgr, relation: 'Your manager' }, { ...ana, relation: 'Colleague · Engineering' }], can_group: false })))
+    renderAsUser(<><MessageButton person={mgr} /><MessageButton person={ana} /><MessageButton person={admin} /></>,
+      { user: users.employee })
     const button = await screen.findByRole('link', { name: 'Message Morgan Manager' })
     expect(button).toHaveAttribute('href', `/messages?to=${mgr.id}`)
-    expect(screen.queryByRole('link', { name: 'Message Ana Ruiz' })).not.toBeInTheDocument()
+    // A fellow employee gets a Message button; an admin (not on an employee's list) does not.
+    expect(screen.getByRole('link', { name: 'Message Ana Ruiz' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: `Message ${admin.name}` })).not.toBeInTheDocument()
   })
 
   test('never for yourself', async () => {
