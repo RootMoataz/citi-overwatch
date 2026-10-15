@@ -97,7 +97,7 @@ function Milestones({ title, items, tone }) {
           {items.slice(0, 6).map((m) => (
             <ListItem key={m.id} disableGutters>
               <ListItemText primary={m.name} secondary={<>{projectLink(m.project, 'milestones')} · due {formatDate(m.end_date)}</>} />
-              <PriorityChip priority={m.priority} sx={{ mr: 0.75, flexShrink: 0 }} />
+              <PriorityChip priority={m.priority} hideDefault sx={{ mr: 0.75, flexShrink: 0 }} />
               <StatusChip status={m.status} />
             </ListItem>
           ))}

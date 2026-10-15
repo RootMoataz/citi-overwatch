@@ -124,7 +124,7 @@ export default function PersonProfilePage() {
                   : m.project.status === 'completed' ? <Chip size="small" variant="outlined" label="Project completed" sx={{ ml: 1 }} /> : null}
               </TableCell>
               <TableCell>{m.role === 'supporting' ? 'Supporting' : m.role === 'primary' ? 'Primary' : 'No longer assigned'}</TableCell>
-              <TableCell><StatusChip status={m.status} /><PriorityChip priority={m.priority} sx={{ ml: 0.75 }} />
+              <TableCell><StatusChip status={m.status} /><PriorityChip priority={m.priority} hideDefault sx={{ ml: 0.75 }} />
                 <DifficultyChip difficulty={m.difficulty} sx={{ ml: 0.75 }} /></TableCell>
               <TableCell>{formatDate(m.start_date)} – {formatDate(m.end_date)}</TableCell>
               <TableCell align="right">{formatHours(m.logged_hours)}</TableCell>

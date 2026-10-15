@@ -23,9 +23,10 @@ function tone(priority, t) {
   return [{ color: 'text.primary' }, palette.reference]
 }
 
-/** A milestone's priority (Low / Medium / High / Critical): how urgent it is. Separate from difficulty. */
-export default function PriorityChip({ priority, sx }) {
-  if (!PRIORITY[priority]) return null
+/** A milestone's priority (Low / Medium / High / Critical): how urgent it is. Separate from difficulty.
+ * `hideDefault`: compact lists skip the default Medium, so it isn't read next to a Medium difficulty as "Medium · Medium". */
+export default function PriorityChip({ priority, sx, hideDefault = false }) {
+  if (!PRIORITY[priority] || (hideDefault && priority === 'medium')) return null
   const Icon = ICONS[priority]
   return (
     <Chip size="small" variant="outlined" icon={<Icon aria-hidden />} label={PRIORITY[priority]}

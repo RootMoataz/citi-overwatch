@@ -101,7 +101,7 @@ function MilestoneItem({ m, action }) {
         <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
           {overdue(m) ? <Chip size="small" color="error" variant="outlined" label="Overdue" /> : null}
           <StatusChip status={m.status} />
-          <PriorityChip priority={m.priority} />
+          <PriorityChip priority={m.priority} hideDefault />
           <DifficultyChip difficulty={m.difficulty} />
           {m.role === 'supporting' ? <Chip size="small" variant="outlined" label="Supporting" sx={{ height: 20 }} /> : null}
           {action}
