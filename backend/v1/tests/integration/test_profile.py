@@ -92,8 +92,8 @@ def test_profile_access_by_role(client, conn):
 
 
 def test_manager_loses_access_when_person_leaves_their_project(client, conn):
-    mgr = make_user(conn, role="manager")
-    emp = make_user(conn, manager_id=mgr["id"])
+    mgr, line_mgr = make_user(conn, role="manager"), make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=line_mgr["id"])                    # not their direct report
     project = make_project(conn, mgr, **SPAN)
     add_member(conn, project, emp)
     assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 200
@@ -130,3 +130,27 @@ def test_own_history_includes_archived_and_completed_work_read_only(client, conn
     body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[1]
     assert {m["name"] for m in body["milestones"]} == {"Wrap"}
     assert {p["name"] for p in body["projects"]} == {"Done", "Live"}
+
+
+def test_managers_see_their_direct_reports(client, conn):
+    """The Allocation page and dashboard list a manager's reports, so their profiles open too."""
+    mgr, other_mgr = make_user(conn, role="manager"), make_user(conn, role="manager")
+    report = make_user(conn, manager_id=mgr["id"])                       # on nobody's project
+    elsewhere = make_user(conn, manager_id=other_mgr["id"])
+    add_member(conn, make_project(conn, other_mgr, **SPAN), report)
+    assert client.request("GET", f"/users/{report['id']}/profile", token=token_for(conn, mgr))[0] == 200
+    assert client.request("GET", f"/users/{elsewhere['id']}/profile", token=token_for(conn, mgr))[0] == 404
+
+
+def test_managers_see_people_whose_hours_wait_for_their_approval(client, conn):
+    """Someone who left the team can still have pending hours in the manager's Approvals queue."""
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn)
+    project = make_project(conn, mgr, **SPAN)
+    add_member(conn, project, emp)
+    build = make_milestone(conn, project)
+    conn.run("UPDATE project_members SET is_archived = true WHERE user_id = CAST(:u AS uuid)", u=str(emp["id"]))
+    entry = log_entry(conn, emp, build, MONDAY, 4, status="pending")
+    assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 200
+    conn.run("UPDATE time_entries SET status = 'approved' WHERE id = :i", i=entry["id"])
+    assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 404

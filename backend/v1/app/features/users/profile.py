@@ -1,6 +1,7 @@
 """A person's profile page: who they are, this week's hours and their project and milestone history.
-Admins see anyone (with salary); managers see themselves and the people on projects they manage (never a
-salary); employees see only themselves. Anyone else gets 404, so the page doesn't reveal who exists."""
+Admins see anyone (with salary); managers see themselves, their direct reports, the people on live projects they
+manage and anyone whose hours wait for their approval (never a salary); employees see only themselves. Anyone else
+gets 404, so the page doesn't reveal who exists."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -24,9 +25,17 @@ def _can_view(conn, ctx: Ctx, user_id: str) -> bool:
         return True
     if ctx.role != "manager":
         return False
-    return query_one(conn, """SELECT 1 AS ok FROM project_members pm JOIN projects p ON p.id = pm.project_id
-                              WHERE pm.user_id = CAST(:u AS uuid) AND p.manager_id = CAST(:me AS uuid)
-                                AND NOT pm.is_archived AND NOT p.is_archived""",
+    # The same people a manager already sees on Allocation, the dashboard and Approvals.
+    return query_one(conn, """SELECT 1 AS ok FROM users u WHERE u.id = CAST(:u AS uuid) AND (
+                                u.manager_id = CAST(:me AS uuid)
+                                OR EXISTS (SELECT 1 FROM project_members pm JOIN projects p ON p.id = pm.project_id
+                                           WHERE pm.user_id = u.id AND p.manager_id = CAST(:me AS uuid)
+                                             AND NOT pm.is_archived AND NOT p.is_archived)
+                                OR EXISTS (SELECT 1 FROM time_entries t JOIN projects p ON p.id = t.project_id
+                                           JOIN milestones m ON m.id = t.milestone_id
+                                           WHERE t.user_id = u.id AND t.status = 'pending'
+                                             AND p.manager_id = CAST(:me AS uuid)
+                                             AND NOT p.is_archived AND NOT m.is_archived))""",
                      u=user_id, me=ctx.user_id) is not None
 
 
