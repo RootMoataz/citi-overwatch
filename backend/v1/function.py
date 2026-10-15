@@ -7,7 +7,7 @@ Anything else is an internal operation, reachable only by an IAM-authorized dire
 import app.features  # noqa: F401  (registers routes)
 from app import ctx, db
 from app.migrate import apply_migrations
-from app.seed import create_admins, rotate_unpublished, seed
+from app.seed import create_admins, demo_backfill, rotate_unpublished, seed
 from app.router import router
 
 ctx.install(router)
@@ -24,6 +24,8 @@ def _internal(event: dict) -> dict:
         return {"rotated": rotate_unpublished(db.connect())}
     if op == "create_admins":
         return create_admins(db.connect(), event.get("users") or [])
+    if op == "demo_backfill":
+        return demo_backfill(db.connect())
     return {"error": f"unknown op: {op}"}
 
 

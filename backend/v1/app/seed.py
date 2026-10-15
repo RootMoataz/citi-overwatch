@@ -7,7 +7,7 @@ Running seed() again is a no-op once admin.demo exists.
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from app.db import query_one, transaction
+from app.db import query, query_one, transaction
 from app.rules.overtime import hourly_rate
 from app.security import hash_password
 
@@ -43,6 +43,27 @@ DEPARTMENTS = {
     "Technology": ("manager.demo", "employee.demo", "ana.ruiz", "ben.okafor", "chloe.park", "gia.rossi", "hugo.lee"),
     "Operations": ("admin.demo", "riley.chen", "dev.patel", "emma.stone", "finn.walsh", "isla.nguyen", "jack.brown"),
     "Risk & Compliance": ("kira.sato", "leo.martin"),
+}
+
+# Project -> its department. Beacon works in pull mode (its team claims milestones); the rest are push.
+PROJECT_DEPARTMENTS = {
+    "Apollo Data Migration": "Technology",
+    "Atlas Customer Portal": "Operations",
+    "Beacon Mobile App": "Technology",
+    "Cobalt Infrastructure Upgrade": "Operations",
+    "Delta Compliance Audit": "Risk & Compliance",
+}
+PULL_PROJECT, CLAIMABLE_MILESTONE = "Beacon Mobile App", "Design"
+
+# (project, milestone) -> difficulty; every other demo milestone is 'medium'.
+DIFFICULTIES = {
+    ("Apollo Data Migration", "Discovery"): "easy",
+    ("Apollo Data Migration", "Cutover"): "hard",
+    ("Atlas Customer Portal", "Requirements"): "easy",
+    ("Atlas Customer Portal", "Build"): "hard",
+    ("Beacon Mobile App", "Prototype"): "hard",
+    ("Cobalt Infrastructure Upgrade", "Assessment"): "easy",
+    ("Delta Compliance Audit", "Audit Fieldwork"): "hard",
 }
 
 
@@ -96,6 +117,97 @@ def create_admins(conn, users: list[dict]) -> dict:
     return {"created": created, "skipped": skipped}
 
 
+def demo_backfill(conn) -> dict:
+    """Bring demo data seeded before departments, pull mode and difficulty up to today's seed, filling blanks only.
+
+    Departments are reused (any case) or created; a demo person or project gets the seed's department only while
+    it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
+    seed's difficulty only while it's still 'medium'. Assignees and hours are never touched. Safe to run again.
+    For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
+    """
+    out = {"departments_created": [], "users_updated": [], "projects_updated": [], "work_mode_updated": [],
+           "difficulties_updated": [], "already_set": 0, "skipped": []}
+
+    def skip(item: str, reason: str) -> None:
+        """Values already there are only counted; anything the operator may want to look at is listed."""
+        if reason == "already_set":
+            out["already_set"] += 1
+        else:
+            out["skipped"].append({"item": item, "reason": reason})
+
+    with transaction(conn):
+        departments: dict[str, str] = {}
+        for name in DEPARTMENTS:
+            row = query_one(conn, "SELECT id, is_archived FROM departments WHERE lower(name) = lower(:n)", n=name)
+            if row and row["is_archived"]:
+                skip(f"department {name}", "archived")
+                continue
+            if not row:
+                row = query_one(conn, "INSERT INTO departments (name) VALUES (:n) RETURNING id", n=name)
+                out["departments_created"].append(name)
+            departments[name] = str(row["id"])
+
+        def fill_department(table: str, key: str, value: str, label: str, department: str, updated: list) -> None:
+            active = " AND NOT is_archived" if table == "projects" else ""
+            row = query_one(conn, f"SELECT id, department_id FROM {table} WHERE {key} = :v{active}", v=value)
+            if not row:
+                skip(label, "missing")
+            elif row["department_id"] is not None:
+                skip(label, "already_set")
+            elif department not in departments:
+                skip(label, "department_archived")
+            else:
+                conn.run(f"UPDATE {table} SET department_id = CAST(:d AS uuid), updated_at = now() WHERE id = :i",
+                         d=departments[department], i=row["id"])
+                updated.append(value)
+
+        for department, usernames in DEPARTMENTS.items():
+            for username in usernames:
+                fill_department("users", "username", username, f"user {username}", department, out["users_updated"])
+        for name, department in PROJECT_DEPARTMENTS.items():
+            fill_department("projects", "name", name, f"project {name}", department, out["projects_updated"])
+
+        beacon = query_one(conn, "SELECT id, work_mode FROM projects WHERE name = :n AND NOT is_archived",
+                           n=PULL_PROJECT)
+        if not beacon:
+            skip(f"{PULL_PROJECT} work mode", "missing")
+        elif beacon["work_mode"] != "push":
+            skip(f"{PULL_PROJECT} work mode", "already_set")
+        else:
+            conn.run("UPDATE projects SET work_mode = 'pull', updated_at = now() WHERE id = :i", i=beacon["id"])
+            out["work_mode_updated"].append(PULL_PROJECT)
+        if beacon:
+            # Pull mode leaves assignments alone, so Design is claimable only if nobody was put on it meanwhile.
+            design = query_one(conn, """
+                SELECT m.status::text AS status,
+                       (SELECT count(*) FROM milestone_assignees a WHERE a.milestone_id = m.id) AS n
+                FROM milestones m WHERE m.project_id = :p AND m.name = :n AND NOT m.is_archived""",
+                               p=beacon["id"], n=CLAIMABLE_MILESTONE)
+            label = f"{PULL_PROJECT} / {CLAIMABLE_MILESTONE}"
+            if not design:
+                skip(label, "missing")
+            elif design["n"]:
+                skip(label, "has_assignees")
+            elif design["status"] != "not_started":
+                skip(label, "already_started")
+
+        for (project, milestone), difficulty in DIFFICULTIES.items():
+            label = f"{project} / {milestone}"
+            rows = query(conn, """SELECT m.id, m.difficulty FROM milestones m JOIN projects p ON p.id = m.project_id
+                                  WHERE p.name = :p AND NOT p.is_archived AND m.name = :m AND NOT m.is_archived""",
+                         p=project, m=milestone)
+            if not rows:
+                skip(label, "missing")
+            elif all(r["difficulty"] != "medium" for r in rows):
+                skip(label, "already_set")
+            else:
+                conn.run("""UPDATE milestones SET difficulty = :d, updated_at = now()
+                            WHERE id = ANY(:ids) AND difficulty = 'medium'""",
+                         d=difficulty, ids=[r["id"] for r in rows if r["difficulty"] == "medium"])
+                out["difficulties_updated"].append(label)
+    return out
+
+
 def _load(conn) -> None:
     today = datetime.now(timezone.utc).date()
     monday = today - timedelta(days=today.weekday())
@@ -117,8 +229,7 @@ def _load(conn) -> None:
     def d(days: int) -> date:
         return today + timedelta(days=days)
 
-    def project(name, manager, status, start, end, budget, description, department, completed=False,
-                work_mode="push"):
+    def project(name, manager, status, start, end, budget, description, completed=False):
         return query_one(conn, """
             INSERT INTO projects (name, description, start_date, predicted_end_date, budget, status,
                                   manager_id, created_by, completed_at, department_id, work_mode)
@@ -126,15 +237,16 @@ def _load(conn) -> None:
                     CASE WHEN :done THEN now() - interval '30 days' END, :dept, :mode)
             RETURNING *""", n=name, desc=description, s=start, e=end, b=Decimal(budget), st=status,
             m=people[manager]["id"], c=people["admin.demo"]["id"], done=completed,
-            dept=departments[department], mode=work_mode)
+            dept=departments[PROJECT_DEPARTMENTS[name]], mode="pull" if name == PULL_PROJECT else "push")
 
-    def milestone(proj, name, start, end, status, description="", difficulty="medium"):
+    def milestone(proj, name, start, end, status, description=""):
         return query_one(conn, """
             INSERT INTO milestones (project_id, name, description, start_date, end_date, status, completed_at,
                                     difficulty)
             VALUES (:p, :n, :desc, :s, :e, CAST(:st AS milestone_status),
                     CASE WHEN :st = 'completed' THEN now() END, :dif)
-            RETURNING *""", p=proj["id"], n=name, desc=description, s=start, e=end, st=status, dif=difficulty)
+            RETURNING *""", p=proj["id"], n=name, desc=description, s=start, e=end, st=status,
+            dif=DIFFICULTIES.get((proj["name"], name), "medium"))
 
     def member(proj, username, hours):
         conn.run("INSERT INTO project_members (project_id, user_id, planned_hours_per_week) VALUES (:p, :u, :h)",
@@ -166,12 +278,10 @@ def _load(conn) -> None:
 
     # 1. Healthy active project with a three-step dependency chain.
     apollo = project("Apollo Data Migration", "manager.demo", "active", d(-90), d(75), 250000,
-                     "Move customer records from the legacy warehouse to the new platform.", "Technology")
-    discovery = milestone(apollo, "Discovery", d(-90), d(-60), "completed", "Inventory every legacy table.",
-                          "easy")
+                     "Move customer records from the legacy warehouse to the new platform.")
+    discovery = milestone(apollo, "Discovery", d(-90), d(-60), "completed", "Inventory every legacy table.")
     mapping = milestone(apollo, "Schema Mapping", d(-59), d(10), "in_progress", "Map legacy fields to the new model.")
-    cutover = milestone(apollo, "Cutover", d(11), d(60), "not_started", "Switch traffic to the new platform.",
-                        "hard")
+    cutover = milestone(apollo, "Cutover", d(11), d(60), "not_started", "Switch traffic to the new platform.")
     depends(mapping, discovery)
     depends(cutover, mapping)
     for username, hours in (("employee.demo", 30), ("ana.ruiz", 20), ("ben.okafor", 20), ("chloe.park", 15)):
@@ -182,9 +292,9 @@ def _load(conn) -> None:
 
     # 2. At-risk project: past its predicted end with an overdue milestone.
     atlas = project("Atlas Customer Portal", "riley.chen", "active", d(-120), d(-4), 60000,
-                    "Self-service portal for customer account changes.", "Operations")
-    requirements = milestone(atlas, "Requirements", d(-120), d(-90), "completed", difficulty="easy")
-    build = milestone(atlas, "Build", d(-89), d(-8), "in_progress", difficulty="hard")
+                    "Self-service portal for customer account changes.")
+    requirements = milestone(atlas, "Requirements", d(-120), d(-90), "completed")
+    build = milestone(atlas, "Build", d(-89), d(-8), "in_progress")
     launch = milestone(atlas, "Launch", d(-7), d(-4), "not_started")
     depends(build, requirements)
     depends(launch, build)
@@ -195,21 +305,21 @@ def _load(conn) -> None:
 
     # 3-5. Planned, on hold and completed projects. Beacon works in pull mode: its team claims the milestones.
     beacon = project("Beacon Mobile App", "manager.demo", "planned", d(20), d(200), 90000,
-                     "Native mobile app for field teams.", "Technology", work_mode="pull")
+                     "Native mobile app for field teams.")
     design = milestone(beacon, "Design", d(20), d(60), "not_started")
-    prototype = milestone(beacon, "Prototype", d(61), d(120), "not_started", difficulty="hard")
+    prototype = milestone(beacon, "Prototype", d(61), d(120), "not_started")
     depends(prototype, design)
     member(beacon, "gia.rossi", 20)
     member(beacon, "hugo.lee", 20)
     cobalt = project("Cobalt Infrastructure Upgrade", "riley.chen", "on_hold", d(-30), d(120), 150000,
-                     "Replace end-of-life network hardware.", "Operations")
-    assessment = milestone(cobalt, "Assessment", d(-30), d(10), "in_progress", difficulty="easy")
+                     "Replace end-of-life network hardware.")
+    assessment = milestone(cobalt, "Assessment", d(-30), d(10), "in_progress")
     for username in ("isla.nguyen", "jack.brown", "finn.walsh"):
         member(cobalt, username, 20)
     assign(assessment, "isla.nguyen", "jack.brown")
     delta = project("Delta Compliance Audit", "manager.demo", "completed", d(-200), d(-30), 40000,
-                    "Annual controls audit.", "Risk & Compliance", completed=True)
-    audit = milestone(delta, "Audit Fieldwork", d(-200), d(-30), "completed", difficulty="hard")
+                    "Annual controls audit.", completed=True)
+    audit = milestone(delta, "Audit Fieldwork", d(-200), d(-30), "completed")
     member(delta, "kira.sato", 20)
     member(delta, "leo.martin", 20)
     assign(audit, "kira.sato", "leo.martin")

@@ -4,7 +4,7 @@ from decimal import Decimal
 from app.db import query, query_one
 from app.rules.at_risk import at_risk_reasons
 from app.rules.cycles import dependency_order
-from app.seed import DEMO_PASSWORD, seed
+from app.seed import DEMO_PASSWORD, PEOPLE, seed
 
 
 def test_seed_idempotent_and_demo_logins_work(client, conn):
@@ -128,3 +128,140 @@ def test_seed_has_a_pull_project_with_a_claimable_milestone(conn):
                                AND NOT EXISTS (SELECT 1 FROM milestone_dependencies d WHERE d.milestone_id = m.id)""",
                       p=pull[0]["id"])
     assert open_work
+
+
+DEMO_USERNAMES = [u for u, *_ in PEOPLE]
+
+
+def demo_state(conn) -> dict:
+    """What the backfill is responsible for: departments of the demo people and projects, work modes, difficulties."""
+    return {
+        "users": {r["username"]: r["dept"] for r in query(conn, """
+            SELECT u.username, d.name AS dept FROM users u LEFT JOIN departments d ON d.id = u.department_id
+            WHERE u.username = ANY(:names)""", names=DEMO_USERNAMES)},
+        "projects": {r["name"]: (r["dept"], r["work_mode"]) for r in query(conn, """
+            SELECT p.name, d.name AS dept, p.work_mode FROM projects p
+            LEFT JOIN departments d ON d.id = p.department_id""")},
+        "milestones": {(r["project"], r["name"]): r["difficulty"] for r in query(conn, """
+            SELECT p.name AS project, m.name, m.difficulty FROM milestones m
+            JOIN projects p ON p.id = m.project_id""")},
+    }
+
+
+def seed_the_old_way(conn) -> dict:
+    """Seed, note what today's seed gives, then wind it back to how the live database was seeded before
+    departments, pull mode and difficulty (Beacon only had Design then)."""
+    seed(conn)
+    expected = demo_state(conn)
+    conn.run("""DELETE FROM milestone_dependencies
+                WHERE milestone_id IN (SELECT id FROM milestones WHERE name = 'Prototype')""")
+    conn.run("DELETE FROM milestones WHERE name = 'Prototype'")
+    conn.run("UPDATE users SET department_id = NULL")
+    conn.run("UPDATE projects SET department_id = NULL, work_mode = 'push'")
+    conn.run("UPDATE milestones SET difficulty = 'medium'")
+    conn.run("DELETE FROM departments")
+    del expected["milestones"][("Beacon Mobile App", "Prototype")]
+    return expected
+
+
+def counts(conn) -> dict:
+    return {t: query_one(conn, f"SELECT count(*) AS n FROM {t}")["n"]
+            for t in ("milestone_assignees", "time_entries", "audit_log", "departments", "users", "projects")}
+
+
+def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
+    import function
+
+    expected = seed_the_old_way(conn)
+    before = counts(conn)
+    result = function.handler({"op": "demo_backfill"})
+    assert demo_state(conn) == expected
+    assert result["departments_created"] == ["Technology", "Operations", "Risk & Compliance"]
+    assert sorted(result["users_updated"]) == sorted(DEMO_USERNAMES)
+    assert sorted(result["projects_updated"]) == sorted(expected["projects"])
+    assert result["work_mode_updated"] == ["Beacon Mobile App"]
+    assert sorted(result["difficulties_updated"]) == [
+        "Apollo Data Migration / Cutover", "Apollo Data Migration / Discovery", "Atlas Customer Portal / Build",
+        "Atlas Customer Portal / Requirements", "Cobalt Infrastructure Upgrade / Assessment",
+        "Delta Compliance Audit / Audit Fieldwork"]
+    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
+    assert result["already_set"] == 0
+    after = counts(conn)
+    assert after == {**before, "departments": 3}  # no assignees, hours, people or projects added or removed
+    # Design is claimable by Beacon's team, as in today's seed.
+    beacon_ms = query(conn, """SELECT m.name FROM milestones m JOIN projects p ON p.id = m.project_id
+                               WHERE p.name = 'Beacon Mobile App'""")
+    assert [m["name"] for m in beacon_ms] == ["Design"]
+    assert query_one(conn, """SELECT count(*) AS n FROM milestone_assignees a JOIN milestones m ON m.id = a.milestone_id
+                              WHERE m.name = 'Design'""")["n"] == 0
+
+
+def test_demo_backfill_a_second_time_changes_nothing(conn):
+    import function
+
+    seed_the_old_way(conn)
+    function.handler({"op": "demo_backfill"})
+    state, before = demo_state(conn), counts(conn)
+    result = function.handler({"op": "demo_backfill"})
+    assert (demo_state(conn), counts(conn)) == (state, before)
+    for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
+                "difficulties_updated"):
+        assert result[key] == [], key
+    assert result["already_set"] == 16 + 5 + 1 + 6
+    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
+
+
+def test_demo_backfill_on_a_fresh_seed_changes_nothing(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    state = demo_state(conn)
+    result = demo_backfill(conn)
+    assert demo_state(conn) == state
+    assert result["departments_created"] == [] and result["users_updated"] == []
+
+
+def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
+    from app.seed import demo_backfill
+
+    seed_the_old_way(conn)
+    custom = query_one(conn, "INSERT INTO departments (name) VALUES ('Platform') RETURNING id")["id"]
+    query_one(conn, "INSERT INTO departments (name) VALUES ('technology') RETURNING id")
+    query_one(conn, """INSERT INTO departments (name, is_archived, archived_at)
+                       VALUES ('Operations', true, now()) RETURNING id""")
+    conn.run("UPDATE users SET department_id = :d WHERE username = 'manager.demo'", d=custom)
+    conn.run("UPDATE projects SET department_id = :d WHERE name = 'Apollo Data Migration'", d=custom)
+    conn.run("""UPDATE milestones SET difficulty = 'hard' WHERE name = 'Discovery'""")
+    gia = query_one(conn, "SELECT id FROM users WHERE username = 'gia.rossi'")["id"]
+    design = query_one(conn, "SELECT id FROM milestones WHERE name = 'Design'")["id"]
+    conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=design, u=gia)
+
+    result = demo_backfill(conn)
+    state = demo_state(conn)
+    # Kept: an admin's department, difficulty and Design's assignee.
+    assert state["users"]["manager.demo"] == "Platform"
+    assert state["projects"]["Apollo Data Migration"][0] == "Platform"
+    assert state["milestones"][("Apollo Data Migration", "Discovery")] == "hard"
+    assert [r["user_id"] for r in query(conn, "SELECT user_id FROM milestone_assignees WHERE milestone_id = :m",
+                                        m=design)] == [gia]
+    assert {"item": "Beacon Mobile App / Design", "reason": "has_assignees"} in result["skipped"]
+    # An existing department is reused whatever its case; an archived one isn't used or duplicated.
+    assert "Technology" not in result["departments_created"] and state["users"]["employee.demo"] == "technology"
+    assert {"item": "department Operations", "reason": "archived"} in result["skipped"]
+    assert state["users"]["riley.chen"] is None and state["projects"]["Atlas Customer Portal"][0] is None
+    assert query_one(conn, "SELECT count(*) AS n FROM departments WHERE lower(name) = 'operations'")["n"] == 1
+    assert "manager.demo" not in result["users_updated"]
+    assert "Apollo Data Migration" not in result["projects_updated"]
+    assert "Apollo Data Migration / Discovery" not in result["difficulties_updated"]
+    assert {"item": "user riley.chen", "reason": "department_archived"} in result["skipped"]
+    assert result["already_set"] == 3
+    # Beacon still switches to pull: Design keeps its assignee, so it simply isn't claimable.
+    assert state["projects"]["Beacon Mobile App"][1] == "pull"
+
+
+def test_demo_backfill_leaves_a_project_already_in_pull_mode(conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    result = demo_backfill(conn)
+    assert result["work_mode_updated"] == [] and result["skipped"] == []
