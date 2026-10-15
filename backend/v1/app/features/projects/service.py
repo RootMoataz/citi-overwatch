@@ -185,7 +185,7 @@ def update_project(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
             raise ApiError(403, "FORBIDDEN", "Only an admin can change a project's manager")
         changes["manager_id"] = _check_manager(conn, body["manager_id"])
     if "department_id" in body:
-        changes["department_id"] = check_department(conn, body["department_id"])
+        changes["department_id"] = check_department(conn, body["department_id"], current=before["department_id"])
     start = changes.get("start_date", before["start_date"])
     end = changes.get("predicted_end_date", before["predicted_end_date"])
     _check_dates(start, end)

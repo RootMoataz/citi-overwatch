@@ -180,3 +180,32 @@ def test_allocations_carry_each_persons_department(client, conn):
     put_in(conn, "users", person, tech)
     body = client.request("GET", "/allocations", token=token_for(conn, admin))[1]
     assert [r["user"]["department_id"] for r in body if r["user"]["name"] == "Tess Tech"] == [str(tech["id"])]
+
+
+def test_project_in_an_archived_department_can_still_be_edited_keeping_it(client, conn):
+    mgr = make_user(conn, role="manager")
+    old, other_old = make_department(conn, "Old", archived=True), make_department(conn, "Older", archived=True)
+    project = make_project(conn, mgr)
+    put_in(conn, "projects", project, old)
+    token = token_for(conn, mgr)
+    # The edit form sends the current department back with every save.
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token,
+                                        json={"name": "Renamed", "department_id": str(old["id"])})
+    assert (status, body["name"], body["department"]["name"]) == (200, "Renamed", "Old")
+    # Moving it to a different archived department is still refused.
+    status, body, _, _ = client.request("PUT", f"/projects/{project['id']}", token=token,
+                                        json={"department_id": str(other_old["id"])})
+    assert (status, body["error"]["details"]) == (400, {"department_id": "invalid"})
+
+
+def test_person_in_an_archived_department_can_still_be_edited_keeping_it(client, conn):
+    token = token_for(conn, make_user(conn, role="admin"))
+    old, other_old = make_department(conn, "Old", archived=True), make_department(conn, "Older", archived=True)
+    person = make_user(conn, role="manager")
+    put_in(conn, "users", person, old)
+    status, body, _, _ = client.request("PUT", f"/users/{person['id']}", token=token,
+                                        json={"job_title": "Lead", "department_id": str(old["id"])})
+    assert (status, body["job_title"], body["department_id"]) == (200, "Lead", str(old["id"]))
+    status, body, _, _ = client.request("PUT", f"/users/{person['id']}", token=token,
+                                        json={"department_id": str(other_old["id"])})
+    assert (status, body["error"]["details"]) == (400, {"department_id": "invalid"})

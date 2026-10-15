@@ -11,11 +11,17 @@ from app.http import ApiError
 from app.validation import as_str, as_uuid, require
 
 
-def check_department(conn, value, field: str = "department_id") -> str | None:
-    """A department id to store on a person or project: None clears it, anything else must be an active one."""
+def check_department(conn, value, field: str = "department_id", *, current=None) -> str | None:
+    """A department id to store on a person or project: None clears it, anything else must be an active one.
+
+    Keeping the department it already has (`current`) is always allowed, even once that one is archived,
+    so editing other fields doesn't force a move.
+    """
     if value is None or value == "":
         return None
     dept_id = as_uuid(value, field)
+    if current is not None and dept_id.lower() == str(current):
+        return dept_id
     if not query_one(conn, "SELECT 1 AS ok FROM departments WHERE id = CAST(:i AS uuid) AND NOT is_archived",
                      i=dept_id):
         raise ApiError(400, "VALIDATION_ERROR", "Pick an active department", {field: "invalid"})

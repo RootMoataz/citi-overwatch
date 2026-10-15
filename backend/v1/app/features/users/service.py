@@ -175,7 +175,7 @@ def update_user(conn, ctx: Ctx, user_id: str, body: dict) -> dict:
     if "manager_id" in body or "role" in changes:
         changes["manager_id"] = _check_manager(conn, role, body.get("manager_id", before["manager_id"]), user_id)
     if "department_id" in body:
-        changes["department_id"] = check_department(conn, body["department_id"])
+        changes["department_id"] = check_department(conn, body["department_id"], current=before["department_id"])
     if not changes:
         return user_public(before, include_salary=True)
     sets = ", ".join(
