@@ -102,11 +102,12 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
  "projects": [{"id": "86a8c3a5-…", "name": "Apollo Data Migration", "status": "active", "planned_hours_per_week": 30.0,
                "on_team": true, "logged_hours": 120.0, "approved_hours": 96.0, "can_open": true, "…": "…"}],
  "milestones": [{"id": "…", "name": "Schema Mapping", "role": "supporting", "status": "in_progress",
-                 "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"}, "logged_hours": 24.0,
+                 "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration", "status": "active", "is_archived": false},
+                 "logged_hours": 24.0,
                  "approved_hours": 16.0, "can_open": true, "…": "…"}]}
 ```
 
-`logged` counts pending and approved hours; `overtime` is the hours logged this week beyond 40. Totals leave out archived projects and milestones. The history lists every project they've been on (completed ones included, archived ones only for admins) and every milestone they're assigned to or logged time on; `role` is `null` once they're no longer assigned.
+`logged` counts pending and approved hours; `overtime` is the hours logged this week beyond 40. Totals leave out archived projects and milestones. The history lists every project they've been on and every milestone they're assigned to or logged time on, completed ones included; `role` is `null` once they're no longer assigned. Archived projects and milestones are in the history only for admins and for the person themselves (their own past work); a manager viewing someone sees live work only. Each milestone's `project` carries its `status` and `is_archived`. Nothing on the profile is editable.
 
 ```http
 GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith
@@ -157,8 +158,8 @@ Every change is in the audit log (`entity_type` `department`).
 | POST | `/projects` | Admin. `{name, description?, start_date, predicted_end_date, budget, manager_id, status?, department_id?, work_mode?}` → `201`. `work_mode` is `push` (default) or `pull` |
 | GET | `/projects/{id}` | `404` if you can't see it |
 | PUT | `/projects/{id}` | The project's manager or an admin, including `department_id` (an active department or `null`) and `work_mode`. Only admins can change the manager |
-| DELETE | `/projects/{id}` | Admin. Archives the project → `204` |
-| POST | `/projects/{id}/restore` | Admin |
+| DELETE | `/projects/{id}` | Admin only (`403` for managers, even their own project). Archives the project → `204` |
+| POST | `/projects/{id}/restore` | Admin only (`403` for managers) |
 | GET | `/projects/{id}/summary` | Budget, consumed, remaining, percentages, risk reasons and team size |
 | GET | `/projects/{id}/milestone-costs` | Per non-archived milestone: `approved_hours`, `pending_hours`, `approved_cost` and `budget_pct`, plus a `total` whose `approved_cost` is the project's `consumed`. Hours are `null` (and `hours_visible` is `false`) unless you manage the project. Never includes an hourly rate |
 
@@ -200,7 +201,7 @@ A missing field:
 | GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support), `difficulty`, `is_assignee`, `claimable` (a pull project's ready, unassigned milestone) and `can_claim` (claimable and you're on the team) |
 | POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date, difficulty?}` → `201`. `difficulty` is `easy`, `medium` (default) or `hard`; anything else is `400`. The dates must fall within the project's dates |
 | GET / PUT / DELETE | `/milestones/{id}` | `DELETE` archives |
-| POST | `/milestones/{id}/restore` | Admin |
+| POST | `/milestones/{id}/restore` | Admins and the project's manager (`403` for employees; `404` for other managers, or when the project itself is archived and you're not an admin) |
 | PUT | `/milestones/{id}/dependencies` | `{predecessor_ids: [...]}` → `{…, warnings}`. Returns `400 DEPENDENCY_CYCLE` or `CROSS_PROJECT_DEPENDENCY`. `warnings` flags a start date before a predecessor's end |
 | PUT | `/milestones/{id}/assignees` | `{user_ids: [...]}`. They must be project members (`NOT_A_MEMBER`) |
 | POST | `/milestones/{id}/status` | `{status}`. Assignees can move it to `in_progress` and `ready_for_review`; only the manager or an admin can set `completed` or send it back. Returns `400 INVALID_TRANSITION`, or `403 NOT_ASSIGNED`. The response is the milestone plus `routed_to`: when an assignee sends it for review they're added as support elsewhere ([auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)) and `routed_to` is `{milestone: {id, name, end_date}, project: {id, name}}`; otherwise it's `null` |
@@ -219,8 +220,8 @@ A missing field:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones, each with `role`: `primary` or `supporting`), entries and totals. `user` lets a manager or admin view someone else |
-| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week. `hours` is 0.25–24 with at most 2 decimal places (more is a `400` with "Use at most 2 decimal places"); `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it |
+| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones, each with `role`: `primary` or `supporting`, the `project`'s `status`, and `open`: `false` when the project is on hold or completed), entries and totals. `user` lets a manager or admin view someone else |
+| PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours}]}` saves a week, all or nothing. `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it. See the rules below |
 | GET | `/approvals?user=&project=&milestone=` | Pending entries you can decide (never your own) |
 | GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry. `hourly_rate` is included for admins only, because a rate reveals a salary; managers get the cost |
 | POST | `/time-entries/{id}/approve` | `{expected_hours?}`: the hours you saw. Copies the hourly rate onto the entry, which then counts toward the budget. Returns `409 STALE_ENTRY` if the entry changed since you loaded it |
@@ -238,7 +239,19 @@ GET /api/v1/time-entries          (as employee.demo, this week)
  "totals": {"logged": 45.0, "approved": 0.0}}
 ```
 
-The entry that takes the week past 40 hours carries `"over_40": true` and `"label": "Pending (Overtime requested from …)"`.
+The entry that takes the week past 40 hours carries `"over_40": true` and `"label": "Pending (Overtime requested from …)"`. Going over 40 is never refused: the hours above 40 go to the manager as an overtime request.
+
+**Saving rules** (`PUT /time-entries`):
+
+| Rule | Error |
+|---|---|
+| `hours` is a JSON number, or text made of digits and one decimal point (`"7.5"`). Letters, `"1e1"`, `"+5"`, `"7,5"`, booleans, lists are refused | `400 VALIDATION_ERROR`, `details: {"hours": "invalid_number"}` |
+| Not negative | `400 VALIDATION_ERROR`, `details: {"hours": "min:0"}`, message "Hours on Mon 12 Oct can't be negative" |
+| At most 24 in one cell, at least 0.25 unless clearing it | `400 VALIDATION_ERROR`, `{"hours": "max:24"}` / `{"hours": "min:0.25"}` |
+| At most 2 decimal places (`7.25` is fine, `7.255` isn't) | `400 VALIDATION_ERROR`, `{"hours": "Use at most 2 decimal places"}` |
+| A day's total across all the person's milestones stays at or under 24: their saved pending and approved hours on live (non-archived) work, with each cell in the save replacing what it held. Rejected hours don't count | `400 DAY_OVER_24H`, `details: {"work_date": "2026-10-14", "hours": 26.0}`, message "More than 24h on Wed 14 Oct (26h across your milestones). …" |
+| No new or changed hours on a project that's on hold or completed, on an archived project, or on an archived milestone. Re-sending an unchanged cell there is fine (nothing is written); changing, clearing or resubmitting it isn't | `409 PROJECT_NOT_OPEN`, message e.g. "Atlas is on hold — logging is paused" |
+| Only milestones you're assigned to (checked first) | `400 NOT_ASSIGNED` |
 
 ```http
 GET /api/v1/time-entries/d273b5fc-02a1-41a8-8388-5d2c33698ee5/breakdown
@@ -314,12 +327,14 @@ For `ENTRY_REJECTED`, the top-level `week_start` is the rejected entry's week, s
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/archive?type=` | Admin (`403` otherwise). Every archived project, milestone and person, newest first. `type` is `project`, `milestone` or `user`. Restoring uses each type's own `POST …/{id}/restore` |
+| GET | `/archive?type=` | Admins and managers (`403` for employees). Admins get every archived project, milestone and person. Managers get only the archived projects they manage and the archived milestones in their projects, never people (`?type=user` is `403`). Newest first. `type` is `project`, `milestone` or `user`. Each item has `can_restore`: always `true` for admins; for managers `true` only on milestones whose project isn't archived (projects are restored by an admin). Restoring uses each type's own `POST …/{id}/restore` |
 
 ```json
 {"items": [{"type": "milestone", "id": "202d87b5-…", "name": "Schema Mapping", "archived_at": "2026-10-13T18:00:15.020027-04:00",
-            "archived_by": {"id": "9315bbc9-…", "name": "Avery Admin"}, "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"}},
-           {"type": "user", "id": "81c483ea-…", "name": "Lee Leaver", "username": "lleaver", "archived_at": "…", "archived_by": null}]}
+            "archived_by": {"id": "9315bbc9-…", "name": "Avery Admin"}, "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"},
+            "difficulty": "medium", "can_restore": true},
+           {"type": "user", "id": "81c483ea-…", "name": "Lee Leaver", "username": "lleaver", "archived_at": "…", "archived_by": null,
+            "can_restore": true}]}
 ```
 
 `archived_by` comes from the latest `archive` entry in the audit log, and is `null` when there isn't one (for example, seeded data).

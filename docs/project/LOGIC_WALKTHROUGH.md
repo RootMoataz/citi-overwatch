@@ -128,9 +128,13 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  S[PUT /time-entries — save a week grid] --> V{each cell valid?<br/>0.25–24h, assigned, in project dates, in this week}
+  S[PUT /time-entries — save a week grid] --> V{each cell valid?<br/>a plain number, 0.25–24h, ≤ 2 decimals,<br/>assigned, in project dates, in this week}
   V -- no --> VE[400 with the field / code]
-  V -- yes --> W[upsert entry → status = pending<br/>edited after a decision? tag edited_after_decision]
+  V -- yes --> G{project on hold, completed or archived,<br/>or milestone archived — and the cell changes something?}
+  G -- yes --> GE["409 PROJECT_NOT_OPEN"]
+  G -- no --> D{any day over 24h?<br/>saved pending + approved hours on other milestones<br/>+ this save's cells for that day}
+  D -- yes --> DE["400 DAY_OVER_24H"]
+  D -- no --> W[upsert entry → status = pending<br/>edited after a decision? tag edited_after_decision]
   W --> T["week total = person's pending + approved hours,<br/>all projects, Mon–Sun"]
   T --> O{total > 40?}
   O -- no --> P1[label: Pending approval]
@@ -151,7 +155,23 @@ flowchart TD
 - **The week save, labels, approve and reject, and the breakdown** are in [`app/features/time/service.py`](../../backend/v1/app/features/time/service.py).
 - **One alert per person-week** is guaranteed twice: by the crossing check, and by a unique constraint on `(type, subject_user_id, week_start)`.
 - **The forecast** is consumed + (the average approved cost over the last 4 complete weeks × the weeks left until the predicted end date).
+- **Input:** `_hours()` takes a JSON number or text of digits and one point only, so `"1e1"`, `"+5"`, `"-3"` and letters never become hours; negatives, more than 24, under 0.25 and a third decimal each get their own message. The grid blocks the same keys (`-`, `+`, `e`, letters) and refuses a paste that isn't already a clean value, rather than cleaning `"-3"` into `3`.
+- **24 hours a day:** `_check_daily_cap()` runs after every cell is valid and before anything is written. A day counts what the server would hold after the save: the person's pending and approved hours on live work that day, with each saved cell replacing its old value. Rejected hours and archived work don't count (spec §3.1). The grid adds up the same way and, before saving, marks that day's cells, header and total and shows "More than 24h on <day>"; Save stays disabled until it's fixed.
+- **Over 40 is a warning, not a block:** the overtime request is the point of the 40-hour rule, so the grid shows "This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request." and turns the week total amber, and the save goes through.
+- **Closed projects:** logging is open on `planned` and `active` projects. On hold pauses it, completed closes it, and archived projects or milestones can't change. `_validate_cell()` refuses a cell there with `409 PROJECT_NOT_OPEN` only when it would write something (new hours, changed hours or note, a clear, or a resubmission); an unchanged cell is skipped. The week rows carry the project's `status` and `open`, so the grid greys those rows out, disables their cells (existing hours stay visible), hides **Resubmit**, and labels them "Project on hold — logging paused" or "Project completed — logging closed".
 - **UI:** [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx), [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx), [`BreakdownPanel.jsx`](../../frontend/src/features/approvals/BreakdownPanel.jsx) and [`NotificationBell.jsx`](../../frontend/src/components/NotificationBell.jsx).
+
+## 5a. Archive and restore permissions
+
+| | Archive | Restore | Sees it on the Archive page |
+|---|---|---|---|
+| Project | Admin | Admin | Admins; the project's manager (read-only, "Only an admin can restore a project") |
+| Milestone | Admin, the project's manager | Admin, the project's manager (while the project itself isn't archived) | Admins; the project's manager, with **Restore** |
+| Person | Admin | Admin | Admins only |
+
+- **Code:** `load_milestone()` in [`app/authz.py`](../../backend/v1/app/authz.py) lets an archived milestone through only for someone who manages its project, so other managers and employees get `404`; `restore_milestone()` asks for `manage=True`. Projects stay admin-only at the route. [`app/features/archive/service.py`](../../backend/v1/app/features/archive/service.py) filters a manager's list to `p.manager_id = me`, leaves people out, and sets `can_restore` per item.
+- **UI:** [`ArchivePage.jsx`](../../frontend/src/features/archive/ArchivePage.jsx) shows **Restore** only where `can_restore` is true and hides the People filter from managers. Milestones are archived from the project's Milestones tab.
+- **History:** a person's own profile ("My history") also lists their work on archived projects and milestones, marked *Archived* / *Project archived* / *Project completed*, with nothing editable. Totals still leave archived work out. A manager looking at someone sees live work only.
 
 ## 6. The at-risk rule
 
