@@ -11,6 +11,7 @@ from app.features.activity.service import summarize
 from app.features.projects.service import decorated, visible_projects
 from app.features.time.service import _today, _weekly_costs, week_start
 from app.rules.overtime import WEEKLY_CAP, forecast_total
+from app.rules.priority import priority_rank
 from app.validation import as_date, as_uuid, page_params
 
 DUE_SOON_DAYS = 14
@@ -58,17 +59,20 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
 
     overdue, due_soon = [], []
     if ids:
-        milestones = query(conn, """SELECT id, project_id, name, end_date, status, difficulty FROM milestones
+        milestones = query(conn, """SELECT id, project_id, name, end_date, status, difficulty, priority FROM milestones
                                     WHERE project_id = ANY(CAST(:ids AS uuid[])) AND NOT is_archived
                                       AND status <> 'completed' ORDER BY end_date""", ids=ids)
         for m in milestones:
             entry = {"id": m["id"], "name": m["name"], "end_date": m["end_date"], "status": m["status"],
-                     "difficulty": m["difficulty"],
+                     "difficulty": m["difficulty"], "priority": m["priority"],
                      "project": {"id": m["project_id"], "name": by_id[str(m["project_id"])]["name"]}}
             if m["end_date"] < today:
                 overdue.append(entry)
             elif m["end_date"] <= today + timedelta(days=DUE_SOON_DAYS):
                 due_soon.append(entry)
+        # Within each list the most important come first, then the earliest due (the query's order).
+        overdue.sort(key=lambda e: priority_rank(e["priority"]))
+        due_soon.sort(key=lambda e: priority_rank(e["priority"]))
 
     start = week_start(today)
     people = {str(p["id"]): p for p in _people_scope(conn, ctx, department)}

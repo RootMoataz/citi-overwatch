@@ -342,7 +342,7 @@ def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:
     """Budget tab: approved cost per non-archived milestone. The total is project_consumed itself, so the
     table always matches the Consumed figure. Hours only for the project's manager, admins and executives (P7)."""
     project = load_project(conn, ctx, project_id, include_archived=ctx.sees_all)
-    rows = query(conn, """SELECT m.id, m.name, m.status,
+    rows = query(conn, """SELECT m.id, m.name, m.status, m.priority,
                                  coalesce(sum(t.hours) FILTER (WHERE t.status = 'approved'), 0) AS approved_hours,
                                  coalesce(sum(t.hours) FILTER (WHERE t.status = 'pending'), 0) AS pending_hours,
                                  coalesce(sum(t.hours * t.hourly_rate) FILTER (WHERE t.status = 'approved'), 0) AS cost
@@ -357,7 +357,7 @@ def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:
 
     consumed = project_consumed(conn, project_id)
     return {"hours_visible": show,
-            "items": [{"milestone": {"id": r["id"], "name": r["name"], "status": r["status"]},
+            "items": [{"milestone": {"id": r["id"], "name": r["name"], "status": r["status"], "priority": r["priority"]},
                        "approved_hours": hours(r["approved_hours"]), "pending_hours": hours(r["pending_hours"]),
                        "approved_cost": r["cost"], "budget_pct": _pct(r["cost"], budget)} for r in rows],
             "total": {"approved_hours": hours(sum((r["approved_hours"] for r in rows), Decimal(0))),

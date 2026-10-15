@@ -110,6 +110,16 @@ def test_seed_milestones_have_a_mix_of_difficulties(conn):
     assert difficulties == {"easy", "medium", "hard"}
 
 
+def test_seed_milestones_have_demo_priorities(conn):
+    seed(conn)
+    rows = query(conn, """SELECT p.name AS project, m.name, m.priority FROM milestones m
+                          JOIN projects p ON p.id = m.project_id WHERE m.priority <> 'medium'""")
+    assert {(r["project"], r["name"]): r["priority"] for r in rows} == {
+        ("Apollo Data Migration", "Cutover"): "critical", ("Apollo Data Migration", "Schema Mapping"): "high",
+        ("Atlas Customer Portal", "Build"): "critical", ("Atlas Customer Portal", "Launch"): "high",
+        ("Delta Compliance Audit", "Audit Fieldwork"): "low"}
+
+
 def test_seed_puts_people_and_projects_in_departments(conn):
     seed(conn)
     names = {r["name"] for r in query(conn, "SELECT name FROM departments WHERE NOT is_archived")}
@@ -135,7 +145,8 @@ DEMO_USERNAMES = [u for u, *_ in PEOPLE]
 
 
 def demo_state(conn) -> dict:
-    """What the backfill is responsible for: departments of the demo people and projects, work modes, difficulties."""
+    """What the backfill is responsible for: departments of the demo people and projects, work modes, difficulties
+    and priorities."""
     return {
         "users": {r["username"]: r["dept"] for r in query(conn, """
             SELECT u.username, d.name AS dept FROM users u LEFT JOIN departments d ON d.id = u.department_id
@@ -145,6 +156,9 @@ def demo_state(conn) -> dict:
             LEFT JOIN departments d ON d.id = p.department_id""")},
         "milestones": {(r["project"], r["name"]): r["difficulty"] for r in query(conn, """
             SELECT p.name AS project, m.name, m.difficulty FROM milestones m
+            JOIN projects p ON p.id = m.project_id""")},
+        "priorities": {(r["project"], r["name"]): r["priority"] for r in query(conn, """
+            SELECT p.name AS project, m.name, m.priority FROM milestones m
             JOIN projects p ON p.id = m.project_id""")},
     }
 
@@ -160,11 +174,12 @@ def seed_the_old_way(conn) -> dict:
     conn.run("DELETE FROM users WHERE username = 'executive.demo'")  # the executive came later still
     conn.run("UPDATE users SET department_id = NULL")
     conn.run("UPDATE projects SET department_id = NULL, work_mode = 'push'")
-    conn.run("UPDATE milestones SET difficulty = 'medium'")
+    conn.run("UPDATE milestones SET difficulty = 'medium', priority = 'medium'")
     conn.run("DELETE FROM departments")
     conn.run("DELETE FROM conversations")  # messages came later too
     conn.run("DELETE FROM notifications WHERE type = 'MESSAGE_RECEIVED'")
     del expected["milestones"][("Beacon Mobile App", "Prototype")]
+    del expected["priorities"][("Beacon Mobile App", "Prototype")]
     return expected
 
 
@@ -188,6 +203,9 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
         "Apollo Data Migration / Cutover", "Apollo Data Migration / Discovery", "Atlas Customer Portal / Build",
         "Atlas Customer Portal / Requirements", "Cobalt Infrastructure Upgrade / Assessment",
         "Delta Compliance Audit / Audit Fieldwork"]
+    assert sorted(result["priorities_updated"]) == [
+        "Apollo Data Migration / Cutover", "Apollo Data Migration / Schema Mapping", "Atlas Customer Portal / Build",
+        "Atlas Customer Portal / Launch", "Delta Compliance Audit / Audit Fieldwork"]
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
     assert result["already_set"] == 0
     assert result["users_created"] == ["executive.demo"]
@@ -215,9 +233,10 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     result = function.handler({"op": "demo_backfill"})
     assert (demo_state(conn), counts(conn)) == (state, before)
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
-                "difficulties_updated"):
+                "difficulties_updated", "priorities_updated"):
         assert result[key] == [], key
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1  # ... the executive login and the demo messages
+    # departments of people and projects, Beacon, difficulties, the executive login, the demo messages, priorities
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 5
     assert result["users_created"] == [] and result["conversations_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
 
@@ -244,6 +263,7 @@ def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
     conn.run("UPDATE users SET department_id = :d WHERE username = 'manager.demo'", d=custom)
     conn.run("UPDATE projects SET department_id = :d WHERE name = 'Apollo Data Migration'", d=custom)
     conn.run("""UPDATE milestones SET difficulty = 'hard' WHERE name = 'Discovery'""")
+    conn.run("""UPDATE milestones SET priority = 'low' WHERE name = 'Cutover'""")
     gia = query_one(conn, "SELECT id FROM users WHERE username = 'gia.rossi'")["id"]
     design = query_one(conn, "SELECT id FROM milestones WHERE name = 'Design'")["id"]
     conn.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=design, u=gia)
@@ -254,6 +274,8 @@ def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
     assert state["users"]["manager.demo"] == "Platform"
     assert state["projects"]["Apollo Data Migration"][0] == "Platform"
     assert state["milestones"][("Apollo Data Migration", "Discovery")] == "hard"
+    assert state["priorities"][("Apollo Data Migration", "Cutover")] == "low"
+    assert state["priorities"][("Apollo Data Migration", "Schema Mapping")] == "high"
     assert [r["user_id"] for r in query(conn, "SELECT user_id FROM milestone_assignees WHERE milestone_id = :m",
                                         m=design)] == [gia]
     assert {"item": "Beacon Mobile App / Design", "reason": "has_assignees"} in result["skipped"]
@@ -265,8 +287,9 @@ def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
     assert "manager.demo" not in result["users_updated"]
     assert "Apollo Data Migration" not in result["projects_updated"]
     assert "Apollo Data Migration / Discovery" not in result["difficulties_updated"]
+    assert "Apollo Data Migration / Cutover" not in result["priorities_updated"]
     assert {"item": "user riley.chen", "reason": "department_archived"} in result["skipped"]
-    assert result["already_set"] == 3
+    assert result["already_set"] == 4
     # Beacon still switches to pull: Design keeps its assignee, so it simply isn't claimable.
     assert state["projects"]["Beacon Mobile App"][1] == "pull"
 

@@ -2,6 +2,8 @@
 
 from datetime import date
 
+from app.rules.priority import priority_rank
+
 
 def _eligible(m: dict, *, exclude_id: str, member_projects: set[str]) -> bool:
     return (m["status"] == "in_progress" and not m["is_archived"]
@@ -11,8 +13,9 @@ def _eligible(m: dict, *, exclude_id: str, member_projects: set[str]) -> bool:
 
 
 def urgency(m: dict, today: date) -> tuple:
-    """Overdue first, then the nearest end date, then the name so the choice is stable."""
-    return (m["end_date"] >= today, m["end_date"], m["name"].lower(), str(m["id"]))
+    """Overdue first, then priority (critical, high, medium, low), then the nearest end date, then the name so
+    the choice is stable."""
+    return (m["end_date"] >= today, priority_rank(m.get("priority")), m["end_date"], m["name"].lower(), str(m["id"]))
 
 
 def pick_support_milestone(candidates: list[dict], *, today: date, exclude_id: str,

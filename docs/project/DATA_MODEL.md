@@ -1,6 +1,6 @@
 # Data model
 
-The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode, [`005_user_avatars.sql`](../../backend/v1/migrations/005_user_avatars.sql) adds profile photos, and [`006_executive_delegates.sql`](../../backend/v1/migrations/006_executive_delegates.sql) adds the `executive` role and each project's delegate approver. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
+The schema lives in numbered migrations: [`001_init.sql`](../../backend/v1/migrations/001_init.sql) creates everything, [`002_assignee_role.sql`](../../backend/v1/migrations/002_assignee_role.sql) adds the assignee role, [`003_milestone_difficulty.sql`](../../backend/v1/migrations/003_milestone_difficulty.sql) adds milestone difficulty, [`004_departments_work_mode.sql`](../../backend/v1/migrations/004_departments_work_mode.sql) adds departments and each project's push/pull work mode, [`005_user_avatars.sql`](../../backend/v1/migrations/005_user_avatars.sql) adds profile photos, [`006_executive_delegates.sql`](../../backend/v1/migrations/006_executive_delegates.sql) adds the `executive` role and each project's delegate approver, and [`008_milestone_priority.sql`](../../backend/v1/migrations/008_milestone_priority.sql) adds milestone priority. They're applied in order by `scripts/migrate.py` locally, and by the `migrate` Lambda invoke in the cloud. Applied migrations are tracked, so running them again is a no-op.
 
 Conventions:
 
@@ -80,6 +80,7 @@ erDiagram
     date end_date "≥ start_date"
     milestone_status status "not_started | in_progress | ready_for_review | completed"
     text difficulty "easy | medium | hard"
+    text priority "low | medium | high | critical"
   }
   time_entries {
     uuid id PK
@@ -120,7 +121,7 @@ erDiagram
 
 | Table | Purpose and notes |
 |---|---|
-| `milestones` | The brief's deliverables. The stored status is one of four values; **blocked is never stored**, it's computed from the predecessors. The service checks that both dates fall within the project's dates.<br>• `difficulty` is `easy`, `medium` (the default) or `hard` (a `CHECK`), weighted 1 / 2 / 3 in progress. Only the project's manager or an admin sets it. |
+| `milestones` | The brief's deliverables. The stored status is one of four values; **blocked is never stored**, it's computed from the predecessors. The service checks that both dates fall within the project's dates.<br>• `difficulty` is `easy`, `medium` (the default) or `hard` (a `CHECK`), weighted 1 / 2 / 3 in progress. Only the project's manager or an admin sets it.<br>• `priority` is `low`, `medium` (the default) or `high` / `critical` (a `CHECK`): how urgent the milestone is, separate from difficulty and never part of progress. It orders auto-routing and the dashboard's deliverables and raises deadline insights. Set by the same people as difficulty. |
 | `milestone_dependencies` | Directed edges: `milestone_id` depends on `depends_on_id`.<br>• The primary key is the pair.<br>• `CHECK` forbids self-dependency.<br>• The service enforces the same-project and no-loop rules (see [LOGIC_WALKTHROUGH §7](LOGIC_WALKTHROUGH.md#7-dependency-loop-detection)). |
 | `milestone_assignees` | Who works on a milestone; the primary key is the pair. The person must be a project member. Removing someone from the team removes these links too.<br>• `role` is `primary` (the default, and every assignment a manager makes) or `supporting` (added by [auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review)). Re-saving a milestone's assignees keeps the role of the people who stay. |
 | `milestone_notes` | Append-only progress notes, 1–2,000 characters, with `author_id` and the time. |

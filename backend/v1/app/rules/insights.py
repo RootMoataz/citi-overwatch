@@ -10,6 +10,7 @@ from decimal import Decimal
 
 from app.rules.at_risk import BURN_GAP_POINTS
 from app.rules.overtime import WEEKLY_CAP
+from app.rules.priority import priority_rank
 
 DUE_SOON_DAYS = 7               # a milestone due within this many days and not yet ready for review
 UNDER_UTILISED = WEEKLY_CAP / 2  # under 50% of 40h this week: someone who could take on work
@@ -22,6 +23,9 @@ MAX_PER_KIND = 2                # so one noisy rule can't crowd out every other 
 
 SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 OPEN_MILESTONE = {"not_started": "hasn't started", "in_progress": "is still in progress"}
+# A critical or high milestone's deadline insight is raised one severity level (overdue is already high) and its
+# title names the priority.
+RAISED_PRIORITY = {"critical": "Critical milestone", "high": "High-priority milestone"}
 
 
 def _insight(kind: str, key, severity: str, title: str, detail: str, link: dict) -> dict:
@@ -83,19 +87,24 @@ def budget_burn_gap(projects: list[dict]) -> list[dict]:
 # ---------- 3. overdue, or due within 7 days, and not ready for review ----------
 
 def milestone_deadlines(milestones: list[dict], *, today: date) -> list[dict]:
+    """Critical and high milestones come first within each kind, are raised one severity level and say so in the
+    title ("Critical milestone Cutover is due in 3 days")."""
     out = []
-    for m in sorted(milestones, key=lambda m: m["end_date"]):
+    for m in sorted(milestones, key=lambda m: (priority_rank(m.get("priority")), m["end_date"])):
         if m["status"] not in OPEN_MILESTONE:
             continue
         label, state = f"{m['name']} ({m['project_name']})", OPEN_MILESTONE[m["status"]]
         link = _project_link(m["project_id"], "milestones")
         days = (m["end_date"] - today).days
+        raised = RAISED_PRIORITY.get(m.get("priority"))
         if days < 0:
-            out.append(_insight("milestone_overdue", m["id"], "high", f"{m['name']} is overdue",
+            title = f"{raised} {m['name']} is overdue" if raised else f"{m['name']} is overdue"
+            out.append(_insight("milestone_overdue", m["id"], "high", title,
                                 f"{label} was due {_days(-days)} ago and {state}.", link))
         elif days <= DUE_SOON_DAYS:
             when = "today" if days == 0 else f"in {_days(days)}"
-            out.append(_insight("milestone_due_soon", m["id"], "medium", f"{m['name']} is due soon",
+            title = f"{raised} {m['name']} is due {when}" if raised else f"{m['name']} is due soon"
+            out.append(_insight("milestone_due_soon", m["id"], "high" if raised else "medium", title,
                                 f"{label} is due {when} and {state}.", link))
     return out
 

@@ -62,6 +62,17 @@ def test_manager_sees_only_their_projects(client, conn):
     assert {"Late here is overdue", "Late there is overdue"} <= set(admin_titles)
 
 
+def test_a_critical_milestone_due_soon_is_raised_and_named(client, conn):
+    mgr = make_user(conn, role="manager")
+    project = make_project(conn, mgr, name="Apollo", start=TODAY - timedelta(days=60), end=TODAY + timedelta(days=60))
+    make_milestone(conn, project, name="Cutover", end=TODAY + timedelta(days=3), status="in_progress",
+                   priority="critical")
+    make_milestone(conn, project, name="Docs", end=TODAY + timedelta(days=2), status="in_progress")
+    titles = {i["title"]: i["severity"] for i in smart(client, conn, mgr)}
+    assert titles["Critical milestone Cutover is due in 3 days"] == "high"
+    assert titles["Docs is due soon"] == "medium"
+
+
 def test_forecast_overrun_and_burn_gap_for_the_manager(client, conn):
     mgr = make_user(conn, role="manager")
     emp = make_user(conn, first_name="Ada", last_name="Lee", manager_id=mgr["id"], salary=Decimal("208000"))

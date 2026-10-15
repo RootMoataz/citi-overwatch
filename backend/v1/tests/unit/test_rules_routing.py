@@ -6,8 +6,9 @@ TODAY = date(2026, 10, 14)
 
 
 def ms(mid, *, end, name=None, status="in_progress", archived=False, project="p1", project_status="active",
-       project_archived=False, assigned=False):
+       project_archived=False, assigned=False, priority="medium"):
     return {"id": mid, "name": name or mid, "end_date": end, "status": status, "is_archived": archived,
+            "priority": priority,
             "project_id": project, "project_status": project_status, "project_archived": project_archived,
             "assigned": assigned}
 
@@ -22,6 +23,36 @@ def test_overdue_first_then_nearest_end_date():
                   ms("overdue", end=date(2026, 10, 1))]
     assert pick(candidates) == "overdue"
     assert pick(candidates[:2]) == "soon"
+
+
+def test_overdue_beats_priority_then_priority_beats_the_nearer_end_date():
+    candidates = [ms("crit_later", end=date(2026, 11, 30), priority="critical"),
+                  ms("high_soon", end=date(2026, 10, 25), priority="high"),
+                  ms("low_soonest", end=date(2026, 10, 16), priority="low"),
+                  ms("medium_overdue", end=date(2026, 10, 1))]
+    assert pick(candidates) == "medium_overdue"
+    assert pick(candidates[:3]) == "crit_later"
+    assert pick(candidates[1:3]) == "high_soon"
+
+
+def test_among_overdue_milestones_priority_comes_before_how_late():
+    candidates = [ms("very_late", end=date(2026, 9, 1), priority="medium"),
+                  ms("just_late", end=date(2026, 10, 13), priority="critical")]
+    assert pick(candidates) == "just_late"
+
+
+def test_same_priority_falls_back_to_the_nearest_end_date_and_low_ranks_last():
+    candidates = [ms("a", end=date(2026, 10, 30), priority="high"), ms("b", end=date(2026, 10, 20), priority="high"),
+                  ms("c", end=date(2026, 10, 15), priority="low"), ms("d", end=date(2026, 12, 1))]
+    assert pick(candidates) == "b"
+    assert pick(candidates[2:]) == "d"
+
+
+def test_a_milestone_without_a_priority_counts_as_medium():
+    legacy = ms("legacy", end=date(2026, 10, 20))
+    del legacy["priority"]
+    assert pick([legacy, ms("low", end=date(2026, 10, 15), priority="low")]) == "legacy"
+    assert pick([legacy, ms("high", end=date(2026, 12, 1), priority="high")]) == "high"
 
 
 def test_ties_break_by_name_case_insensitively():

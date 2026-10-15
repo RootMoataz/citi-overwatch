@@ -52,6 +52,15 @@ def test_routes_to_most_urgent_milestone_and_keeps_the_reviewed_one(client, conn
     assert roles(conn, ada) == {"Discovery": "primary", "Overdue": "supporting"}
 
 
+def test_routes_to_the_critical_milestone_before_a_sooner_medium_one(client, conn):
+    _, ada, _, reviewed = setup(conn)
+    project = query_one(conn, "SELECT * FROM projects WHERE id = :p", p=reviewed["project_id"])
+    ends(conn, project, "Soon", 3)
+    ends(conn, project, "Cutover", 40, priority="critical")
+    status, body, _, _ = review(client, conn, ada, reviewed)
+    assert status == 200 and body["routed_to"]["milestone"]["name"] == "Cutover"
+
+
 def test_skips_ineligible_candidates(client, conn):
     mgr, ada, project, reviewed = setup(conn)
     ends(conn, project, "Not started", -10, status="not_started")

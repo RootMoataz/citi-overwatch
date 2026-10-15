@@ -78,6 +78,43 @@ def test_due_today_reads_naturally():
     assert i["detail"] == "Build (Apollo) is due today and is still in progress."
 
 
+def test_critical_or_high_due_soon_is_raised_to_high_and_says_so():
+    items = milestone_deadlines([
+        milestone(id="crit", name="Cutover", end_date=TODAY + timedelta(days=3), priority="critical"),
+        milestone(id="high", name="Launch", end_date=TODAY, priority="high", status="not_started"),
+        milestone(id="low", name="Docs", end_date=TODAY + timedelta(days=2), priority="low"),
+    ], today=TODAY)
+    by_id = {i["id"]: i for i in items}
+    assert by_id["milestone_due_soon:crit"]["severity"] == "high"
+    assert by_id["milestone_due_soon:crit"]["title"] == "Critical milestone Cutover is due in 3 days"
+    assert by_id["milestone_due_soon:high"]["severity"] == "high"
+    assert by_id["milestone_due_soon:high"]["title"] == "High-priority milestone Launch is due today"
+    assert (by_id["milestone_due_soon:low"]["severity"], by_id["milestone_due_soon:low"]["title"]) == (
+        "medium", "Docs is due soon")
+    # The detail sentence stays the same.
+    assert by_id["milestone_due_soon:crit"]["detail"] == "Cutover (Apollo) is due in 3 days and is still in progress."
+
+
+def test_critical_overdue_stays_high_and_the_title_names_the_priority():
+    [i] = milestone_deadlines([milestone(name="Build", end_date=TODAY - timedelta(days=8), priority="critical")],
+                              today=TODAY)
+    assert (i["severity"], i["title"]) == ("high", "Critical milestone Build is overdue")
+
+
+def test_priority_milestones_come_first_within_a_kind():
+    items = milestone_deadlines([
+        milestone(id="a", end_date=TODAY - timedelta(days=9)),
+        milestone(id="b", end_date=TODAY - timedelta(days=2), priority="critical"),
+        milestone(id="c", end_date=TODAY - timedelta(days=5), priority="high"),
+    ], today=TODAY)
+    assert [i["id"] for i in items] == ["milestone_overdue:b", "milestone_overdue:c", "milestone_overdue:a"]
+
+
+def test_a_milestone_without_a_priority_reads_as_before():
+    [i] = milestone_deadlines([milestone(end_date=TODAY + timedelta(days=2))], today=TODAY)
+    assert (i["severity"], i["title"]) == ("medium", "Build is due soon")
+
+
 # ---------- 4. over-allocation and rebalancing ----------
 
 def test_over_40_is_flagged_and_an_idle_teammate_is_suggested():

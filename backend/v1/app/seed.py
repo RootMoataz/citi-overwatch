@@ -70,6 +70,15 @@ DIFFICULTIES = {
     ("Delta Compliance Audit", "Audit Fieldwork"): "hard",
 }
 
+# (project, milestone) -> priority; every other demo milestone is 'medium'. Atlas Build is the overdue one.
+PRIORITIES = {
+    ("Apollo Data Migration", "Cutover"): "critical",
+    ("Apollo Data Migration", "Schema Mapping"): "high",
+    ("Atlas Customer Portal", "Build"): "critical",
+    ("Atlas Customer Portal", "Launch"): "high",
+    ("Delta Compliance Audit", "Audit Fieldwork"): "low",
+}
+
 
 # A short, realistic message thread and a milestone discussion: (sender, minutes ago, text). Times are relative to
 # when they're loaded. Each reader's last_read_at is set so Eli has one unread message in each on first sign-in.
@@ -198,18 +207,18 @@ def _insert_executive(conn, password_hash: str, department_id) -> dict:
 
 
 def demo_backfill(conn) -> dict:
-    """Bring demo data seeded before departments, pull mode, difficulty and the executive role up to today's seed,
-    filling blanks only.
+    """Bring demo data seeded before departments, pull mode, difficulty, the executive role and priority up to
+    today's seed, filling blanks only.
 
     Departments are reused (any case) or created; a demo person or project gets the seed's department only while
     it has none; Beacon switches to pull only while it's still on the 'push' default; a demo milestone gets the
-    seed's difficulty only while it's still 'medium'; executive.demo is created (published demo password) only
+    seed's difficulty and priority, each only while it's still 'medium'; executive.demo is created (published demo password) only
     if that username doesn't exist yet; the demo message thread and Schema Mapping discussion are added only while
     there are no conversations at all. Assignees and hours are never touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
-           "work_mode_updated": [], "difficulties_updated": [], "conversations_created": [], "already_set": 0,
+           "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "conversations_created": [], "already_set": 0,
            "skipped": []}
 
     def skip(item: str, reason: str) -> None:
@@ -296,6 +305,21 @@ def demo_backfill(conn) -> dict:
                          d=difficulty, ids=[r["id"] for r in rows if r["difficulty"] == "medium"])
                 out["difficulties_updated"].append(label)
 
+        for (project, milestone), priority in PRIORITIES.items():
+            label = f"{project} / {milestone}"
+            rows = query(conn, """SELECT m.id, m.priority FROM milestones m JOIN projects p ON p.id = m.project_id
+                                  WHERE p.name = :p AND NOT p.is_archived AND m.name = :m AND NOT m.is_archived""",
+                         p=project, m=milestone)
+            if not rows:
+                skip(label, "missing")
+            elif all(r["priority"] != "medium" for r in rows):
+                skip(label, "already_set")
+            else:
+                conn.run("""UPDATE milestones SET priority = :pr, updated_at = now()
+                            WHERE id = ANY(:ids) AND priority = 'medium'""",
+                         pr=priority, ids=[r["id"] for r in rows if r["priority"] == "medium"])
+                out["priorities_updated"].append(label)
+
         # The demo messages, only while nobody has written anything yet.
         if query_one(conn, "SELECT 1 AS ok FROM conversations LIMIT 1"):
             skip("demo messages", "already_set")
@@ -342,11 +366,11 @@ def _load(conn) -> None:
     def milestone(proj, name, start, end, status, description=""):
         return query_one(conn, """
             INSERT INTO milestones (project_id, name, description, start_date, end_date, status, completed_at,
-                                    difficulty)
+                                    difficulty, priority)
             VALUES (:p, :n, :desc, :s, :e, CAST(:st AS milestone_status),
-                    CASE WHEN :st = 'completed' THEN now() END, :dif)
+                    CASE WHEN :st = 'completed' THEN now() END, :dif, :pr)
             RETURNING *""", p=proj["id"], n=name, desc=description, s=start, e=end, st=status,
-            dif=DIFFICULTIES.get((proj["name"], name), "medium"))
+            dif=DIFFICULTIES.get((proj["name"], name), "medium"), pr=PRIORITIES.get((proj["name"], name), "medium"))
 
     def member(proj, username, hours):
         conn.run("INSERT INTO project_members (project_id, user_id, planned_hours_per_week) VALUES (:p, :u, :h)",

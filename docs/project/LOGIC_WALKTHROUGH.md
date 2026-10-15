@@ -240,7 +240,7 @@ flowchart TD
   C --> D["pick_support_milestone():<br/>in progress, not archived, active non-archived project,<br/>not already assigned, not this milestone"]
   D --> E{any left?}
   E -- no --> Done
-  E -- yes --> F[most urgent: overdue first,<br/>then nearest end date, then name]
+  E -- yes --> F[most urgent: overdue first,<br/>then priority critical → high → medium → low,<br/>then nearest end date, then name]
   F --> G{"fits_weekly_plan(other planned, planned here)?"}
   G -- no --> Done
   G -- yes --> H["INSERT milestone_assignees role = 'supporting'<br/>audit auto_assign_support (actor = the employee)<br/>SUPPORT_ASSIGNED to them, SUPPORT_ROUTED to that project's manager"]
@@ -248,6 +248,7 @@ flowchart TD
 
 - **Code:** the choice is a pure function in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py). `_route_to_support()` in [`app/features/milestones/service.py`](../../backend/v1/app/features/milestones/service.py) gathers the candidates and writes the result inside the status change's transaction, so either all of it happens or none of it does.
 - **Planned hours don't change:** the person is already a member of the project, so they're only routed while their existing plan fits under 40 hours ([`app/rules/capacity.py`](../../backend/v1/app/rules/capacity.py), with the same overlap query as section 8).
+- **Order:** overdue milestones first; then priority (critical, high, medium, low); then the nearest end date; then the name, so the choice is stable. So a *critical* milestone due in 40 days beats a *medium* one due in 3, but any overdue milestone beats both. Priority never changes progress; that's difficulty's job.
 - **They stay on the reviewed milestone**, in case the manager sends it back.
 - **A manager moving the milestone** isn't routed anywhere unless they're one of its assignees.
 - **Example:** Ada marks *Discovery* ready for review. The in-progress milestones on her projects that she isn't on are *Build* (ended 3 days ago) and *Cutover* (due in 5 days), so she's added to *Build* as support. She sees "You've been added as support on Build (Apollo), due …", and the project's manager sees "Ada Lovelace was auto-routed to support Build".
@@ -273,7 +274,7 @@ flowchart TD
 | `milestone_overdue` | A milestone on a non-completed project is past its end date and still *not started* or *in progress* | high | project's milestones |
 | `over_allocated` | Someone has more than 40 logged hours (pending + approved) this week | high | person |
 | `budget_burn` | Not completed, budget > 0, and % budget used − weighted % complete ≥ 20 points (the at-risk `BUDGET_BURN` threshold) | medium | project |
-| `milestone_due_soon` | Due in the next 0–7 days and still *not started* or *in progress* | medium | project's milestones |
+| `milestone_due_soon` | Due in the next 0–7 days and still *not started* or *in progress* | medium (high for a critical or high-priority milestone) | project's milestones |
 | `rebalance` | Paired with each over-40 person: the least-loaded person under 20h (50% of 40h), preferring someone who shares a project with them, each suggested once | medium | the person with spare time |
 | `approval_backlog` | Entries waiting for this manager (not their own) whose work date is more than 3 days ago | medium | approvals |
 | `idle_milestone` | An *in progress* milestone on a project that isn't on hold has had no pending or approved hours for 14+ days (counted from its start if nobody ever logged) | medium | project's milestones |
@@ -281,6 +282,7 @@ flowchart TD
 
 - **Code:** the rules and thresholds are pure functions and constants in [`app/rules/insights.py`](../../backend/v1/app/rules/insights.py), unit-tested in `tests/unit/test_rules_insights.py`. [`app/features/insights/smart.py`](../../backend/v1/app/features/insights/smart.py) gathers the data with the dashboard's own scoping helpers (`visible_projects`, `_people_scope`, the same forecast).
 - **Each insight** is `{id, kind, severity, title, detail, link}`; `detail` is one sentence with the actual numbers and names.
+- **Priority raises deadline insights:** an overdue or due-soon milestone whose priority is *critical* or *high* goes up one severity level (due soon: medium → high; overdue is already high) and the title names it: "Critical milestone Cutover is due in 3 days", "High-priority milestone Launch is overdue". Within each of the two kinds, critical and high milestones come first, so they survive the 2-per-kind cap.
 - **Employees get insights, not a 403:** `/dashboard` is open to every role and filtered to what you may see, so this follows the same pattern. An employee only hears about themselves (over 40 hours, repeated rejections), never about budgets, projects or colleagues.
 - **No salary or rate leaves the server.** Rates only feed the cost totals that `/dashboard` already shows as money.
 - **UI:** [`SmartInsightsPanel.jsx`](../../frontend/src/features/dashboard/SmartInsightsPanel.jsx). Each row has a severity icon and colour plus a *High/Medium/Low* chip (so colour isn't the only signal), the title, the detail and a link. With nothing to say it shows "No suggestions right now". It shares the dashboard's query key, so approvals and project edits refresh it.

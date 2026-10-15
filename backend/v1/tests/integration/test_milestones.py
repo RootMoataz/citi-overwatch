@@ -278,3 +278,62 @@ def test_manager_and_admin_edit_difficulty_and_it_is_audited(client, conn):
     assert [(r["changes"]["before"], r["changes"]["after"]) for r in rows] == [({"difficulty": "medium"}, {"difficulty": "easy"}),
                                                           ({"difficulty": "easy"}, {"difficulty": "hard"})]
     assert client.request("GET", url, token=token_for(conn, assignee))[1]["difficulty"] == "hard"
+
+
+def test_priority_defaults_to_medium_and_is_set_on_create(client, conn):
+    mgr, _, _, project = setup(conn)
+    url = f"/projects/{project['id']}/milestones"
+    dates = {"start_date": "2026-02-01", "end_date": "2026-03-01"}
+    status, body, _, _ = client.request("POST", url, token=token_for(conn, mgr), json={"name": "Plain", **dates})
+    assert (status, body["priority"], body["difficulty"]) == (201, "medium", "medium")
+    status, body, _, _ = client.request("POST", url, token=token_for(conn, mgr),
+                                        json={"name": "Cutover", "priority": "critical", **dates})
+    assert (status, body["priority"], body["difficulty"]) == (201, "critical", "medium")
+    audit = query(conn, "SELECT changes FROM audit_log WHERE entity_id = :i AND action = 'create'", i=body["id"])
+    assert audit[0]["changes"]["after"]["priority"] == "critical"
+    assert {m["name"]: m["priority"] for m in listing(client, conn, mgr, project)} == {"Plain": "medium",
+                                                                                        "Cutover": "critical"}
+
+
+def test_priority_rejects_bad_values(client, conn):
+    mgr, _, _, project = setup(conn)
+    ms = make_milestone(conn, project)
+    for bad in ("urgent", "Critical", "", None, 4):
+        status, body, _, _ = client.request("POST", f"/projects/{project['id']}/milestones", token=token_for(conn, mgr),
+                                            json={"name": "X", "start_date": "2026-02-01", "end_date": "2026-03-01",
+                                                  "priority": bad})
+        assert (status, body["error"]["code"], body["error"]["details"]) == (
+            400, "VALIDATION_ERROR", {"priority": "invalid_choice"}), bad
+        status, body, _, _ = client.request("PUT", f"/milestones/{ms['id']}", token=token_for(conn, mgr),
+                                            json={"priority": bad})
+        assert (status, body["error"]["details"]) == (400, {"priority": "invalid_choice"}), bad
+
+
+def test_manager_and_admin_edit_priority_and_it_is_audited(client, conn):
+    mgr, assignee, _, project = setup(conn)
+    admin = make_user(conn, role="admin")
+    executive = make_user(conn, role="executive")
+    ms = make_milestone(conn, project, difficulty="hard")
+    assign(conn, ms, assignee)
+    url = f"/milestones/{ms['id']}"
+    status, body, _, _ = client.request("PUT", url, token=token_for(conn, mgr), json={"priority": "high"})
+    assert (status, body["priority"], body["difficulty"]) == (200, "high", "hard")  # difficulty is separate
+    status, body, _, _ = client.request("PUT", url, token=token_for(conn, admin), json={"priority": "critical"})
+    assert (status, body["priority"]) == (200, "critical")
+    assert client.request("PUT", url, token=token_for(conn, assignee), json={"priority": "low"})[0] == 403
+    assert client.request("PUT", url, token=token_for(conn, executive), json={"priority": "low"})[0] == 403
+    rows = query(conn, """SELECT changes FROM audit_log WHERE entity_id = :i AND action = 'update'
+                          ORDER BY created_at""", i=str(ms["id"]))
+    assert [(r["changes"]["before"], r["changes"]["after"]) for r in rows] == [
+        ({"priority": "medium"}, {"priority": "high"}), ({"priority": "high"}, {"priority": "critical"})]
+    assert client.request("GET", url, token=token_for(conn, assignee))[1]["priority"] == "critical"
+
+
+def test_priority_does_not_change_weighted_progress(client, conn):
+    mgr, _, _, project = setup(conn)
+    make_milestone(conn, project, status="completed")
+    other = make_milestone(conn, project)
+    before = client.request("GET", f"/projects/{project['id']}", token=token_for(conn, mgr))[1]["progress_pct"]
+    client.request("PUT", f"/milestones/{other['id']}", token=token_for(conn, mgr), json={"priority": "critical"})
+    after = client.request("GET", f"/projects/{project['id']}", token=token_for(conn, mgr))[1]["progress_pct"]
+    assert before == after == 50.0

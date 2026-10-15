@@ -15,12 +15,13 @@ from app.rules.capacity import fits_weekly_plan
 from app.rules.claim import claim_blocker
 from app.rules.cycles import creates_cycle, dependency_order
 from app.rules.milestone_status import can_transition
+from app.rules.priority import PRIORITIES
 from app.rules.routing import pick_support_milestone
 from app.validation import as_date, as_enum, as_str, as_uuid, require
 
 STATUSES = ("not_started", "in_progress", "ready_for_review", "completed")
 DIFFICULTIES = ("easy", "medium", "hard")
-EDITABLE = {"name", "description", "start_date", "end_date", "difficulty"}
+EDITABLE = {"name", "description", "start_date", "end_date", "difficulty", "priority"}
 
 
 def _project_milestones(conn, project_id: str) -> list[dict]:
@@ -74,7 +75,7 @@ def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict
         out.append({
             "id": m["id"], "project_id": m["project_id"], "name": m["name"], "description": m["description"],
             "start_date": m["start_date"], "end_date": m["end_date"], "status": m["status"],
-            "difficulty": m["difficulty"], "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
+            "difficulty": m["difficulty"], "priority": m["priority"], "display_status": "blocked" if blocked and m["status"] != "completed" else m["status"],
             "blocked": blocked, "predecessors": preds, "assignees": people, "supporting_ids": supporting.get(mid, []),
             "is_assignee": any(str(a["id"]) == ctx.user_id for a in people),
             "claimable": claimable, "can_claim": claimable and on_team,
@@ -113,11 +114,14 @@ def create_milestone(conn, ctx: Ctx, project_id: str, body: dict) -> dict:
             "description": as_str(body.get("description") or "", "description", min_len=0, max_len=4000),
             "start_date": as_date(body["start_date"], "start_date"),
             "end_date": as_date(body["end_date"], "end_date"),
-            "difficulty": as_enum(body.get("difficulty", "medium"), "difficulty", DIFFICULTIES)}
+            "difficulty": as_enum(body.get("difficulty", "medium"), "difficulty", DIFFICULTIES),
+            "priority": as_enum(body.get("priority", "medium"), "priority", PRIORITIES)}
     _check_dates(project, data["start_date"], data["end_date"])
     with transaction(conn):
-        row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty)
-                                 VALUES (CAST(:p AS uuid), :name, :description, :start_date, :end_date, :difficulty)
+        row = query_one(conn, """INSERT INTO milestones (project_id, name, description, start_date, end_date, difficulty,
+                                                         priority)
+                                 VALUES (CAST(:p AS uuid), :name, :description, :start_date, :end_date, :difficulty,
+                                         :priority)
                                  RETURNING id""", p=project_id, **data)
         record(conn, ctx, "create", "milestone", str(row["id"]), after=data)
     return _view(conn, ctx, row["id"])
@@ -144,6 +148,8 @@ def update_milestone(conn, ctx: Ctx, milestone_id: str, body: dict) -> dict:
             changes[field] = as_date(body[field], field)
     if "difficulty" in body:
         changes["difficulty"] = as_enum(body["difficulty"], "difficulty", DIFFICULTIES)
+    if "priority" in body:
+        changes["priority"] = as_enum(body["priority"], "priority", PRIORITIES)
     _check_dates(project, changes.get("start_date", before["start_date"]), changes.get("end_date", before["end_date"]))
     if changes:
         sets = ", ".join(f"{k} = :{k}" for k in changes)
@@ -277,7 +283,7 @@ def _route_to_support(conn, ctx: Ctx, reviewed: dict) -> dict | None:
     """Add the person who sent `reviewed` for review as support on the most urgent other milestone
     (LOGIC_WALKTHROUGH §9). Runs inside the status change's transaction; returns what it picked, or None."""
     rows = query(conn, """
-        SELECT m.id, m.name, m.end_date, m.status::text AS status, m.is_archived, m.project_id,
+        SELECT m.id, m.name, m.end_date, m.priority, m.status::text AS status, m.is_archived, m.project_id,
                p.name AS project_name, p.manager_id, p.start_date AS p_start, p.predicted_end_date AS p_end,
                p.status::text AS project_status, p.is_archived AS project_archived, pm.planned_hours_per_week,
                EXISTS (SELECT 1 FROM milestone_assignees a

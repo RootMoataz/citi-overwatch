@@ -43,13 +43,14 @@ def _milestones(conn, rows: list[dict]) -> list[dict]:
     open_projects = {str(r["id"]): r for r in rows if r["status"] != "completed"}
     if not open_projects:
         return []
-    found = query(conn, """SELECT m.id, m.project_id, m.name, m.status, m.start_date, m.end_date,
+    found = query(conn, """SELECT m.id, m.project_id, m.name, m.status, m.priority, m.start_date, m.end_date,
                                   (SELECT max(t.work_date) FROM time_entries t WHERE t.milestone_id = m.id
                                      AND t.status IN ('pending', 'approved')) AS last_logged
                            FROM milestones m WHERE m.project_id = ANY(CAST(:ids AS uuid[]))
                              AND NOT m.is_archived AND m.status <> 'completed' ORDER BY m.end_date""",
                   ids=list(open_projects))
     return [{"id": m["id"], "name": m["name"], "project_id": m["project_id"], "status": m["status"],
+             "priority": m["priority"],
              "project_name": open_projects[str(m["project_id"])]["name"],
              "project_status": open_projects[str(m["project_id"])]["status"],
              "start_date": m["start_date"], "end_date": m["end_date"], "last_logged": m["last_logged"]}

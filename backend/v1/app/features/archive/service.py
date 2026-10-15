@@ -13,7 +13,7 @@ MANAGER_TYPES = ("project", "milestone")
 # Each archivable type that has a restore endpoint. Every query returns id, name, archived_at and manager_id.
 QUERIES = {
     "project": "SELECT id, name, archived_at, manager_id, false AS parent_archived FROM projects p WHERE is_archived",
-    "milestone": """SELECT m.id, m.name, m.archived_at, m.difficulty, p.id AS project_id, p.name AS project_name,
+    "milestone": """SELECT m.id, m.name, m.archived_at, m.difficulty, m.priority, p.id AS project_id, p.name AS project_name,
                            p.manager_id, p.is_archived AS parent_archived
                     FROM milestones m JOIN projects p ON p.id = m.project_id WHERE m.is_archived""",
     "user": """SELECT id, first_name || ' ' || last_name AS name, username, archived_at,
@@ -66,6 +66,7 @@ def list_archive(conn, ctx: Ctx, params: dict) -> dict:
         if t == "milestone":
             item["project"] = {"id": r["project_id"], "name": r["project_name"]}
             item["difficulty"] = r["difficulty"]
+            item["priority"] = r["priority"]
         if t == "user":
             item["username"] = r["username"]
         items.append(item)

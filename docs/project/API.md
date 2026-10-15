@@ -202,7 +202,7 @@ Every change is in the audit log (`entity_type` `department`).
 | DELETE | `/projects/{id}` | Admin only (`403` for managers, even their own project). Archives the project → `204` |
 | POST | `/projects/{id}/restore` | Admin only (`403` for managers) |
 | GET | `/projects/{id}/summary` | Budget, consumed, remaining, percentages, risk reasons and team size |
-| GET | `/projects/{id}/milestone-costs` | Per non-archived milestone: `approved_hours`, `pending_hours`, `approved_cost` and `budget_pct`, plus a `total` whose `approved_cost` is the project's `consumed`. Hours are `null` (and `hours_visible` is `false`) unless you manage the project or are an executive. Never includes an hourly rate |
+| GET | `/projects/{id}/milestone-costs` | Per non-archived milestone (`milestone` is `{id, name, status, priority}`): `approved_hours`, `pending_hours`, `approved_cost` and `budget_pct`, plus a `total` whose `approved_cost` is the project's `consumed`. Hours are `null` (and `hours_visible` is `false`) unless you manage the project or are an executive. Never includes an hourly rate |
 
 ```http
 GET /api/v1/projects?page_size=1
@@ -239,9 +239,9 @@ A missing field:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support), `difficulty`, `is_assignee`, `claimable` (a pull project's ready, unassigned milestone) and `can_claim` (claimable and you're on the team) |
-| POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date, difficulty?}` → `201`. `difficulty` is `easy`, `medium` (default) or `hard`; anything else is `400`. The dates must fall within the project's dates |
-| GET / PUT / DELETE | `/milestones/{id}` | `DELETE` archives |
+| GET | `/projects/{id}/milestones` | In dependency order, with `display_status`, `blocked`, `predecessors`, `assignees`, `supporting_ids` (assignees who are there as support), `difficulty`, `priority`, `is_assignee`, `claimable` (a pull project's ready, unassigned milestone) and `can_claim` (claimable and you're on the team) |
+| POST | `/projects/{id}/milestones` | `{name, description?, start_date, end_date, difficulty?, priority?}` → `201`. `difficulty` is `easy`, `medium` (default) or `hard`; `priority` is `low`, `medium` (default), `high` or `critical`; anything else is `400 VALIDATION_ERROR` (`{difficulty: invalid_choice}` or `{priority: invalid_choice}`). Priority is how urgent the milestone is and never changes progress (difficulty does). The dates must fall within the project's dates |
+| GET / PUT / DELETE | `/milestones/{id}` | `PUT` takes any of `name`, `description`, `start_date`, `end_date`, `difficulty`, `priority` (the project's manager or an admin; audited as `update`). `DELETE` archives |
 | POST | `/milestones/{id}/restore` | Admins and the project's manager (`403` for employees; `404` for other managers, or when the project itself is archived and you're not an admin) |
 | PUT | `/milestones/{id}/dependencies` | `{predecessor_ids: [...]}` → `{…, warnings}`. Returns `400 DEPENDENCY_CYCLE` or `CROSS_PROJECT_DEPENDENCY`. `warnings` flags a start date before a predecessor's end |
 | PUT | `/milestones/{id}/assignees` | `{user_ids: [...]}`. They must be project members (`NOT_A_MEMBER`) |
@@ -252,7 +252,7 @@ A missing field:
 ```json
 {"id": "07ad53b4-fd9d-4947-a584-aed75e47ec08", "project_id": "86a8c3a5-…", "name": "Discovery",
  "description": "Inventory every legacy table.", "start_date": "2026-07-15", "end_date": "2026-08-14",
- "status": "completed", "difficulty": "easy", "display_status": "completed", "blocked": false, "predecessors": [],
+ "status": "completed", "difficulty": "easy", "priority": "medium", "display_status": "completed", "blocked": false, "predecessors": [],
  "assignees": [{"id": "81c483ea-…", "name": "Eli Employee"}, {"id": "a250afbe-…", "name": "Chloe Park"}],
  "is_assignee": false, "completed_at": "2026-10-13T18:00:15.020027-04:00", "is_archived": false}
 ```
@@ -379,7 +379,7 @@ its `created_at`. Sending a message counts as reading the conversation.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/dashboard?department=` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`), `over_allocated`, `budgets`, `pending_approvals`. `department` (an ID) keeps only that department's projects in every project-based number, only its people in `over_allocated`, and only its projects' entries in `pending_approvals` ([department filter](LOGIC_WALKTHROUGH.md#12-the-dashboards-department-filter)) |
+| GET | `/dashboard?department=` | Everything the dashboard needs, scoped to what you can see: `status_counts`, `projects`, `at_risk`, `milestones` (`overdue`, `due_soon`; each milestone has `difficulty` and `priority`, and each list is most important first: critical, high, medium, low, then earliest due), `over_allocated`, `budgets`, `pending_approvals`. `department` (an ID) keeps only that department's projects in every project-based number, only its people in `over_allocated`, and only its projects' entries in `pending_approvals` ([department filter](LOGIC_WALKTHROUGH.md#12-the-dashboards-department-filter)) |
 | GET | `/allocations?week=` | Admins, managers and executives. Per person (with their `department_id`): projects with planned, logged and approved hours, totals and `utilization_pct` |
 | GET | `/insights/smart?department=` | Everyone, scoped like `/dashboard`. Up to 6 rule-based suggestions (no AI), highest severity first. Employees only get insights about themselves. `department` (an ID) narrows them the way it narrows `/dashboard`: only that department's projects and people; `400 VALIDATION_ERROR` (`department: invalid_id`) if it isn't an ID. See [Smart insights](LOGIC_WALKTHROUGH.md#10-smart-insights) for the rules |
 | GET | `/audit-log?actor=&action=&entity_type=&from=&to=&page=&page_size=` | Admins and executives (without any `salary` or `hourly_rate` inside `changes`). Newest first. An approval or rejection made as a delegate has `changes.after.as_delegate_for` (the project manager's ID). `actor` is a user ID; `action` is a stored action such as `create`, `update`, `archive`, `restore`, `approve` or `reject`. Each item also has `summary` (`actor`, `verb`, `object`, `tail`, `project`, `sentence`), the same readable sentence `/activity` gives, e.g. "Morgan Manager approved 9h for Eli Employee on Schema Mapping" |
@@ -428,7 +428,7 @@ its `created_at`. Sending a message counts as reading the conversation.
 ```json
 {"items": [{"type": "milestone", "id": "202d87b5-…", "name": "Schema Mapping", "archived_at": "2026-10-13T18:00:15.020027-04:00",
             "archived_by": {"id": "9315bbc9-…", "name": "Avery Admin"}, "project": {"id": "86a8c3a5-…", "name": "Apollo Data Migration"},
-            "difficulty": "medium", "can_restore": true},
+            "difficulty": "medium", "priority": "high", "can_restore": true},
            {"type": "user", "id": "81c483ea-…", "name": "Lee Leaver", "username": "lleaver", "archived_at": "…", "archived_by": null,
             "can_restore": true}]}
 ```
@@ -445,4 +445,4 @@ These run only through an IAM-authorized `aws lambda invoke`, never through the 
 | `{"op": "rotate_demo"}` | `{"rotated": 13}`: gives every seeded account except `admin.demo`, `manager.demo` and `employee.demo` a random password (run once on the public site) |
 | `{"op": "seed"}` | `{"seeded": true, "demo_users": ["admin.demo", "manager.demo", "employee.demo"]}`. Does nothing once the demo data exists |
 | `{"op": "create_admins", "users": [{"username", "first_name", "last_name"}, ...]}` | `{"created": [{"username", "password"}], "skipped": [...]}`: adds ready-to-use admin logins with random passwords (no forced change on first login); usernames that already exist are skipped. Used to create the live demo admins `admin.demo2`–`admin.demo4` |
-| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode and difficulty up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty on demo milestones (matched by project and milestone name) only while still `medium`. Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |
+| `{"op": "demo_backfill"}` | `{"departments_created": [...], "users_created": ["executive.demo"], "users_updated": [...], "projects_updated": [...], "work_mode_updated": [...], "difficulties_updated": ["Apollo Data Migration / Discovery", ...], "priorities_updated": ["Apollo Data Migration / Cutover", ...], "already_set": 0, "skipped": [{"item", "reason"}]}`: brings demo data seeded before departments, pull mode, difficulty and priority up to today's seed, filling blanks only. Creates Technology, Operations and Risk & Compliance unless a department with that name exists (any case); gives each demo person and project the seed's department only while it has none; creates the read-only `executive.demo` login (published password `Demo123!`, in Operations) only if that username doesn't exist yet; switches Beacon Mobile App to pull only while it's still `push`; sets the seed's difficulty and priority on demo milestones (matched by project and milestone name), each only while still `medium` (priorities: Apollo Cutover critical, Schema Mapping high, Atlas Build critical, Atlas Launch high, Delta Audit Fieldwork low). Never changes assignees or hours. `already_set` counts values left as they were; `skipped` reasons are `missing`, `archived` (that department is archived, so it isn't reused or recreated), `department_archived`, and for Beacon's Design `has_assignees` or `already_started` (left as is, so not claimable). Not audited, like `seed`. A second run changes nothing |

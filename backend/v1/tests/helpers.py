@@ -53,13 +53,15 @@ def cookie_value(set_cookie: str) -> str:
 
 
 def make_milestone(conn, project: dict, *, name=None, start=None, end=None, status="not_started",
-                   archived=False, difficulty="medium") -> dict:
+                   archived=False, difficulty="medium", priority="medium") -> dict:
     return query_one(conn, """
-        INSERT INTO milestones (project_id, name, start_date, end_date, status, is_archived, archived_at, difficulty)
-        VALUES (CAST(:p AS uuid), :n, :s, :e, CAST(:st AS milestone_status), :a, CASE WHEN :a THEN now() END, :d)
+        INSERT INTO milestones (project_id, name, start_date, end_date, status, is_archived, archived_at, difficulty,
+                                priority)
+        VALUES (CAST(:p AS uuid), :n, :s, :e, CAST(:st AS milestone_status), :a, CASE WHEN :a THEN now() END, :d,
+                :pr)
         RETURNING *""", p=str(project["id"]), n=name or f"M {uuid.uuid4().hex[:4]}",
         s=start or project["start_date"], e=end or project["predicted_end_date"], st=status, a=archived,
-        d=difficulty)
+        d=difficulty, pr=priority)
 
 
 def log_entry(conn, user: dict, milestone: dict, day: date, hours, *, status="approved",

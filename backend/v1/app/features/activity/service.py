@@ -2,7 +2,8 @@
 
 `summarize` turns audit-log rows into {actor, verb, object, project, sentence}, e.g. "Morgan Manager approved 9h for
 Eli Employee on Schema Mapping". It looks the names up in a few batched queries and never copies a recorded
-value other than hours and statuses, so no salary or rate can reach a sentence. The audit log uses it too.
+value other than hours, statuses and milestone priorities, so no salary or rate can reach a sentence. The audit log
+uses it too.
 
 Who sees which event in the feed (sign-ins and password events never appear, for anyone):
 - admins and executives: everything;
@@ -18,6 +19,7 @@ from app.ctx import Ctx
 from app.db import query
 from app.features.time.service import _today
 from app.http import ApiError
+from app.rules.priority import PRIORITY_LABELS
 from app.validation import as_uuid
 
 HIDDEN_ACTIONS = ["login", "password_change", "password_reset", "password_reset_by_admin"]
@@ -120,6 +122,8 @@ def summarize(conn, rows: list[dict]) -> list[dict]:
                 verb = "completed"
             elif action == "status_change":
                 verb, tail = "moved", f"to {STATUS_LABELS.get(target, target)}"
+            elif action == "update" and set(after) == {"priority"}:
+                verb, tail = "set priority of", f"to {PRIORITY_LABELS.get(after['priority'], after['priority'])}"
             else:
                 verb = {"create": "added milestone", "update": "updated", "archive": "archived milestone",
                         "restore": "restored milestone", "claim": "claimed", "set_assignees": "changed who works on",

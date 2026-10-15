@@ -59,6 +59,17 @@ def test_milestone_difficulty_defaults_to_medium_and_is_checked(conn):
         conn.run("UPDATE milestones SET difficulty = 'extreme'")
 
 
+def test_milestone_priority_defaults_to_medium_and_is_checked(conn):
+    from tests.helpers import make_milestone, make_project, make_user
+    ms = make_milestone(conn, make_project(conn, make_user(conn, role="manager")))
+    conn.run("UPDATE milestones SET priority = DEFAULT")
+    assert query(conn, "SELECT priority FROM milestones WHERE id = :i", i=ms["id"]) == [{"priority": "medium"}]
+    for value in ("low", "high", "critical"):
+        conn.run("UPDATE milestones SET priority = :p", p=value)
+    with pytest.raises(DatabaseError):
+        conn.run("UPDATE milestones SET priority = 'urgent'")
+
+
 def test_work_mode_defaults_to_push_and_is_checked(conn):
     from tests.helpers import make_project, make_user
     project = make_project(conn, make_user(conn, role="manager"))
