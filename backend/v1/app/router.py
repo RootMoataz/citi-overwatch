@@ -2,6 +2,7 @@
 
 Executives are read-only: every POST/PUT/PATCH/DELETE is refused for them here, before any handler runs, unless the
 route opts in with allow_executive=True (only their own account: password, name and email, photo, notifications) and sending their own messages.
+Public demo accounts (published password) are refused every write that app/public_demo.py doesn't allow.
 Every JSON response to an executive also has salary and hourly-rate fields removed, wherever they sit."""
 
 import json
@@ -11,6 +12,7 @@ import traceback
 
 from pg8000.exceptions import DatabaseError
 
+from app import public_demo
 from app.authz import redact_pay
 from app.dberrors import api_error_from
 from app.http import ApiError, Request, error_body, json_response
@@ -69,6 +71,8 @@ class Router:
             raise ApiError(403, "PASSWORD_CHANGE_REQUIRED", "You must change your password first")
         if ctx.role == "executive" and route.method in MUTATING and not route.allow_executive:
             raise ApiError(403, "READ_ONLY", "Executive access is read-only")
+        if ctx.is_public_demo:
+            public_demo.check(route.method, route.pattern)
         if route.roles and ctx.role not in route.roles:
             raise ApiError(403, "FORBIDDEN", "You don't have permission to do this")
         return ctx

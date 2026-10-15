@@ -10,7 +10,8 @@ from app.seed import DEMO_PASSWORD, PEOPLE, seed
 def test_seed_idempotent_and_demo_logins_work(client, conn):
     creds = seed(conn)
     assert creds == {"admin": ("admin.demo", DEMO_PASSWORD), "manager": ("manager.demo", DEMO_PASSWORD),
-                     "employee": ("employee.demo", DEMO_PASSWORD), "executive": ("executive.demo", DEMO_PASSWORD)}
+                     "employee": ("employee.demo", DEMO_PASSWORD), "executive": ("executive.demo", DEMO_PASSWORD),
+                     "public_admin": ("demo.admin", DEMO_PASSWORD)}
     users_before = query_one(conn, "SELECT count(*) AS n FROM users")["n"]
     assert seed(conn) == creds
     assert query_one(conn, "SELECT count(*) AS n FROM users")["n"] == users_before
@@ -18,7 +19,8 @@ def test_seed_idempotent_and_demo_logins_work(client, conn):
         status, body, _, _ = client.request("POST", "/auth/login",
                                             json={"username": username, "password": password})
         assert status == 200, role
-        assert body["user"]["role"] == role and body["user"]["must_change_password"] is False
+        assert body["user"]["role"] == {"public_admin": "admin"}.get(role, role), role
+        assert body["user"]["must_change_password"] is False
 
 
 def test_seed_has_enough_people_and_projects(conn):
@@ -86,7 +88,8 @@ def test_internal_seed_op(conn):
     assert function.handler({"op": "seed"}, None) == {"seeded": True, "demo_users": ["admin.demo",
                                                                                    "manager.demo",
                                                                                    "employee.demo",
-                                                                                   "executive.demo"]}
+                                                                                   "executive.demo",
+                                                                                   "demo.admin"]}
 
 
 def test_create_admins_op_makes_ready_admin_logins_and_skips_existing(client, conn):
@@ -171,7 +174,7 @@ def seed_the_old_way(conn) -> dict:
     conn.run("""DELETE FROM milestone_dependencies
                 WHERE milestone_id IN (SELECT id FROM milestones WHERE name = 'Prototype')""")
     conn.run("DELETE FROM milestones WHERE name = 'Prototype'")
-    conn.run("DELETE FROM users WHERE username = 'executive.demo'")  # the executive came later still
+    conn.run("DELETE FROM users WHERE username IN ('executive.demo', 'demo.admin')")  # these came later still
     conn.run("UPDATE users SET department_id = NULL")
     conn.run("UPDATE projects SET department_id = NULL, work_mode = 'push'")
     conn.run("UPDATE milestones SET difficulty = 'medium', priority = 'medium'")
@@ -208,11 +211,12 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
         "Atlas Customer Portal / Launch", "Delta Compliance Audit / Audit Fieldwork"]
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
     assert result["already_set"] == 0
-    assert result["users_created"] == ["executive.demo"]
+    assert result["users_created"] == ["executive.demo", "demo.admin"]
     assert result["conversations_created"] == DEMO_CONVERSATIONS
     after = counts(conn)
-    # No assignees, hours or projects added or removed; the only new person is the executive demo login.
-    assert after == {**before, "departments": 3, "users": before["users"] + 1}
+    # No assignees, hours or projects added or removed; the only new people are the executive and public admin
+    # demo logins.
+    assert after == {**before, "departments": 3, "users": before["users"] + 2}
     exe = query_one(conn, """SELECT u.role::text AS role, u.must_change_password, d.name AS dept FROM users u
                              LEFT JOIN departments d ON d.id = u.department_id WHERE u.username = 'executive.demo'""")
     assert exe == {"role": "executive", "must_change_password": False, "dept": "Operations"}
@@ -235,8 +239,9 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
                 "difficulties_updated", "priorities_updated"):
         assert result[key] == [], key
-    # departments of people and projects, Beacon, difficulties, the executive login, the demo messages, priorities
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 5
+    # departments of people and projects, Beacon, difficulties, the executive login, the public demo admin,
+    # the demo messages, priorities
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5
     assert result["users_created"] == [] and result["conversations_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}]
 
@@ -395,3 +400,52 @@ def test_demo_backfill_skips_the_demo_messages_when_their_people_are_gone(conn):
     result = demo_backfill(conn)
     assert result["conversations_created"] == []
     assert {"item": "demo messages", "reason": "missing"} in result["skipped"]
+
+
+def public_admin_row(conn):
+    return query_one(conn, """SELECT u.first_name, u.last_name, u.role::text AS role, u.is_public_demo,
+                                     u.must_change_password, d.name AS dept
+                              FROM users u LEFT JOIN departments d ON d.id = u.department_id
+                              WHERE u.username = 'demo.admin'""")
+
+
+PUBLIC_ADMIN_ROW = {"first_name": "Dana", "last_name": "Demo-Admin", "role": "admin", "is_public_demo": True,
+                    "must_change_password": False, "dept": "Operations"}
+
+
+def test_seed_creates_the_public_demo_admin_and_leaves_the_real_admin_private(client, conn):
+    seed(conn)
+    assert public_admin_row(conn) == PUBLIC_ADMIN_ROW
+    flags = {r["username"]: r["is_public_demo"] for r in query(conn, "SELECT username, is_public_demo FROM users")}
+    assert [u for u, flagged in flags.items() if flagged] == ["demo.admin"]  # admin.demo is a normal admin
+    status, body, _, _ = client.request("POST", "/auth/login",
+                                        json={"username": "demo.admin", "password": DEMO_PASSWORD})
+    assert status == 200 and body["user"]["is_public_demo"] is True
+
+
+def test_demo_backfill_creates_the_public_demo_admin_once(client, conn):
+    from app.seed import demo_backfill
+
+    seed(conn)
+    conn.run("DELETE FROM users WHERE username = 'demo.admin'")
+    users = query_one(conn, "SELECT count(*) AS n FROM users")["n"]
+    assert demo_backfill(conn)["users_created"] == ["demo.admin"]
+    assert public_admin_row(conn) == PUBLIC_ADMIN_ROW
+    again = demo_backfill(conn)
+    assert again["users_created"] == [] and again["skipped"] == []
+    assert query_one(conn, "SELECT count(*) AS n FROM users")["n"] == users + 1
+    assert client.request("POST", "/auth/login",
+                          json={"username": "demo.admin", "password": DEMO_PASSWORD})[0] == 200
+
+
+def test_demo_backfill_never_publishes_an_ordinary_account_called_demo_admin(conn):
+    from app.seed import demo_backfill
+    from tests.helpers import make_user
+
+    seed(conn)
+    conn.run("DELETE FROM users WHERE username = 'demo.admin'")
+    make_user(conn, role="admin", username="demo.admin", password="Private!pw1")
+    result = demo_backfill(conn)
+    assert result["users_created"] == []
+    assert {"item": "user demo.admin", "reason": "exists_not_public_demo"} in result["skipped"]
+    assert query_one(conn, "SELECT is_public_demo FROM users WHERE username = 'demo.admin'")["is_public_demo"] is False

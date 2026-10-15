@@ -90,11 +90,16 @@ def _decode(token: str, secret: str) -> dict:
 
 
 def create_access_token(*, user_id: str, role: str, restricted: bool, secret: str,
-                        now: datetime) -> str:
+                        now: datetime, session_expires_at: datetime | None = None) -> str:
+    """A 15-minute access token. With session_expires_at (public demo sessions) it never outlives that moment,
+    and carries it as `sxp`."""
     iat = int(now.timestamp())
-    return _encode({"sub": str(user_id), "role": role, "rst": bool(restricted), "typ": "access",
-                    "iat": iat, "exp": iat + ACCESS_TOKEN_MINUTES * 60,
-                    "jti": uuid.uuid4().hex}, secret)
+    claims = {"sub": str(user_id), "role": role, "rst": bool(restricted), "typ": "access",
+              "iat": iat, "exp": iat + ACCESS_TOKEN_MINUTES * 60, "jti": uuid.uuid4().hex}
+    if session_expires_at is not None:
+        claims["sxp"] = int(session_expires_at.timestamp())
+        claims["exp"] = min(claims["exp"], claims["sxp"])
+    return _encode(claims, secret)
 
 
 def decode_access_token(token: str, secret: str, now: datetime) -> dict:
