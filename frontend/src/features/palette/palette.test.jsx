@@ -16,8 +16,9 @@ const projects = [
     progress_pct: 0, budget_pct: 0 },
 ]
 const milestones = {
-  'p-apollo': [{ id: 'm1', name: 'Schema Mapping', status: 'in_progress', end_date: '2020-01-31' },
-    { id: 'm2', name: 'Cutover', status: 'not_started', end_date: '2099-01-31' }],
+  'p-apollo': [{ id: 'm1', name: 'Schema Mapping', status: 'in_progress', end_date: '2020-01-31', priority: 'high' },
+    { id: 'm2', name: 'Cutover', status: 'not_started', end_date: '2099-01-31', priority: 'critical' },
+    { id: 'm3', name: 'Discovery', status: 'completed', end_date: '2020-01-01', priority: 'critical' }],
   'p-zeus': [],
 }
 
@@ -103,6 +104,26 @@ describe('command palette', () => {
     expect(await screen.findByText('Dashboard · Overdue milestones')).toBeInTheDocument()
     expect(await screen.findByRole('option', { name: /schema mapping/i })).toBeInTheDocument()
     expect(screen.queryByRole('option', { name: /cutover/i })).not.toBeInTheDocument()
+  })
+
+  test('critical milestones lists only the open critical ones; high priority adds the high ones, most important first', async () => {
+    handlers()
+    const user = userEvent.setup()
+    renderAsUser(<PaletteButton />, { user: users.manager, route: '/projects' })
+    openWithShortcut()
+    const input = await screen.findByRole('combobox')
+    await user.type(input, 'critical milestones')
+    expect(await screen.findByText('Dashboard · Critical milestones')).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: /cutover/i })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /schema mapping/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /discovery/i })).not.toBeInTheDocument()
+    await user.clear(input)
+    await user.type(input, 'high priority milestones')
+    await screen.findByText('Dashboard · High priority milestones')
+    await screen.findByRole('option', { name: /schema mapping/i })
+    const names = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(names.findIndex((n) => /cutover/i.test(n))).toBeLessThan(names.findIndex((n) => /schema mapping/i.test(n)))
+    expect(names.some((n) => /discovery/i.test(n))).toBe(false)
   })
 
   test('dark mode switches the theme', async () => {

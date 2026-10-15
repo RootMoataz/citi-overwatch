@@ -14,6 +14,7 @@ const me = { id: users.employee.id, name: 'Eli Employee' }
 const ms = (overrides) => ({
   project_id: 'p1', description: '', status: 'not_started', display_status: 'not_started', blocked: false,
   predecessors: [], assignees: [], is_assignee: false, completed_at: null, is_archived: false, difficulty: 'medium',
+  priority: 'medium',
   ...overrides,
 })
 
@@ -21,7 +22,8 @@ const discovery = ms({ id: 'm1', name: 'Discovery', start_date: '2026-01-05', en
   display_status: 'in_progress', assignees: [me], is_assignee: true })
 const mapping = ms({ id: 'm2', name: 'Schema Mapping', start_date: '2026-03-01', end_date: '2026-06-30',
   display_status: 'blocked', blocked: true, predecessors: ['m1'], assignees: [me], is_assignee: true })
-const cutover = ms({ id: 'm3', name: 'Cutover', start_date: '2026-07-01', end_date: '2026-09-30', difficulty: 'hard' })
+const cutover = ms({ id: 'm3', name: 'Cutover', start_date: '2026-07-01', end_date: '2026-09-30', difficulty: 'hard',
+  priority: 'critical' })
 
 function handlers(list = [discovery, mapping, cutover], extra = []) {
   return [
@@ -251,6 +253,61 @@ describe('MilestonesTab', () => {
     await user.click(await screen.findByRole('option', { name: 'Easy' }))
     await user.click(within(dialog).getByRole('button', { name: /save/i }))
     await waitFor(() => expect(sent).toEqual([{ difficulty: 'easy' }]))
+  })
+
+  test('each milestone card shows its priority before its difficulty, and the timeline says it too', async () => {
+    server.use(...handlers())
+    renderTab(users.employee, false)
+    const cut = await card('Cutover')
+    const priority = within(cut).getByLabelText('Priority: Critical')
+    expect(priority).toHaveTextContent('Critical')
+    expect(priority.compareDocumentPosition(within(cut).getByLabelText('Difficulty: Hard')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(within(await card('Discovery')).getByLabelText('Priority: Medium')).toHaveTextContent('Medium')
+    const timeline = screen.getByRole('list', { name: 'Milestone timeline' })
+    expect(within(timeline).getByRole('listitem', { name: /^Cutover, .*, Critical priority$/ })).toBeInTheDocument()
+  })
+
+  test('manager picks a priority next to difficulty, Medium by default', async () => {
+    let created = null
+    server.use(...handlers([], [
+      http.post(`${API}/projects/p1/milestones`, async ({ request }) => {
+        created = await request.json()
+        return HttpResponse.json({ ...cutover, id: 'm9', ...created }, { status: 201 })
+      }),
+      http.put(`${API}/milestones/m9/dependencies`, () => HttpResponse.json({ ...cutover, warnings: [] })),
+      http.put(`${API}/milestones/m9/assignees`, () => HttpResponse.json(cutover))]))
+    renderTab(users.manager, true)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: /add milestone/i }))
+    const dialog = await screen.findByRole('dialog', { name: /new milestone/i })
+    const priority = within(dialog).getByRole('combobox', { name: /priority/i })
+    expect(priority).toHaveTextContent('Medium')
+    expect(within(dialog).getByText('How urgent this is. Separate from difficulty, which weights progress.')).toBeInTheDocument()
+    await user.type(within(dialog).getByLabelText(/^name/i), 'Launch')
+    await user.type(within(dialog).getByLabelText(/start date/i), '2026-10-01')
+    await user.type(within(dialog).getByLabelText(/end date/i), '2026-10-31')
+    await user.click(priority)
+    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Low', 'Medium', 'High', 'Critical'])
+    await user.click(screen.getByRole('option', { name: 'Critical' }))
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(created).toMatchObject({ name: 'Launch', priority: 'critical', difficulty: 'medium' }))
+  })
+
+  test('editing sends the priority only when it changed', async () => {
+    const sent = []
+    server.use(...handlers([discovery, mapping, cutover], [
+      http.put(`${API}/milestones/m1`, async ({ request }) => {
+        sent.push(await request.json())
+        return HttpResponse.json({ ...discovery, ...sent.at(-1) })
+      })]))
+    renderTab(users.manager, true)
+    const user = userEvent.setup()
+    await user.click(within(await card('Discovery')).getByRole('button', { name: /edit discovery/i }))
+    const dialog = await screen.findByRole('dialog', { name: /edit milestone/i })
+    await user.click(within(dialog).getByRole('combobox', { name: /priority/i }))
+    await user.click(await screen.findByRole('option', { name: 'High' }))
+    await user.click(within(dialog).getByRole('button', { name: /save/i }))
+    await waitFor(() => expect(sent).toEqual([{ priority: 'high' }]))
   })
 
   test('in a pull project, team members claim ready milestones and see what pull mode means', async () => {

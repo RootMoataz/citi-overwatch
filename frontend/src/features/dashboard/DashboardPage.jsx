@@ -21,6 +21,7 @@ import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
+import PriorityChip from '../../components/PriorityChip.jsx'
 import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -96,6 +97,7 @@ function Milestones({ title, items, tone }) {
           {items.slice(0, 6).map((m) => (
             <ListItem key={m.id} disableGutters>
               <ListItemText primary={m.name} secondary={<>{projectLink(m.project, 'milestones')} · due {formatDate(m.end_date)}</>} />
+              <PriorityChip priority={m.priority} sx={{ mr: 0.75, flexShrink: 0 }} />
               <StatusChip status={m.status} />
             </ListItem>
           ))}

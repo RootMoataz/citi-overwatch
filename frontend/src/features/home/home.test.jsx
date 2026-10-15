@@ -83,6 +83,26 @@ describe('HomePage by role', () => {
     expect(screen.queryByRole('region', { name: /^risk$/i })).not.toBeInTheDocument()
   })
 
+  test('My milestones: overdue first, then the most important, then the soonest due; each shows its priority', async () => {
+    const mine = (id, name, end, priority, status = 'in_progress') => ({ id, name, status, priority, difficulty: 'medium',
+      start_date: '2020-01-01', end_date: end, is_archived: false, role: 'primary', project: { id: 'p1', name: 'Apollo' },
+      can_open: true, logged_hours: 0, approved_hours: 0 })
+    server.use(
+      http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [
+        mine('a', 'Soon low', '2099-01-02', 'low'), mine('b', 'Later critical', '2099-06-01', 'critical'),
+        mine('c', 'Late medium', '2020-02-01', 'medium'), mine('d', 'Soon high', '2099-01-03', 'high'),
+        mine('e', 'Done critical', '2099-01-01', 'critical', 'completed'), mine('f', 'Late high', '2020-03-01', 'high')] })),
+      http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
+    )
+    renderAsUser(<HomePage />, { user: users.employee, route: '/' })
+    const region = await screen.findByRole('region', { name: /my milestones/i })
+    const rows = await within(region).findAllByRole('listitem')
+    expect(rows.map((r) => within(r).getByRole('heading').textContent)).toEqual(
+      ['Late high', 'Late medium', 'Later critical', 'Soon high', 'Soon low', 'Done critical'])
+    expect(within(rows[2]).getByLabelText('Priority: Critical')).toHaveTextContent('Critical')
+    expect(within(region).getByText('Assigned to you: overdue first, then by priority and due date.')).toBeInTheDocument()
+  })
+
   test('employees with nothing to claim are told so', async () => {
     server.use(
       http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [] })),

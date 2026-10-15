@@ -9,6 +9,7 @@ import { useClaimMilestone, useMilestonesOf, useProfile, useProjects } from '../
 import { useSession } from '../../auth/sessionContext.js'
 import CountUp from '../../components/CountUp.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
+import PriorityChip from '../../components/PriorityChip.jsx'
 import Reveal from '../../components/Reveal.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -16,6 +17,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { chartPalette } from '../../app/chartColors.js'
 import { formatDate, formatHours } from '../../lib/format.js'
+import { priorityRank } from '../../lib/labels.js'
 import Section from '../dashboard/Section.jsx'
 
 const WEEKLY_CAP = 40
@@ -99,6 +101,7 @@ function MilestoneItem({ m, action }) {
         <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
           {overdue(m) ? <Chip size="small" color="error" variant="outlined" label="Overdue" /> : null}
           <StatusChip status={m.status} />
+          <PriorityChip priority={m.priority} />
           <DifficultyChip difficulty={m.difficulty} />
           {m.role === 'supporting' ? <Chip size="small" variant="outlined" label="Supporting" sx={{ height: 20 }} /> : null}
           {action}
@@ -108,16 +111,19 @@ function MilestoneItem({ m, action }) {
   )
 }
 
-/** Open work first, soonest due first; finished milestones drop to the bottom. */
+/** Open work first: overdue, then the most important (priority), then the soonest due. Finished milestones drop to
+ * the bottom, soonest due first. */
 function byUrgency(a, b) {
   const done = (m) => (m.status === 'completed' ? 1 : 0)
-  return done(a) - done(b) || String(a.end_date).localeCompare(String(b.end_date))
+  const rank = (m) => (done(m) ? 0 : priorityRank(m.priority))
+  return done(a) - done(b) || Number(overdue(b)) - Number(overdue(a)) || rank(a) - rank(b)
+    || String(a.end_date).localeCompare(String(b.end_date))
 }
 
 function MyMilestones({ milestones }) {
   const mine = milestones.filter((m) => m.role && !m.is_archived && !m.project?.is_archived).sort(byUrgency)
   return (
-    <Section question="My milestones" hint="Assigned to you, soonest due first.">
+    <Section question="My milestones" hint="Assigned to you: overdue first, then by priority and due date.">
       {mine.length ? (
         <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
           {mine.map((m) => <MilestoneItem key={m.id} m={m} />)}

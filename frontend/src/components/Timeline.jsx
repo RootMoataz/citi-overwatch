@@ -3,6 +3,7 @@ import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
 import { STATUS, statusColor } from '../app/theme.js'
 import { formatDate } from '../lib/format.js'
+import { PRIORITY } from '../lib/labels.js'
 
 const DAY = 86400000
 const toTime = (iso) => Date.UTC(...String(iso).slice(0, 10).split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
@@ -37,7 +38,8 @@ export default function Timeline({ items, range }) {
             const left = pct(item.start_date)
             const width = Math.max(pct(item.end_date) - left + (DAY / span) * 100, 1.5)
             const after = item.predecessors.map((id) => names[String(id)]).filter(Boolean)
-            const label = `${item.name}, ${formatDate(item.start_date)} to ${formatDate(item.end_date)}, ${meta.label}`
+            const priority = PRIORITY[item.priority] ? `, ${PRIORITY[item.priority]} priority` : ''
+            const label = `${item.name}, ${formatDate(item.start_date)} to ${formatDate(item.end_date)}, ${meta.label}${priority}`
             return (
               <Box component="li" key={item.id} tabIndex={0} aria-label={label}
                 sx={{ outline: 'none', '&:focus-visible .bar': { boxShadow: (t) => `0 0 0 3px ${alpha(t.palette.primary.main, 0.4)}` } }}>

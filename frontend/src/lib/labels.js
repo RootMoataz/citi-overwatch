@@ -19,6 +19,13 @@ export const RISK_LABELS = {
 export const DIFFICULTY = { easy: 'Easy', medium: 'Medium', hard: 'Hard' }
 export const PROGRESS_WEIGHTING = 'Harder milestones count more toward progress: easy 1, medium 2, hard 3.'
 
+/** Milestone priority: how urgent it is, separate from difficulty and never part of progress. Low to Critical. */
+export const PRIORITY = { low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical' }
+export const PRIORITY_HELP = 'How urgent this is. Separate from difficulty, which weights progress.'
+const PRIORITY_RANK = { critical: 0, high: 1, medium: 2, low: 3 }
+/** For sorting, most urgent first: critical 0 … low 3; a missing priority counts as medium. */
+export const priorityRank = (priority) => PRIORITY_RANK[priority] ?? PRIORITY_RANK.medium
+
 /** Push: the manager assigns milestones. Pull: team members claim ready, unassigned milestones themselves. */
 export const WORK_MODE = {
   push: { label: 'Push', help: 'The manager assigns people to milestones' },

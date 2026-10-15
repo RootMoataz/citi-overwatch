@@ -5,7 +5,8 @@
 //   { kind: 'navigate', to, chips, label }        open a page (chips show how the phrase was read)
 //   { kind: 'theme', mode: 'dark'|'light', ... }   switch the colour theme
 //   { kind: 'signout', ... }                       sign out
-// plus `milestones: 'overdue'` when the palette should list only overdue milestones.
+// plus `milestones: 'overdue' | 'critical' | 'high'` when the palette should list only those milestones (high means
+// high or critical).
 // Only intents the viewer may act on come back: the same role rules as the pages (ROUTE_ROLES, can, canViewProfile).
 import { ROUTE_ROLES } from '../../app/access.js'
 import { can, canViewProfile } from '../../lib/permissions.js'
@@ -97,6 +98,20 @@ function overdue(text, { user }) {
     : navigate('/projects?at_risk=true', ['Projects', 'At risk'], 'Open your at-risk projects', { milestones: 'overdue' })
 }
 
+const CRITICAL = /^critical(?: priority)?$|\bcritical (?:priority )?(?:milestones?|deliverables?)\b/
+const HIGH = /^high[\s-]?priority$|\bhigh[\s-]?priority (?:milestones?|deliverables?)\b|\b(?:urgent|important) (?:milestones?|deliverables?)\b/
+
+/** "critical milestones" / "high priority milestones": the dashboard's deliverables (My week for employees), with
+ * the palette listing those milestones, as "overdue milestones" does. */
+function priorityMilestones(text, { user }) {
+  const level = CRITICAL.test(text) ? 'critical' : HIGH.test(text) ? 'high' : null
+  if (!level) return null
+  const chip = level === 'critical' ? 'Critical milestones' : 'High priority milestones'
+  return user?.role === 'employee'
+    ? navigate('/', ['My week', chip], 'Open My week', { milestones: level })
+    : navigate('/', ['Dashboard', chip], 'Open the dashboard deliverables', { milestones: level })
+}
+
 function budgetOf(text, { projects }) {
   const match = /^(?:show\s+|open\s+)?(?:the\s+)?budget\s+(?:of|for|on)\s+(?:the\s+)?(.+?)(?:\s+project)?$/.exec(text)
     ?? /^(?:show\s+|open\s+)?(?:the\s+)?(.+?)(?:\s+project)?(?:'s|s')?\s+budget$/.exec(text)
@@ -136,7 +151,8 @@ function projectFilters(text, { departments }) {
   return navigate(`/projects${qs ? `?${qs}` : ''}`, chips, `Open the projects list filtered to ${chips.slice(1).join(', ')}`)
 }
 
-const RULES = [theme, signOut, newProject, approvals, overAllocated, overdue, budgetOf, personHours, projectFilters]
+const RULES = [theme, signOut, newProject, approvals, overAllocated, overdue, priorityMilestones, budgetOf, personHours,
+  projectFilters]
 
 export function parsePhrase(raw, { user, projects = [], people = [], departments = [] } = {}) {
   const text = normalize(raw)
@@ -153,6 +169,7 @@ export function parsePhrase(raw, { user, projects = [], people = [], departments
 export function examplePhrases(user) {
   const list = ['at-risk projects', 'on hold projects']
   if (user?.role !== 'employee') list.push('overdue milestones')
+  list.push('critical milestones')
   if (mayOpen(user, 'approvals')) list.push('pending approvals')
   if (mayOpen(user, 'allocation')) list.push('who is over 40')
   list.push('dark mode')

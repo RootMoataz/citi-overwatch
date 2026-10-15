@@ -17,7 +17,7 @@ const profile = ({ salary } = {}) => ({
   milestones: [
     { id: 'm1', name: 'Review', status: 'in_progress', start_date: '2026-10-01', end_date: '2026-10-31', is_archived: false,
       role: 'supporting', project: { id: 'p1', name: 'Apollo' }, logged_hours: 12, approved_hours: 0, can_open: true,
-      difficulty: 'easy' }],
+      difficulty: 'easy', priority: 'high' }],
 })
 
 const renderProfile = (viewer, body, status = 200) => {
@@ -45,6 +45,7 @@ describe('PersonProfilePage', () => {
     expect(within(row).getByText('Supporting')).toBeInTheDocument()
     expect(within(row).getByText('12h')).toBeInTheDocument()
     expect(within(row).getByLabelText('Difficulty: Easy')).toBeInTheDocument()
+    expect(within(row).getByLabelText('Priority: High')).toBeInTheDocument()
   })
 
   test("the header shows the person's photo when they have one", async () => {

@@ -14,8 +14,10 @@ const dashboard = {
   status_counts: { planned: 1, active: 2, on_hold: 1, completed: 1 },
   projects: [project(), project({ id: 'p2', name: 'Atlas', at_risk_reasons: ['PAST_DUE', 'OVERDUE_MILESTONE'] })],
   at_risk: [{ id: 'p2', name: 'Atlas', reasons: ['PAST_DUE', 'OVERDUE_MILESTONE'] }],
-  milestones: { overdue: [{ id: 'm9', name: 'Build', end_date: '2026-10-05', status: 'in_progress', project: { id: 'p2', name: 'Atlas' } }],
-    due_soon: [{ id: 'm2', name: 'Schema Mapping', end_date: '2026-10-20', status: 'in_progress', project: { id: 'p1', name: 'Apollo' } }] },
+  milestones: { overdue: [{ id: 'm9', name: 'Build', end_date: '2026-10-05', status: 'in_progress', priority: 'critical',
+    project: { id: 'p2', name: 'Atlas' } }],
+    due_soon: [{ id: 'm2', name: 'Schema Mapping', end_date: '2026-10-20', status: 'in_progress', priority: 'high',
+      project: { id: 'p1', name: 'Apollo' } }] },
   over_allocated: [{ user: { id: 'u-emp', name: 'Eli Employee' }, week_logged_total: 45 }],
   budgets: [{ project_id: 'p1', name: 'Apollo', budget: 250000, consumed: 50000, forecast: 120000 },
     { project_id: 'p2', name: 'Atlas', budget: 60000, consumed: 58000, forecast: 70000 }],
@@ -79,7 +81,10 @@ describe('DashboardPage', () => {
     const over = screen.getByRole('region', { name: /over-allocated/i })
     expect(within(over).getByText('Eli Employee')).toBeInTheDocument()
     expect(within(over).getByText('45h')).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: /key deliverables/i })).getByText('Build')).toBeInTheDocument()
+    const deliverables = screen.getByRole('region', { name: /key deliverables/i })
+    expect(within(deliverables).getByText('Build')).toBeInTheDocument()
+    expect(within(deliverables).getByLabelText('Priority: Critical')).toBeInTheDocument()
+    expect(within(deliverables).getByLabelText('Priority: High')).toBeInTheDocument()
     expect(within(screen.getByRole('region', { name: /dependency chain/i })).getAllByRole('link', { name: /timeline/i })).toHaveLength(2)
     expect(screen.getByText('6 waiting for your approval')).toBeInTheDocument()
   })

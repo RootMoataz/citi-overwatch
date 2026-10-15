@@ -8,11 +8,12 @@ import { useMediaQuery } from 'react-responsive'
 import { useSaveMilestone } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDate, fullName } from '../../lib/format.js'
-import { DIFFICULTY, PROGRESS_WEIGHTING } from '../../lib/labels.js'
+import { DIFFICULTY, PRIORITY, PRIORITY_HELP, PROGRESS_WEIGHTING } from '../../lib/labels.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { milestoneSchema } from '../../lib/schemas.js'
 
 const FORM_CODES = ['OUT_OF_PROJECT_RANGE']
+const FIELDS = ['name', 'description', 'start_date', 'end_date', 'difficulty', 'priority']
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 
 /** Create or edit a milestone, its dependencies and its assignees. */
@@ -23,13 +24,13 @@ export default function MilestoneDialog({ project, milestone, milestones, member
   const [failure, setFailure] = useState(null)
   const initialPreds = (milestone?.predecessors ?? []).map(String)
   const initialPeople = (milestone?.assignees ?? []).map((a) => String(a.id))
+  const initial = {
+    name: milestone?.name ?? '', description: milestone?.description ?? '', start_date: milestone?.start_date ?? '',
+    end_date: milestone?.end_date ?? '', difficulty: milestone?.difficulty ?? 'medium', priority: milestone?.priority ?? 'medium',
+  }
   const { register, control, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm({
     resolver: zodResolver(milestoneSchema),
-    defaultValues: {
-      name: milestone?.name ?? '', description: milestone?.description ?? '', start_date: milestone?.start_date ?? '',
-      end_date: milestone?.end_date ?? '', difficulty: milestone?.difficulty ?? 'medium', predecessor_ids: initialPreds,
-      assignee_ids: initialPeople,
-    },
+    defaultValues: { ...initial, predecessor_ids: initialPreds, assignee_ids: initialPeople },
   })
   const others = milestones.filter((m) => String(m.id) !== String(milestone?.id))
   const nameOf = (id) => others.find((m) => String(m.id) === id)?.name ?? id
@@ -38,8 +39,8 @@ export default function MilestoneDialog({ project, milestone, milestones, member
   const onSubmit = async (values) => {
     setFailure(null)
     const fields = {}
-    for (const key of ['name', 'description', 'start_date', 'end_date', 'difficulty']) {
-      if (!milestone || values[key] !== (milestone[key] ?? '')) fields[key] = values[key]
+    for (const key of FIELDS) {
+      if (!milestone || values[key] !== initial[key]) fields[key] = values[key]
     }
     try {
       const saved = await save.mutateAsync({
@@ -102,7 +103,14 @@ export default function MilestoneDialog({ project, milestone, milestones, member
                 slotProps={{ inputLabel: { shrink: true } }} error={Boolean(errors.end_date)}
                 helperText={errors.end_date?.message ?? `Until ${formatDate(project.predicted_end_date)}`} />
             </Grid>
-            <Grid size={12}>
+            <Grid size={{ xs: 12, sm: 6 }}>
+              <Controller name="priority" control={control} render={({ field }) => (
+                <TextField select label="Priority" {...field} disabled={isSubmitting} helperText={PRIORITY_HELP}>
+                  {Object.entries(PRIORITY).map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+                </TextField>
+              )} />
+            </Grid>
+            <Grid size={{ xs: 12, sm: 6 }}>
               <Controller name="difficulty" control={control} render={({ field }) => (
                 <TextField select label="Difficulty" {...field} disabled={isSubmitting}
                   helperText={`Project progress is weighted by difficulty. ${PROGRESS_WEIGHTING}`}>

@@ -6,6 +6,7 @@ import DataBar from '../../components/DataBar.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { STATUS } from '../../app/theme.js'
 import { num } from '../../lib/csv.js'
+import { PRIORITY } from '../../lib/labels.js'
 import { formatHours, formatMoney, formatPct } from '../../lib/format.js'
 
 const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
@@ -15,6 +16,7 @@ function csvColumns(showHours) {
   return [
     { header: 'Milestone', value: (r) => r.milestone?.name ?? 'Total (consumed)' },
     { header: 'Status', value: (r) => (r.milestone ? STATUS[r.milestone.status]?.label ?? r.milestone.status : '') },
+    { header: 'Priority', value: (r) => (r.milestone ? PRIORITY[r.milestone.priority] ?? '' : '') },
     ...(showHours ? [{ header: 'Approved hours', value: (r) => num(r.approved_hours) },
       { header: 'Pending hours', value: (r) => num(r.pending_hours) }] : []),
     { header: 'Approved cost (USD)', value: (r) => num(r.approved_cost) },

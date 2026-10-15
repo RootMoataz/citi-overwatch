@@ -10,6 +10,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
+import PriorityChip from '../../components/PriorityChip.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { formatDate, formatHours, formatMoney } from '../../lib/format.js'
 import StatTile from '../../components/StatTile.jsx'
@@ -123,7 +124,8 @@ export default function PersonProfilePage() {
                   : m.project.status === 'completed' ? <Chip size="small" variant="outlined" label="Project completed" sx={{ ml: 1 }} /> : null}
               </TableCell>
               <TableCell>{m.role === 'supporting' ? 'Supporting' : m.role === 'primary' ? 'Primary' : 'No longer assigned'}</TableCell>
-              <TableCell><StatusChip status={m.status} /><DifficultyChip difficulty={m.difficulty} sx={{ ml: 0.75 }} /></TableCell>
+              <TableCell><StatusChip status={m.status} /><PriorityChip priority={m.priority} sx={{ ml: 0.75 }} />
+                <DifficultyChip difficulty={m.difficulty} sx={{ ml: 0.75 }} /></TableCell>
               <TableCell>{formatDate(m.start_date)} – {formatDate(m.end_date)}</TableCell>
               <TableCell align="right">{formatHours(m.logged_hours)}</TableCell>
               <TableCell align="right">{formatHours(m.approved_hours)}</TableCell>

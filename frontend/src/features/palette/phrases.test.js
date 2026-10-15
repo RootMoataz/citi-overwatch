@@ -121,6 +121,17 @@ describe('pages and actions by role', () => {
     expect(parse('overdue milestones', 'employee')).toMatchObject({ to: '/projects?at_risk=true', milestones: 'overdue' })
   })
 
+  test('critical and high priority milestones: dashboard deliverables, or My week for employees', () => {
+    expect(parse('critical milestones', 'manager')).toMatchObject({ to: '/', chips: ['Dashboard', 'Critical milestones'], milestones: 'critical' })
+    expect(parse('critical', 'admin')).toMatchObject({ milestones: 'critical' })
+    expect(parse('show critical deliverables', 'executive')).toMatchObject({ to: '/', milestones: 'critical' })
+    expect(parse('high priority milestones', 'manager')).toMatchObject({ to: '/', chips: ['Dashboard', 'High priority milestones'], milestones: 'high' })
+    expect(parse('high-priority', 'manager')).toMatchObject({ milestones: 'high' })
+    expect(parse('urgent milestones', 'admin')).toMatchObject({ milestones: 'high' })
+    expect(parse('critical milestones', 'employee')).toMatchObject({ to: '/', chips: ['My week', 'Critical milestones'], milestones: 'critical' })
+    expect(parse('high', 'manager')?.milestones).toBeUndefined()
+  })
+
   test('new project: admins create, managers request, others nothing', () => {
     expect(parse('new project', 'admin')).toMatchObject({ to: '/projects?new=1' })
     expect(parse('create a project', 'manager')).toMatchObject({ to: '/requests?new=1' })

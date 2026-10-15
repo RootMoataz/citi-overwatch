@@ -18,6 +18,7 @@ import { useColorMode } from '../../app/colorMode.js'
 import { useSession } from '../../auth/sessionContext.js'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatDate } from '../../lib/format.js'
+import { PRIORITY, priorityRank } from '../../lib/labels.js'
 import { canViewProfile } from '../../lib/permissions.js'
 import { examplePhrases, parsePhrase } from './phrases.js'
 import { actionsFor, pagesFor, rank } from './search.js'
@@ -25,6 +26,8 @@ import usePaletteData from './usePaletteData.js'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const isOverdue = (m) => m.status !== 'completed' && String(m.end_date).slice(0, 10) < today()
+// "critical milestones" lists the open critical ones; "high priority milestones" adds the high ones, most important first.
+const PRIORITY_LEVELS = { critical: ['critical'], high: ['critical', 'high'] }
 
 function ItemIcon({ item }) {
   if (item.group === 'People') return <UserAvatar userId={item.personId} name={item.label} size={24} />
@@ -44,11 +47,18 @@ function useResults(query) {
     const projectName = new Map(data.projects.map((p) => [String(p.id), p.name]))
     const milestones = data.milestones.map((m) => ({
       id: `milestone:${m.id}`, group: 'Milestones', kind: 'navigate', label: m.name, overdue: isOverdue(m),
-      detail: `${projectName.get(String(m.project_id)) ?? ''} · due ${formatDate(m.end_date)}`,
+      priority: m.priority, open: m.status !== 'completed', end: String(m.end_date),
+      detail: [projectName.get(String(m.project_id)) ?? '', `due ${formatDate(m.end_date)}`,
+        ['critical', 'high'].includes(m.priority) ? `${PRIORITY[m.priority]} priority` : null].filter(Boolean).join(' · '),
       to: `/projects/${m.project_id}?tab=milestones`,
     }))
     if (intent?.milestones === 'overdue') {
       return { intent, items: [intentItem, ...milestones.filter((m) => m.overdue).slice(0, 8)] }
+    }
+    if (PRIORITY_LEVELS[intent?.milestones]) {
+      const picked = milestones.filter((m) => m.open && PRIORITY_LEVELS[intent.milestones].includes(m.priority))
+        .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority) || a.end.localeCompare(b.end))
+      return { intent, items: [intentItem, ...picked.slice(0, 8)] }
     }
     const projects = data.projects.map((p) => ({
       id: `project:${p.id}`, group: 'Projects', kind: 'navigate', label: p.name, to: `/projects/${p.id}`,

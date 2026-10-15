@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
+import MilestoneCostTable from '../features/projects/MilestoneCostTable.jsx'
 import ProjectsPage from '../features/projects/ProjectsPage.jsx'
 import { API, HttpResponse, http, server } from '../test/server.js'
 import { renderAsUser, users } from '../test/render.jsx'
@@ -51,4 +52,18 @@ test('Export CSV is disabled while there is nothing to export', async () => {
   renderAsUser(<ProjectsPage />, { user: users.employee, route: '/projects' })
   await screen.findByText(/aren't on any projects yet/)
   expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
+})
+
+test('the cost-by-milestone CSV has a Priority column', async () => {
+  server.use(http.get(`${API}/projects/p1/milestone-costs`, () => HttpResponse.json({ hours_visible: false,
+    items: [{ milestone: { id: 'm1', name: 'Cutover', status: 'in_progress', priority: 'critical' }, approved_hours: null,
+      pending_hours: null, approved_cost: 2000, budget_pct: 4 }],
+    total: { approved_hours: null, pending_hours: null, approved_cost: 2000, budget_pct: 4 } })))
+  renderAsUser(<MilestoneCostTable project={project()} />, { user: users.employee, route: '/costs-under-test' })
+  await screen.findByRole('table', { name: /cost by milestone/i })
+  await userEvent.click(screen.getByRole('button', { name: 'Export CSV' }))
+  const [header, row, total] = (await blobs[0].text()).split(String.fromCharCode(13, 10))
+  expect(header).toBe('Milestone,Status,Priority,Approved cost (USD),Share of budget (%)')
+  expect(row).toBe('Cutover,In progress,Critical,2000,4')
+  expect(total).toBe('Total (consumed),,,2000,4')
 })
