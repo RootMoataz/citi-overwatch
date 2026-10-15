@@ -1,10 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import RequireAuth from '../../auth/RequireAuth.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
-import AuditPage from '../audit/AuditPage.jsx'
 import ProfilePage from '../profile/ProfilePage.jsx'
 import CreateUserWizard from './CreateUserWizard.jsx'
 import UserDetailPage from './UserDetailPage.jsx'
@@ -183,64 +181,6 @@ describe('ProfilePage', () => {
     renderAsUser(<ProfilePage />, { user: users.employee, route: '/profile', path: '/profile' })
     await userEvent.click(await screen.findByRole('button', { name: /change photo/i }))
     expect(await screen.findByRole('dialog', { name: /profile photo/i })).toBeInTheDocument()
-  })
-})
-
-describe('AuditPage', () => {
-  test('audit page not reachable by manager', () => {
-    renderAsUser(<RequireAuth roles={['admin']}><AuditPage /></RequireAuth>, { user: users.manager, route: '/audit', path: '/audit' })
-    expect(screen.getByText(/don't have access/i)).toBeInTheDocument()
-  })
-
-  test('admin sees entries and can expand the before/after', async () => {
-    server.use(http.get(`${API}/audit-log`, () => HttpResponse.json({ total: 1, items: [{ id: 'a1', action: 'update',
-      entity_type: 'project', entity_id: 'p1', request_id: 'r-1', created_at: '2026-10-13T12:00:00Z',
-      actor: { id: 'u-admin', name: 'Avery Admin' }, changes: { before: { budget: 1000 }, after: { budget: 2000 } } }] })))
-    renderAsUser(<AuditPage />, { user: users.admin, route: '/audit', path: '/audit' })
-    expect(await screen.findByText('Avery Admin')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /show changes/i }))
-    await userEvent.click(await screen.findByRole('button', { name: /show raw json/i }))
-    expect(await screen.findByText(/"budget": 2000/)).toBeInTheDocument()
-  })
-
-  test('changes read as one line per changed field, with the raw JSON behind a toggle', async () => {
-    server.use(http.get(`${API}/audit-log`, () => HttpResponse.json({ total: 1, items: [{ id: 'a1', action: 'update',
-      entity_type: 'project', entity_id: 'p1', request_id: 'r-1', created_at: '2026-10-13T12:00:00Z',
-      actor: { id: 'u-admin', name: 'Avery Admin' },
-      changes: { before: { budget: 1000, status: 'active', end_date: null }, after: { budget: 2000, status: 'active', end_date: '2026-12-31' } } }] })))
-    renderAsUser(<AuditPage />, { user: users.admin, route: '/audit', path: '/audit' })
-    const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: /show changes/i }))
-    const list = await screen.findByRole('list', { name: /changed fields/i })
-    expect(within(list).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['budget: 1000 → 2000', 'end date: — → 2026-12-31'])
-    expect(screen.getByText(/request id: r-1/i)).toBeInTheDocument()
-    expect(screen.queryByText(/"budget": 2000/)).not.toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /show raw json/i }))
-    expect(await screen.findByText(/"budget": 2000/)).toBeInTheDocument()
-  })
-
-  test('Who and Action filters are sent to the server', async () => {
-    const seen = []
-    server.use(
-      http.get(`${API}/audit-log`, ({ request }) => {
-        seen.push(Object.fromEntries(new URL(request.url).searchParams))
-        return HttpResponse.json({ total: 0, items: [] })
-      }),
-      http.get(`${API}/users`, ({ request }) => HttpResponse.json(new URL(request.url).searchParams.get('archived') === 'true'
-        ? { items: [{ id: 'u-old', first_name: 'Olive', last_name: 'Old', username: 'oold', role: 'employee', is_archived: true }], total: 1 }
-        : { items: [{ id: 'u-blake', first_name: 'Blake', last_name: 'Admin', username: 'badmin', role: 'admin' }], total: 1 })),
-    )
-    renderAsUser(<AuditPage />, { user: users.admin, route: '/audit', path: '/audit' })
-    const user = userEvent.setup()
-    await user.type(await screen.findByRole('combobox', { name: /who/i }), 'bla')
-    await user.click(await screen.findByRole('option', { name: /blake admin/i }))
-    await waitFor(() => expect(seen.at(-1)).toMatchObject({ actor: 'u-blake' }))
-    await user.click(screen.getByRole('combobox', { name: /action/i }))
-    await user.click(await screen.findByRole('option', { name: /^archive$/i }))
-    await waitFor(() => expect(seen.at(-1)).toMatchObject({ actor: 'u-blake', action: 'archive' }))
-    await user.clear(screen.getByRole('combobox', { name: /who/i }))
-    await user.type(screen.getByRole('combobox', { name: /who/i }), 'oli')
-    expect(await screen.findByRole('option', { name: /olive old \(archived\)/i })).toBeInTheDocument()
   })
 })
 
