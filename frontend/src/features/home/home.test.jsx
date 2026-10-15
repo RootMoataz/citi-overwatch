@@ -131,7 +131,7 @@ describe('HomePage by role', () => {
     expect(await within(open).findByText(/nothing to claim right now/i)).toBeInTheDocument()
   })
 
-  test('managers get Approvals pinned above Risk and Smart insights', async () => {
+  test('managers get Approvals and Live now pinned above Risk and Smart insights', async () => {
     server.use(http.get(`${API}/approvals`, () => HttpResponse.json([
       pendingEntry('t1', 'Eli Employee', 8), pendingEntry('t2', 'Ada Lovelace', 6), pendingEntry('t3', 'Bo Builder', 4),
       pendingEntry('t4', 'Cy Coder', 2)])))
@@ -142,7 +142,7 @@ describe('HomePage by role', () => {
     expect(within(approvals).queryByText(/Cy Coder/)).not.toBeInTheDocument()
     expect(within(approvals).getByRole('link', { name: /review all/i })).toHaveAttribute('href', '/timesheets')
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
-    expect(headings.slice(0, 3)).toEqual(['Approvals', 'Risk', 'Which projects are at risk of missing their deadlines?'])
+    expect(headings.slice(0, 4)).toEqual(['Approvals', 'Live now', 'Risk', 'Which projects are at risk of missing their deadlines?'])
     expect(screen.getByRole('region', { name: /smart insights/i })).toBeInTheDocument()
   })
 

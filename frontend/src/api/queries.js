@@ -156,7 +156,7 @@ export const useWeek = (week, userId, enabled = true) => useQuery({
   placeholderData: keepPreviousData,
 })
 export const useSaveWeek = () => useApiMutation((body) => api.put('/time-entries', body),
-  { invalidate: timeKeys, success: 'Hours saved and sent for approval' })
+  { invalidate: [...timeKeys, ['timer']], success: 'Hours saved and sent for approval' })
 export const useApprovals = (filters = {}, enabled = true) =>
   useQuery({ queryKey: ['approvals', filters], enabled, queryFn: () => api.get('/approvals', filters) })
 export const useBreakdown = (entryId, enabled = true) =>
@@ -184,16 +184,36 @@ export const useApprovedWeeks = (range, enabled = true) => useQuery({
   placeholderData: keepPreviousData,
 })
 
-// ---------- timers: one running per person; stopping one logs its hours ----------
-// The running timer (or null) with the server's clock; a timer left past midnight is stopped by this read.
+// ---------- timers: one running per person; stopping one keeps its hours as a draft of the day's cell ----------
+// The running timer (or null) with the server's clock, its limits and the person's unsubmitted timer hours; a timer
+// left past midnight is stopped by this read.
 export const useCurrentTimer = (enabled = true) => useQuery({
   queryKey: ['timer'], enabled, queryFn: () => api.get('/timers/current'), staleTime: 30_000,
 })
 export const useStartTimer = () => useApiMutation((milestoneId) => api.post('/timers', { milestone_id: milestoneId }),
-  { invalidate: [['timer'], ['time'], ['notifications']], success: (d) => `Timer started on ${d.timer.milestone.name}` })
-// The result says what was logged (or why nothing was); the caller shows it, so there's no generic toast.
+  { invalidate: [['timer'], ['time'], ['notifications'], ['timers-live']],
+    success: (d) => `Timer started on ${d.timer.milestone.name}` })
+// The result says what was added to the timesheet (or why nothing was); the caller shows it, so no generic toast.
 export const useStopTimer = () => useApiMutation((note) => api.post('/timers/stop', note ? { note } : {}),
-  { invalidate: [['timer'], ...timeKeys] })
+  { invalidate: [['timer'], ['timers-live'], ...timeKeys] })
+// Managers, admins and executives: the running timers they oversee (the screen ticks between refreshes).
+export const useLiveTimers = (enabled = true) => useQuery({
+  queryKey: ['timers-live'], enabled, queryFn: () => api.get('/timers/live'), refetchInterval: 30_000,
+})
+// A manager or admin stops someone's timer with a message (it reaches them in the bell and in Messages).
+export const useStopRemote = () => useApiMutation(({ id, message }) => api.post(`/timers/${id}/stop-remote`, { message }),
+  { invalidate: [['timers-live'], ['messages'], ['notifications']] })
+
+// ---------- change requests on locked (timer) cells ----------
+export const useEditRequests = (status = 'pending', enabled = true) => useQuery({
+  queryKey: ['edit-requests', status], enabled, queryFn: () => api.get('/time-edit-requests', { status }),
+})
+export const useRequestEdit = () => useApiMutation((body) => api.post('/time-edit-requests', body),
+  { invalidate: [['time'], ['edit-requests']], success: 'Change requested — your manager has been told' })
+export const useDecideEdit = () => useApiMutation(({ id, approve, comment }) =>
+  api.post(`/time-edit-requests/${id}/${approve ? 'approve' : 'reject'}`, comment ? { comment } : {}),
+{ invalidate: [['edit-requests'], ...timeKeys],
+  success: (d) => (d.status === 'approved' ? `Change approved — ${d.user.name}'s hours updated` : 'Change request declined') })
 
 // ---------- HR submissions (admins submit; executives read the list) ----------
 export const useHrSubmissions = (enabled = true) =>

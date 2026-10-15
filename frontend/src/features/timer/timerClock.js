@@ -67,11 +67,51 @@ export function shareText(entries) {
   return share ? `Tracked ${share.tracked}% · Manual ${share.manual}%` : null
 }
 
-/** Tell the person what a stop did: logged hours (asking for a note when there's no proof), nothing, or why not. */
+/** Tell the person what a stop did: hours added to the day's cell (not submitted yet), nothing, or why not. */
 export function announceStop(toast, result) {
   if (!result) return
   if (result.not_logged) toast.error(result.message)
-  else if (!result.logged_hours) toast.info(result.message)
-  else if (result.needs_note || result.auto_stopped) toast.warning(result.message)
+  else if (!result.added_hours) toast.info(result.message)
+  else if (result.auto_stopped) toast.warning(result.message)
   else toast.success(result.message)
+}
+
+// ---------- over-limit warnings (backend app/rules/timer_limits.py) ----------
+// The server sends each limit of a running timer with the moments the clock reaches 100% (warn_at) and 125%
+// (over_at), so the screen changes level exactly then, between refreshes, from its own ticking clock.
+
+/** 'ok' | 'warning' | 'over' for one limit at `serverNowMs` (the device clock plus the server offset). */
+export function limitLevel(limit, serverNowMs) {
+  const over = Date.parse(limit?.over_at ?? '')
+  const warn = Date.parse(limit?.warn_at ?? '')
+  if (Number.isFinite(over) && serverNowMs >= over) return 'over'
+  if (Number.isFinite(warn) && serverNowMs >= warn) return 'warning'
+  return 'ok'
+}
+
+/** The worst level across a timer's limits. */
+export function worstLevel(limits, serverNowMs) {
+  const levels = (limits ?? []).map((l) => limitLevel(l, serverNowMs))
+  return levels.includes('over') ? 'over' : levels.includes('warning') ? 'warning' : 'ok'
+}
+
+/** Limits at 100% or more right now, worst first. */
+export function reachedLimits(limits, serverNowMs) {
+  return (limits ?? []).filter((l) => limitLevel(l, serverNowMs) !== 'ok')
+}
+
+export const LIMIT_LABEL = { daily: '8h day', milestone: 'Estimate', weekly: '40h week' }
+export const LEVEL_CHIP = { warning: { label: 'Warning', color: 'warning' }, over: { label: 'Over', color: 'error' } }
+
+/** "1h 20m" / "45m" for a number of seconds. */
+export function formatDuration(seconds) {
+  const minutes = Math.max(0, Math.floor(seconds / 60))
+  const h = Math.floor(minutes / 60)
+  return h ? `${h}h ${minutes % 60}m` : `${minutes}m`
+}
+
+/** "2026-10-13" → "Tuesday", with no timezone shift. */
+export function weekdayName(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' })
 }

@@ -14,7 +14,7 @@ const MS = { id: 'm1', name: 'Schema Mapping' }
 const NOW = '2026-10-14T15:00:00.000Z'
 const running = (overrides = {}) => ({
   id: 't1', milestone: MS, project: { id: 'p1', name: 'Apollo' }, work_date: '2026-10-14',
-  started_at: '2026-10-14T14:58:55.000Z', stopped_at: null, auto_stopped: false, logged_hours: null, entry_id: null,
+  started_at: '2026-10-14T14:58:55.000Z', stopped_at: null, auto_stopped: false, tracked_hours: 0, submitted: false, note: '',
   ...overrides,
 })
 const current = (timer, stopped = null) => http.get(`${API}/timers/current`,
@@ -108,20 +108,22 @@ describe('TimerButton and the header chip', () => {
     expect(screen.getByRole('button', { name: 'Start timer on Build' })).toBeDisabled()
   })
 
-  test('the header chip stops the timer with an optional note and says what was logged', async () => {
+  test('the header chip stops the timer with an optional note and says the hours wait in the timesheet', async () => {
     let body = null
     let timer = running()
     server.use(http.get(`${API}/timers/current`, () => HttpResponse.json({ timer, now: NOW, stopped: null })),
       http.post(`${API}/timers/stop`, async ({ request }) => {
         body = await request.json()
         timer = null
-        return HttpResponse.json({ timer: running({ stopped_at: NOW }), logged_hours: 1.5, elapsed_hours: 1.5,
-          auto_stopped: false, needs_note: false, not_logged: null, message: 'Logged 1.5h on Schema Mapping (Wed 14 Oct)' })
+        return HttpResponse.json({ timer: running({ stopped_at: NOW }), added_hours: 1.5, elapsed_hours: 1.5,
+          auto_stopped: false, not_logged: null, work_date: '2026-10-14', week_start: '2026-10-12',
+          message: "Added 1.5h to Wednesday's cell — open your timesheet to submit." })
       }))
     renderAsUser(<Header milestones={[]} />, { user: users.employee })
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: /timer running on schema mapping/i }))
     const dialog = await screen.findByRole('dialog', { name: /stop your timer/i })
+    expect(dialog).toHaveTextContent(/stopping now adds/i)
     const note = within(dialog).getByLabelText(/what did you work on/i)
     await user.type(note, 'short')
     expect(within(dialog).getByText(/at least 10 characters/i)).toBeInTheDocument()
@@ -129,29 +131,38 @@ describe('TimerButton and the header chip', () => {
     await user.type(note, ' fixes to the address mapping')
     await user.click(within(dialog).getByRole('button', { name: 'Stop timer' }))
     await waitFor(() => expect(body).toEqual({ note: 'short fixes to the address mapping' }))
-    expect(await screen.findByText('Logged 1.5h on Schema Mapping (Wed 14 Oct)')).toBeInTheDocument()
+    expect(await screen.findByText("Added 1.5h to Wednesday's cell — open your timesheet to submit.")).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('button', { name: /timer running/i })).not.toBeInTheDocument())
   })
 
-  test('stopping without a note sends no note and the message asks for one', async () => {
+  test('stopping without a note sends no note', async () => {
     let body = null
     server.use(current(running()), http.post(`${API}/timers/stop`, async ({ request }) => {
       body = await request.json()
-      return HttpResponse.json({ timer: running({ stopped_at: NOW }), logged_hours: 1, elapsed_hours: 1, auto_stopped: false,
-        needs_note: true, not_logged: null,
-        message: 'Logged 1h on Schema Mapping (Wed 14 Oct). Add a work note so your manager can see what you did' })
+      return HttpResponse.json({ timer: running({ stopped_at: NOW }), added_hours: 1, elapsed_hours: 1, auto_stopped: false,
+        not_logged: null, message: "Added 1h to Wednesday's cell — open your timesheet to submit." })
     }))
     renderAsUser(<Header milestones={[]} />, { user: users.employee })
     await userEvent.click(await screen.findByRole('button', { name: /timer running on schema mapping/i }))
     await userEvent.click(await screen.findByRole('button', { name: 'Stop timer' }))
     await waitFor(() => expect(body).toEqual({}))
-    expect(await screen.findByText(/add a work note so your manager can see what you did/i)).toBeInTheDocument()
+    expect(await screen.findByText(/open your timesheet to submit/i)).toBeInTheDocument()
+  })
+
+  test('a stop that adds nothing says why', async () => {
+    server.use(current(running()), http.post(`${API}/timers/stop`, () => HttpResponse.json({
+      timer: running({ stopped_at: NOW }), added_hours: 0, elapsed_hours: 0, auto_stopped: false, not_logged: null,
+      message: 'Timer stopped after less than 7.5 minutes, so nothing was added' })))
+    renderAsUser(<Header milestones={[]} />, { user: users.employee })
+    await userEvent.click(await screen.findByRole('button', { name: /timer running on schema mapping/i }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop timer' }))
+    expect(await screen.findByText('Timer stopped after less than 7.5 minutes, so nothing was added')).toBeInTheDocument()
   })
 
   test('a timer the server stopped at midnight is announced once', async () => {
-    server.use(current(null, { timer: running({ auto_stopped: true }), logged_hours: 4, elapsed_hours: 4, auto_stopped: true,
-      needs_note: true, not_logged: null,
-      message: 'Your timer on Schema Mapping stopped at midnight. Logged 4h on Schema Mapping (Tue 13 Oct)' }))
+    server.use(current(null, { timer: running({ auto_stopped: true }), added_hours: 4, elapsed_hours: 4, auto_stopped: true,
+      not_logged: null,
+      message: "Your timer on Schema Mapping stopped at midnight. Added 4h to Tuesday's cell — open your timesheet to submit." }))
     renderAsUser(<Header milestones={[]} />, { user: users.employee })
     expect(await screen.findByText(/stopped at midnight/i)).toBeInTheDocument()
     await act(async () => { await new Promise((r) => setTimeout(r, 50)) })

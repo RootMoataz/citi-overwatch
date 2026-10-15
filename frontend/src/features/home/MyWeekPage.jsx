@@ -20,7 +20,9 @@ import { formatDate, formatHours, mondayOf } from '../../lib/format.js'
 import { priorityRank } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
 import TimerButton from '../timer/TimerButton.jsx'
+import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import Section from '../dashboard/Section.jsx'
+import YourManagerCard from '../people/YourManagerCard.jsx'
 
 const WEEKLY_CAP = 40
 // Projects whose milestones can be claimed (the server also refuses claims on other statuses).
@@ -195,9 +197,11 @@ export default function MyWeekPage() {
     <>
       <PageHeader title="My week" subtitle={`Hello, ${user.first_name}. Your hours and the milestones on your plate.`} />
       <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} sx={{ mb: 2 }} />
+      <TimerLimitBanner showUnsubmitted />
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 5 }}>
           {profile.data ? <Reveal><ThisWeek week={profile.data.this_week} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+          {profile.data?.user?.manager ? <YourManagerCard manager={profile.data.user.manager} sx={{ mt: 2 }} /> : null}
         </Grid>
         <Grid size={{ xs: 12, md: 7 }}>
           {profile.data ? <Reveal index={1}><MyMilestones milestones={profile.data.milestones} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}

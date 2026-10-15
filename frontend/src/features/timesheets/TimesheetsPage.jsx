@@ -1,9 +1,11 @@
-import { Tab, Tabs } from '@mui/material'
+import { Box, Tab, Tabs } from '@mui/material'
 import { useSearchParams } from 'react-router-dom'
 import { useSession } from '../../auth/sessionContext.js'
 import PageHeader from '../../components/PageHeader.jsx'
 import { can } from '../../lib/permissions.js'
+import LiveTimersCard from '../timer/LiveTimersCard.jsx'
 import ApprovedTab from './ApprovedTab.jsx'
+import ChangeRequests from './ChangeRequests.jsx'
 import HrTab from './HrTab.jsx'
 import ReviewTab from './ReviewTab.jsx'
 
@@ -25,7 +27,8 @@ const SUBTITLE = {
   executive: 'Pay periods admins have submitted to HR.',
 }
 
-/** The Timesheets area (was Approvals): the tab lives in ?tab=, and alert links filter To review with ?user= etc. */
+/** The Timesheets area (was Approvals): who's running a timer right now (Live now), change requests on timer hours,
+ * then the tabs. The tab lives in ?tab=, and alert links filter To review with ?user= etc. */
 export default function TimesheetsPage() {
   const { user } = useSession()
   const [params, setParams] = useSearchParams()
@@ -37,6 +40,8 @@ export default function TimesheetsPage() {
   return (
     <>
       <PageHeader title="Timesheets" subtitle={SUBTITLE[user?.role]} />
+      <Box sx={{ mb: 2 }}><LiveTimersCard /></Box>
+      {can(user, 'approvals.view') ? <ChangeRequests /> : null}
       <Tabs value={tab} onChange={(_, v) => choose(v)} sx={{ mb: 2 }} aria-label="Timesheets" variant="scrollable" allowScrollButtonsMobile>
         {tabs.map((t) => <Tab key={t.value} value={t.value} label={t.label} />)}
       </Tabs>

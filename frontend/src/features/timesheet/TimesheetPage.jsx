@@ -12,7 +12,9 @@ import { useSearchParams } from 'react-router-dom'
 import { useSaveWeek, useWeek } from '../../api/queries.js'
 import SourceChip from '../timer/SourceChip.jsx'
 import TimerButton from '../timer/TimerButton.jsx'
+import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
+import LockedCell, { RequestChangeDialog } from './LockedCell.jsx'
 import { STATUS, statusColor } from '../../app/theme.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -114,14 +116,21 @@ export default function TimesheetPage() {
   const [drafts, setDrafts] = useState({})
   const [notes, setNotes] = useState({})
   const [failure, setFailure] = useState(null)
+  const [asking, setAsking] = useState(null)
 
   const allDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(week, i)), [week])
   const days = desktop || showWeekend ? allDays : allDays.slice(0, 5)
   const entries = useMemo(() => Object.fromEntries((sheet.data?.entries ?? []).map((e) => [key(e.milestone_id, e.work_date), e])), [sheet.data])
-  const valueOf = (k) => (k in drafts ? drafts[k] : entries[k] ? String(entries[k].hours) : '')
-  const countsToward = (k) => (k in drafts ? true : entries[k] && entries[k].status !== 'rejected')
+  // Cells holding timer hours are locked at saved hours + unsubmitted timer hours (the server refuses anything else).
+  const locks = useMemo(() => Object.fromEntries((sheet.data?.locks ?? []).map((l) => [key(l.milestone_id, l.work_date), l])), [sheet.data])
+  const timerNotes = useMemo(() => Object.fromEntries((sheet.data?.drafts ?? []).map((d) => [key(d.milestone_id, d.work_date), d.note])), [sheet.data])
+  const waitingDraft = Number(sheet.data?.totals?.draft ?? 0)
+  const valueOf = (k) => (locks[k] ? String(locks[k].hours) : k in drafts ? drafts[k] : entries[k] ? String(entries[k].hours) : '')
+  const hasDraft = (k) => Number(locks[k]?.draft_hours ?? 0) > 0
+  const countsToward = (k) => (hasDraft(k) || k in drafts ? true : entries[k] && entries[k].status !== 'rejected')
 
   const rows = sheet.data?.rows ?? []
+  const closedKeys = new Set(rows.filter((r) => closedLabel(r)).flatMap((r) => allDays.map((d) => key(r.milestone.id, d))))
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
   const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
   // A day counts the same hours as the server: pending and approved entries plus whatever is being typed.
@@ -129,12 +138,16 @@ export default function TimesheetPage() {
   const overDays = allDays.filter((d) => dayTotal(d) > DAY_CAP)
   const tooMany = cellKeys.some((k) => num(valueOf(k)) > DAY_CAP) || overDays.length > 0
   const tooFew = cellKeys.some((k) => k in drafts && tooLow(drafts[k]))
-  const noteOf = (k) => (k in notes ? notes[k] : entries[k]?.note ?? '')
-  const hoursChanged = (k) => k in drafts && (num(drafts[k]) !== num(entries[k]?.hours ?? 0) || (!entries[k] && drafts[k] !== '')
-    || (entries[k]?.status === 'rejected' && num(drafts[k]) > 0))
+  // A stop's note pre-fills a cell that has none.
+  const noteOf = (k) => (k in notes ? notes[k] : entries[k]?.note || (hasDraft(k) ? timerNotes[k] ?? '' : ''))
+  // A locked cell changes only by its timer draft, or by resubmitting it unchanged after a rejection.
+  const hoursChanged = (k) => hasDraft(k) || (Boolean(locks[k]) && k in drafts && entries[k]?.status === 'rejected')
+    || (!locks[k] && k in drafts && (num(drafts[k]) !== num(entries[k]?.hours ?? 0)
+    || (!entries[k] && drafts[k] !== '') || (entries[k]?.status === 'rejected' && num(drafts[k]) > 0)))
   const noteChanged = (k) => k in notes && notes[k] !== (entries[k]?.note ?? '')
   // A note alone on an empty cell has nothing to save; it goes with the hours once they're typed.
-  const changed = [...new Set([...Object.keys(drafts), ...Object.keys(notes)])]
+  const changed = [...new Set([...Object.keys(drafts), ...Object.keys(notes),
+    ...Object.keys(locks).filter((k) => hasDraft(k) && rows.some((r) => k.startsWith(`${r.milestone.id}|`)) && !closedKeys.has(k))])]
     .filter((k) => (hoursChanged(k) || noteChanged(k)) && (entries[k] || num(valueOf(k)) > 0))
   // Cells the server said need proof of work (PROOF_REQUIRED), until a note is added to them.
   const proofCells = new Set(failure?.code === 'PROOF_REQUIRED'
@@ -150,7 +163,8 @@ export default function TimesheetPage() {
     setFailure(null)
     const body = { week, entries: changed.map((k) => {
       const [milestoneId, date] = k.split('|')
-      return { milestone_id: milestoneId, work_date: date, hours: num(valueOf(k)), ...(k in notes ? { note: notes[k] } : {}) }
+      const note = k in notes ? notes[k] : hasDraft(k) && !entries[k]?.note && timerNotes[k] ? timerNotes[k] : undefined
+      return { milestone_id: milestoneId, work_date: date, hours: num(valueOf(k)), ...(note !== undefined ? { note } : {}) }
     }) }
     if (!body.entries.length) return
     try {
@@ -203,7 +217,7 @@ export default function TimesheetPage() {
       ))}
       {tooMany && !overDays.length ? <Alert severity="error" sx={{ mb: 2 }}>A cell can't hold more than {DAY_CAP} hours.</Alert> : null}
       {tooFew ? <Alert severity="error" sx={{ mb: 2 }}>Log at least {MIN_HOURS} hours, or leave the cell empty.</Alert> : null}
-      {failure?.code === 'PROOF_REQUIRED' ? (
+      {failure?.code === 'TIMER_HOURS_LOCKED' ? null : failure?.code === 'PROOF_REQUIRED' ? (
         <Alert severity="error" role="alert" sx={{ mb: 2 }}>
           <AlertTitle>Add a work note before saving</AlertTitle>
           Each new or changed day needs a note ({NOTE_MIN}-{NOTE_MAX} characters) or a progress update you posted on that
@@ -221,6 +235,20 @@ export default function TimesheetPage() {
         <ErrorAlert error={failure ?? sheet.error} title={failure ? "Couldn't save your week" : undefined}
           onRetry={failure ? undefined : () => sheet.refetch()} sx={{ mb: 2 }} />
       )}
+      <TimerLimitBanner />
+      {waitingDraft > 0 ? (
+        <Alert severity="info" sx={{ mb: 2 }} data-testid="timer-draft-banner">
+          You have {formatHours(waitingDraft)} of timer time not submitted yet — Save week to submit.
+          {' '}Cells with a timer mark are pre-filled from your timer and locked; use Request a change to fix their hours.
+        </Alert>
+      ) : null}
+      {failure?.code === 'TIMER_HOURS_LOCKED' ? (
+        <Alert severity="error" role="alert" sx={{ mb: 2 }}>
+          <AlertTitle>Timer hours can&apos;t be edited</AlertTitle>
+          {(failure.details?.cells ?? []).map((c) => `${nameOf(c.milestone_id)}, ${formatDayLabel(c.work_date)}`).join('; ')}
+          {' '}— use Request a change on those cells instead.
+        </Alert>
+      ) : null}
       {sheet.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
       {!sheet.isLoading && !sheet.error && rows.length === 0 ? (
         <EmptyState title="You're not assigned to any milestones this week"
@@ -243,6 +271,7 @@ export default function TimesheetPage() {
             <TableBody>
               {groups.map((g) => (
                 <GroupRows key={g.project.id} group={g} days={days} allDays={allDays} valueOf={valueOf} entries={entries} isDraft={(k) => k in drafts}
+                  locks={locks} onRequest={(cell) => setAsking(cell)}
                   overDays={overDays} noteOf={noteOf} attention={attention} timerNeedsNote={timerNeedsNote} thisWeek={thisWeek}
                   onNote={(k, v) => setNotes((n) => ({ ...n, [k]: v }))}
                   onChange={(k, v) => setDrafts((d) => ({ ...d, [k]: v }))} />
@@ -262,12 +291,13 @@ export default function TimesheetPage() {
           </Table>
         </TableContainer>
       ) : null}
+      {asking ? <RequestChangeDialog cell={asking} onClose={() => setAsking(null)} /> : null}
     </>
   )
 }
 
 function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft, overDays, noteOf, attention, timerNeedsNote,
-  onNote, thisWeek }) {
+  onNote, thisWeek, locks, onRequest }) {
   return (
     <>
       <TableRow>
@@ -294,9 +324,13 @@ function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft, 
             {days.map((d) => {
               const k = key(r.milestone.id, d)
               const value = valueOf(k)
+              const label = `${r.milestone.name}, ${formatDayLabel(d)}`
               return (
                 <TableCell key={d} align="center" sx={{ verticalAlign: 'top' }}>
-                  <TextField value={value} onChange={(e) => onChange(k, cleanHours(e.target.value))} disabled={Boolean(closed)}
+                  {locks[k] ? (
+                    <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
+                      onRequest={() => onRequest({ milestoneId: r.milestone.id, date: d, hours: locks[k].hours, label })} />
+                  ) : <TextField value={value} onChange={(e) => onChange(k, cleanHours(e.target.value))} disabled={Boolean(closed)}
                     onKeyDown={(e) => { if (!allowedKey(e)) e.preventDefault() }}
                     onPaste={(e) => {
                       e.preventDefault()
@@ -306,7 +340,7 @@ function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft, 
                     error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(d)) || (isDraft(k) && tooLow(value))}
                     slotProps={{ htmlInput: { inputMode: 'decimal', pattern: '[0-9]{0,2}([.][0-9]{0,2})?',
                       'aria-label': `${r.milestone.name}, ${formatDayLabel(d)}`, style: { textAlign: 'center' } } }}
-                    sx={{ width: 76 }} />
+                    sx={{ width: 76 }} />}
                   {num(value) > 0 || entries[k] ? (
                     <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'center', mt: 0.25, gap: 0.5 }}>
                       <NoteButton cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`} note={noteOf(k)} disabled={Boolean(closed)}

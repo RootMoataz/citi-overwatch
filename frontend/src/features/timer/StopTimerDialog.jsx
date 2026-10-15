@@ -4,7 +4,7 @@ import { useStopTimer } from '../../api/queries.js'
 import { useToast } from '../../app/toast.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatHours } from '../../lib/format.js'
-import { NOTE_MAX, NOTE_MIN, announceStop, formatElapsed, hoursIfStopped, isProofNote } from './timerClock.js'
+import { NOTE_MAX, NOTE_MIN, announceStop, formatElapsed, hoursIfStopped, isProofNote, weekdayName } from './timerClock.js'
 
 /** Stop the running timer, with an optional work note (10-500 characters counts as proof of work). */
 export default function StopTimerDialog({ timer, elapsed, onClose }) {
@@ -30,14 +30,15 @@ export default function StopTimerDialog({ timer, elapsed, onClose }) {
         <Stack sx={{ gap: 2, pt: 1 }}>
           <Typography variant="body2">
             {timer.milestone.name} · {timer.project.name} · running {formatElapsed(elapsed)}.{' '}
-            {hours ? `Stopping now logs ${formatHours(hours)} on today's timesheet.`
-              : 'Under 7.5 minutes, so stopping now logs nothing.'}
+            {hours ? `Stopping now adds ${formatHours(hours)} to ${weekdayName(timer.work_date)}'s cell on your timesheet. `
+              + 'It isn\'t submitted until you Save week there.'
+              : 'Under 7.5 minutes, so stopping now adds nothing.'}
           </Typography>
           <ErrorAlert error={failure} />
           <TextField label="What did you work on?" multiline minRows={2} value={note} autoFocus
             onChange={(e) => setNote(e.target.value.slice(0, NOTE_MAX))} error={tooShort}
             helperText={tooShort ? `At least ${NOTE_MIN} characters to count as a work note`
-              : `Optional. A note (${NOTE_MIN}-${NOTE_MAX} characters) or a progress update today shows your manager the work.`}
+              : `Optional. It pre-fills the cell's work note (${NOTE_MIN}-${NOTE_MAX} characters), which Save week needs unless you post a progress update that day.`}
             slotProps={{ htmlInput: { maxLength: NOTE_MAX } }} />
         </Stack>
       </DialogContent>
