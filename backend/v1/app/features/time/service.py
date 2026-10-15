@@ -479,6 +479,8 @@ def _message(r: dict, who: str) -> str:
         until = f"until {short_day(p['until'])}" if p.get("until") else "until further notice"
         return (f"{who} made you the delegate approver for {p['project']['name']}: you can approve hours "
                 f"for {p['manager']['name']} {until}")
+    if r["type"] == "TIMESHEET_EMPTY":
+        return f"Your timesheet for the week of {short_day(r['week_start'])} is empty"
     return f"{who} passed 40h for the week of {r['week_start']}"
 
 
