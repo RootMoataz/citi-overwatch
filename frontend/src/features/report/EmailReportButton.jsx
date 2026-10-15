@@ -5,6 +5,7 @@ import {
 } from '@mui/material'
 import { useQuery } from '@tanstack/react-query'
 import { useId, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client.js'
 import { useDepartments, useMe } from '../../api/queries.js'
 import { useToast } from '../../app/toast.js'
@@ -130,13 +131,20 @@ function Compose({ dashboard, department, onClose, titleId, toMe, setToMe }) {
 /** "Email this report" on the dashboard (managers, admins, executives): the report reflects the department filter. */
 export default function EmailReportButton({ dashboard, department = '' }) {
   const { user } = useSession()
-  const [open, setOpen] = useState(false)
+  const [chosen, setOpen] = useState(false)
+  // ?report=email (Puppy's "Email this report to me") opens the dialog; the person still presses Send.
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('report') === 'email'
+  const open = chosen || asked
   // "Send to me" starts on; the choice is kept for the next time the dialog opens.
   const [toMe, setToMe] = useState(true)
   const titleId = useId()
   const phone = useMediaQuery((theme) => theme.breakpoints.down('sm'))
   if (!REPORT_ROLES.includes(user?.role) || !dashboard) return null
-  const close = () => setOpen(false)
+  const close = () => {
+    setOpen(false)
+    if (asked) setParams((p) => { p.delete('report'); return p }, { replace: true })
+  }
   return (
     <>
       <Button size="small" variant="outlined" startIcon={<Mail />} onClick={() => setOpen(true)} data-print="hide">
