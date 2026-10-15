@@ -296,6 +296,7 @@ def seed_the_old_way(conn) -> dict:
     conn.run("UPDATE users SET department_id = NULL")
     conn.run("UPDATE projects SET department_id = NULL, work_mode = 'push'")
     conn.run("UPDATE milestones SET difficulty = 'medium', priority = 'medium'")
+    conn.run("UPDATE project_requests SET department_id = NULL")
     conn.run("DELETE FROM departments")
     conn.run("DELETE FROM conversations")  # messages came later too
     conn.run("DELETE FROM notifications WHERE type = 'MESSAGE_RECEIVED'")
@@ -344,6 +345,7 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
     assert result["progress_updates_created"] == ["Apollo Data Migration / Schema Mapping progress update"]
     assert result["kickbacks_created"] == ["Apollo Data Migration / Schema Mapping kickback"]
     assert len(result["hr_submissions_created"]) == 1
+    assert result["requests_updated"] == ["Orion Analytics Dashboard"]
     assert result["users_created"] == ["executive.demo", "demo.admin"]
     assert result["conversations_created"] == DEMO_CONVERSATIONS
     after = counts(conn)
@@ -372,12 +374,12 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
     assert (demo_state(conn), counts(conn)) == (state, before)
     for key in ("departments_created", "users_updated", "projects_updated", "work_mode_updated",
                 "difficulties_updated", "priorities_updated", "plan_board_arranged", *WORKFLOW_KEYS,
-                "hr_submissions_created"):
+                "hr_submissions_created", "requests_updated"):
         assert result[key] == [], key
     # departments of people and projects, Beacon, difficulties, the executive login, the public demo admin,
     # the demo messages, priorities, Beacon's planning board, people's skills, milestone details, the progress
-    # update, the kickback, the HR submission
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5 + 1 + len(PEOPLE_SKILLS) + 9 + 1 + 1 + 1
+    # update, the kickback, the HR submission, the demo request's department
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5 + 1 + len(PEOPLE_SKILLS) + 9 + 1 + 1 + 1 + 1
     assert result["users_created"] == [] and result["conversations_created"] == []
     assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2
 

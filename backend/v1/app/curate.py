@@ -516,13 +516,14 @@ class _ProjectCuration:
         for row in sorted(work, key=lambda r: r["start_date"]):
             for person, role in row["assigned"]:
                 uid = str(person["id"])
+                who = f"{person['first_name']} {person['last_name']}"  # stable across databases, unlike the id
                 planned = Decimal(person["planned"]) * (Decimal(1) if role == "primary" else support_share)
                 rate = hourly_rate(person["salary"])
                 day = max(row["start_date"], first)
                 while day <= min(row["end_date"], last):
                     monday = _monday(day)
-                    seed = zlib.crc32(f"{uid}:{row['name']}:{day.isoformat()}".encode())
-                    day_off = (monday.toordinal() // 7 + zlib.crc32(uid.encode())) % 5  # one weekday off a week
+                    seed = zlib.crc32(f"{who}:{row['name']}:{day.isoformat()}".encode())
+                    day_off = (monday.toordinal() // 7 + zlib.crc32(who.encode())) % 5  # one weekday off a week
                     if day.weekday() < 5 and day.weekday() != day_off:
                         hours = MIN_DAY + Decimal(seed % 9) / 2  # 4 to 8 in half hours
                         room = min(planned - project_week.get((uid, self.pid, monday), Decimal(0)),
@@ -672,7 +673,8 @@ def _timesheets(conn, today: date, warnings: list) -> dict:
         free = slots(uid, week, skip)
         for i, (day, w) in enumerate(free):
             days_left = len(free) - i
-            base = Decimal(6) + Decimal(zlib.crc32(f"{uid}{day}".encode()) % 5) / 2  # 6 to 8 hours
+            who = f"{people[uid][0]['first_name']} {people[uid][0]['last_name']}"  # stable, unlike the id
+            base = Decimal(6) + Decimal(zlib.crc32(f"{who}{day}".encode()) % 5) / 2  # 6 to 8 hours
             spread = (target - total) / days_left  # what's left, over the days left
             hours = min(max(base, spread), target - total,
                         min(day_cap, Decimal(24)) - day_total.get((uid, day), Decimal(0)))

@@ -64,6 +64,7 @@ PROJECT_DEPARTMENTS = {
     "Delta Compliance Audit": "Risk & Compliance",
 }
 PULL_PROJECT, CLAIMABLE_MILESTONE = "Beacon Mobile App", "Design"
+DEMO_REQUEST = "Orion Analytics Dashboard"  # the pending project request
 
 # Beacon is still being planned. Its board (the planning branch's Backlog -> Ready -> Scheduled) holds the Technology
 # department plan: the first four steps scheduled in order, QA in Ready and the last two in Backlog. With those
@@ -503,7 +504,7 @@ def demo_backfill(conn) -> dict:
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
            "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "plan_board_arranged": [],
-           "conversations_created": [], **{key: [] for key in WORKFLOW_KEYS}, "hr_submissions_created": [],
+           "conversations_created": [], **{key: [] for key in WORKFLOW_KEYS}, "hr_submissions_created": [], "requests_updated": [],
            "already_set": 0, "skipped": []}
 
     def skip(item: str, reason: str) -> None:
@@ -647,6 +648,20 @@ def demo_backfill(conn) -> dict:
             out["conversations_created"] = created
 
         _demo_workflow(conn, out, skip)
+
+        # The pending demo request gets Technology (so approving it offers the template) only while it has none.
+        request = query_one(conn, """SELECT r.id, r.department_id FROM project_requests r JOIN users u ON u.id = r.requested_by
+                                     WHERE r.name = :n AND r.status = 'pending' AND u.username = 'manager.demo'
+                                     ORDER BY r.created_at LIMIT 1""", n=DEMO_REQUEST)
+        tech = query_one(conn, "SELECT id FROM departments WHERE lower(name) = 'technology' AND NOT is_archived")
+        if not request or not tech:
+            skip(f"request {DEMO_REQUEST}", "missing")
+        elif request["department_id"] is not None:
+            out["already_set"] += 1
+        else:
+            conn.run("UPDATE project_requests SET department_id = :d, updated_at = now() WHERE id = :i",
+                     d=tech["id"], i=request["id"])
+            out["requests_updated"].append(DEMO_REQUEST)
 
         added, why_not = _demo_hr_submission(conn)
         if added:
@@ -819,11 +834,10 @@ def _load(conn) -> None:
                      p=f'{{"name": "{eli["first_name"]} {eli["last_name"]}", "week_total": {total}}}')
     log("ben.okafor", apollo, mapping, monday, 4, "pending")
 
-    # A project request waiting for an admin.
+    # A project request waiting for an admin, in Technology so approving it offers that department's template.
     conn.run("""INSERT INTO project_requests (requested_by, name, description, proposed_start, proposed_end,
-                                              proposed_budget)
-                VALUES (:u, 'Orion Analytics Dashboard', 'Executive reporting on delivery health.',
-                        :s, :e, 75000)""",
-             u=people["manager.demo"]["id"], s=d(30), e=d(150))
+                                              proposed_budget, department_id)
+                VALUES (:u, :n, 'Executive reporting on delivery health.', :s, :e, 75000, :dept)""",
+             u=people["manager.demo"]["id"], n=DEMO_REQUEST, s=d(30), e=d(150), dept=departments["Technology"])
 
     _demo_messages(conn)
