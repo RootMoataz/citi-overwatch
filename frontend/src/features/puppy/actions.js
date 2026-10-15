@@ -46,9 +46,9 @@ export function buildActions({ user, today, unread = 0, mode = 'light', projects
   }
   if (can(user, 'approvals.view')) {
     const n = approvals.length
-    out.push({ id: 'open-approvals', label: 'Open pending approvals', to: '/approvals',
-      confirm: n ? `Puppy will open Approvals with ${n} pending ${n === 1 ? 'entry' : 'entries'}. Approving stays your decision.`
-        : 'Puppy will open Approvals. Approving stays your decision.' })
+    out.push({ id: 'open-approvals', label: 'Open pending approvals', to: '/timesheets',
+      confirm: n ? `Puppy will open Timesheets with ${n} pending ${n === 1 ? 'entry' : 'entries'}. Approving stays your decision.`
+        : 'Puppy will open Timesheets. Approving stays your decision.' })
   }
   const risky = [...projects].filter((p) => p.at_risk_reasons?.length)
     .sort((a, b) => b.at_risk_reasons.length - a.at_risk_reasons.length)[0]

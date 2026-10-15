@@ -24,8 +24,8 @@ describe('proactive tips', () => {
   test('approvers hear about entries waiting over 3 days; employees never do', () => {
     const approvals = [old('a', '2026-10-05'), old('b', '2026-10-12'), old('c', '2026-10-14'), old('d', '2026-10-11')]
     expect(buildTips({ user: users.manager, today: TODAY, approvals })).toEqual([
-      { id: 'approvals-old:2026-10-15', text: '3 entries logged 3+ days ago are still waiting — open Approvals?',
-        action: { label: 'Open Approvals', to: '/approvals' } },
+      { id: 'approvals-old:2026-10-15', text: '3 entries logged 3+ days ago are still waiting — open Timesheets?',
+        action: { label: 'Open Timesheets', to: '/timesheets' } },
     ])
     expect(buildTips({ user: users.employee, today: TODAY, approvals })).toEqual([])
     expect(buildTips({ user: users.executive, today: TODAY, approvals })).toEqual([])
@@ -39,7 +39,8 @@ describe('proactive tips', () => {
   })
 
   test('never more than 3, and dismissed tips stay gone', () => {
-    const args = { user: users.manager, today: TODAY, notifications: [empty], approvals: [old('a', '2026-10-01')],
+    const args = { user: { ...users.manager, tracks_own_hours: true }, today: TODAY, notifications: [empty],
+      approvals: [old('a', '2026-10-01')],
       milestones: [critical('1', '2026-10-15'), critical('2', '2026-10-16')] }
     expect(buildTips(args).map((t) => t.id)).toEqual(['timesheet-empty:2026-10-12', 'approvals-old:2026-10-15', 'critical-due:1'])
     expect(buildTips({ ...args, dismissed: ['approvals-old:2026-10-15'] }).map((t) => t.id))

@@ -27,7 +27,7 @@ describe('Ask Puppy (the command palette\'s phrase rules)', () => {
 
   test('greetings and politeness around a question are ignored', () => {
     expect(stripPolite('Hey Puppy, show me pending approvals please!')).toBe('pending approvals')
-    expect(ask('Puppy: pending approvals please')).toMatchObject({ to: '/approvals' })
+    expect(ask('Puppy: pending approvals please')).toMatchObject({ to: '/timesheets' })
     expect(ask("can you show me Eli's hours?")).toMatchObject({ to: '/people/u-eli/profile' })
     expect(ask('budget of Apollo')).toMatchObject({ to: '/projects/p1?tab=budget' })
   })
@@ -81,7 +81,9 @@ describe('Ask Puppy: the help library', () => {
     ['who can approve as a delegate?', 'delegate', /delegate approver/],
     ['what can executives do?', 'executive', /can't change anything/],
     ['how does auto-routing work?', 'routing', /Ready for review/],
-    ['what are kickbacks?', 'routing', /sent back/],
+    ['what are kickbacks?', 'kickback', /kicks the milestone back/],
+    ['how does auto-routing use skills?', 'routing', /skills only goes to someone/],
+    ['how do I finalize the plan?', 'planning', /every card is scheduled/],
     ['are you an AI?', 'puppy', /fixed rules/],
   ])('"%s" → %s', (question, topic, text) => {
     const answer = ask(question)

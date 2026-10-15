@@ -1,5 +1,5 @@
 // Puppy's help library: short answers about how Scout works, matched by fixed patterns (no AI). The wording follows
-// docs/project/LOGIC_WALKTHROUGH.md; features that may not exist in every build (kickbacks) are described generically.
+// docs/project/LOGIC_WALKTHROUGH.md.
 // Each topic: { topic, title, match: RegExp on the normalized question, text (string or user → string), to?, link? }.
 
 const MESSAGE_RULES = (user) => (user?.role === 'employee'
@@ -44,8 +44,8 @@ export const HELP = [
   { topic: 'delegate', title: 'Delegate approvers',
     match: /\bdelegat/,
     text: "A project's manager (or an admin) can name another manager or admin as delegate approver, optionally until a "
-      + "date. While it runs, the delegate also gets that project's pending hours in Approvals; the manager keeps every right." },
-  { topic: 'approvals', title: 'How approvals work', to: '/approvals', link: 'Open Approvals',
+      + "date. While it runs, the delegate also gets that project's pending hours in Timesheets; the manager keeps every right." },
+  { topic: 'approvals', title: 'How approvals work', to: '/timesheets', link: 'Open Timesheets',
     match: /\bhow\b.*\bapprov|\bwho approves\b|\bapproval (?:process|rules?|works?)\b|\bwhat happens\b.*\b(?:approv|reject)/,
     text: "Saved hours are pending until the project's manager (or an active delegate approver) approves them or rejects "
       + 'them with a reason. Nobody approves their own hours. Rejected hours come back to you in the bell to fix and resubmit.' },
@@ -56,11 +56,20 @@ export const HELP = [
     match: /\bexecutives?\b|\bread[\s-]?only\b/,
     text: "Executives see what admins see, for oversight, but can't change anything: the server refuses every edit they "
       + 'try. They never see salaries or hourly rates, not even their own.' },
-  { topic: 'routing', title: 'Auto-routing and work sent back',
-    match: /\bauto[\s-]?rout|\brouting\b|\bkickbacks?\b|\bsent back\b|\bready for review\b|\bsupport(?:ing)? (?:milestones?|work)\b/,
-    text: 'When an assignee marks a milestone Ready for review, Scout may add them as support on the most urgent in-progress '
-      + 'milestone on their projects (overdue first, then priority, then the nearest end date) if their planned hours fit. '
-      + 'If your Scout has kickbacks, work sent back for changes arrives in the bell like any other alert.' },
+  { topic: 'kickback', title: 'Kickbacks', match: /\bkick[\s-]?backs?\b|\bsent back\b|\bblocked\b/,
+    text: "An assignee who can't go on kicks the milestone back to its manager with a reason (blocker, technical issue, "
+      + 'unclear requirement or other). It shows as Blocked until the manager, an admin or the active delegate resolves it: '
+      + 'back to the team (in progress) or back in the queue (not started). Both steps reach the bell and the history.' },
+  { topic: 'routing', title: 'Auto-routing',
+    match: /\bauto[\s-]?(?:rout|assign)|\brouting\b|\bready for review\b|\bsupport(?:ing)? (?:milestones?|work)\b|\bskills?\b/,
+    text: 'When a milestone is completed, the people who were on it may be made the primary assignee of the next ready, '
+      + 'unassigned milestone in the project: overdue first, then priority, then the plan order. A milestone that needs '
+      + 'skills only goes to someone with at least one of them, and their planned hours must fit. When an assignee marks a '
+      + 'milestone Ready for review, Scout may add them as support on the most urgent in-progress milestone they qualify for.' },
+  { topic: 'planning', title: 'The planning board', match: /\bplan(?:ning)?(?: board| tab)?\b|\bfinali[sz]e\b|\bbacklog\b/,
+    text: 'A planned project opens on its Plan tab: milestones sit in Backlog, Ready and Scheduled. The manager orders the '
+      + 'Scheduled column, then finalizes the plan once every card is scheduled, inside the project dates, assigned and in '
+      + 'dependency order. Finalizing starts the project and tells the team.' },
 ]
 
 /** The help topic for a normalized question, as an answer for this viewer, or null. */

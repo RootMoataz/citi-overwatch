@@ -45,7 +45,7 @@ function namesPhrase(names) {
 function approvalsSentence(approvals) {
   const timesheets = new Set(approvals.map((a) => `${a.user?.id}:${mondayOfIso(a.entry?.work_date ?? '')}`)).size
   if (!timesheets) return null
-  return { id: 'approvals', to: '/approvals',
+  return { id: 'approvals', to: '/timesheets',
     text: `${timesheets} ${plural(timesheets, 'timesheet is', 'timesheets are')} waiting for your approval` }
 }
 
@@ -79,10 +79,10 @@ function overtime(items, today) {
   if (people.size === 1) {
     const [n] = people.values()
     const when = n.week_start ? weekPhrase(n.week_start, today) : 'this week'
-    return { id: 'OVER_40H', to: `/approvals?user=${n.subject_user?.id}`,
+    return { id: 'OVER_40H', to: `/timesheets?user=${n.subject_user?.id}`,
       text: `${n.subject_user?.name ?? 'Someone'} went over 40 hours ${when.startsWith('the week') ? `in ${when}` : when}` }
   }
-  return { id: 'OVER_40H', to: '/approvals', text: `${people.size} people went over 40 hours` }
+  return { id: 'OVER_40H', to: '/timesheets', text: `${people.size} people went over 40 hours` }
 }
 
 function missingSentence(missing, today) {
@@ -112,11 +112,35 @@ const single = (id, items, many) => {
 function delegate(items) {
   const project = projectOf(items[0])
   if (items.length === 1) {
-    return { id: 'DELEGATE_ASSIGNED', to: project ? `/approvals?project=${project.id}` : '/approvals',
+    return { id: 'DELEGATE_ASSIGNED', to: project ? `/timesheets?project=${project.id}` : '/timesheets',
       text: `You're the delegate approver for ${project?.name ?? 'a project'}` }
   }
-  return { id: 'DELEGATE_ASSIGNED', to: '/approvals', text: `You're a delegate approver on ${items.length} projects` }
+  return { id: 'DELEGATE_ASSIGNED', to: '/timesheets', text: `You're a delegate approver on ${items.length} projects` }
 }
+
+/** The milestone an alert is about, on its project's Milestones tab (as the bell links it). */
+const milestoneTo = (n) => {
+  const project = projectOf(n)
+  const milestone = n.payload?.milestone
+  if (!project?.id) return '/'
+  return milestone?.id ? `/projects/${project.id}?tab=milestones&milestone=${milestone.id}` : `/projects/${project.id}?tab=milestones`
+}
+
+/** Milestone workflow and planning alerts: the server's sentence for one, a counted sentence for several. */
+const workflow = (id, many) => (items) => ({
+  id, to: items.length === 1 ? milestoneTo(items[0]) : '/',
+  text: items.length === 1 && items[0].message ? items[0].message : many(items.length),
+})
+
+const WORKFLOW = [
+  ['AUTO_ASSIGNED', (n) => `You were auto-assigned to ${n} milestones`],
+  ['AUTO_ROUTED', (n) => `${n} milestones were auto-assigned on your projects`],
+  ['NO_QUALIFIED_PERSON', (n) => `${n} milestones are ready but nobody free has the skills`],
+  ['KICKBACK_RAISED', (n) => `${n} milestones were kicked back to you for review`],
+  ['KICKBACK_RESOLVED', (n) => `${n} of your kickbacks were resolved`],
+  ['MILESTONE_UPDATE', (n) => `${n} new progress updates on your milestones`],
+  ['PLAN_FINALIZED', (n) => `${n} project plans were finalized`],
+]
 
 function unknown(type, items) {
   const project = projectOf(items[0])
@@ -127,7 +151,7 @@ function unknown(type, items) {
 }
 
 const KNOWN = new Set(['TIMESHEET_EMPTY', 'ENTRY_REJECTED', 'MESSAGE_RECEIVED', 'OVER_40H', 'SUPPORT_ASSIGNED',
-  'SUPPORT_ROUTED', 'MILESTONE_CLAIMED', 'DELEGATE_ASSIGNED'])
+  'SUPPORT_ROUTED', 'MILESTONE_CLAIMED', 'DELEGATE_ASSIGNED', ...WORKFLOW.map(([type]) => type)])
 
 export function buildSummary({ user, today = new Date().toISOString().slice(0, 10), notifications = [], unreadMessages = 0,
   approvals = [], missing = null } = {}) {
@@ -153,6 +177,7 @@ export function buildSummary({ user, today = new Date().toISOString().slice(0, 1
     when(of('MILESTONE_CLAIMED'), (items) => single('MILESTONE_CLAIMED', items,
       (count) => `${count} milestones were claimed by your team`)),
     when(of('DELEGATE_ASSIGNED'), delegate),
+    ...WORKFLOW.map(([type, many]) => when(of(type), workflow(type, many))),
     ...[...byType].filter(([type]) => !KNOWN.has(type)).map(([type, items]) => unknown(type, items)),
   ]
   return sentences.filter(Boolean)

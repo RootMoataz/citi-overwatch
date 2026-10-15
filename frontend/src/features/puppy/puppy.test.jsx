@@ -198,7 +198,7 @@ describe('the Puppy panel', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Puppy assistant' }))
     const panel = await screen.findByRole('dialog', { name: /puppy/i })
     expect(await within(panel).findByText(/all caught up/i)).toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: 'Open approvals' })).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: 'Open timesheets' })).not.toBeInTheDocument()
     await userEvent.click(within(panel).getByRole('button', { name: 'Open timesheet' }))
     expect(screen.getByTestId('location')).toHaveTextContent('/timesheet')
   })
@@ -208,7 +208,7 @@ describe('the Puppy panel', () => {
     renderPuppy()
     const panel = await openPanel()
     await userEvent.click(await within(panel).findByRole('button', { name: /timesheets are waiting/ }))
-    expect(screen.getByTestId('location')).toHaveTextContent('/approvals')
+    expect(screen.getByTestId('location')).toHaveTextContent('/timesheets')
   })
 
   test('a tip offers to open this week\'s empty timesheet, and a dismissed tip stays gone', async () => {

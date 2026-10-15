@@ -14,8 +14,12 @@ const ids = (user, extra = {}) => buildActions({ user, ...base, ...extra }).map(
 describe('do-it-for-me actions', () => {
   test('each role gets only what it may do', () => {
     expect(ids(users.employee)).toEqual(['mark-read', 'open-timesheet', 'message-manager', 'open-at-risk', 'theme', 'sound'])
-    expect(ids(users.manager)).toEqual(['mark-read', 'open-timesheet', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
-    expect(ids(users.admin)).toEqual(['mark-read', 'open-timesheet', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
+    // Managers and admins keep a timesheet only when "Tracks own hours" is on for them.
+    expect(ids(users.manager)).toEqual(['mark-read', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
+    expect(ids(users.admin)).toEqual(['mark-read', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
+    expect(ids({ ...users.manager, tracks_own_hours: true }))
+      .toEqual(['mark-read', 'open-timesheet', 'open-approvals', 'open-at-risk', 'email-report', 'theme', 'sound'])
+    expect(buildActions({ user: users.manager, ...base }).find((a) => a.id === 'open-approvals').to).toBe('/timesheets')
     // Executives are read-only: no timesheet, no approvals.
     expect(ids(users.executive)).toEqual(['mark-read', 'open-at-risk', 'email-report', 'theme', 'sound'])
   })
@@ -38,7 +42,7 @@ describe('do-it-for-me actions', () => {
     expect(byId['open-at-risk']).toMatchObject({ to: '/projects/p2', confirm: 'Puppy will open Atlas, which is at risk: Past due date.' })
     expect(byId.theme).toMatchObject({ label: 'Switch to the dark theme', mode: 'dark' })
     const manager = Object.fromEntries(buildActions({ user: users.manager, ...base }).map((a) => [a.id, a]))
-    expect(manager['open-approvals'].confirm).toBe('Puppy will open Approvals with 1 pending entry. Approving stays your decision.')
+    expect(manager['open-approvals'].confirm).toBe('Puppy will open Timesheets with 1 pending entry. Approving stays your decision.')
     expect(manager['email-report']).toMatchObject({ to: '/?report=email',
       confirm: 'Puppy will open Email this report on your dashboard with Send to me on. You press Send.' })
   })
@@ -46,7 +50,7 @@ describe('do-it-for-me actions', () => {
   test('actions with nothing to act on are left out', () => {
     const none = { unread: 0, projects: [{ id: 'p1', name: 'Apollo', at_risk_reasons: [] }], contacts: [], approvals: [] }
     expect(ids(users.employee, none)).toEqual(['open-timesheet', 'theme', 'sound'])
-    expect(ids(users.manager, none)).toEqual(['open-timesheet', 'open-approvals', 'email-report', 'theme', 'sound'])
+    expect(ids(users.manager, none)).toEqual(['open-approvals', 'email-report', 'theme', 'sound'])
     expect(buildActions({ user: users.employee, ...base, mode: 'dark' }).find((a) => a.id === 'theme').mode).toBe('light')
   })
 })

@@ -40,7 +40,7 @@ const useTopInsights = () => useQuery({ queryKey: ['dashboard', 'smart', ''], qu
 function insightTarget(link = {}) {
   if (link.to === 'project') return `/projects/${link.id}${link.tab ? `?tab=${link.tab}` : ''}`
   if (link.to === 'person') return `/people/${link.id}/profile`
-  return '/approvals'
+  return '/timesheets'
 }
 
 const mayOpen = (user, route) => !ROUTE_ROLES[route] || ROUTE_ROLES[route].includes(user?.role)
@@ -103,7 +103,7 @@ function Summary({ user, view, unreadMessages, insightsLoading, go }) {
     dismissed })
   const top = view.insights.slice(0, 3)
   const links = [
-    can(user, 'approvals.view') ? { label: 'Open approvals', to: '/approvals' } : null,
+    can(user, 'approvals.view') ? { label: 'Open timesheets', to: '/timesheets' } : null,
     can(user, 'timesheet.use') && mayOpen(user, 'timesheet') ? { label: 'Open timesheet', to: '/timesheet' } : null,
     can(user, 'messages.use') && mayOpen(user, 'messages') ? { label: 'Open messages', to: '/messages' } : null,
   ].filter(Boolean)

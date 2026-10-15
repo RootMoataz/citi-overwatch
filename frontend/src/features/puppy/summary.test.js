@@ -51,8 +51,8 @@ describe('summary sentences', () => {
       'Eli Employee went over 40 hours this week',
       "2 of your people haven't logged hours for last week",
     ])
-    expect(items[0].to).toBe('/approvals')
-    expect(items[1].to).toBe('/approvals?user=u-eli')
+    expect(items[0].to).toBe('/timesheets')
+    expect(items[1].to).toBe('/timesheets?user=u-eli')
   })
 
   test('singular and plural read naturally', () => {
@@ -107,16 +107,40 @@ describe('summary sentences', () => {
 
   test('unknown notification types (added later) get a generic sentence instead of breaking', () => {
     const items = buildSummary({ user: users.employee, today: TODAY, notifications: [
-      note('k1', 'KICKBACK_RAISED', { message: 'Morgan sent API back to you', payload: { project: { id: 'p9' } } }),
-      note('p1', 'PLAN_FINALIZED', { message: '' }), note('p2', 'PLAN_FINALIZED', { message: '' }),
+      note('k1', 'SOMETHING_NEW', { message: 'Morgan sent API back to you', payload: { project: { id: 'p9' } } }),
+      note('p1', 'BUDGET_ALERT', { message: '' }), note('p2', 'BUDGET_ALERT', { message: '' }),
       note('h1', 'HR_SUBMISSION', { message: undefined, payload: null }),
     ] })
     expect(texts(items)).toEqual([
       'Morgan sent API back to you',
-      '2 new plan finalized notifications',
+      '2 new budget alert notifications',
       'You have a new hr submission notification',
     ])
     expect(items.map((i) => i.to)).toEqual(['/projects/p9', null, null])
+  })
+
+  test('milestone workflow and planning alerts read as sentences that open the milestone', () => {
+    const ms = { project: { id: 'p1', name: 'Apollo' }, milestone: { id: 'm1', name: 'Cutover' } }
+    const items = buildSummary({ user: users.employee, today: TODAY, notifications: [
+      note('a1', 'AUTO_ASSIGNED', { message: 'You were auto-assigned to Cutover (Apollo)', payload: ms }),
+      note('k1', 'KICKBACK_RAISED', { message: 'Ana kicked back Schema Mapping', payload: ms }),
+      note('k2', 'KICKBACK_RESOLVED', { message: '', payload: ms }), note('k3', 'KICKBACK_RESOLVED', { message: '', payload: ms }),
+      note('u1', 'MILESTONE_UPDATE', { message: 'Eli posted an update on Schema Mapping', payload: ms }),
+      note('n1', 'NO_QUALIFIED_PERSON', { message: 'Nobody free has the skills for Cutover', payload: ms }),
+      note('r1', 'AUTO_ROUTED', { message: 'Cutover went to Ben Okafor', payload: ms }),
+      note('f1', 'PLAN_FINALIZED', { message: 'Beacon plan finalized: the first milestone is Discovery', payload: ms }),
+    ] })
+    expect(texts(items)).toEqual([
+      'You were auto-assigned to Cutover (Apollo)',
+      'Cutover went to Ben Okafor',
+      'Nobody free has the skills for Cutover',
+      'Ana kicked back Schema Mapping',
+      '2 of your kickbacks were resolved',
+      'Eli posted an update on Schema Mapping',
+      'Beacon plan finalized: the first milestone is Discovery',
+    ])
+    expect(items[0].to).toBe('/projects/p1?tab=milestones&milestone=m1')
+    expect(items[4].to).toBe('/')
   })
 
   test('nothing waiting means an empty summary', () => {

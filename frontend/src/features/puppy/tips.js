@@ -51,8 +51,8 @@ export function buildTips({ user, today, notifications = [], approvals = [], mil
     const waiting = approvals.filter((a) => a.entry?.work_date && daysBetween(a.entry.work_date, today) >= 3).length
     if (waiting) {
       tips.push({ id: `approvals-old:${today}`,
-        text: `${waiting} ${waiting === 1 ? 'entry' : 'entries'} logged 3+ days ago ${waiting === 1 ? 'is' : 'are'} still waiting — open Approvals?`,
-        action: { label: 'Open Approvals', to: '/approvals' } })
+        text: `${waiting} ${waiting === 1 ? 'entry' : 'entries'} logged 3+ days ago ${waiting === 1 ? 'is' : 'are'} still waiting — open Timesheets?`,
+        action: { label: 'Open Timesheets', to: '/timesheets' } })
     }
   }
   milestones
