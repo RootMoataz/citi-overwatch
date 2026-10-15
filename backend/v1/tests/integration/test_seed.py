@@ -314,6 +314,11 @@ def seed_the_old_way(conn) -> dict:
     return expected
 
 
+# The old seed has no pending hours for Gia, so there are no work notes or tracked hours to fill in for her.
+NO_GIA_HOURS = [{"item": "gia.rossi work notes", "reason": "missing"},
+                {"item": "gia.rossi tracked hours", "reason": "missing"}]
+
+
 def counts(conn) -> dict:
     return {t: query_one(conn, f"SELECT count(*) AS n FROM {t}")["n"]
             for t in ("milestone_assignees", "time_entries", "audit_log", "departments", "users", "projects")}
@@ -337,8 +342,10 @@ def test_demo_backfill_fills_an_old_seed_like_todays_seed(conn):
     assert sorted(result["priorities_updated"]) == [
         "Apollo Data Migration / Cutover", "Apollo Data Migration / Schema Mapping", "Atlas Customer Portal / Build",
         "Atlas Customer Portal / Launch", "Delta Compliance Audit / Audit Fieldwork"]
-    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2
-    assert result["already_set"] == 1  # only Beacon's board: Design alone is already in place
+    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2 + NO_GIA_HOURS
+    # Beacon's board (Design alone is already in place) and the flagged pending example (Eli's same 9h every day).
+    assert result["already_set"] == 2
+    assert (result["entry_notes_added"], result["entries_marked_tracked"], result["flagged_examples_created"]) ==         ([], [], [])
     assert result["skills_created"] == list(SKILLS)
     assert sorted(result["user_skills_updated"]) == sorted(PEOPLE_SKILLS)
     assert len(result["milestone_details_updated"]) == len(MILESTONE_DETAILS) - 1  # all but the missing Prototype
@@ -378,10 +385,10 @@ def test_demo_backfill_a_second_time_changes_nothing(conn):
         assert result[key] == [], key
     # departments of people and projects, Beacon, difficulties, the executive login, the public demo admin,
     # the demo messages, priorities, Beacon's planning board, people's skills, milestone details, the progress
-    # update, the kickback, the HR submission, the demo request's department
-    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5 + 1 + len(PEOPLE_SKILLS) + 9 + 1 + 1 + 1 + 1
+    # update, the kickback, the HR submission, the demo request's department, the flagged pending example
+    assert result["already_set"] == 16 + 5 + 1 + 6 + 1 + 1 + 1 + 5 + 1 + len(PEOPLE_SKILLS) + 9 + 1 + 1 + 1 + 1 + 1
     assert result["users_created"] == [] and result["conversations_created"] == []
-    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2
+    assert result["skipped"] == [{"item": "Beacon Mobile App / Prototype", "reason": "missing"}] * 2 + NO_GIA_HOURS
 
 
 def test_demo_backfill_on_a_fresh_seed_changes_nothing(conn):
@@ -432,7 +439,9 @@ def test_demo_backfill_never_overwrites_what_an_admin_set(conn):
     assert "Apollo Data Migration / Discovery" not in result["difficulties_updated"]
     assert "Apollo Data Migration / Cutover" not in result["priorities_updated"]
     assert {"item": "user riley.chen", "reason": "department_archived"} in result["skipped"]
-    assert result["already_set"] == 5  # the four kept values and Beacon's board (Design alone, already in place)
+    # The four kept values, Beacon's board (Design alone, already in place) and the flagged pending example (Eli's
+    # same 9h every day this week).
+    assert result["already_set"] == 6
     # Beacon still switches to pull: Design keeps its assignee, so it simply isn't claimable.
     assert state["projects"]["Beacon Mobile App"][1] == "pull"
 
@@ -691,3 +700,81 @@ def test_demo_backfill_never_publishes_an_ordinary_account_called_demo_admin(con
     assert result["users_created"] == []
     assert {"item": "user demo.admin", "reason": "exists_not_public_demo"} in result["skipped"]
     assert query_one(conn, "SELECT is_public_demo FROM users WHERE username = 'demo.admin'")["is_public_demo"] is False
+
+
+# ---------- hour tracking demo data (LOGIC_WALKTHROUGH §28) ----------
+
+def _pending_flags(client, conn, username="manager.demo") -> list[dict]:
+    from tests.helpers import token_for
+    me = query_one(conn, "SELECT * FROM users WHERE username = :u", u=username)
+    return client.request("GET", "/approvals", token=token_for(conn, me))[1]
+
+
+def test_seed_gives_gia_notes_and_tracked_hours_and_starts_the_flags_after_the_history(client, conn):
+    from app.rules.time_tracking import is_proof_note
+    seed(conn)
+    gia = query(conn, """SELECT t.note, t.hours, t.tracked_hours FROM time_entries t JOIN users u ON u.id = t.user_id
+                         WHERE u.username = 'gia.rossi' AND t.status = 'pending' ORDER BY t.work_date""")
+    assert gia and all(is_proof_note(e["note"]) for e in gia)
+    tracked = [e for e in gia if e["tracked_hours"] > 0]
+    assert len(tracked) == 3 and sum(e["tracked_hours"] == e["hours"] for e in tracked) == 2
+    live = query_one(conn, "SELECT CAST(value AS timestamptz) AS t FROM app_settings WHERE name = 'hour_flags_live_since'")
+    assert live["t"] >= query_one(conn, "SELECT max(created_at) AS t FROM time_entries")["t"]
+    # The seeded history has red flags worth showing (same hours every day) but none about sign-ins or lateness.
+    items = _pending_flags(client, conn, "admin.demo")
+    codes = {f["code"] for i in items for f in i["flags"]}
+    assert "SAME_HOURS_DAILY" in codes and not codes & {"NO_ACTIVITY", "BACKDATED"}
+
+
+def test_demo_backfill_adds_a_flagged_example_and_notes_once_and_never_touches_decided_hours(client, conn):
+    from app.seed import demo_backfill
+    seed_the_old_way(conn)
+    monday = datetime.now(timezone.utc).date() - timedelta(days=datetime.now(timezone.utc).date().weekday())
+    # No flagged pending week yet (Eli's same 9h every day and Ben's 4h go), and Ana's last week is free.
+    conn.run("DELETE FROM notifications WHERE type = 'OVER_40H'")
+    conn.run("DELETE FROM time_entries WHERE status = 'pending'")
+    conn.run("""DELETE FROM time_entries WHERE work_date BETWEEN :a AND :b
+                AND user_id = (SELECT id FROM users WHERE username = 'ana.ruiz')""",
+             a=monday - timedelta(days=7), b=monday - timedelta(days=1))
+    decided = query(conn, "SELECT id, hours, note, tracked_hours, status FROM time_entries WHERE status <> 'pending' ORDER BY id")
+    result = demo_backfill(conn)
+    assert len(result["flagged_examples_created"]) == 1, result["skipped"]
+    assert result["flagged_examples_created"][0].startswith("Ana Ruiz: 8h on 4 weekdays from")
+    example = query(conn, """SELECT t.hours, t.note, t.status FROM time_entries t JOIN users u ON u.id = t.user_id
+                             WHERE u.username = 'ana.ruiz' AND t.work_date BETWEEN :a AND :b""",
+                    a=monday - timedelta(days=7), b=monday - timedelta(days=1))
+    assert [(e["hours"], e["status"]) for e in example] == [(Decimal(8), "pending")] * 4
+    assert all(e["note"] for e in example)
+    flagged = [i for i in _pending_flags(client, conn) if any(f["code"] == "SAME_HOURS_DAILY" for f in i["flags"])]
+    assert len(flagged) == 4
+    assert query(conn, "SELECT id, hours, note, tracked_hours, status FROM time_entries WHERE status <> 'pending' "
+                       "ORDER BY id") == decided
+    again = demo_backfill(conn)
+    assert again["flagged_examples_created"] == []
+
+
+def test_demo_backfill_fills_gias_pending_notes_and_tracked_hours_only_while_blank(conn):
+    from app.seed import demo_backfill
+    seed_the_old_way(conn)
+    gia = query_one(conn, "SELECT id FROM users WHERE username = 'gia.rossi'")
+    ms = query_one(conn, "SELECT id, project_id FROM milestones WHERE name = 'Schema Mapping'")
+    monday = datetime.now(timezone.utc).date() - timedelta(days=datetime.now(timezone.utc).date().weekday())
+    days = [monday - timedelta(days=7) + timedelta(days=n) for n in range(4)]
+    for d, note in zip(days, ["", "short", "", "Already wrote a proper note"]):
+        conn.run("""INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, status, note)
+                    VALUES (:u, :m, :p, :d, 5, 'pending', :n)""", u=gia["id"], m=ms["id"], p=ms["project_id"], d=d, n=note)
+    approved = query_one(conn, """INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, status, note,
+                                      hourly_rate) VALUES (:u, :m, :p, :d, 3, 'approved', '', 50) RETURNING id""",
+                         u=gia["id"], m=ms["id"], p=ms["project_id"], d=monday - timedelta(days=14))
+    result = demo_backfill(conn)
+    assert len(result["entry_notes_added"]) == 3
+    assert len(result["entries_marked_tracked"]) == 3
+    rows = query(conn, """SELECT work_date, note, hours, tracked_hours FROM time_entries
+                          WHERE user_id = :u AND status = 'pending' ORDER BY work_date""", u=gia["id"])
+    assert rows[3]["note"] == "Already wrote a proper note"
+    assert all(len(r["note"]) >= 10 for r in rows)
+    assert [r["tracked_hours"] for r in rows] == [Decimal(0), Decimal("2.5"), Decimal(5), Decimal(5)]
+    untouched = query_one(conn, "SELECT note, tracked_hours FROM time_entries WHERE id = :i", i=approved["id"])
+    assert (untouched["note"], untouched["tracked_hours"]) == ("", Decimal(0))
+    again = demo_backfill(conn)
+    assert again["entry_notes_added"] == [] and again["entries_marked_tracked"] == []

@@ -406,6 +406,122 @@ def _demo_hr_submission(conn) -> tuple[str | None, str | None]:
     return f"{paid_from} to {paid_to}", None
 
 
+# ---------- hour tracking (LOGIC_WALKTHROUGH §28): notes, tracked hours and a flagged example ----------
+
+TRACKED_PERSON = "gia.rossi"  # whose pending hours get work notes and timer-tracked hours in the demo
+TIME_TRACKING_KEYS = ("entry_notes_added", "entries_marked_tracked", "flagged_examples_created")
+EXAMPLE_HOURS = Decimal(8)
+EXAMPLE_DAYS = 4  # the same hours on 4 weekdays: SAME_HOURS_DAILY
+EXAMPLE_NOTE = "Worked through the open tickets for this milestone"
+
+
+def mark_flags_live(conn) -> None:
+    """The red flags judge activity and lateness only for hours logged from now on (see app.rules.hour_flags), so a
+    freshly seeded history, which has no sign-in trail, never lights up with them."""
+    conn.run("""INSERT INTO app_settings (name, value) VALUES ('hour_flags_live_since', CAST(clock_timestamp() AS text))
+                ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, updated_at = now()""")
+
+
+def _demo_time_tracking(conn, out: dict, skip) -> None:
+    """Fill blanks only, never touching approved, rejected or HR-submitted hours:
+    - TRACKED_PERSON's pending entries without a usable work note get one (as the timesheet curation writes them);
+    - while none of their pending hours came from a timer, their three latest pending entries are marked tracked
+      (two fully, one half: "mixed");
+    - while no pending entry is flagged SAME_HOURS_DAILY or LONG_DAY, one demo employee gets 8h pending on four
+      weekdays of a milestone they're assigned to (inside every rule: open project, the 24h day, a week of at most
+      40h), so the approval screens show a red flag."""
+    from app.curate import _note_for
+    from app.features.time.flags import person_week_flags
+    from app.rules.time_tracking import is_proof_note
+
+    person = query_one(conn, "SELECT id FROM users WHERE username = :u", u=TRACKED_PERSON)
+    pending = [] if not person else query(conn, """
+        SELECT t.id, t.work_date, t.hours, t.note, t.tracked_hours, m.name AS milestone FROM time_entries t
+        JOIN milestones m ON m.id = t.milestone_id JOIN projects p ON p.id = t.project_id
+        WHERE t.user_id = :u AND t.status = 'pending' AND t.hr_submission_id IS NULL
+          AND NOT m.is_archived AND NOT p.is_archived ORDER BY t.work_date, m.name""", u=person["id"])
+    if not pending:
+        skip(f"{TRACKED_PERSON} work notes", "missing")
+        skip(f"{TRACKED_PERSON} tracked hours", "missing")
+    else:
+        blank = [e for e in pending if not is_proof_note(e["note"])]
+        for e in blank:
+            conn.run("UPDATE time_entries SET note = :n WHERE id = :i",
+                     n=_note_for(e["milestone"], str(person["id"]), e["work_date"]), i=e["id"])
+            out["entry_notes_added"].append(f"{TRACKED_PERSON} {e['work_date']} {e['milestone']}")
+        if not blank:
+            skip(f"{TRACKED_PERSON} work notes", "already_set")
+        if any(e["tracked_hours"] > 0 for e in pending):
+            skip(f"{TRACKED_PERSON} tracked hours", "already_set")
+        else:
+            latest = pending[-3:]
+            for i, e in enumerate(latest):
+                half = (e["hours"] * 2).to_integral_value(rounding="ROUND_FLOOR") / 4  # to the quarter hour
+                tracked = half if i == 0 and len(latest) == 3 else e["hours"]
+                conn.run("UPDATE time_entries SET tracked_hours = :t WHERE id = :i", t=tracked, i=e["id"])
+                out["entries_marked_tracked"].append(
+                    f"{TRACKED_PERSON} {e['work_date']} {e['milestone']} ({tracked:f} of {e['hours']:f}h)")
+
+    keys = {(str(r["user_id"]), r["work_date"] - timedelta(days=r["work_date"].weekday())) for r in query(conn, """
+        SELECT DISTINCT t.user_id, t.work_date FROM time_entries t WHERE t.status = 'pending'""")}
+    flagged = person_week_flags(conn, keys)
+    pending_ids = {str(r["id"]) for r in query(conn, "SELECT id FROM time_entries WHERE status = 'pending'")}
+    if any(f["code"] in ("SAME_HOURS_DAILY", "LONG_DAY") for i in pending_ids for f in flagged.get(i, [])):
+        skip("flagged pending example", "already_set")
+        return
+    example = _flag_example_slot(conn)
+    if not example:
+        skip("flagged pending example", "no_room")
+        return
+    w, days = example
+    for d in days:
+        conn.run("""INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, status, note,
+                                              created_at, updated_at)
+                    VALUES (:u, :m, :p, :d, :h, 'pending', :n, :at, :at)""",
+                 u=w["id"], m=w["milestone_id"], p=w["project_id"], d=d, h=EXAMPLE_HOURS, n=EXAMPLE_NOTE,
+                 at=datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) + timedelta(hours=22))
+    out["flagged_examples_created"].append(
+        f"{w['first_name']} {w['last_name']}: {EXAMPLE_HOURS:f}h on {len(days)} weekdays from {days[0]} on "
+        f"{w['project']} / {w['milestone']} (SAME_HOURS_DAILY)")
+
+
+def _flag_example_slot(conn):
+    """(person and work item, days) for the flagged example: a demo employee on an in-progress milestone of an active
+    project, last week or this week before today, four weekdays with nothing on that milestone, each day staying
+    within 24h and the week within 40h. None when nobody fits."""
+    today = datetime.now(timezone.utc).date()
+    this_week = today - timedelta(days=today.weekday())
+    work = query(conn, """
+        SELECT u.id, u.first_name, u.last_name, m.id AS milestone_id, m.name AS milestone, m.start_date,
+               p.id AS project_id, p.name AS project, p.start_date AS p_start, p.predicted_end_date AS p_end
+        FROM milestone_assignees a JOIN users u ON u.id = a.user_id JOIN milestones m ON m.id = a.milestone_id
+        JOIN projects p ON p.id = m.project_id
+        WHERE u.role = 'employee' AND NOT u.is_archived AND m.status = 'in_progress' AND NOT m.is_archived
+          AND p.status = 'active' AND NOT p.is_archived AND p.name = ANY(:names)
+        ORDER BY lower(u.last_name), lower(u.first_name), lower(p.name), lower(m.name)""",
+                 names=list(PROJECT_DEPARTMENTS))
+    for week in (this_week - timedelta(days=7), this_week):
+        for w in work:
+            rows = query(conn, """SELECT t.milestone_id, t.work_date, t.hours FROM time_entries t
+                                  JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
+                                  JOIN projects p ON p.id = t.project_id AND NOT p.is_archived
+                                  WHERE t.user_id = :u AND t.work_date BETWEEN :a AND :b
+                                    AND t.status IN ('pending', 'approved')""",
+                         u=w["id"], a=week, b=week + timedelta(days=6))
+            taken = {r["work_date"] for r in rows if r["milestone_id"] == w["milestone_id"]}
+            day_total = {}
+            for r in rows:
+                day_total[r["work_date"]] = day_total.get(r["work_date"], Decimal(0)) + r["hours"]
+            week_total = sum(day_total.values(), Decimal(0))
+            days = [week + timedelta(days=n) for n in WEEKDAYS
+                    if week + timedelta(days=n) < today and week + timedelta(days=n) not in taken
+                    and max(w["start_date"], w["p_start"]) <= week + timedelta(days=n) <= w["p_end"]
+                    and day_total.get(week + timedelta(days=n), Decimal(0)) + EXAMPLE_HOURS <= 24]
+            if len(days) >= EXAMPLE_DAYS and week_total + EXAMPLE_HOURS * EXAMPLE_DAYS <= 40:
+                return w, days[:EXAMPLE_DAYS]
+    return None
+
+
 def seed(conn, *, curate: bool = True) -> dict:
     """Load the demo once. `curate` rounds it out like the demo_curate operation (app/curate.py) does on the live
     database, so a fresh database and the curated live one look the same; tests of the older seed turn it off."""
@@ -425,6 +541,8 @@ def seed(conn, *, curate: bool = True) -> dict:
         # After the curation, so the plan's steps get their details and the paid week holds all its hours.
         _demo_workflow(conn, {key: [] for key in WORKFLOW_KEYS}, lambda item, reason: None)
         _demo_hr_submission(conn)
+        _demo_time_tracking(conn, {key: [] for key in TIME_TRACKING_KEYS}, lambda item, reason: None)
+        mark_flags_live(conn)
     return creds
 
 
@@ -503,13 +621,15 @@ def demo_backfill(conn) -> dict:
     nobody has arranged it (every card in Scheduled, no plan_order audited); skills, milestone objectives, criteria
     and required skills (the seed's own and every department-plan step by name), the Schema Mapping progress
     update and resolved kickback fill blanks only (see _demo_workflow); the demo HR submission is added only while
-    there is none. Assignees and hours are never touched. Safe to run again.
+    there is none; hour tracking fills blanks on pending hours only (see _demo_time_tracking: work notes and
+    tracked hours on Gia's pending entries, and one flagged pending example while there is none). Assignees and
+    approved, rejected or HR-submitted hours are never touched. Safe to run again.
     For the operator only: reachable through an IAM-authorized direct invoke, never the public URL.
     """
     out = {"departments_created": [], "users_created": [], "users_updated": [], "projects_updated": [],
            "work_mode_updated": [], "difficulties_updated": [], "priorities_updated": [], "plan_board_arranged": [],
            "conversations_created": [], **{key: [] for key in WORKFLOW_KEYS}, "hr_submissions_created": [], "requests_updated": [],
-           "users_renamed": [],
+           "users_renamed": [], **{key: [] for key in TIME_TRACKING_KEYS},
            "already_set": 0, "skipped": []}
 
     def skip(item: str, reason: str) -> None:
@@ -683,6 +803,8 @@ def demo_backfill(conn) -> dict:
             out["already_set"] += 1
         else:
             skip("HR submission", why_not)
+
+        _demo_time_tracking(conn, out, skip)
     return out
 
 
