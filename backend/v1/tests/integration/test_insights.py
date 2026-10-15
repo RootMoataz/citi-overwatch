@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.seed import seed
-from tests.helpers import add_member, log_entry, make_milestone, make_project, make_user, token_for
+from tests.helpers import add_member, log_entry, login, make_milestone, make_project, make_user, token_for
 
 TODAY = datetime.now(timezone.utc).date()
 MONDAY = TODAY - timedelta(days=TODAY.weekday())
@@ -90,3 +90,21 @@ def test_audit_log_filters_by_who_and_action(client, conn):
     assert entries(f"actor={other['id']}&action=archive") == ([], 0)
     status, body, _, _ = client.request("GET", "/audit-log?actor=nope", token=token_for(conn, admin))
     assert (status, body["error"]["details"]) == (400, {"actor": "invalid_id"})
+
+
+def test_audit_log_can_leave_sign_ins_out(client, conn):
+    admin = make_user(conn, role="admin", username="avery")
+    login(client, "avery", "Passw0rd!")
+    client.request("POST", "/projects", token=token_for(conn, admin),
+                   json={"name": "Kept", "start_date": "2026-01-01", "predicted_end_date": "2026-12-31",
+                         "manager_id": str(make_user(conn, role="manager")["id"])})
+
+    def actions(qs):
+        body = client.request("GET", f"/audit-log?{qs}", token=token_for(conn, admin))[1]
+        return {i["action"] for i in body["items"]}, body["total"]
+
+    assert "login" in actions("")[0]
+    kept, total = actions("exclude_action=login")
+    assert "login" not in kept and "create" in kept and total == len(kept)
+    # Asking for sign-ins explicitly wins over hiding them.
+    assert actions("action=login&exclude_action=login")[0] == {"login"}

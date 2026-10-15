@@ -2,6 +2,7 @@
 summaries and the list."""
 
 import json
+import math
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -15,6 +16,7 @@ from app.features.common import conflict_from
 from app.features.departments.service import check_department
 from app.http import ApiError
 from app.rules.at_risk import at_risk_reasons, weighted_progress
+from app.rules.overtime import forecast_total
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
 
 STATUSES = ("planned", "active", "on_hold", "completed")
@@ -317,15 +319,23 @@ def restore_project(conn, ctx: Ctx, project_id: str) -> dict:
     return project_view(conn, project_id)
 
 
+def project_forecast(conn, project: dict, consumed: Decimal) -> Decimal:
+    """Spend at the end date at the last 4 weeks' pace (the dashboard's forecast); a completed project stops here."""
+    from app.features.time.service import _today, _weekly_costs  # time imports this module: import late
+    weeks_left = max(math.ceil((project["predicted_end_date"] - _today()).days / 7), 0)
+    return forecast_total(consumed=Decimal(consumed), weekly_costs=_weekly_costs(conn, project),
+                          weeks_remaining=weeks_left if project["status"] != "completed" else 0).quantize(Decimal("0.01"))
+
+
 def summary(conn, ctx: Ctx, project_id: str) -> dict:
-    load_project(conn, ctx, project_id, include_archived=ctx.sees_all)
+    project = load_project(conn, ctx, project_id, include_archived=ctx.sees_all)
     view = project_view(conn, project_id)
     members = query_one(conn, """SELECT count(*) AS n FROM project_members
                                  WHERE project_id = CAST(:p AS uuid) AND NOT is_archived""", p=project_id)["n"]
     return {"project": view, "budget": view["budget"], "consumed": view["consumed"],
             "remaining": Decimal(view["budget"]) - view["consumed"], "budget_pct": view["budget_pct"],
             "progress_pct": view["progress_pct"], "at_risk_reasons": view["at_risk_reasons"],
-            "member_count": members}
+            "forecast": project_forecast(conn, project, view["consumed"]), "member_count": members}
 
 
 def milestone_costs(conn, ctx: Ctx, project_id: str) -> dict:

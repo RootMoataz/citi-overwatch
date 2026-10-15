@@ -164,6 +164,10 @@ def audit_log(conn, params: dict) -> dict:
     if params.get("action"):
         where.append("a.action = :action")
         args["action"] = params["action"]
+    elif params.get("exclude_action"):
+        # "Hide sign-ins": routine entries can be left out so real changes surface first.
+        where.append("a.action <> :skip")
+        args["skip"] = params["exclude_action"]
     if params.get("from"):
         where.append("a.created_at >= :from_d")
         args["from_d"] = as_date(params["from"], "from")

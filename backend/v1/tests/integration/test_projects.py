@@ -181,6 +181,8 @@ def test_summary_numbers(client, conn):
     assert (body["budget"], body["consumed"], body["remaining"]) == (2080.0, 400.0, 1680.0)
     assert (body["budget_pct"], body["progress_pct"], body["member_count"]) == (19.2, 50.0, 1)
     assert body["at_risk_reasons"] == []
+    # No approved spend in the last 4 complete weeks: the forecast at the end date is what's consumed so far.
+    assert body["forecast"] == 400.0
     assert body["project"]["id"] == str(project["id"])
 
 
