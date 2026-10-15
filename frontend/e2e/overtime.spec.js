@@ -16,26 +16,30 @@ async function consumed(page) {
 }
 
 test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager gets one notification → opens the breakdown → approves → budget consumed rises', async ({ page }, testInfo) => {
-  test.slow() // two sign-ins, five work-note dialogs and two budget reads
+  test.slow() // two sign-ins, five days of hours and notes, and two budget reads
   const person = PERSON[testInfo.project.name]
 
   await signIn(page, person.username)
   await page.goto('/timesheet')
+  // The Day view is the default: one day at a time, picked from the week strip ("Mon 12 Oct, 0h"), with one Submit for the whole week.
   for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']) {
+    await page.getByRole('button', { name: new RegExp(`^${day} \\d`) }).click()
     await page.getByLabel(new RegExp(`^Schema Mapping, ${day}`)).fill('9')
     // Proof of work: new hours need a work note (or a progress update that day) before the week saves.
-    // The seed may already hold hours (with or without a note) on earlier days of this week, so it's Add or Edit.
-    await page.getByRole('button', { name: new RegExp(`^(Add|Edit) work note, Schema Mapping, ${day}`) }).click()
-    await page.getByLabel('What did you work on?').fill(`Mapped source tables to the new schema (${day}).`)
-    await page.getByRole('button', { name: 'Done' }).click()
+    // The seed may already hold hours (with or without a note) on earlier days of this week; fill replaces the note.
+    await page.getByRole('textbox', { name: 'Work note, Schema Mapping' }).fill(`Mapped source tables to the new schema (${day}).`)
   }
   await expect(page.getByRole('alert').filter({ hasText: /This week is 45h — 5h over 40h/ })).toBeVisible()
-  await page.getByRole('button', { name: 'Save week' }).click()
+  await page.getByRole('button', { name: /^Submit \d+ changes?$/ }).click()
   await expect(page.getByTestId('week-total')).toHaveText('45h / 40h')
-  // Only the entry that crosses 40h (Friday: 36h → 45h) is overtime.
-  const overtime = page.getByText(/^Pending \(Overtime requested from .+\)$/)
-  await expect(overtime).toHaveCount(1)
-  await expect(page.getByText('Pending approval')).toHaveCount(4)
+  // Only the entry that crosses 40h (Friday: 36h → 45h) is overtime. The Day view shows one day's status at a time.
+  await expect(page.getByText(/^Pending \(Overtime requested from .+\)$/)).toHaveCount(1)
+  await expect(page.getByText('Pending approval')).toHaveCount(0)
+  for (const day of ['Mon', 'Tue', 'Wed', 'Thu']) {
+    await page.getByRole('button', { name: new RegExp(`^${day} \\d`) }).click()
+    await expect(page.getByText('Pending approval')).toHaveCount(1)
+    await expect(page.getByText(/Overtime requested from/)).toHaveCount(0)
+  }
 
   await signOut(page)
   await signIn(page, 'manager.demo')

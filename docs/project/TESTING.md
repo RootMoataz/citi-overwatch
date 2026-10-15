@@ -12,10 +12,10 @@ The tests are built for **debugging**, not only for a green tick:
 | Rules (unit) | pytest | part of 364 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 364 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
 | API (integration) | pytest + real PostgreSQL 17 | 723 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 794 (65 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Frontend (component) | Vitest + React Testing Library + MSW | 822 (66 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
-Counts as of 2026-10-15: **1,087 backend** (364 unit, 723 integration, 97% coverage) and **794 frontend** in 65 files, plus **6 end-to-end**, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-15: **1,087 backend** (364 unit, 723 integration, 97% coverage) and **822 frontend** in 66 files, plus **6 end-to-end**, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -73,11 +73,11 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 
 1. **Onboarding:** an admin creates an account in the wizard. The test reads the welcome email from `backend/v1/.outbox/`, then the new user signs in with the temporary password, is forced to change it, and lands on **My week** with the **Your manager** card.
 2. **Milestones:** a manager adds a milestone that depends on *Discovery* and assigns Eli. Eli starts it and moves it to *ready for review*; Eli can't complete it. The manager then completes it.
-3. **Overtime:** an employee logs 9 h Monday to Friday, adding a work note to each day (proof of work). Only Friday shows "Pending (Overtime requested from …)". The manager gets exactly one notification and opens it on the Timesheets page, filtered to that person. The manager then views the budget impact and approves, and the project's consumed budget goes up.
+3. **Overtime:** an employee logs 9 h Monday to Friday in the timesheet's Day view: for each day they pick it in the week strip, type the hours and a work note (proof of work), and they press **Submit** once at the end. Stepping through the days afterwards, only Friday shows "Pending (Overtime requested from …)". The manager gets exactly one notification and opens it on the Timesheets page, filtered to that person. The manager then views the budget impact and approves, and the project's consumed budget goes up.
 
 ## Current results (2026-10-15)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend figures from commit `59d29fe` (the timer workflow); the backend suite was re-run at `323ea89` with the same result (1,087 passed, 97%). Frontend and end-to-end figures from `323ea89` plus the GitHub-link test and the updated end-to-end journeys.
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend figures from commit `59d29fe` (the timer workflow); the backend suite was re-run at `323ea89` with the same result (1,087 passed, 97%). Frontend and end-to-end figures from `fe03874` (the timesheet Day view) plus the end-to-end overtime journey rewritten for it.
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
@@ -95,17 +95,17 @@ tests/unit:        364 tests
 tests/integration: 723 tests
 
 # frontend: npx vitest run
- Test Files  65 passed (65)
-      Tests  794 passed (794)
+ Test Files  66 passed (66)
+      Tests  822 passed (822)
 
 # frontend: npm run lint && npm run build
-no problems; built in 9.72s
+no problems; built in 9.68s
 
 # frontend: npx playwright test
-  6 passed (1.6m)
+  6 passed (1.5m)
 ```
 
-The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, 6 tests) was brought up to date on 15 October: the overtime journey now adds a work note to each day (proof of work) and follows the alert to the Timesheets page, and the onboarding journey lands on My week. All 6 pass. When the machine is busy with other suites, the milestones journey can time out waiting on the API; run the end-to-end suite on its own.
+The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, 6 tests) was brought up to date on 15 October: the overtime journey logs day by day in the Day view (hours and a work note per day, one **Submit** for the week) and follows the alert to the Timesheets page, and the onboarding journey lands on My week. All 6 pass. When the machine is busy with other suites, the milestones journey can time out waiting on the API; run the end-to-end suite on its own.
 
 ## Results (2026-10-13, after the final review's fixes; Windows 11, PostgreSQL 17.11, Node 24, Python 3.12)
 

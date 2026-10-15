@@ -25,11 +25,11 @@ Each step is marked:
 
 | Step | Effect | Repeatable? |
 |---|---|---|
-| Start/Stop timer | Stores a timer row; 7.5+ minutes become a draft in Eli's timesheet cell (not submitted) | Yes (drafts sit there until Save week) |
-| Eli's **Save week** with a timer draft | Submits the draft as pending, Tracked hours | Yes (it adds hours to Eli's day) |
+| Start/Stop timer | Stores a timer row; 7.5+ minutes become a draft in Eli's timesheet cell (not submitted) | Yes (drafts sit there until Submit) |
+| Eli's **Submit** with a timer draft | Submits the draft as pending, Tracked hours | Yes (it adds hours to Eli's day) |
 | Morgan's **Stop timer** in Live now | Stops Eli's timer, posts a message in their thread, adds a draft | Yes |
 | **Approve** Eli's change request | Sets that cell to the requested hours (pending) | **No, one-shot** (Eli can ask again on another timer cell) |
-| Save week without a note | Refused (`400 PROOF_REQUIRED`); nothing saved | Yes |
+| Submit without a note | Refused (`400 PROOF_REQUIRED`); nothing saved | Yes |
 | Kick back Hypercare (optional) | Hypercare becomes Blocked; Apollo becomes at risk | Yes: Morgan presses **Put back in the queue** |
 | Message Morgan | Adds a message to the thread | Yes |
 | **Approve week** for Gia (week of 12 Oct) | Approves 3 entries; budget consumed rises | **No, one-shot** |
@@ -80,21 +80,22 @@ Click **Employee**.
 3. **Your manager (READ).** Under **This week**, the **Your manager** card shows Morgan's photo, title and
    department and a **Message Morgan** button. Say: "One press to message your manager." (Same card on your own
    profile.)
-4. **Timer: start → stop → pre-filled, locked cell → Save week (WRITE, repeatable).** The timer started in the other
+4. **Timer: start → stop → pre-filled, locked row → Submit (WRITE, repeatable).** The timer started in the other
    window is running: the header chip ticks and turns amber, and a banner says "You've reached your 8h for today on
    this timer". Press the chip; the **Stop your timer?** dialog says "Stopping now adds 0.25h to Thursday's cell on
-   your timesheet. It isn't submitted until you Save week there." Add a note (**What did you work on?**) and press
+   your timesheet. It isn't submitted until you press Submit there." Add a note (**What did you work on?**) and press
    **Stop timer**. The toast: "Added 0.25h to Thursday's cell — open your timesheet to submit." Open **My
-   timesheet**: today's *Schema Mapping* cell shows saved + timer hours with a timer mark, "from timer, not submitted
-   yet", and the banner "You have 0.25h of timer time not submitted yet — Save week to submit." Hover it: "Timer hours
-   can't be edited — request a change". Press **Save week**. Say: "Stopping a timer never submits hours. The employee
-   still submits them, with proof of work, and can't type over them. To fix them they press **Request a change**,
-   which goes to the manager." (Stopped under 7.5 minutes, nothing is added and the toast says so.) Then press
+   timesheet**; it opens on today in the **Day view**, with the week strip above one row per milestone. The *Schema
+   Mapping* row shows saved + timer hours with a timer mark, "from timer, not submitted yet", and the banner "You have
+   0.25h of timer time not submitted yet — press Submit to send it." Hover the hours: "Timer hours can't be edited —
+   request a change". Press **Submit**. Say: "Stopping a timer never submits hours. The employee still submits them,
+   with proof of work, and can't type over them. To fix them they press **Request a change**, which goes to the
+   manager." (Stopped under 7.5 minutes, nothing is added and the toast says so.) Then press
    **Start** again in the other window so Morgan has a live timer to watch.
-5. **Proof of work (WRITE attempt, refused, repeatable).** Open **My timesheet**. Change Wednesday's *Schema Mapping*
-   cell from 8 to 7 and press **Save week**. The page shows **Add a work note before saving** and lists the cell.
-   Say: "New or changed hours need a 10 to 500 character note, or a progress update that day. Old hours aren't
-   checked." Put the 8 back. Nothing was saved.
+5. **Proof of work (WRITE attempt, refused, repeatable).** Open **My timesheet** and press **Wed** in the week strip.
+   Change the *Schema Mapping* hours from 8 to 7 and press **Submit 1 change**. The page shows **Add a work note
+   before saving** and lists the row, with a link to the day. Say: "New or changed hours need a 10 to 500 character
+   note, or a progress update that day. Old hours aren't checked." Put the 8 back. Nothing was saved.
 6. **Kick back (optional: WRITE, repeatable, changes live data).** On Apollo's **Milestones** tab, press
    **Kick back** on *Hypercare*. Pick a category under **What's wrong?**, write a reason in **Explain** (10+
    characters) and press **Kick back**. Hypercare becomes Blocked and Apollo becomes at risk ("Kicked back – needs
@@ -107,9 +108,9 @@ Click **Employee**.
    involved, and nothing you type leaves the browser."
 
 **If something goes wrong:** if **Start** is disabled, another timer is running; stop it first. If the stop adds
-nothing, the timer ran under 7.5 minutes: show the seeded Saturday 10 Oct cell (2h, Tracked, "Change requested") in
-last week's timesheet instead. If
-the proof-of-work error doesn't appear, the cell wasn't changed; type a different number. If the kickback dialog
+nothing, the timer ran under 7.5 minutes: show the seeded Saturday 10 Oct row (2h, Tracked, "Change requested") in
+last week's timesheet instead (**Previous week**, then **Sat** in the strip). If
+the proof-of-work error doesn't appear, the hours weren't changed; type a different number. If the kickback dialog
 refuses, the reason is under 10 characters. Skip anything that stalls; Puppy is the strongest closer.
 
 ## 3. Manager: Morgan (2:00–4:30)
@@ -126,7 +127,7 @@ Sign out, click **Manager**.
 2. **Stop Eli's timer with a message (WRITE, repeatable).** In Live now press **Stop timer** on Eli's row, write
    "Please stop here and join the 3pm review call" (10+ characters) and press **Stop timer and send**. In Eli's window:
    the bell shows "Morgan stopped your timer on Schema Mapping: …", **Messages** has "⏹ Stopped your timer on Schema
-   Mapping (…): …" in their thread, and the time so far is a locked draft in today's cell. Say: "Managers see who is
+   Mapping (…): …" in their thread, and the time so far is a locked draft in today's row. Say: "Managers see who is
    timing work right now, get one alert when a timer passes 125% of a limit, and can stop it with a reason the
    employee actually reads."
 3. **Change requests (WRITE, one-shot).** Open **Timesheets**. **Change requests** lists Eli's request on Saturday
@@ -163,7 +164,7 @@ Sign out, click **Manager**.
 - Live now says "Nobody is running a timer right now": the other window's timer was stopped or ran past midnight.
   Press **Start** there again; the card refreshes within 30 seconds (or reload).
 - **Change requests** is missing: the seeded request was decided already. As Eli, press **Request a change** on any
-  locked (timer) cell to make a new one.
+  locked (timer) row to make a new one.
 - Gia's weeks are missing from **To review**: someone approved them already. Show a remaining flagged week, or the
   `timesheets-review.png` screenshot.
 - *Schema Mapping* is already Completed: someone ran this step. Show *Cutover* with Ben as primary, then open its
@@ -264,7 +265,7 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,087 backend tests at 97% coverage, 794 frontend component tests, and 6 end-to-end runs on desktop and
+> Tests: 1,087 backend tests at 97% coverage, 822 frontend component tests, and 6 end-to-end runs on desktop and
 > iPhone, all passing on 15 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
@@ -305,7 +306,7 @@ One open kickback per milestone and one running timer per person are enforced by
 submissions keep a frozen copy of each payroll CSV.
 
 **Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (364 unit tests).
-723 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 794 component tests use Vitest
+723 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 822 component tests use Vitest
 and MSW, where an unhandled request fails the test. 6 Playwright runs cover 3 journeys on desktop Chrome and iPhone
 13, all passing on 15 October. Two fail-closed tests walk every write route for the executive and demo-admin guards.
 

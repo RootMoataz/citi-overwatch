@@ -244,23 +244,29 @@ Each panel is titled with the question it answers, and the panels are labelled r
 ### T1. Log my week (Q5, U)
 **As** anyone, **I want to** log hours per day on the milestones I'm assigned to **so that** my manager can approve them.
 
-- **Loading:** grid skeleton. **Save week** shows "Saving…".
+- **Loading:** a skeleton. **Submit** shows "Saving…".
 - **Success:**
-  - The grid has one row per assigned milestone, grouped by project, with daily and weekly totals and previous/next week buttons.
-  - Weekends are hidden behind a switch on phones.
-  - Each saved cell shows its status:
+  - The **Day view** is the default, one day at a time:
+    - A week bar has previous/next week buttons, **This week**, the week total ("22h / 40h") and a strip of seven day buttons (Mon to Sun), each showing that day's hours. A day over 24h turns red.
+    - The page opens on today in the current week, otherwise on Monday. The open day is kept in the address (`?week=…&day=…`).
+    - The open day has one row per assigned milestone, grouped by project when there is more than one, each with an hours field and a work note that is always visible (10-500 characters, with a counter, marked "needed" when the hours are new or changed and there's no note or same-day progress update).
+    - A **Start** button appears on today's rows only.
+    - Switching day keeps what I typed. **Submit N changes** in the page header sends every changed cell of the week, on any day, in one save.
+    - Completed milestones, and milestones of a closed or on-hold project, sit behind **Show N closed milestones**. A completed milestone stays editable while its project is open; a closed or on-hold project's rows are read-only.
+  - The **Day / Week** toggle swaps in the **Week grid**: one row per assigned milestone, grouped by project, with daily and weekly totals. The choice is remembered in this browser. Weekends are hidden behind a switch on phones.
+  - Each saved entry shows its status:
     - "Pending approval"
     - "Pending (Overtime requested from *First Last*)" for the entry that takes my week past 40 hours, and any after it
     - "Approved"
-    - "Rejected", with the reason in a tooltip
+    - "Rejected", with the reason (shown under the field in the Day view, in a tooltip in the Week grid)
   - Editing an entry that was already decided sends it back for approval and tags it "Edited".
-  - A rejected cell has a **Resubmit** button, so the same hours can go back for approval after a conversation with the manager.
+  - A rejected entry has a **Resubmit** button, so the same hours can go back for approval after a conversation with the manager.
   - When hours are rejected, my bell shows "Your 8h on *Milestone* (Mon 12 Oct) was rejected: *reason*", and opening it takes me to that week.
   - A milestone I was auto-routed to support shows a "Supporting" chip on its row.
 - **Failure:**
-  - A cell takes plain numbers only: digits and one decimal point, at most 2 digits on each side (7.5 and 7.25, not 7.255). Typed or pasted `-`, `+`, `e`, letters and spaces are dropped. The server refuses more than 2 decimal places too ("Use at most 2 decimal places").
-  - A value under 0.25 is flagged on the cell and blocks saving; 0 or empty clears a pending cell.
-  - More than 24 hours in a day is blocked before saving.
+  - An hours field takes plain numbers only: digits and one decimal point, at most 2 digits on each side (7.5 and 7.25, not 7.255). Typed or pasted `-`, `+`, `e`, letters and spaces are dropped. The server refuses more than 2 decimal places too ("Use at most 2 decimal places").
+  - A value under 0.25 is flagged on the field and blocks submitting, with a link to the day when it's another day's; 0 or empty clears a pending entry.
+  - More than 24 hours in a day is blocked before submitting, and the message links to that day.
   - A day outside the project's dates, or on a milestone I'm no longer assigned to, is refused with the server's message.
   - Going over 40 hours shows a warning but is allowed.
 - **Empty:** "You're not assigned to any milestones this week. Your project manager assigns you to milestones."
@@ -471,7 +477,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### E2. Time my work with a start/stop timer (U) — Done
 **As** an employee, **I want** to start a timer on a milestone and stop it when I'm done **so that** my hours are logged for me.
-- **Success:** one running timer at a time, a live clock in the header. **Stop your timer?** says what it adds; stopping rounds to the nearest quarter hour and keeps the hours as a **draft** of that day's cell ("Added 0.25h to Thursday's cell — open your timesheet to submit."), never submitting them. The timesheet shows the cell pre-filled and locked ("from timer, not submitted yet"), with "You have 0.25h of timer time not submitted yet — Save week to submit."; **Save week** submits it with proof of work like any hours. Entries show Tracked, Manual or Mixed.
+- **Success:** one running timer at a time, a live clock in the header. **Stop your timer?** says what it adds; stopping rounds to the nearest quarter hour and keeps the hours as a **draft** of that day's cell ("Added 0.25h to Thursday's cell — open your timesheet to submit."), never submitting them. The timesheet shows the cell pre-filled and locked ("from timer, not submitted yet"), with "You have 0.25h of timer time not submitted yet — press Submit to send it."; **Submit** sends it with proof of work like any hours. Entries show Tracked, Manual or Mixed.
 - **Warnings:** at 100% of the 8h day, the milestone's estimate or the 40h week, a banner and a toast ("You've reached your 8h for today on this timer") and the header chip turns amber. It never stops the timer.
 - **Failure:** starting a second timer is refused (`409 TIMER_RUNNING`); under 7.5 minutes adds nothing and says so; a timer left running stops at midnight New York time into a draft and tells me; if the hours can't be recorded (the day would pass 24h, the project was paused) the timer still stops and says why. Typing over a locked cell is refused (`409 TIMER_HOURS_LOCKED`).
 

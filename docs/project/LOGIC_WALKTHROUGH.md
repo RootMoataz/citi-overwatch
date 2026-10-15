@@ -128,7 +128,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  S[PUT /time-entries — save a week grid] --> V{each cell valid?<br/>a plain number, 0.25–24h, ≤ 2 decimals,<br/>assigned, in project dates, in this week}
+  S[PUT /time-entries — Submit the week] --> V{each cell valid?<br/>a plain number, 0.25–24h, ≤ 2 decimals,<br/>assigned, in project dates, in this week}
   V -- no --> VE[400 with the field / code]
   V -- yes --> G{project on hold, completed or archived,<br/>or milestone archived — and the cell changes something?}
   G -- yes --> GE["409 PROJECT_NOT_OPEN"]
@@ -155,19 +155,20 @@ flowchart TD
 - **The week save, labels, approve and reject, and the breakdown** are in [`app/features/time/service.py`](../../backend/v1/app/features/time/service.py).
 - **One alert per person-week** is guaranteed twice: by the crossing check, and by a unique constraint on `(type, subject_user_id, week_start)`.
 - **The forecast** is consumed + (the average approved cost over the last 4 complete weeks × the weeks left until the predicted end date).
-- **Input:** `_hours()` takes a JSON number or text of digits and one point only, so `"1e1"`, `"+5"`, `"-3"` and letters never become hours; negatives, more than 24, under 0.25 and a third decimal each get their own message. The grid blocks the same keys (`-`, `+`, `e`, letters) and refuses a paste that isn't already a clean value, rather than cleaning `"-3"` into `3`.
-- **24 hours a day:** `_check_daily_cap()` runs after every cell is valid and before anything is written. A day counts what the server would hold after the save: the person's pending and approved hours on live work that day, with each saved cell replacing its old value. Rejected hours and archived work don't count (spec §3.1). The grid adds up the same way and, before saving, marks that day's cells, header and total and shows "More than 24h on <day>"; Save stays disabled until it's fixed.
-- **Over 40 is a warning, not a block:** the overtime request is the point of the 40-hour rule, so the grid shows "This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request." and turns the week total amber, and the save goes through.
-- **Closed projects:** logging is open on `planned` and `active` projects. On hold pauses it, completed closes it, and archived projects or milestones can't change. `_validate_cell()` refuses a cell there with `409 PROJECT_NOT_OPEN` only when it would write something (new hours, changed hours or note, a clear, or a resubmission); an unchanged cell is skipped. The week rows carry the project's `status` and `open`, so the grid greys those rows out, disables their cells (existing hours stay visible), hides **Resubmit**, and labels them "Project on hold — logging paused" or "Project completed — logging closed".
+- **Input:** `_hours()` takes a JSON number or text of digits and one point only, so `"1e1"`, `"+5"`, `"-3"` and letters never become hours; negatives, more than 24, under 0.25 and a third decimal each get their own message. The hours field (Day view and Week grid alike) blocks the same keys (`-`, `+`, `e`, letters) and refuses a paste that isn't already a clean value, rather than cleaning `"-3"` into `3`.
+- **24 hours a day:** `_check_daily_cap()` runs after every cell is valid and before anything is written. A day counts what the server would hold after the save: the person's pending and approved hours on live work that day, with each saved cell replacing its old value. Rejected hours and archived work don't count (spec §3.1). The timesheet adds up the same way and, before saving, marks that day (its button in the week strip and its total in the Day view; the cells, header and total in the Week grid) and shows "More than 24h on <day>" with a link to jump to that day; **Submit** stays disabled until it's fixed.
+- **Over 40 is a warning, not a block:** the overtime request is the point of the 40-hour rule, so the timesheet shows "This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request." and turns the week total amber, and the save goes through.
+- **Closed projects:** logging is open on `planned` and `active` projects. On hold pauses it, completed closes it, and archived projects or milestones can't change. `_validate_cell()` refuses a cell there with `409 PROJECT_NOT_OPEN` only when it would write something (new hours, changed hours or note, a clear, or a resubmission); an unchanged cell is skipped. The week rows carry the project's `status` and `open`, so the timesheet greys those rows out, disables their fields (existing hours stay visible), hides **Resubmit**, and labels them "Project on hold — logging paused" or "Project completed — logging closed". The Day view tucks them, and completed milestones, behind "Show N closed milestones"; a completed milestone on an open project stays editable once shown (hours for a day after it was completed get the closed-milestone red flag).
 - **Who saves a week:** employees, and managers or admins whose `tracks_own_hours` an admin turned on ([`app/rules/timesheets.py`](../../backend/v1/app/rules/timesheets.py) `keeps_timesheet`). Anyone else gets `403 TIMESHEET_DISABLED` before any cell is read. The Friday reminder and the "Missing timesheets" list follow the same rule.
 - **Approve week:** `POST /approvals/approve-week` checks every entry exactly like a single approval, then writes them all in one transaction; one stale or already-decided entry stops the batch.
-- **UI:** [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx), the Timesheets area ([`TimesheetsPage.jsx`](../../frontend/src/features/timesheets/TimesheetsPage.jsx): To review, Approved, HR submission), [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx), [`BreakdownPanel.jsx`](../../frontend/src/features/approvals/BreakdownPanel.jsx) and [`NotificationBell.jsx`](../../frontend/src/components/NotificationBell.jsx).
+- **Day view, Week grid, one state.** [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx) opens on the **Day view** (the default): a strip of seven day buttons with each day's hours, then one row per milestone for the open day with its hours field, an always-visible work note (10-500 characters, "needed" when new or changed hours have no note or same-day progress update) and the saved entry's status. The open day is kept in the URL (`?week=…&day=…`; it opens on today in the current week, otherwise on Monday). The **Day / Week** toggle swaps in the **Week grid**, the earlier seven-column table, and the choice is remembered per browser in `localStorage` (`overwatch.timesheet.view`). Both read one hook, [`useTimesheetWeek.js`](../../frontend/src/features/timesheet/useTimesheetWeek.js), so typed hours and notes survive switching day or view, and the header's **Submit N changes** sends every changed cell of the week, on any day, in one `PUT /time-entries`. An error about a cell on another day names the day and links to it.
+- **UI:** [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx), [`DayView.jsx`](../../frontend/src/features/timesheet/DayView.jsx), [`WeekStrip.jsx`](../../frontend/src/features/timesheet/WeekStrip.jsx), [`WeekGrid.jsx`](../../frontend/src/features/timesheet/WeekGrid.jsx), the Timesheets area ([`TimesheetsPage.jsx`](../../frontend/src/features/timesheets/TimesheetsPage.jsx): To review, Approved, HR submission), [`ApprovalRow.jsx`](../../frontend/src/features/approvals/ApprovalRow.jsx), [`BreakdownPanel.jsx`](../../frontend/src/features/approvals/BreakdownPanel.jsx) and [`NotificationBell.jsx`](../../frontend/src/components/NotificationBell.jsx).
 
 ## 5a. Timesheet lifecycle: draft → pending → approved → submitted to HR
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Draft: typed in the grid, not saved
+  [*] --> Draft: typed on the timesheet, not submitted
   Draft --> Pending: PUT /time-entries
   Pending --> Approved: manager / admin / delegate (one entry or Approve week)
   Pending --> Rejected: with a reason
@@ -179,7 +180,7 @@ stateDiagram-v2
   ChangedAfterHR --> SubmittedToHR: next HR submission re-sends it as a correction
 ```
 
-- **Draft** is only in the browser: nothing exists on the server until the week is saved. Saving makes every new or changed cell **pending**.
+- **Draft** is only in the browser: nothing exists on the server until the week is submitted. Submitting makes every new or changed cell **pending**.
 - **Submitted to HR** is an admin action per pay period (a week up to 31 days) in [`app/features/hr/service.py`](../../backend/v1/app/features/hr/service.py). It takes every approved entry in the period not yet sent, in one transaction, locking the rows (`FOR UPDATE`) so two admins can't send the same entry. Each entry is sent once. What was sent is copied row by row into `hr_submission_entries`, so the payroll CSV of a submission never changes afterwards. There's no HR system: the submission row says "Submitted to HR (export ready)" and its **Payroll CSV** is built in the browser from `GET /hr-submissions/{id}/entries` through `lib/csv.js` (formula-injection safe): one line per person per type, Regular or Correction.
 - **Not locked (owner's decision).** Sent hours follow the normal rules: an employee can still edit them (they go back to pending) and the manager approves or rejects them again. Any edit to a sent entry sets `changed_after_hr_submission` and `hr_changed_at` and keeps `hr_submission_id`. The Timesheets area shows "Changed after HR submission — re-send" on the entry (To review) and on its week (Approved), and the admin's HR tab lists them under **Needs re-submission (N)**.
 - **Corrections:** once a changed entry is approved or rejected again it's *ready*. The next submission (any period; the admin can untick "include corrections") re-sends it as a correction row with the hours sent before (`previous_hours`): its current hours, or 0 if it was rejected. The submission's `resubmission_of` points at the submission it corrects, and the flag clears. A changed entry still pending waits.
@@ -1028,7 +1029,7 @@ change requests, the live feed and over-limit alerts) adds
 [`app/rules/timer_limits.py`](../../backend/v1/app/rules/timer_limits.py) (pure) and
 [`app/features/time/changes.py`](../../backend/v1/app/features/time/changes.py). Schema: migrations 014 and 015.
 
-### Start/stop timer: stopping keeps a draft, Save week submits it
+### Start/stop timer: stopping keeps a draft, Submit sends it
 
 ```mermaid
 sequenceDiagram
@@ -1046,7 +1047,7 @@ sequenceDiagram
   API->>DB: time_timers.tracked_hours = hours, note = note (no time entry is touched)
   API-->>Emp: "Added 1.5h to Tuesday's cell — open your timesheet to submit."
   Emp->>API: GET /time-entries → drafts + locks: the cell shows saved + draft hours, locked
-  Emp->>API: PUT /time-entries (Save week) with the cell at saved + draft
+  Emp->>API: PUT /time-entries (Submit) with the cell at saved + draft
   API->>DB: write the entry (pending, proof of work as usual),<br/>tracked_hours += draft; timers submitted_at = now, entry_id = entry
 ```
 
@@ -1069,9 +1070,9 @@ sequenceDiagram
   project closed meanwhile, nothing is recorded and `not_logged` says why, so a timer can never get stuck.
 - **Pre-filled cells.** `GET /time-entries` returns `drafts` (per cell: hours and the latest stop note) and `locks`.
   The timesheet shows the cell as saved hours + draft hours with a timer mark and "from timer, not submitted yet",
-  and a banner: "You have 2.5h of timer time not submitted yet — Save week to submit." The stop's note pre-fills the
+  and a banner: "You have 2.5h of timer time not submitted yet — press Submit to send it." The stop's note pre-fills the
   cell's work note.
-- **Save week submits.** The cell is sent at saved + draft hours, like any other change: proof of work, the 24h day,
+- **Submit sends it.** The cell is sent at saved + draft hours, like any other change: proof of work, the 24h day,
   overtime and the 40h alert, the HR-changed flag, back to pending. The server attributes the drafts of that
   person, milestone and day to the entry: `tracked_hours = min(tracked + drafts, hours)`, and marks the timers
   `submitted_at` with `entry_id`. A sent cell without a note gets the stop's note. Drafts of cells not sent stay drafts.
@@ -1120,7 +1121,7 @@ sequenceDiagram
 - **Remote stop.** Managers and admins (never executives, never the public demo admin) press **Stop timer**, write a
   message (10-500 characters) and `POST /timers/{id}/stop-remote`. Only an admin or someone who oversees that person
   or project may (`403` otherwise). The time so far becomes the employee's draft exactly as if they had stopped it
-  (locked, submitted with Save week); the timer records `stopped_by` and `stop_message`; the employee gets
+  (locked, sent with Submit); the timer records `stopped_by` and `stop_message`; the employee gets
   `TIMER_STOPPED_BY_MANAGER` ("Morgan stopped your timer on Schema Mapping: *message*"), and the message is posted in
   their one-to-one conversation (reused, or created) as "⏹ Stopped your timer on Schema Mapping (1h 20m): *message*".
   Audited as `timer_remote_stop`.
@@ -1153,7 +1154,7 @@ against three limits, each as hours already used + the running timer:
   data) stay valid; the rule applies the next time someone changes them.
 - **`PUT /time-entries`** refuses the whole save with `400 PROOF_REQUIRED` and lists the cells
   (`details.cells: [{milestone_id, milestone, work_date, reason: no_note | note_too_short}]`). The timesheet shows the
-  list and highlights the note icon under each of those cells.
+  list and highlights the work note box on each of those rows (the Week grid: the note icon under each cell).
 - **Timer stops** never fail for want of proof: the stop may carry a note; without one, and without a progress update
   that day, the hours are saved with `needs_note = true`. The employee sees "Add a note" on that cell; approvers see a
   red **No proof of work** flag. Adding the note (a normal save) or posting a progress update that day settles it.
@@ -1172,7 +1173,7 @@ The rules see every pending and approved entry of the person-week (whichever pro
 | `BACKDATED` | info | Created more than 7 days after its work date (New York dates; 7 days late is fine, 8 isn't) |
 | `OVER_PLAN` | warn | The person-week on one project is over 150% of their planned hours there (`planned_hours_per_week`); no plan, no flag |
 | `NO_ACTIVITY` | info | No sign-in and no other activity by the person that day: no audit entry (a sign-in is one), session refresh, progress update, message sent or timer started |
-| `NO_PROOF` | warn | `needs_note` timer hours with no progress update that day (only entries from before migration 015, when a stop saved hours directly; timer hours now go through Save week's proof of work) |
+| `NO_PROOF` | warn | `needs_note` timer hours with no progress update that day (only entries from before migration 015, when a stop saved hours directly; timer hours now go through Submit's proof of work) |
 
 **The go-live cutoff.** `BACKDATED` and `NO_ACTIVITY` read a sign-in trail and creation dates that hours logged before
 the feature don't have (the seeded and curated demo history was inserted, not logged through the app). So they judge

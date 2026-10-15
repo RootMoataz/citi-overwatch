@@ -158,7 +158,7 @@ Requirements the owner (**U**) added once the minimum was live, grouped by role.
 
 - [x] My week home page: hours against 40, milestones by urgency, milestones to claim
 - [x] Start/stop timer: one at a time, header clock, quarter-hour rounding, midnight auto-stop, Tracked/Manual/Mixed labels
-- [x] Timer workflow: a stop keeps a draft that pre-fills a locked timesheet cell and **Save week** submits it; **Request a change** on a locked cell goes to the manager
+- [x] Timer workflow: a stop keeps a draft that pre-fills a locked timesheet cell and **Submit** sends it; **Request a change** on a locked cell goes to the manager
 - [x] Over-limit warnings at 100% of the 8h day, the milestone's estimate or the 40h week (banner, toast, amber clock)
 - [x] **Your manager** card on My week and the person's own profile, with one press to message them
 - [x] Proof of work: a 10–500 character note or a same-day progress update on new or changed hours

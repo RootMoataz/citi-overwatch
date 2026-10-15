@@ -351,7 +351,7 @@ Who logs hours: employees always; managers and admins only when `tracks_own_hour
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week grid: rows (assigned milestones, each with `role`: `primary` or `supporting`, the `project`'s `status`, and `open`: `false` when the project is on hold or completed), entries and totals. `user` lets a manager or admin view someone else |
+| GET | `/time-entries?week=YYYY-MM-DD&user=` | The week (the Day view and the Week grid both read it): rows (assigned milestones, each with `role`: `primary` or `supporting`, the `project`'s `status`, and `open`: `false` when the project is on hold or completed), entries and totals. `user` lets a manager or admin view someone else |
 | PUT | `/time-entries` | `{week, entries: [{milestone_id, work_date, hours, note?}]}` saves a week, all or nothing. `hours: 0` clears a pending cell. Every changed entry becomes `pending`. Re-sending a **rejected** cell unchanged resubmits it. New or changed hours need proof of work (a note or a progress update that day). See the rules below |
 | GET | `/approvals?user=&project=&milestone=` | Admins and managers. Pending entries you can decide (never your own): admins all; managers their projects' and those of projects delegated to them while the delegation is active. Each item has `delegated_from`: `{id, name}` of the project's manager when it's in your queue as the delegate, otherwise `null`; `flags`: the entry's red flags (`[{code, severity, message}]`, see below); `progress_update`: `{body (first 200 characters), created_at}` of the person's progress update on that milestone that day, or `null` |
 | GET | `/time-entries/{id}/breakdown` | The budget impact of approving this entry, for whoever may decide it (the project's manager, an admin, or its active delegate). `hourly_rate` is included for admins only, because a rate reveals a salary; managers and delegates get the cost |
@@ -360,7 +360,7 @@ Who logs hours: employees always; managers and admins only when `tracks_own_hour
 | POST | `/approvals/approve-week` | Admins and managers. `{entries: [{id, expected_hours}]}`: approves one person's week in one step, all or nothing (at most 100 entries). Each entry gets the same checks as a single approval (`403 SELF_APPROVAL`, `404`, `400 NOT_PENDING`, `409 STALE_ENTRY`); entries of more than one person or week are `400 MIXED_WEEKS` → `{approved, user_id, week_start}` |
 | GET | `/timesheets/approved?from=&to=` | Admins and managers. Approved hours per person and week (default: the last 8 weeks; at most a year): admins everyone, managers the projects they manage plus anything they approved themselves. Each row: `user {id, name, username}`, `week_start`, `entry_count`, `hours`, `tracked_hours` (of those, the hours that came from timers), `projects`, `hr_submitted` (every entry sent to HR and unchanged since), `hr_submitted_count`, `hr_submitted_at`, `hr_changed_count` (entries changed after they were sent), and `cost` for admins only (cost ÷ hours would reveal a rate) |
 
-Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)), `created_at`, and from migration 014: `note` (the work note), `tracked_hours` (the hours that came from timers), `source` (`tracked` when all of them did, `manual` when none, `mixed`), and `needs_note` (timer hours saved without proof of work; `false` once a note or a progress update that day covers them). The week also carries `totals.draft` (timer hours not submitted yet; they're not in `logged` or `approved`), `drafts` (`[{milestone_id, work_date, hours, note}]`: per cell, the stopped timers' hours waiting for Save week and the latest stop note) and `locks` (`[{milestone_id, work_date, hours, draft_hours, tracked_hours, request}]`: cells with timer hours, `hours` = saved + draft, `request` = the pending change request or `null`). Managers viewing someone's week see these for their own projects only.
+Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)), `created_at`, and from migration 014: `note` (the work note), `tracked_hours` (the hours that came from timers), `source` (`tracked` when all of them did, `manual` when none, `mixed`), and `needs_note` (timer hours saved without proof of work; `false` once a note or a progress update that day covers them). The week also carries `totals.draft` (timer hours not submitted yet; they're not in `logged` or `approved`), `drafts` (`[{milestone_id, work_date, hours, note}]`: per cell, the stopped timers' hours waiting for Submit and the latest stop note) and `locks` (`[{milestone_id, work_date, hours, draft_hours, tracked_hours, request}]`: cells with timer hours, `hours` = saved + draft, `request` = the pending change request or `null`). Managers viewing someone's week see these for their own projects only.
 
 ```http
 GET /api/v1/time-entries          (as employee.demo, this week)
@@ -409,7 +409,7 @@ A hand edit keeps at most the new hours as tracked (`tracked_hours = min(tracked
 ### Timers
 
 One running timer per person, for whoever keeps a timesheet. Stopping it never submits hours: the rounded time is
-kept as a draft of that day's cell, which the person submits with **Save week** (`PUT /time-entries`). See
+kept as a draft of that day's cell, which the person submits with **Submit** (`PUT /time-entries`). See
 [LOGIC_WALKTHROUGH §28](LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags).
 
 | Method | Path | Notes |
@@ -421,7 +421,7 @@ kept as a draft of that day's cell, which the person submits with **Save week** 
 | POST | `/timers/{id}/stop-remote` | Admins and managers. `{message}` (10-500 characters, required). Stops someone's running timer: their time so far becomes their draft, `stopped_by`/`stop_message` are recorded, they get `TIMER_STOPPED_BY_MANAGER`, and the message is posted in your one-to-one conversation with them (created if needed) as "⏹ Stopped your timer on *milestone* (1h 20m): *message*". → the stop's shape plus `conversation_id`. `403 FORBIDDEN` unless you're an admin or manage the person (direct report) or the project (manager or active delegate); `400 OWN_TIMER` for your own; `409 NO_TIMER` when it already stopped |
 
 A timer is `{id, milestone {id, name}, project {id, name}, work_date, started_at, stopped_at, auto_stopped, tracked_hours, submitted, note}`
-(`tracked_hours`: what the stop recorded; `submitted`: Save week or an approved change request took it into an entry).
+(`tracked_hours`: what the stop recorded; `submitted`: Submit or an approved change request took it into an entry).
 
 ```json
 {"timer": {"id": "4be1…", "milestone": {"id": "202d…", "name": "Schema Mapping"}, "project": {"id": "86a8…", "name": "Apollo Data Migration"},
