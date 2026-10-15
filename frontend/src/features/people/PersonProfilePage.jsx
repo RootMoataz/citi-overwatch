@@ -3,6 +3,7 @@ import {
 } from '@mui/material'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { useProfile } from '../../api/queries.js'
+import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
@@ -44,6 +45,7 @@ function HistoryTable({ title, label, head, children, empty }) {
  * The server decides who may open it (404 otherwise) and only sends a salary to admins and its owner. */
 export default function PersonProfilePage() {
   const { id } = useParams()
+  const { user: viewer } = useSession()
   const profile = useProfile(id)
   if (profile.isLoading) return <Skeleton variant="rounded" height={320} />
   if (profile.error?.status === 404) {
@@ -52,6 +54,7 @@ export default function PersonProfilePage() {
   if (profile.error) return <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} />
   const { user: p, this_week: week, all_time: total, projects, milestones } = profile.data
   const overtime = Number(week.overtime) > 0
+  const own = viewer?.id != null && String(viewer.id) === String(p.id)
 
   return (
     <>
@@ -74,6 +77,11 @@ export default function PersonProfilePage() {
         <Grid size={{ xs: 12, sm: 6 }}><StatTile label="Total hours logged" value={formatHours(total.logged)} hint="All time, pending and approved" /></Grid>
         <Grid size={{ xs: 12, sm: 6 }}><StatTile label="Total hours approved" value={formatHours(total.approved)} hint="All time" /></Grid>
       </Grid>
+      {own ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+          A read-only record of your work, including finished and archived projects. Hours are changed on My timesheet while a project is open.
+        </Typography>
+      ) : null}
       <Stack sx={{ gap: 2 }}>
         <HistoryTable title="Projects" label={`Projects ${p.name} has been on`}
           head={['Project', 'Status', 'Dates', 'Planned / week', 'Hours logged', 'Hours approved']}
@@ -98,8 +106,15 @@ export default function PersonProfilePage() {
           empty={milestones.length ? null : 'No milestones yet.'}>
           {milestones.map((m) => (
             <TableRow key={m.id}>
-              <TableCell component="th" scope="row">{m.name}</TableCell>
-              <TableCell>{projectLink(m.project, m.can_open, 'milestones')}</TableCell>
+              <TableCell component="th" scope="row">
+                {m.name}
+                {m.is_archived ? <Chip size="small" variant="outlined" label="Archived" sx={{ ml: 1 }} /> : null}
+              </TableCell>
+              <TableCell>
+                {projectLink(m.project, m.can_open, 'milestones')}
+                {m.project.is_archived ? <Chip size="small" variant="outlined" label="Project archived" sx={{ ml: 1 }} />
+                  : m.project.status === 'completed' ? <Chip size="small" variant="outlined" label="Project completed" sx={{ ml: 1 }} /> : null}
+              </TableCell>
               <TableCell>{m.role === 'supporting' ? 'Supporting' : m.role === 'primary' ? 'Primary' : 'No longer assigned'}</TableCell>
               <TableCell><StatusChip status={m.status} /><DifficultyChip difficulty={m.difficulty} sx={{ ml: 0.75 }} /></TableCell>
               <TableCell>{formatDate(m.start_date)} – {formatDate(m.end_date)}</TableCell>

@@ -59,6 +59,30 @@ describe('PersonProfilePage', () => {
     expect(await screen.findByText('Profile not available')).toBeInTheDocument()
   })
 
+  test("an employee's own history lists past work on completed and archived projects, read-only", async () => {
+    const body = profile()
+    const own = { ...body, user: { ...body.user, id: users.employee.id },
+      milestones: [...body.milestones,
+        { id: 'm8', name: 'Wrap', status: 'completed', start_date: '2025-05-01', end_date: '2025-06-30', is_archived: false,
+          role: 'primary', project: { id: 'p9', name: 'Done', status: 'completed', is_archived: false }, logged_hours: 6,
+          approved_hours: 6, can_open: false, difficulty: 'medium' },
+        { id: 'm9', name: 'Old', status: 'in_progress', start_date: '2025-01-01', end_date: '2025-03-01', is_archived: true,
+          role: null, project: { id: 'p8', name: 'Shelved', status: 'active', is_archived: true }, logged_hours: 4,
+          approved_hours: 4, can_open: false, difficulty: 'easy' }] }
+    renderProfile(users.employee, own)
+    const milestones = await screen.findByRole('table', { name: /milestones ada lovelace has worked on/i })
+    const wrap = within(milestones).getByRole('rowheader', { name: 'Wrap' }).closest('tr')
+    expect(within(wrap).getByText('Project completed')).toBeInTheDocument()
+    const old = within(milestones).getByRole('rowheader', { name: /old/i }).closest('tr')
+    expect(within(old).getByText('Archived')).toBeInTheDocument()
+    expect(within(old).getByText('Shelved')).not.toHaveAttribute('href')
+    expect(within(old).getAllByText('4h')).toHaveLength(2)                   // logged and approved
+    expect(screen.getByText(/read-only record/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+  })
+
   test('shows the department the person is in', async () => {
     const body = profile()
     renderProfile(users.admin, { ...body, user: { ...body.user, department: { id: 'd1', name: 'Technology' } } })

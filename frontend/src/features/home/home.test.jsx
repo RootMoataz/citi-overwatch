@@ -30,6 +30,10 @@ const profile = {
       is_archived: false, role: null, project: { id: 'p1', name: 'Apollo' }, can_open: true, logged_hours: 5, approved_hours: 5 },
     { id: 'm3', name: 'Review', status: 'not_started', difficulty: 'medium', start_date: '2026-10-21', end_date: '2026-10-30',
       is_archived: false, role: 'supporting', project: { id: 'p2', name: 'Beacon' }, can_open: true, logged_hours: 0, approved_hours: 0 },
+    // Your own history also lists work on archived projects; it is never on your plate.
+    { id: 'm4', name: 'Shelved work', status: 'in_progress', difficulty: 'easy', start_date: '2026-10-01', end_date: '2026-10-15',
+      is_archived: false, role: 'primary', project: { id: 'p8', name: 'Shelved', status: 'active', is_archived: true }, can_open: false,
+      logged_hours: 3, approved_hours: 3 },
   ],
 }
 

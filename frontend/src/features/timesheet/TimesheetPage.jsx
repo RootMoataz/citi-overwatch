@@ -18,6 +18,7 @@ import { addDays, formatDate, formatDayLabel, formatHours, mondayOf } from '../.
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
 const CAP = 40
+const DAY_CAP = 24
 const MIN_HOURS = 0.25
 const key = (milestoneId, date) => `${milestoneId}|${date}`
 const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v))
@@ -28,8 +29,18 @@ const cleanHours = (raw) => {
   const [whole, ...rest] = String(raw).replace(/[^\d.]/g, '').split('.')
   return rest.length ? `${whole.slice(0, 2)}.${rest.join('').slice(0, 2)}` : whole.slice(0, 2)
 }
+// A paste is taken only when it is already a clean value; anything else ("-3", "1e1", "7.5h") is refused whole
+// rather than half-cleaned into a different number.
+const CLEAN_PASTE = /^\d{1,2}(\.\d{1,2})?$/
+// Keys that could start a negative, an exponent or a letter never reach the cell.
+const allowedKey = (e) => e.ctrlKey || e.metaKey || e.altKey || e.key.length > 1 || /[\d.]/.test(e.key)
 
-function CellStatus({ entry, cellLabel, onResubmit, resubmitting }) {
+// On hold pauses logging; completed closes it. The server refuses changes on both (409 PROJECT_NOT_OPEN).
+const CLOSED = { on_hold: 'Project on hold — logging paused', completed: 'Project completed — logging closed' }
+const closedLabel = (row) => (row.open === false || CLOSED[row.project?.status]
+  ? CLOSED[row.project?.status] ?? 'Logging closed on this project' : null)
+
+function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed }) {
   if (!entry) return null
   const meta = STATUS[entry.status] ?? STATUS.pending
   const label = (
@@ -40,7 +51,7 @@ function CellStatus({ entry, cellLabel, onResubmit, resubmitting }) {
       {entry.status === 'rejected' && entry.rejection_reason
         ? <Tooltip title={`Rejected: ${entry.rejection_reason}`}><span>{label}</span></Tooltip> : label}
       {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ mt: 0.5, height: 18 }} /> : null}
-      {entry.status === 'rejected' && !resubmitting ? (
+      {entry.status === 'rejected' && !resubmitting && !closed ? (
         <Button size="small" onClick={onResubmit} aria-label={`Resubmit ${cellLabel}`} sx={{ mt: 0.25, minWidth: 0, px: 0.5 }}>
           Resubmit
         </Button>
@@ -68,7 +79,10 @@ export default function TimesheetPage() {
   const rows = sheet.data?.rows ?? []
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
   const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
-  const tooMany = cellKeys.some((k) => num(valueOf(k)) > 24) || allDays.some((d) => rows.reduce((s, r) => s + num(valueOf(key(r.milestone.id, d))), 0) > 24)
+  // A day counts the same hours as the server: pending and approved entries plus whatever is being typed.
+  const dayTotal = (d) => rows.reduce((s, r) => s + (countsToward(key(r.milestone.id, d)) ? num(valueOf(key(r.milestone.id, d))) : 0), 0)
+  const overDays = allDays.filter((d) => dayTotal(d) > DAY_CAP)
+  const tooMany = cellKeys.some((k) => num(valueOf(k)) > DAY_CAP) || overDays.length > 0
   const tooFew = cellKeys.some((k) => k in drafts && tooLow(drafts[k]))
   const changed = Object.entries(drafts).filter(([k, v]) => num(v) !== num(entries[k]?.hours ?? 0) || (!entries[k] && v !== '')
     || (entries[k]?.status === 'rejected' && num(v) > 0))
@@ -108,16 +122,29 @@ export default function TimesheetPage() {
           <Button size="small" onClick={() => goTo(mondayOf(new Date()))}>This week</Button>
         </Stack>
         <Box sx={{ flexGrow: 1 }} />
-        <Typography data-testid="week-total" variant="h3" component="p"
+        <Typography data-testid="week-total" data-over={total > CAP} variant="h3" component="p"
           sx={{ color: total > CAP ? 'warning.main' : 'text.primary' }}>
           {formatHours(total)} / {CAP}h
         </Typography>
         {!desktop ? <FormControlLabel control={<Switch checked={showWeekend} onChange={(e) => setShowWeekend(e.target.checked)} />} label="Weekend" /> : null}
       </Stack>
-      {total > CAP ? <Alert severity="warning" sx={{ mb: 2 }}>Over 40 hours this week. Your manager is notified once and each entry over the mark shows as overtime.</Alert> : null}
-      {tooMany ? <Alert severity="error" sx={{ mb: 2 }}>Hours over 24 in a day can't be saved.</Alert> : null}
+      {total > CAP ? (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          This week is {formatHours(total)} — {formatHours(total - CAP)} over {CAP}h. Hours above {CAP} are sent to your manager as an overtime request.
+        </Alert>
+      ) : null}
+      {overDays.map((d) => (
+        <Alert key={d} severity="error" sx={{ mb: 1 }}>
+          <Box component="span" sx={{ fontWeight: 700 }}>More than {DAY_CAP}h on {formatDayLabel(d)}</Box>
+          <Box component="span" sx={{ display: 'block' }}>
+            That day adds up to {formatHours(dayTotal(d))} across your milestones. Lower it to save.
+          </Box>
+        </Alert>
+      ))}
+      {tooMany && !overDays.length ? <Alert severity="error" sx={{ mb: 2 }}>A cell can't hold more than {DAY_CAP} hours.</Alert> : null}
       {tooFew ? <Alert severity="error" sx={{ mb: 2 }}>Log at least {MIN_HOURS} hours, or leave the cell empty.</Alert> : null}
-      <ErrorAlert error={failure ?? sheet.error} onRetry={failure ? undefined : () => sheet.refetch()} sx={{ mb: 2 }} />
+      <ErrorAlert error={failure ?? sheet.error} title={failure ? "Couldn't save your week" : undefined}
+        onRetry={failure ? undefined : () => sheet.refetch()} sx={{ mb: 2 }} />
       {sheet.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
       {!sheet.isLoading && !sheet.error && rows.length === 0 ? (
         <EmptyState title="You're not assigned to any milestones this week"
@@ -129,20 +156,28 @@ export default function TimesheetPage() {
             <TableHead>
               <TableRow>
                 <TableCell sx={{ minWidth: 160 }}>Milestone</TableCell>
-                {days.map((d) => <TableCell key={d} align="center" sx={{ minWidth: 84 }}>{formatDayLabel(d)}</TableCell>)}
+                {days.map((d) => (
+                  <TableCell key={d} align="center" sx={{ minWidth: 84, color: overDays.includes(d) ? 'error.main' : undefined }}>
+                    {formatDayLabel(d)}
+                  </TableCell>
+                ))}
                 <TableCell align="right">Total</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {groups.map((g) => (
                 <GroupRows key={g.project.id} group={g} days={days} allDays={allDays} valueOf={valueOf} entries={entries} isDraft={(k) => k in drafts}
+                  overDays={overDays}
                   onChange={(k, v) => setDrafts((d) => ({ ...d, [k]: v }))} />
               ))}
               <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
                 <TableCell component="th" scope="row">Daily total</TableCell>
                 {days.map((d) => {
-                  const dayTotal = rows.reduce((s, r) => s + num(valueOf(key(r.milestone.id, d))), 0)
-                  return <TableCell key={d} align="center" sx={{ color: dayTotal > 24 ? 'error.main' : undefined }}>{formatHours(dayTotal)}</TableCell>
+                  const over = overDays.includes(d)
+                  return (
+                    <TableCell key={d} align="center" data-testid={`day-total-${d}`} data-over={over}
+                      sx={{ color: over ? 'error.main' : undefined }}>{formatHours(dayTotal(d))}</TableCell>
+                  )
                 })}
                 <TableCell align="right">{formatHours(total)}</TableCell>
               </TableRow>
@@ -154,7 +189,7 @@ export default function TimesheetPage() {
   )
 }
 
-function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft }) {
+function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft, overDays }) {
   return (
     <>
       <TableRow>
@@ -164,24 +199,37 @@ function GroupRows({ group, days, allDays, valueOf, entries, onChange, isDraft }
       </TableRow>
       {group.rows.map((r) => {
         const rowTotal = allDays.reduce((s, d) => s + num(valueOf(key(r.milestone.id, d))), 0)
+        const closed = closedLabel(r)
         return (
-          <TableRow key={r.milestone.id}>
+          <TableRow key={r.milestone.id} aria-disabled={closed ? true : undefined}
+            sx={closed ? { bgcolor: 'action.hover', '& th, & td': { color: 'text.disabled' } } : undefined}>
             <TableCell component="th" scope="row">
               {r.milestone.name}
               {r.role === 'supporting' ? <SupportingChip /> : null}
+              {closed ? (
+                <Tooltip title={`${closed}. Hours already logged stay visible but can't be changed.`}>
+                  <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{closed}</Typography>
+                </Tooltip>
+              ) : null}
             </TableCell>
             {days.map((d) => {
               const k = key(r.milestone.id, d)
               const value = valueOf(k)
               return (
                 <TableCell key={d} align="center" sx={{ verticalAlign: 'top' }}>
-                  <TextField value={value} onChange={(e) => onChange(k, cleanHours(e.target.value))}
-                    error={num(value) > 24 || (isDraft(k) && tooLow(value))}
+                  <TextField value={value} onChange={(e) => onChange(k, cleanHours(e.target.value))} disabled={Boolean(closed)}
+                    onKeyDown={(e) => { if (!allowedKey(e)) e.preventDefault() }}
+                    onPaste={(e) => {
+                      e.preventDefault()
+                      const text = e.clipboardData.getData('text').trim()
+                      if (CLEAN_PASTE.test(text)) onChange(k, text)
+                    }}
+                    error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(d)) || (isDraft(k) && tooLow(value))}
                     slotProps={{ htmlInput: { inputMode: 'decimal', pattern: '[0-9]{0,2}([.][0-9]{0,2})?',
                       'aria-label': `${r.milestone.name}, ${formatDayLabel(d)}`, style: { textAlign: 'center' } } }}
                     sx={{ width: 76 }} />
                   <CellStatus entry={entries[k]} cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`}
-                    resubmitting={isDraft(k)} onResubmit={() => onChange(k, String(entries[k].hours))} />
+                    resubmitting={isDraft(k)} closed={Boolean(closed)} onResubmit={() => onChange(k, String(entries[k].hours))} />
                 </TableCell>
               )
             })}

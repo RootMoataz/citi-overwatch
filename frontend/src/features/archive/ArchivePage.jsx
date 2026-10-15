@@ -3,6 +3,7 @@ import {
 } from '@mui/material'
 import { useState } from 'react'
 import { useArchive, useRestoreArchived } from '../../api/queries.js'
+import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -18,6 +19,10 @@ const TYPES = {
 const when = (iso) => (iso ? new Date(iso).toLocaleString() : '—')
 
 export default function ArchivePage() {
+  const { user } = useSession()
+  const admin = user?.role === 'admin'
+  // Managers see the projects they manage and the milestones in them; archived people are for admins only.
+  const types = Object.entries(TYPES).filter(([t]) => admin || t !== 'user')
   const archive = useArchive()
   const restore = useRestoreArchived()
   const [type, setType] = useState('')
@@ -40,11 +45,13 @@ export default function ArchivePage() {
 
   return (
     <>
-      <PageHeader title="Archive" subtitle="Everything archived, in one place. Restoring brings a record back exactly as it was." />
+      <PageHeader title="Archive" subtitle={admin
+        ? 'Everything archived, in one place. Restoring brings a record back exactly as it was.'
+        : 'Archived work from the projects you manage. You can restore milestones; only an admin can restore a project.'} />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <TextField select label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">Everything ({all.length})</MenuItem>
-          {Object.entries(TYPES).map(([t, meta]) => <MenuItem key={t} value={t}>{meta.plural} ({count(t)})</MenuItem>)}
+          {types.map(([t, meta]) => <MenuItem key={t} value={t}>{meta.plural} ({count(t)})</MenuItem>)}
         </TextField>
       </Paper>
       <ErrorAlert error={failure?.err} title={failure ? `Couldn't restore ${failure.item.name}` : undefined} sx={{ mb: 2 }} />
@@ -71,7 +78,13 @@ export default function ArchivePage() {
                   <TableCell>{when(i.archived_at)}</TableCell>
                   <TableCell>{i.archived_by?.name ?? '—'}</TableCell>
                   <TableCell align="right">
-                    <Button size="small" variant="outlined" aria-label={`Restore ${i.name}`} onClick={() => setConfirm(i)}>Restore</Button>
+                    {i.can_restore ? (
+                      <Button size="small" variant="outlined" aria-label={`Restore ${i.name}`} onClick={() => setConfirm(i)}>Restore</Button>
+                    ) : (
+                      <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                        {i.type === 'project' ? 'Only an admin can restore a project' : 'Restore its project first'}
+                      </Typography>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

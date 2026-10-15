@@ -10,15 +10,38 @@ import ArchivePage from './ArchivePage.jsx'
 
 const avery = { id: 'u-admin', name: 'Avery Admin' }
 const items = [
-  { type: 'project', id: 'p9', name: 'Gone Project', archived_at: '2026-10-13T12:00:00Z', archived_by: avery },
+  { type: 'project', id: 'p9', name: 'Gone Project', archived_at: '2026-10-13T12:00:00Z', archived_by: avery, can_restore: true },
   { type: 'milestone', id: 'm9', name: 'Dropped Milestone', archived_at: '2026-10-12T12:00:00Z', archived_by: avery,
-    project: { id: 'p1', name: 'Apollo' } },
-  { type: 'user', id: 'u9', name: 'Lee Leaver', username: 'lleaver', archived_at: '2026-10-11T12:00:00Z', archived_by: null },
+    project: { id: 'p1', name: 'Apollo' }, can_restore: true },
+  { type: 'user', id: 'u9', name: 'Lee Leaver', username: 'lleaver', archived_at: '2026-10-11T12:00:00Z', archived_by: null, can_restore: true },
 ]
 
 const renderArchive = () => renderAsUser(<ArchivePage />, { user: users.admin, route: '/archive', path: '/archive' })
 
 describe('ArchivePage', () => {
+  test('a manager sees their own archived projects read-only and can restore their milestones; no people', async () => {
+    const managerItems = [
+      { type: 'project', id: 'p7', name: 'Shelved Project', archived_at: '2026-10-13T12:00:00Z', archived_by: avery, can_restore: false },
+      { type: 'milestone', id: 'm7', name: 'Cut Milestone', archived_at: '2026-10-12T12:00:00Z', archived_by: null,
+        project: { id: 'p1', name: 'Apollo' }, can_restore: true },
+    ]
+    let restored = null
+    server.use(http.get(`${API}/archive`, () => HttpResponse.json({ items: managerItems })),
+      http.post(`${API}/milestones/m7/restore`, () => { restored = 'm7'; return HttpResponse.json({ id: 'm7' }) }))
+    renderAsUser(<ArchivePage />, { user: users.manager, route: '/archive', path: '/archive' })
+    const project = await screen.findByRole('row', { name: /shelved project/i })
+    expect(within(project).queryByRole('button')).not.toBeInTheDocument()
+    expect(project).toHaveTextContent(/only an admin can restore/i)
+    expect(screen.getByText(/projects you manage/i)).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('combobox', { name: /type/i }))
+    expect(screen.queryByRole('option', { name: /people/i })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: /restore cut milestone/i }))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /^restore$/i }))
+    await waitFor(() => expect(restored).toBe('m7'))
+  })
+
   test('lists every archived record with its type and who archived it, filterable by type', async () => {
     server.use(http.get(`${API}/archive`, () => HttpResponse.json({ items })))
     renderArchive()

@@ -77,7 +77,7 @@ function byUrgency(a, b) {
 }
 
 function MyMilestones({ milestones }) {
-  const mine = milestones.filter((m) => m.role && !m.is_archived).sort(byUrgency)
+  const mine = milestones.filter((m) => m.role && !m.is_archived && !m.project?.is_archived).sort(byUrgency)
   return (
     <Section question="My milestones" hint="Assigned to you, soonest due first.">
       {mine.length ? (

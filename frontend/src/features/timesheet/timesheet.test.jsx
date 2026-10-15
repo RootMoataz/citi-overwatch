@@ -56,7 +56,7 @@ describe('TimesheetPage', () => {
     expect(screen.getByTestId('week-total')).toHaveTextContent('17h / 40h')
     await user.type(screen.getByLabelText('Build, Wed Oct 14'), '30')
     expect(screen.getByTestId('week-total')).toHaveTextContent('47h / 40h')
-    expect(await screen.findByText(/hours over 24/i)).toBeInTheDocument()
+    expect(await screen.findByText('More than 24h on Wed Oct 14')).toBeInTheDocument()
     await user.clear(screen.getByLabelText('Build, Wed Oct 14'))
     await user.click(screen.getByRole('button', { name: /save week/i }))
     await waitFor(() => expect(puts).toBe(1))
@@ -74,14 +74,24 @@ describe('TimesheetPage', () => {
     expect(cell).toHaveValue(shown)
   })
 
-  test('pasted hours are cleaned the same way', async () => {
+  test.each([['-3', ''], ['abc', ''], ['1e1', ''], ['+5', ''], ['7.5h', ''], ['7.255', ''], ['7.5', '7.5'], [' 8 ', '8']])(
+    'pasting %j into an empty hours cell leaves %j (junk is refused whole, never half-cleaned)', async (pasted, shown) => {
+      server.use(weekHandler())
+      renderSheet()
+      const user = userEvent.setup()
+      const cell = await screen.findByLabelText('Build, Mon Oct 12')
+      await user.click(cell)
+      await user.paste(pasted)
+      expect(cell).toHaveValue(shown)
+    })
+
+  test.each(['-', '+', 'e', 'E', ',', 'x'])('the %j key is blocked outright', async (key) => {
     server.use(weekHandler())
     renderSheet()
     const user = userEvent.setup()
     const cell = await screen.findByLabelText('Build, Mon Oct 12')
-    await user.click(cell)
-    await user.paste('-3')
-    expect(cell).toHaveValue('3')
+    await user.type(cell, `7${key}5`)
+    expect(cell).toHaveValue('75')
   })
 
   test('a valid two-decimal value saves as a number, and under 0.25 is flagged', async () => {
