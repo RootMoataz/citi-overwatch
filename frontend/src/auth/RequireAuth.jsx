@@ -1,10 +1,12 @@
 import { Box, CircularProgress } from '@mui/material'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
-import EmptyState from '../components/EmptyState.jsx'
+import { NO_ACCESS } from '../app/access.js'
+import RedirectHome from '../app/RedirectHome.jsx'
 import ForcePasswordChange from './ForcePasswordChange.jsx'
 import { useSession } from './sessionContext.js'
 
-/** Guards app routes: sign-in first, then the forced password change, then the role check. */
+/** Guards app routes: sign-in first, then the forced password change, then the role check (a role that can't
+ * open the page is sent home with a message; see ROUTE_ROLES). */
 export default function RequireAuth({ roles, children }) {
   const { user, status } = useSession()
   const location = useLocation()
@@ -20,9 +22,6 @@ export default function RequireAuth({ roles, children }) {
     return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   }
   if (status === 'restricted') return <ForcePasswordChange />
-  if (roles && !roles.includes(user.role)) {
-    return <EmptyState title="You don't have access to this page"
-      description="Ask an admin if you think you should." />
-  }
+  if (roles && !roles.includes(user.role)) return <RedirectHome message={NO_ACCESS} />
   return children ?? <Outlet />
 }

@@ -14,6 +14,8 @@ function ToastProvider({ children }) {
   const value = useMemo(() => ({
     success: (message) => show('success', message),
     error: (message) => show('error', message),
+    warning: (message) => show('warning', message),
+    info: (message) => show('info', message),
   }), [show])
   return (
     <ToastContext.Provider value={value}>

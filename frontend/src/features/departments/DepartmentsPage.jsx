@@ -8,6 +8,7 @@ import {
 } from '../../api/queries.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 
@@ -57,6 +58,7 @@ export default function DepartmentsPage() {
   const [renaming, setRenaming] = useState(null)
   const [archiving, setArchiving] = useState(null)
   const [failure, setFailure] = useState(null)
+  const leaving = useRedirectOnDenied(departments.error)
   const items = departments.data?.items ?? []
 
   const add = async (e) => {
@@ -73,6 +75,7 @@ export default function DepartmentsPage() {
     try { await mutation.mutateAsync(department) } catch (err) { setFailure(err) }
   }
 
+  if (leaving) return null
   return (
     <>
       <PageHeader title="Departments"

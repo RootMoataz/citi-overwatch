@@ -21,6 +21,7 @@ import DepartmentsPage from '../features/departments/DepartmentsPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
 import { useApprovals } from '../api/queries.js'
 import { can } from '../lib/permissions.js'
+import { ROUTE_ROLES } from './access.js'
 import Layout from './Layout.jsx'
 import NotFound from './NotFound.jsx'
 
@@ -45,17 +46,17 @@ export default function App() {
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
           <Route path="timesheet" element={<TimesheetPage />} />
-          <Route path="approvals" element={<RequireAuth roles={['admin', 'manager']}><ApprovalsPage /></RequireAuth>} />
-          <Route path="requests" element={<RequireAuth roles={['admin', 'manager']}><RequestsPage /></RequireAuth>} />
-          <Route path="allocation" element={<RequireAuth roles={['admin', 'manager']}><AllocationPage /></RequireAuth>} />
-          <Route path="people" element={<RequireAuth roles={['admin']}><PeoplePage /></RequireAuth>} />
-          <Route path="people/:id" element={<RequireAuth roles={['admin']}><UserDetailPage /></RequireAuth>} />
-          {/* Every role; the server returns 404 for anyone the viewer may not see. */}
+          <Route path="approvals" element={<RequireAuth roles={ROUTE_ROLES.approvals}><ApprovalsPage /></RequireAuth>} />
+          <Route path="requests" element={<RequireAuth roles={ROUTE_ROLES.requests}><RequestsPage /></RequireAuth>} />
+          <Route path="allocation" element={<RequireAuth roles={ROUTE_ROLES.allocation}><AllocationPage /></RequireAuth>} />
+          <Route path="people" element={<RequireAuth roles={ROUTE_ROLES.people}><PeoplePage /></RequireAuth>} />
+          <Route path="people/:id" element={<RequireAuth roles={ROUTE_ROLES['people/:id']}><UserDetailPage /></RequireAuth>} />
+          {/* Every role; the server returns 404 for anyone the viewer may not see, which sends them home. */}
           <Route path="people/:id/profile" element={<PersonProfilePage />} />
           <Route path="profile" element={<ProfilePage />} />
-          <Route path="departments" element={<RequireAuth roles={['admin']}><DepartmentsPage /></RequireAuth>} />
-          <Route path="audit" element={<RequireAuth roles={['admin']}><AuditPage /></RequireAuth>} />
-          <Route path="archive" element={<RequireAuth roles={['admin', 'manager']}><ArchivePage /></RequireAuth>} />
+          <Route path="departments" element={<RequireAuth roles={ROUTE_ROLES.departments}><DepartmentsPage /></RequireAuth>} />
+          <Route path="audit" element={<RequireAuth roles={ROUTE_ROLES.audit}><AuditPage /></RequireAuth>} />
+          <Route path="archive" element={<RequireAuth roles={ROUTE_ROLES.archive}><ArchivePage /></RequireAuth>} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

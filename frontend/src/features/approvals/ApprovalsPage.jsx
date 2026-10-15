@@ -2,6 +2,7 @@ import { Button, Paper, Skeleton, Stack, Typography } from '@mui/material'
 import { useSearchParams } from 'react-router-dom'
 import { useApprovals } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import ApprovalRow from './ApprovalRow.jsx'
@@ -10,6 +11,7 @@ export default function ApprovalsPage() {
   const [params, setParams] = useSearchParams()
   const filters = Object.fromEntries(['user', 'project', 'milestone'].map((k) => [k, params.get(k)]).filter(([, v]) => v))
   const approvals = useApprovals(filters)
+  const leaving = useRedirectOnDenied(approvals.error)
   const items = approvals.data ?? []
   const groups = items.reduce((acc, item) => {
     const k = item.milestone.id
@@ -17,6 +19,7 @@ export default function ApprovalsPage() {
     acc.get(k).items.push(item)
     return acc
   }, new Map())
+  if (leaving) return null
 
   return (
     <>

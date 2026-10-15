@@ -9,6 +9,7 @@ import {
 } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -48,9 +49,11 @@ export default function UserDetailPage() {
   const [failure, setFailure] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [shown, setShown] = useState(null)
+  const leaving = useRedirectOnDenied(person.error)
   const back = <Link component={RouterLink} to="/people" underline="hover" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
     <ArrowBack fontSize="small" /> People</Link>
 
+  if (leaving) return null
   if (person.isLoading) return <Box>{back}<Skeleton variant="rounded" height={320} /></Box>
   if (person.error) return <Box>{back}<ErrorAlert error={person.error} /></Box>
   const p = person.data

@@ -65,11 +65,6 @@ describe('PersonProfilePage', () => {
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
 
-  test('someone the viewer may not see shows a not-available state', async () => {
-    renderProfile(users.employee, null, 404)
-    expect(await screen.findByText('Profile not available')).toBeInTheDocument()
-  })
-
   test("an employee's own history lists past work on completed and archived projects, read-only", async () => {
     const body = profile()
     const own = { ...body, user: { ...body.user, id: users.employee.id },

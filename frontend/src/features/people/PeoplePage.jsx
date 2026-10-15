@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUsers } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
@@ -24,6 +25,7 @@ export default function PeoplePage() {
   const [creating, setCreating] = useState(false)
   useEffect(() => { const t = setTimeout(() => setQ(search.trim()), 300); return () => clearTimeout(t) }, [search])
   const users = useUsers({ q, role, archived: archived ? 'true' : '' })
+  const leaving = useRedirectOnDenied(users.error)
   const rows = users.data?.items ?? []
   const columns = [
     { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 160, valueGetter: (_, row) => fullName(row),
@@ -34,6 +36,7 @@ export default function PeoplePage() {
     { field: 'job_title', headerName: 'Job title', flex: 1, minWidth: 140 },
     { field: 'salary', headerName: 'Salary', width: 120, valueFormatter: (v) => (v == null ? '—' : formatMoney(v)) },
   ]
+  if (leaving) return null
   return (
     <>
       <PageHeader title="People" subtitle="Create accounts, set roles and salaries, and archive people who've left."

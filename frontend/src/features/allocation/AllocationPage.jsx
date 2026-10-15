@@ -8,6 +8,7 @@ import { useMediaQuery } from 'react-responsive'
 import { useSearchParams } from 'react-router-dom'
 import { useAllocations } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
@@ -35,10 +36,12 @@ export default function AllocationPage() {
   const [params, setParams] = useSearchParams()
   const week = params.get('week') ?? mondayOf(new Date())
   const allocations = useAllocations(week)
+  const leaving = useRedirectOnDenied(allocations.error)
   const people = allocations.data ?? []
   const projects = [...new Map(people.flatMap((p) => p.projects).map((p) => [String(p.id), p])).values()]
     .sort((a, b) => a.name.localeCompare(b.name))
   const cell = (person, project) => person.projects.find((p) => String(p.id) === String(project.id))
+  if (leaving) return null
 
   return (
     <>

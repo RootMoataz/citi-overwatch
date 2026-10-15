@@ -6,6 +6,7 @@ import { useArchive, useRestoreArchived } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
@@ -29,6 +30,7 @@ export default function ArchivePage() {
   const [type, setType] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [failure, setFailure] = useState(null)
+  const leaving = useRedirectOnDenied(archive.error)
   const all = archive.data?.items ?? []
   const items = type ? all.filter((i) => i.type === type) : all
   const count = (t) => all.filter((i) => i.type === t).length
@@ -44,6 +46,7 @@ export default function ArchivePage() {
     setConfirm(null)
   }
 
+  if (leaving) return null
   return (
     <>
       <PageHeader title="Archive" subtitle={admin

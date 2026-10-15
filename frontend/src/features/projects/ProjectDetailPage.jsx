@@ -6,6 +6,7 @@ import { Link as RouterLink, useNavigate, useParams, useSearchParams } from 'rea
 import { useArchiveProject, useProject, useRestoreProject, useUpdateProject } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
@@ -25,11 +26,13 @@ export default function ProjectDetailPage() {
   const restore = useRestoreProject(id)
   const [editing, setEditing] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
+  const leaving = useRedirectOnDenied(project.error)
 
   const tab = PROJECT_TABS.some((t) => t.value === params.get('tab')) ? params.get('tab') : 'overview'
   const back = <Link component={RouterLink} to="/projects" underline="hover"
     sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}><ArrowBack fontSize="small" /> Projects</Link>
 
+  if (leaving) return null
   if (project.isLoading) return <Box>{back}<Skeleton variant="text" width={320} height={48} /><Skeleton variant="rounded" height={240} /></Box>
   if (project.error) return <Box>{back}<ErrorAlert error={project.error} onRetry={() => project.refetch()} /></Box>
 

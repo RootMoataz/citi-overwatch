@@ -4,7 +4,7 @@ import {
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { useProfile } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
-import EmptyState from '../../components/EmptyState.jsx'
+import { NO_ACCESS, useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
@@ -49,10 +49,10 @@ export default function PersonProfilePage() {
   const { id } = useParams()
   const { user: viewer } = useSession()
   const profile = useProfile(id)
+  // The server answers 404 for anyone the viewer may not see, so that reads as "no access", not "missing".
+  const leaving = useRedirectOnDenied(profile.error, { notFound: NO_ACCESS })
+  if (leaving) return null
   if (profile.isLoading) return <Skeleton variant="rounded" height={320} />
-  if (profile.error?.status === 404) {
-    return <EmptyState title="Profile not available" description="This person doesn't exist or isn't on a project you manage." />
-  }
   if (profile.error) return <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} />
   const { user: p, this_week: week, all_time: total, projects, milestones } = profile.data
   const overtime = Number(week.overtime) > 0

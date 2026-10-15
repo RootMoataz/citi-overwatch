@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApproveRequest, useRejectRequest, useRequests, useSubmitRequest } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
@@ -133,7 +134,9 @@ export default function RequestsPage() {
   const requests = useRequests(status)
   const [creating, setCreating] = useState(false)
   const [rejecting, setRejecting] = useState(null)
+  const leaving = useRedirectOnDenied(requests.error)
   const items = requests.data ?? []
+  if (leaving) return null
 
   return (
     <>

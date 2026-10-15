@@ -5,6 +5,7 @@ import {
 import { Fragment, useState } from 'react'
 import { useAuditLog, useEveryone } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
+import { useRedirectOnDenied } from '../../app/access.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
@@ -47,9 +48,11 @@ export default function AuditPage() {
   const [raw, setRaw] = useState(null)
   const audit = useAuditLog(filters)
   const people = useEveryone()
+  const leaving = useRedirectOnDenied(audit.error)
   const who = (people.data ?? []).find((p) => String(p.id) === filters.actor) ?? null
   const items = audit.data?.items ?? []
   const set = (k) => (e) => setFilters((f) => ({ ...f, [k]: e.target.value }))
+  if (leaving) return null
   return (
     <>
       <PageHeader title="Audit log" subtitle="Every change, who made it and when. Entries can't be edited or deleted." />
