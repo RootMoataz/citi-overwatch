@@ -1,0 +1,51 @@
+<!-- EmailJS template: sign-in details (welcome + admin reset). Paste into the template's HTML/code editor.
+     Subject: {{intro}}  ->  set the template Subject to:  Your ACME Scout sign-in details
+     To Email: {{to_email}}
+     Params sent by frontend/src/lib/emailRelay.js: to_email, to_name, username, temp_password, intro, signin_url -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EEF2F6;padding:32px 12px;font-family:Segoe UI,Helvetica,Arial,sans-serif;">
+  <tr>
+    <td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background:#FFFFFF;border:1px solid #D5DDE7;border-radius:12px;overflow:hidden;">
+        <tr>
+          <td style="background:#0B5CAD;padding:24px 32px;">
+            <img src="https://d3ucnz03j0sngl.cloudfront.net/brand/acme-scout-email.png" width="180" height="40" alt="ACME Scout" style="display:block;border:0;height:40px;width:180px;">
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px;color:#111C27;font-size:15px;line-height:1.6;">
+            <p style="margin:0 0 12px;font-size:20px;font-weight:600;">Hi {{to_name}},</p>
+            <p style="margin:0 0 20px;color:#3F4D5D;">{{intro}}</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F7F9FB;border:1px solid #E1E7EE;border-radius:8px;">
+              <tr>
+                <td style="padding:16px 20px;font-size:14px;color:#3F4D5D;">
+                  Username<br>
+                  <span style="font-family:Consolas,Menlo,monospace;font-size:16px;color:#111C27;font-weight:600;">{{username}}</span>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:0 20px 16px;font-size:14px;color:#3F4D5D;">
+                  Temporary password<br>
+                  <span style="font-family:Consolas,Menlo,monospace;font-size:16px;color:#111C27;font-weight:600;">{{temp_password}}</span>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:20px 0 24px;color:#3F4D5D;">You'll be asked to choose your own password the first time you sign in.</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="background:#0B5CAD;border-radius:8px;">
+                  <a href="{{signin_url}}" style="display:inline-block;padding:12px 24px;color:#FFFFFF;font-weight:600;text-decoration:none;font-size:15px;">Sign in to Scout</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 32px;border-top:1px solid #E1E7EE;color:#6B7A8C;font-size:12px;">
+            ACME Scout &middot; projects, people, hours and budgets in one place.<br>
+            If you weren't expecting this email, you can ignore it.
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
