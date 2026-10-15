@@ -242,6 +242,16 @@ describe('TimesheetPage', () => {
     expect(screen.getByRole('button', { name: 'Start timer on Build' })).toBeInTheDocument()
   })
 
+  test('a completed milestone has no timer button', async () => {
+    server.use(http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: WEEK, user: { id: users.employee.id, name: 'Eli Employee' },
+      entries: [], totals: { logged: 0, approved: 0 },
+      rows: [{ milestone: { id: 'm1', name: 'Schema Mapping', status: 'completed' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true },
+        { milestone: { id: 'm2', name: 'Build', status: 'in_progress' }, project: { id: 'p2', name: 'Atlas', status: 'active' }, open: true }] })))
+    renderAsUser(<TimesheetPage />, { user: users.employee, route: '/timesheet', path: '/timesheet' })
+    expect(await screen.findByRole('button', { name: 'Start timer on Build' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Start timer on Schema Mapping' })).not.toBeInTheDocument()
+  })
+
   test('past weeks have no timer buttons', async () => {
     server.use(weekHandler())
     renderAsUser(<TimesheetPage />, { user: users.employee, route: '/timesheet?week=2026-09-28', path: '/timesheet' })

@@ -187,6 +187,33 @@ def test_a_stop_on_a_project_closed_meanwhile_records_nothing(client, conn, cloc
     assert query_one(conn, "SELECT tracked_hours FROM time_timers")["tracked_hours"] == 0
 
 
+def test_a_timer_cannot_start_on_a_completed_milestone(client, conn, clock):
+    _, emp, _, ms, _ = world(conn)
+    conn.run("UPDATE milestones SET status = 'completed' WHERE id = :m", m=ms["id"])
+    clock.set(ny(TODAY, 9))
+    status, body, _, _ = call(client, conn, emp, "POST", "/timers", {"milestone_id": str(ms["id"])})
+    assert status == 409 and body["error"]["code"] == "PROJECT_NOT_OPEN", body
+    assert "completed" in body["error"]["message"]
+    assert query(conn, "SELECT id FROM time_timers") == []
+
+
+def test_a_running_timer_still_stops_when_its_milestone_is_completed_meanwhile(client, conn, clock):
+    _, emp, _, ms, _ = world(conn)
+    start(client, conn, clock, emp, ms)
+    conn.run("UPDATE milestones SET status = 'completed' WHERE id = :m", m=ms["id"])
+    clock.set(ny(TODAY, 10))
+    status, body, _, _ = call(client, conn, emp, "POST", "/timers/stop", {})
+    assert status == 200 and body["added_hours"] == 1
+
+
+def test_the_week_rows_carry_the_milestone_status(client, conn, clock):
+    _, emp, _, ms, _ = world(conn)
+    conn.run("UPDATE milestones SET status = 'completed' WHERE id = :m", m=ms["id"])
+    body = call(client, conn, emp, "GET", f"/time-entries?week={MONDAY}")[1]
+    by_name = {r["milestone"]["name"]: r["milestone"]["status"] for r in body["rows"]}
+    assert by_name == {"Schema Mapping": "completed", "Cutover": "in_progress"}
+
+
 def test_midnight_auto_stop_goes_to_the_draft(client, conn, clock):
     _, emp, _, ms, _ = world(conn)
     yesterday = TODAY - timedelta(days=1)

@@ -11,7 +11,7 @@ import { formatElapsed } from './timerClock.js'
 import { useTimer } from './useTimer.js'
 
 /** Start a timer on this milestone, or stop the one running on it (with its live clock).
- * While a timer runs on another milestone this one can't start: one timer at a time. */
+ * Completed milestones get no Start. While a timer runs on another milestone this one can't start: one timer at a time. */
 export default function TimerButton({ milestone, size = 'small' }) {
   const { user } = useSession()
   const { enabled, timer, elapsed } = useTimer()
@@ -32,6 +32,7 @@ export default function TimerButton({ milestone, size = 'small' }) {
       </>
     )
   }
+  if (milestone.status === 'completed') return null // finished work: no new clock (the server refuses it too)
   const blocked = demoBlocks(user, 'timer.use')
   const busy = Boolean(timer)
   const why = blocked ? DEMO_DISABLED : busy ? `Stop your timer on ${timer.milestone.name} first` : `Start a timer on ${milestone.name}`

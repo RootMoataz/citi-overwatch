@@ -1056,6 +1056,8 @@ sequenceDiagram
   (employees; managers and admins with `tracks_own_hours`), assigned to the milestone, the project planned or active,
   the day inside the project's dates. Executives are refused by the router (`READ_ONLY`), the public demo admin by
   `app/public_demo.py` (`DEMO_RESTRICTED`).
+- **Not on finished work.** A timer can't be started on a completed milestone (`409 PROJECT_NOT_OPEN`), and the Start
+  button is hidden there. Hours for earlier days can still be typed by hand (they get the closed-milestone red flag).
 - **The day it counts on** is the New York date the timer started (`work_date`), the same clock as the Friday
   reminder (the app keeps no per-user timezone; the conversion is hand-written so the Lambda needs no tz database).
 - **Rounding.** Elapsed time to the nearest quarter hour, 7.5 minutes rounding up: 7 minutes adds nothing (the person

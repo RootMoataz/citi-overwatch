@@ -311,7 +311,9 @@ def start(conn, ctx: Ctx, body: dict) -> dict:
     now = _now()
     stopped = _close_overdue_of(conn, ctx, ctx.user_id, now)
     work_date = ny_date(now)
-    _loggable(conn, ctx, milestone_id, work_date)
+    milestone = _loggable(conn, ctx, milestone_id, work_date)
+    if milestone["status"] == "completed":  # earlier days stay loggable by hand; a live clock on finished work isn't
+        raise ApiError(409, "PROJECT_NOT_OPEN", f"{milestone['name']} is completed, so a timer can't be started on it")
     with transaction(conn):
         service.lock_person(conn, ctx)
         running = _running(conn, ctx.user_id)

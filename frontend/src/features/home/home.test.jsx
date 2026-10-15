@@ -119,6 +119,22 @@ describe('HomePage by role', () => {
     expect(within(region).queryByRole('button', { name: 'Start timer on Review' })).not.toBeInTheDocument()
   })
 
+  test('a completed assigned milestone has no Start timer button', async () => {
+    const done = { ...profile.milestones[0], id: 'm9', name: 'Finished design', status: 'completed' }
+    server.use(
+      http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [profile.milestones[0], done] })),
+      http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
+      http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: '2026-10-12', entries: [], totals: { logged: 0, approved: 0 },
+        user: { id: 'u-emp', name: 'Eli Employee' },
+        rows: [{ milestone: { id: 'm1', name: 'Design', status: 'in_progress' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true },
+          { milestone: { id: 'm9', name: 'Finished design', status: 'completed' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true }] })),
+    )
+    renderAsUser(<HomePage />, { user: users.employee, route: '/' })
+    const region = await screen.findByRole('region', { name: /my milestones/i })
+    expect(await within(region).findByRole('button', { name: 'Start timer on Design' })).toBeInTheDocument()
+    expect(within(region).queryByRole('button', { name: 'Start timer on Finished design' })).not.toBeInTheDocument()
+  })
+
   test('employees with nothing to claim are told so', async () => {
     server.use(
       http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [] })),
