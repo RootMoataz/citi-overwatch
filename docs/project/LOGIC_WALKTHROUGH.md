@@ -900,9 +900,9 @@ flowchart TD
   manager (employees: opens compose with them filled in, and you press Send); open pending approvals (approvers:
   approving stays a human decision); open the at-risk project; email this report to me (opens the dashboard's dialog
   with Send to me on, via `?report=email`, and you press Send); switch theme; change the alert sound. Puppy never
-  approves, rejects, archives, deletes, or changes roles or money.
+  approves, rejects, archives, deletes, or changes roles or money. Admins also get **Create user accounts** (below).
 - **Ask:** a question box (`ask.js`), matched in the browser and never sent, stored or logged. In order, it checks:
-  1. Do-it-for-me requests, shown with the same confirmation.
+  1. Do-it-for-me requests, shown with the same confirmation. An admin asking to create accounts opens the conversation below.
   2. Requests for pay or private details, which are refused: "I keep pay and private details out of reach — ask an
      admin through the proper page."
   3. "Why is *Atlas* at risk?", answered with that project's own `at_risk_reasons` from the project list you already get.
@@ -913,6 +913,73 @@ flowchart TD
 
   A question about a person the palette's role rules hide gets "I can't share that."
 - **Sound:** the settings above.
+
+### Create user accounts with Puppy (admins)
+
+A conversation inside the Puppy panel (`CreateUsersChat.jsx`, rules in `createUsers.js`) for onboarding several people
+at once, for example the instructors.
+
+- **Who:** real admins only. The public demo admin sees **Create user accounts** under **Do it** but gets "Creating
+  accounts is disabled in the public demo." (the server refuses `POST /users` for that account anyway). Managers,
+  employees and executives don't get the action, and Ask never opens it for them.
+- **How to start:** **Do it → Create user accounts**, or ask "create users", "add users", "new accounts", "onboard
+  people" or "create accounts for the instructors". Questions about how it works ("how do I create a user?") and
+  anything about projects, milestones or skills don't start it.
+- **The conversation** (Puppy on the left with the mascot, the admin's answers on the right; **Back** and **Cancel**
+  at every step):
+  1. "What are the names of the people to add? You can paste several, separated by commas or new lines."
+  2. For anyone typed with one name only: "What's Cher's last name?" (the server requires a last name).
+  3. "Got it: 4 people. These are their usernames — click one to change it." with a chip per person
+     ("John Doe → john.doe").
+  4. "What are their email addresses? In the same order, please." then "Thanks! This is who gets which email:" and
+     a name ↔ email table.
+  5. For each person in turn, under "Person 2 of 4 · Jane Roe · jane@example.com": "What role should Jane Roe
+     have?" (**Employee**, **Manager**, **Executive**, **Admin**); for employees "Who will Jane Roe report to?"
+     (active managers and admins); then "Department for Jane Roe?" (the departments, or **Skip**). From the second
+     person on, **Same as previous** answers the manager or department question and **Use the same for everyone
+     left** copies the previous person's role, manager and department to everyone remaining.
+  6. A summary table (name, username, email, role, manager, department) with **Edit** and **Remove** on each row,
+     and: "I'll create these 4 accounts with randomly generated temporary passwords that meet the security rules,
+     and email each person their sign-in details. They'll choose their own password at first sign-in. Is that
+     okay?" **Yes, create and email** / **No, other options**.
+  7. **No** offers: **Show each password once so I can hand it over myself**, **Create the accounts without sending
+     passwords — I'll use Reset password later**, **Go back and change something**, **Cancel — create nothing**.
+  8. The end: "Done! 4 accounts created, 4 emails sent. They'll be asked to choose a password when they first sign
+     in.", an **Open … 's profile** link per person and **Create more**.
+- **Reading what was typed:** commas, semicolons and new lines separate people (so "Doe, John" is two people; the
+  admin is asked for each one's last name). Each item is split on spaces, underscores or dots: the first part is
+  the first name, the rest the last name; all-lower-case input gets capitals ("john.doe" → John Doe). An item
+  without spaces that has a dot, underscore or digit ("John_Doe3") also keeps a username made from it (john_doe3)
+  when that is valid and free. Otherwise the username is first.last (accents dropped, at most 20 characters),
+  checked with `GET /users/username-availability` (the People wizard's check) and against the rest of the batch,
+  so a second John Doe becomes john.doe2. Emails may also be separated by spaces or written as "Name <email>".
+  Puppy refuses, with the reason: no names; more than 25 people; an email where a name should be; symbols in a
+  name; a different number of emails than people ("I got 3 emails for 4 people — who's missing?", with the
+  pairing); an invalid address; the same address twice; an address an existing account (active or archived)
+  already uses.
+- **Creating:** one account at a time, 300 ms apart, through `POST /users`, the call the People page makes, so the
+  server's admin check, public demo guard, validation, password policy, must-change-password and audit log all
+  apply. Each password is made in the browser by `generatePassword()` (12 characters with upper and lower case, a
+  digit and a symbol) just before its request. The table shows live progress per row (Creating… → Created ✓ →
+  Emailed ✓ or Email failed); a failure shows the server's message, and **Retry failed** re-creates only the
+  failed rows (after an **Edit** if needed) and retries emails that didn't go out. Accounts already created are
+  never sent again.
+- **Email:** if the server emailed the details (`email_sent: true`) nothing more happens; otherwise the browser
+  relay sends the welcome email (`relayCredentials`, as the People wizard does). If neither works (locally the
+  relay isn't configured), Puppy says so and offers **Show passwords once**.
+- **Passwords:** never in the conversation, a toast, state that is rendered, storage or a log. They are held in
+  memory only for the email or for the show-once dialog, which shows one account at a time ("1 of 4 · Ada
+  Lovelace"), has copy buttons and keeps **Done** disabled (and ignores Esc) until **I've saved it** is ticked; then
+  that password is dropped. Leaving the conversation drops all of them.
+- **Leaving:** Esc or a click outside closes Puppy at once when nothing was typed; otherwise Puppy asks "Discard what
+  you've entered? Nothing has been created yet." (or warns that passwords not yet emailed or shown would be lost).
+  While accounts are being created, closing waits.
+- **Accessibility:** the conversation is a polite live region (`role="log"`); each answer box is named by Puppy's
+  question and gets focus when the question appears; buttons-only steps move focus to the question.
+- **Tests:** `createUsers.test.js` (parsing, usernames, closing lines) and `createUsersChat.test.jsx` (who sees it,
+  the YES path, each validation message, username edits, Back across people, row edits, partial failure and retry,
+  email not set up, the three other options, Cancel and Esc, and that no password is ever on screen outside the
+  show-once dialog).
 
 **Tips** (`tips.js`), at most 3:
 

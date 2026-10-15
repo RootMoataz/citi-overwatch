@@ -34,6 +34,7 @@ Each step is marked:
 | **Finalize plan** on Beacon | Checklist only; finalizing is disabled while checks fail | Yes (don't move cards) |
 | **Email this report** | Sends one email through EmailJS (free plan: 200 a month) | Yes |
 | Ctrl+K, Puppy, executive, admin tour | Nothing | Yes |
+| Create the instructors' accounts with Puppy (real admin) | Creates accounts and sends one real email each | **No, one-shot** (each email and username works once) |
 
 Rehearse only the READ and repeatable steps. Save the one-shot steps for the real run.
 
@@ -173,6 +174,49 @@ Sign out, click **Admin**. Sign in right before this section: the session lasts 
 **Admin**. "Too many demo sign-ins from your network" means 20 sign-ins in a minute; wait a minute and show
 `control-centre.png`.
 
+## 5b. Admin: create the instructors' accounts with Puppy (optional, about 1 minute)
+
+**WRITE, one-shot.** This creates real accounts on the live site and emails each person. Sign in with one of the
+private admin logins (`admin.demo2`, `admin.demo3` or `admin.demo4`; passwords are held by the owner, never shown on
+screen). **Not** `demo.admin`: there Puppy answers "Creating accounts is disabled in the public demo." (worth showing
+first if there's time).
+
+Before the talk, have the instructors' full names and email addresses ready in a note, one line each, in the same
+order. Each account sends one real email through EmailJS (free plan: 200 a month, shared with **Email this report**),
+and an address or username can only be used once, so a rehearsal with the real addresses spends them: rehearse
+locally (`admin.demo` / `Demo123!` on `localhost`) or with throwaway addresses.
+
+1. Click the dog (**Puppy assistant**) → **Ask** tab, type `create accounts for the instructors` and press Enter.
+   (Or **Do it → Create user accounts**.) Say: "Puppy is still rule-based. It asks, I answer, and nothing is
+   created until I say yes."
+2. Puppy: "What are the names of the people to add? You can paste several, separated by commas or new lines."
+   Paste the names, one per line, for example:
+
+   ```
+   Ana Instructor
+   Ben Instructor
+   Cara Instructor
+   ```
+
+   If someone has only one name, Puppy asks "What's Cara's last name?". Point at the username chips
+   ("Ana Instructor → ana.instructor"); clicking one changes it.
+3. Puppy: "What are their email addresses? In the same order, please." Paste the emails in the same order. To show
+   the checking, paste one too few first: "I got 2 emails for 3 people — who's missing?" with the pairing table.
+4. For each person ("Person 1 of 3 · Ana Instructor · …"): "What role should Ana Instructor have?" → click
+   **Executive** (read-only, sees everything except salaries) or **Manager**. Then "Department for Ana
+   Instructor?" → **Skip**. For the second person click **Use the same for everyone left**.
+5. The summary table appears with "I'll create these 3 accounts with randomly generated temporary passwords that
+   meet the security rules, and email each person their sign-in details. They'll choose their own password at first
+   sign-in. Is that okay?" Say: "Every row is still editable. The server is the guard: same endpoint, validation,
+   password policy and audit log as the People page." Click **Yes, create and email**.
+6. Each row goes Creating… → Created ✓ → Emailed ✓, then: "Done! 3 accounts created, 3 emails sent. They'll be asked
+   to choose a password when they first sign in." Say: "The passwords never appeared on screen."
+
+**If something goes wrong:** a row that says "Failed: That email is already taken" means that address already has an
+account; click **Edit** on the row, fix it, then **Retry failed**. "Email failed" means EmailJS refused (quota or
+network): click **Show passwords once**, hand them over yourself, tick **I've saved it** for each, or later use
+**Reset password** on the person's page. If the site is slow, show `docs/images/puppy.png` and move on.
+
 ## 6. Close (6:30–7:00)
 
 Say:
@@ -184,7 +228,7 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,041 backend tests at 98% coverage, 716 frontend component tests, and 6 end-to-end runs on desktop and
+> Tests: 1,041 backend tests at 98% coverage, 765 frontend component tests, and 6 end-to-end runs on desktop and
 > iPhone.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
@@ -225,7 +269,7 @@ One open kickback per milestone and one running timer per person are enforced by
 submissions keep a frozen copy of each payroll CSV.
 
 **Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (349 unit tests).
-692 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 716 component tests use Vitest
+692 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 765 component tests use Vitest
 and MSW, where an unhandled request fails the test. 6 Playwright runs cover 3 journeys on desktop Chrome and iPhone
 13. Two fail-closed tests walk every write route for the executive and demo-admin guards.
 

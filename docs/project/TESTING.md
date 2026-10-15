@@ -12,10 +12,10 @@ The tests are built for **debugging**, not only for a green tick:
 | Rules (unit) | pytest | part of 349 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 349 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
 | API (integration) | pytest + real PostgreSQL 17 | 692 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 716 (61 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Frontend (component) | Vitest + React Testing Library + MSW | 765 (63 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
-Counts as of 2026-10-15: **1,041 backend** (349 unit, 692 integration, 98% coverage) and **716 frontend** in 61 files, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-15: **1,041 backend** (349 unit, 692 integration, 98% coverage) and **765 frontend** in 63 files, all passing; see [Current results](#current-results-2026-10-15). Older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (62 of 108 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -91,9 +91,9 @@ tests/unit:        349 tests
 tests/integration: 692 tests
 
 # frontend: npx vitest run --maxWorkers=4
- Test Files  61 passed (61)
-      Tests  716 passed (716)
-   Duration  106.96s
+ Test Files  63 passed (63)
+      Tests  765 passed (765)
+   Duration  98.50s
 ```
 
 The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, 6 tests) wasn't re-run for this snapshot; its last recorded result is below.

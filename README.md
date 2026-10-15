@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,041 backend (349 unit · 692 integration, 98% coverage) · 716 frontend component (61 files) · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,041 backend (349 unit · 692 integration, 98% coverage) · 765 frontend component (63 files) · 6 end-to-end (3 journeys × desktop + mobile) — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -142,6 +142,8 @@ The **Admin demo** (the sign-in page's "Admin" button) is a separate public acco
 
 The full allow and deny lists are in `backend/v1/app/public_demo.py`; [Logic walkthrough §26](docs/project/LOGIC_WALKTHROUGH.md#26-the-public-demo-admin) explains them. Seed creates it; on an existing database run the `demo_backfill` operation (it adds `demo.admin` only if missing).
 
+**Creating several accounts at once.** Signed in as a real admin (not `demo.admin`), open Puppy and choose **Do it → Create user accounts**, or ask "create accounts for the instructors". Puppy asks for the names, then the emails, then each person's role, manager and department, shows a summary and creates nothing until you confirm. It uses the same `POST /users` as the People page and emails each person a random temporary password (through the browser email relay when the server can't), or shows each password once if you prefer. Up to 25 people per batch. The public demo admin is told it's disabled. Locally the server writes the welcome emails to `backend/v1/.outbox/`. See [Logic walkthrough §27](docs/project/LOGIC_WALKTHROUGH.md#27-puppy-the-rule-based-assistant).
+
 The published demo logins never lock and can't change their password, so nobody can lock graders out. The executive sees every project, workload, the archive and the audit log but never a salary or hourly rate, and can't change anything; on the live site it's created by the `demo_backfill` operation, which also renames an existing `executive.demo` from the earlier seed's "Eve Executive" to Moataz Hikal, Executive Sponsor (only while it still has that old name). On the live site, the other seeded accounts get random passwords. The admin logins were created with the `create_admins` operation (see [Deploy to AWS](#deploy-to-aws)); the local seed's admin login is defined in `backend/v1/app/seed.py`.
 
 Other useful commands:
@@ -159,7 +161,7 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 
 ```bash
 cd backend/v1 && python -m pytest --cov=app              # 1,041 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 716 component tests (Vitest + Testing Library)
+cd frontend && npm test                                  # 765 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint
