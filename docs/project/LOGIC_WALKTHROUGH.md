@@ -67,6 +67,7 @@ flowchart TD
 - **Login, the lockout and the password change:** [`app/features/auth/service.py`](../../backend/v1/app/features/auth/service.py).
 - **Hashing, tokens and the password policy:** [`app/security.py`](../../backend/v1/app/security.py).
 - **The restricted token** carries a claim that the router checks. [`app/router.py`](../../backend/v1/app/router.py) returns `403 PASSWORD_CHANGE_REQUIRED` for every route except the ones marked `allow_restricted=True`.
+- **Where sign-in lands:** after a deliberate sign-out (or the public demo's session ending) the next sign-in goes to home. If a session simply expired, signing in again returns to the page you were on, a deep link included, but only for the same person; a different person lands on home. [`SessionProvider.jsx`](../../frontend/src/auth/SessionProvider.jsx) keeps the `signedOut` flag and who was signed in last, and [`RequireAuth.jsx`](../../frontend/src/auth/RequireAuth.jsx) passes the return path only when it applies.
 - **UI:** [`frontend/src/auth/ForcePasswordChange.jsx`](../../frontend/src/auth/ForcePasswordChange.jsx), with the live [`PasswordPolicyChecklist`](../../frontend/src/components/PasswordPolicyChecklist.jsx).
 
 ## 3. Forgotten password
@@ -197,6 +198,16 @@ stateDiagram-v2
 - **Code:** `load_milestone()` in [`app/authz.py`](../../backend/v1/app/authz.py) lets an archived milestone through only for someone who manages its project, so other managers and employees get `404`; `restore_milestone()` asks for `manage=True`. Projects stay admin-only at the route. [`app/features/archive/service.py`](../../backend/v1/app/features/archive/service.py) filters a manager's list to `p.manager_id = me`, leaves people out, and sets `can_restore` per item.
 - **UI:** [`ArchivePage.jsx`](../../frontend/src/features/archive/ArchivePage.jsx) shows **Restore** only where `can_restore` is true and hides the People filter from managers. Milestones are archived from the project's Milestones tab.
 - **History:** a person's own profile ("My history") also lists their work on archived projects and milestones, marked *Archived* / *Project archived* / *Project completed*, with nothing editable. Totals still leave archived work out. A manager looking at someone sees live work only.
+
+## 5c. The timesheet's Month view
+
+A read-only calendar of one person's month, opened with the **Day | Week | Month** toggle (`?month=YYYY-MM`; the choice is kept in this browser, and blocked storage just means Day).
+
+- **One request.** `GET /time-entries/calendar?month=YYYY-MM` returns the grid (the Monday on or before the 1st to the Sunday on or after the last day, 4 to 6 whole weeks), the person's milestones that overlap it, their entries (every status, with the week view's `label`, `over_40` and `needs_note`) and timer drafts. A milestone you're assigned to keeps its real `role` even when it's listed only because you logged hours on it; `role: null` marks one you aren't assigned to. Permissions are the week's: your own, or a manager's or admin's view of someone they may see. Code: `calendar_range()` and the calendar handler in [`app/features/time/service.py`](../../backend/v1/app/features/time/service.py).
+- **Bars.** Each week row lays the milestones out as bars across their days, up to 3 lanes, with a "+N more milestones this week" line for the rest ([`monthLayout.js`](../../frontend/src/features/timesheet/monthLayout.js)). A bar is labelled "Name · State" when it is at least 3 columns wide and has a tooltip otherwise. State colours and stripes (waiting and blocked) come from the same theme as the timeline; an overdue milestone is marked.
+- **Day boxes.** Each day lists its hours by milestone and status: approved solid, pending outlined, rejected red with the hours struck through, timer drafts dashed ("from timer"). The day total counts pending and approved hours only; rejected and timer hours are shown but not counted, and a total over 24h turns red. All the date maths is on `YYYY-MM-DD` strings, so a daylight-saving change can't shift a day.
+- **Opening a day.** Each day is a button named like "Wed 14 Oct, 9 hours, Schema Mapping 9 hours pending". Clicking it opens the Day view on that day; on a phone the tap shows the day's details first, with **Open this day**.
+- **UI:** [`MonthView.jsx`](../../frontend/src/features/timesheet/MonthView.jsx), [`MonthBars.jsx`](../../frontend/src/features/timesheet/MonthBars.jsx), [`MonthDayBox.jsx`](../../frontend/src/features/timesheet/MonthDayBox.jsx), [`monthText.js`](../../frontend/src/features/timesheet/monthText.js) and the toggle in [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx).
 
 ## 6. The at-risk rule
 

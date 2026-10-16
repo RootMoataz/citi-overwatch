@@ -41,6 +41,14 @@ test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager
     await expect(page.getByText(/Overtime requested from/)).toHaveCount(0)
   }
 
+  // The Month view shows the same hours (Friday is the overtime day); picking a day there opens the Day view on it (on a phone, via the panel's "Open this day").
+  const friday = (await page.getByRole('button', { name: /^Fri \d/ }).first().getAttribute('aria-label')).match(/Fri \d+ \w+/)[0]
+  await page.getByRole('button', { name: 'Month', exact: true }).click()
+  await page.getByRole('button', { name: new RegExp(`^${friday}, 9 hours, overtime, Schema Mapping 9 hours pending`) }).click()
+  if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: 'Open this day' }).click()
+  await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByLabel(/^Schema Mapping, Fri/)).toHaveValue('9')
+
   await signOut(page)
   await signIn(page, 'manager.demo')
   const before = await consumed(page)
