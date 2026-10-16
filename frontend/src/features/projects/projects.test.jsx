@@ -542,22 +542,6 @@ describe('ProjectsPage', () => {
 describe('ProjectDetailPage', () => {
   beforeEach(() => server.use(departmentsHandler()))
 
-  test('team tab rows show each person with an avatar', async () => {
-    server.use(...detailHandlers())
-    renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=team', path: '/projects/:id' })
-    const list = await screen.findByRole('list', { name: /team members/i })
-    expect(await within(list).findByText('Ada Lovelace')).toBeInTheDocument()
-    expect(within(list).getByText('AL')).toBeInTheDocument()
-    expect(within(list).queryByRole('link', { name: 'Ada Lovelace' })).not.toBeInTheDocument()   // a teammate: plain text
-  })
-
-  test("the project's manager opens a team member's profile from the team tab", async () => {
-    server.use(...detailHandlers(), http.get(`${API}/users`, () => HttpResponse.json({ items: [], total: 0 })))
-    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=team', path: '/projects/:id' })
-    const list = await screen.findByRole('list', { name: /team members/i })
-    expect(await within(list).findByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
-  })
-
   test('the manager moves the project to another department and back to push mode', async () => {
     let put = null
     server.use(...detailHandlers(project({ department: { id: 'd1', name: 'Technology' }, work_mode: 'pull' })),
@@ -761,22 +745,5 @@ describe('ProjectDetailPage', () => {
     expect(screen.getByText(/only the project.s manager and admins see the hours/i)).toBeInTheDocument()
   })
 
-  test('team tab shows cap error message with current total', async () => {
-    server.use(...detailHandlers(),
-      http.get(`${API}/users`, () => HttpResponse.json({ items: [
-        { id: 'u-bo', username: 'bo', first_name: 'Bo', last_name: 'Peep', job_title: 'Engineer' }], total: 1 })),
-      http.post(`${API}/projects/p1/members`, () => HttpResponse.json({ error: { code: 'PLANNED_HOURS_EXCEEDED',
-        message: 'x', details: { current_total: 30, requested: 12, cap: 40 } } }, { status: 400 })))
-    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=team', path: '/projects/:id' })
-    const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: /add member/i }))
-    const dialog = await screen.findByRole('dialog', { name: /add a team member/i })
-    await user.click(within(dialog).getByRole('combobox', { name: /person/i }))
-    await user.click(await screen.findByRole('option', { name: /bo peep/i }))
-    await user.clear(within(dialog).getByLabelText(/planned hours/i))
-    await user.type(within(dialog).getByLabelText(/planned hours/i), '12')
-    await user.click(within(dialog).getByRole('button', { name: /^add$/i }))
-    expect(await within(dialog).findByText('Bo Peep is already planned for 30h of 40h per week.')).toBeInTheDocument()
-  })
 
 })

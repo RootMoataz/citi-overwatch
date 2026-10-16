@@ -98,10 +98,10 @@ describe('executive: read-only leadership view', () => {
     expect(screen.queryByRole('button', { name: /add milestone|new milestone/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Team' }))
-    const list = await screen.findByRole('list', { name: /team members/i })
+    const list = await screen.findByRole('table', { name: /team members/i })
     expect(await within(list).findByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
     expect(screen.queryByRole('button', { name: /add (member|person)/i })).not.toBeInTheDocument()
-    expect(within(list).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(list).queryByRole('button', { name: /more actions|remove|edit/i })).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: 'Budget' }))
     expect((await screen.findAllByText('600h')).length).toBeGreaterThan(0)

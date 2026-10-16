@@ -1,22 +1,23 @@
 import PersonAdd from '@mui/icons-material/PersonAddAlt'
+import MoreHoriz from '@mui/icons-material/MoreHoriz'
 import {
-  Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, List, ListItem, ListItemAvatar, ListItemText,
-  MenuItem,
-  Paper, Stack, TextField, Tooltip,
+  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, TextField,
+  Typography,
 } from '@mui/material'
-import Delete from '@mui/icons-material/DeleteOutlined'
-import EditIcon from '@mui/icons-material/EditOutlined'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useAddMember, useMembers, usePeoplePicker, useRemoveMember, useUpdateMember } from '../../api/queries.js'
 import SkillChips from '../../components/SkillChips.jsx'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import DataTable from '../../components/DataTable.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
+import FilterBar from '../../components/FilterBar.jsx'
+import FootNote from '../../components/FootNote.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
-import { formatHours, fullName } from '../../lib/format.js'
+import { formatDate, formatHours, fullName, nyTodayIso } from '../../lib/format.js'
 import { memberSchema } from '../../lib/schemas.js'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 import MessageButton from '../messages/MessageButton.jsx'
@@ -77,53 +78,130 @@ function MemberDialog({ projectId, member, people, onClose }) {
   )
 }
 
-export default function TeamTab({ project, manage }) {
+const nameOf = (m) => fullName(m.user)
+const skillNames = (m) => (m.user.skills ?? []).map((s) => s.name)
+const youTag = <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 20, fontSize: '0.6875rem' }} />
+
+/** A member's "⋯" (managers only): Edit planned hours, and Remove from project, which `onRemove` confirms. */
+function MemberMenu({ member, onEdit, onRemove }) {
+  const menuId = useId()
+  const [anchor, setAnchor] = useState(null)
+  const close = () => setAnchor(null)
+  return (
+    <>
+      <IconButton aria-label={`More actions for ${nameOf(member)}`} aria-haspopup="menu" aria-expanded={anchor ? 'true' : undefined}
+        aria-controls={anchor ? menuId : undefined} onClick={(e) => setAnchor(e.currentTarget)} sx={{ width: 44, height: 44 }}>
+        <MoreHoriz />
+      </IconButton>
+      <Menu id={menuId} anchorEl={anchor} open={Boolean(anchor)} onClose={close}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
+        <MenuItem onClick={() => { close(); onEdit(member) }}>Edit planned hours</MenuItem>
+        <MenuItem onClick={() => { close(); onRemove(member) }}>Remove from project</MenuItem>
+      </Menu>
+    </>
+  )
+}
+
+/**
+ * The Team tab: a summary (people and planned hours a week, "Add member" for `view.manage`), a search, and the people
+ * ordered by last name, each with Message (the server's contact list decides) and, for `view.manage`, a "⋯". Phones get cards.
+ */
+export default function TeamTab({ project, user, view }) {
+  const manage = view.manage
   const members = useMembers(project.id)
   const people = usePeoplePicker(manage)
   const remove = useRemoveMember(project.id)
   const [dialog, setDialog] = useState(null)
   const [removing, setRemoving] = useState(null)
-  const current = new Set((members.data ?? []).map((m) => String(m.user.id)))
+  const [search, setSearch] = useState('')
+  const all = members.data ?? []
+  const current = new Set(all.map((m) => String(m.user.id)))
   const available = (people.data ?? []).filter((p) => !current.has(String(p.id)))
+  const planned = all.reduce((sum, m) => sum + Number(m.planned_hours_per_week ?? 0), 0)
+  const needle = search.trim().toLowerCase()
+  const shown = all.filter((m) => !needle
+    || `${nameOf(m)}\n${m.user.job_title ?? ''}\n${skillNames(m).join('\n')}`.toLowerCase().includes(needle))
+  const isMe = (m) => user?.id != null && String(m.user.id) === String(user.id)
+  const person = (m) => ({ id: m.user.id, name: nameOf(m) })
 
+  const addButton = manage ? (
+    <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setDialog({ member: null })} sx={{ minHeight: { xs: 44, md: 'auto' } }}>
+      Add member
+    </Button>
+  ) : null
+  const menuFor = manage ? (m) => <MemberMenu member={m} onEdit={(x) => setDialog({ member: x })} onRemove={setRemoving} /> : undefined
+
+  const who = (m) => (
+    <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+      <UserAvatar userId={m.user.id} name={nameOf(m)} size={AVATAR_SIZE.row} />
+      <Box sx={{ minWidth: 0 }}>
+        <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
+            <PersonLink person={person(m)} context={{ project }} />
+          </Typography>
+          {isMe(m) ? youTag : null}
+        </Stack>
+        <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{m.user.job_title || 'No title'}</Typography>
+      </Box>
+    </Stack>
+  )
+  const skills = (m) => <SkillChips skills={m.user.skills ?? []} label={`Skills of ${nameOf(m)}`} empty="—" />
+  const message = (m) => <MessageButton person={person(m)} size="small" />
+
+  const columns = [
+    { key: 'person', header: 'Person', sortable: true, render: who,
+      sortValue: (m) => `${m.user.last_name ?? ''} ${m.user.first_name ?? ''}`.trim() },
+    { key: 'skills', header: 'Skills', render: skills },
+    { key: 'planned', header: 'Planned / week', sortable: true, sortValue: (m) => Number(m.planned_hours_per_week),
+      render: (m) => formatHours(m.planned_hours_per_week) },
+    { key: 'actions', header: 'Actions', align: 'right', render: (m) => (
+      <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>{message(m)}{menuFor?.(m)}</Stack>) },
+  ]
+  const renderCard = (m) => (
+    <Stack sx={{ gap: 1 }}>
+      {who(m)}
+      {m.user.skills?.length ? skills(m) : null}
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>{`Planned / week: ${formatHours(m.planned_hours_per_week)}`}</Typography>
+        {message(m)}
+      </Stack>
+    </Stack>
+  )
+
+  const empty = members.isSuccess && all.length === 0
   return (
     <Stack sx={{ gap: 2 }}>
-      {manage ? (
-        <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-          <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setDialog({ member: null })}>Add member</Button>
+      <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
+        <Stack sx={{ flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { sm: 'center' }, gap: 1.5 }}>
+          <Box>
+            <Typography variant="h3" component="h2">{`${all.length} team ${all.length === 1 ? 'member' : 'members'}`}</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              {`On this project · ${formatHours(planned)} planned per week`}
+            </Typography>
+          </Box>
+          {addButton}
         </Stack>
-      ) : null}
-      <ErrorAlert error={members.error} onRetry={() => members.refetch()} />
-      {members.data?.length === 0 ? (
-        <EmptyState title="Nobody on this project yet" description={manage ? 'Add people and plan their weekly hours.' : undefined} />
-      ) : (
-        <Paper variant="outlined">
-          <List aria-label="Team members" disablePadding>
-            {(members.data ?? []).map((m) => (
-              <ListItem key={m.user.id} divider secondaryAction={manage ? (
-                <Stack direction="row">
-                  <MessageButton person={{ id: m.user.id, name: fullName(m.user) }} variant="icon" />
-                  <Tooltip title="Change planned hours"><IconButton aria-label={`Change hours for ${fullName(m.user)}`}
-                    onClick={() => setDialog({ member: m })}><EditIcon /></IconButton></Tooltip>
-                  <Tooltip title="Remove from project"><IconButton aria-label={`Remove ${fullName(m.user)}`}
-                    onClick={() => setRemoving(m)}><Delete /></IconButton></Tooltip>
-                </Stack>
-              ) : <MessageButton person={{ id: m.user.id, name: fullName(m.user) }} variant="icon" />}>
-                <ListItemAvatar sx={{ minWidth: 52 }}><UserAvatar userId={m.user.id} name={fullName(m.user)} size={AVATAR_SIZE.row} /></ListItemAvatar>
-                <ListItemText primary={<PersonLink person={{ id: m.user.id, name: fullName(m.user) }} context={{ project }} />}
-                  secondary={<>
-                    {`${m.user.job_title || 'No title'} · ${formatHours(m.planned_hours_per_week)} planned per week`}
-                    <SkillChips skills={m.user.skills ?? []} label={`Skills of ${fullName(m.user)}`} sx={{ mt: 0.5 }} />
-                  </>}
-                  slotProps={{ secondary: { component: 'div' } }} />
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
-      )}
+        <ErrorAlert error={members.error} onRetry={() => members.refetch()} />
+        {empty ? (
+          <EmptyState title="Nobody on this project yet" description={manage ? 'Add people and plan their weekly hours.' : undefined} />
+        ) : (
+          <>
+            <Box sx={{ mt: 2 }}>
+              <FilterBar search={{ label: 'Search team members', placeholder: 'Search team members…', value: search, onChange: setSearch }} />
+            </Box>
+            <Box sx={{ mt: 2 }}>
+              <DataTable ariaLabel="Team members" columns={columns} rows={shown} getRowId={(m) => String(m.user.id)}
+                defaultSort={{ key: 'person', dir: 'asc' }} renderCard={renderCard} renderCardActions={menuFor}
+                loading={members.isLoading}
+                empty={<EmptyState title="No team members match" description="Try a different name, job title or skill." />} />
+            </Box>
+            <FootNote note="Planned hours are project allocations, not hours already worked." end={`As of ${formatDate(nyTodayIso())}`} />
+          </>
+        )}
+      </Paper>
       {dialog ? <MemberDialog projectId={project.id} member={dialog.member} people={available} onClose={() => setDialog(null)} /> : null}
-      <ConfirmDialog open={Boolean(removing)} title="Remove from project?" confirmLabel="Remove" busy={remove.isPending}
-        body={removing ? `${fullName(removing.user)} will also be unassigned from this project's milestones. Logged hours stay on record.` : ''}
+      <ConfirmDialog open={Boolean(removing)} title={removing ? `Remove ${nameOf(removing)} from ${project.name}?` : ''}
+        confirmLabel="Remove" busy={remove.isPending} body="They're also taken off its milestones."
         onClose={() => setRemoving(null)}
         onConfirm={async () => { await remove.mutateAsync(removing.user.id); setRemoving(null) }} />
     </Stack>
