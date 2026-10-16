@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import App from '../../app/App.jsx'
 import { api } from '../../api/client.js'
@@ -196,7 +196,13 @@ describe('where sign-in lands', () => {
 
   function Where() {
     const { pathname } = useLocation()
-    return <output aria-label="current page">{pathname}</output>
+    const navigate = useNavigate()
+    return (
+      <>
+        <output aria-label="current page">{pathname}</output>
+        <button type="button" onClick={() => navigate('/messages')}>Open Messages directly</button>
+      </>
+    )
   }
 
   async function startOn(route, u) {
@@ -300,6 +306,9 @@ describe('where sign-in lands', () => {
     await signOutFromMenu()
     server.use(noSession())
     await act(async () => { await api.refresh().catch(() => {}) })
+    // Visiting a protected page now must not make Messages the place to return to.
+    await userEvent.click(screen.getByRole('button', { name: /open messages directly/i }))
+    await screen.findByRole('heading', { name: /sign in/i })
     await signInAs(users.employee)
     expect(here()).toBe('/')
   })

@@ -21,7 +21,7 @@ export default function SessionProvider({ children }) {
       queryClient.clear()
       // A demo ending is a sign-out, and so is any late expiry after one: neither keeps a return path.
       const demo = err?.code === 'DEMO_SESSION_EXPIRED'
-      setState((s) => ({ user: null, status: 'anon', ended: demo ? 'demo' : null,
+      setState((s) => ({ user: null, status: 'anon', ended: demo ? 'demo' : (s.signedOut ? s.ended : null),
         signedOut: demo || s.signedOut, lastUserId: s.user?.id ?? s.lastUserId }))
     })
     const off = api.onSessionRefreshed((user) => alive && setState((s) => ({ ...s, user, status: statusFor(user), ended: null, signedOut: false })))
