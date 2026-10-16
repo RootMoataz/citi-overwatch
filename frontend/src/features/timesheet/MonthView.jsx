@@ -6,7 +6,7 @@ import { Link as RouterLink } from 'react-router-dom'
 import { useCalendarMonth } from '../../api/queries.js'
 import { STATUS, statusColor } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
-import { stripes } from '../../components/stateStripes.js'
+import { STRIPED, stripes } from '../../components/stateStripes.js'
 import { formatHours, todayIso } from '../../lib/format.js'
 import MonthBars from './MonthBars.jsx'
 import { DayBox, DayPanel } from './MonthDayBox.jsx'
@@ -37,6 +37,22 @@ function Legend() {
       {items.map(([label, sx]) => (
         <Stack component="li" key={label} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
           <Swatch sx={sx} />
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>{label}</Typography>
+        </Stack>
+      ))}
+    </Stack>
+  )
+}
+
+const BAR_STATES = [['Not started', 'not_started'], ['In progress', 'in_progress'], ['Ready for review', 'ready_for_review'],
+  ['Completed', 'completed'], ['Waiting (striped)', 'waiting'], ['Blocked (striped)', 'blocked']]
+
+function StateKey() {
+  return (
+    <Stack component="ul" direction="row" useFlexGap aria-label="Milestone states" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1, gap: 2, flexWrap: 'wrap' }}>
+      {BAR_STATES.map(([label, key]) => (
+        <Stack component="li" key={key} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+          <Swatch sx={{ borderRadius: 5, bgcolor: (t) => statusColor(STATUS[key], t), backgroundImage: STRIPED.has(key) ? stripes(3) : 'none' }} />
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>{label}</Typography>
         </Stack>
       ))}
@@ -136,6 +152,7 @@ export default function MonthView({ month, onMonthChange, onOpenDay }) {
           {phone ? <DayPanel date={selected} info={view.lines.get(selected)} names={view.names} today={today}
             milestones={data.milestones} onOpen={() => onOpenDay(selected)} /> : null}
           <Legend />
+          <StateKey />
           <MorePopover more={more} today={today} onClose={() => setMore(null)} />
         </>
       ) : null}

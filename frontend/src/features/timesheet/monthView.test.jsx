@@ -77,6 +77,14 @@ describe('Month view day boxes', () => {
     expect(within(box).getByText('8h')).toBeInTheDocument()
   })
 
+  test('days outside the month dim only the date number, not the lines', async () => {
+    server.use(calendar({ entries: [entry({ work_date: '2026-09-30', hours: 3 })] }))
+    render()
+    const box = await day(/^Wed 30 Sep, 3 hours/)
+    expect(box).not.toHaveStyle('opacity: 0.5')
+    expect(within(box).getByText('Schema Mapping 3h')).not.toHaveStyle('opacity: 0.5')
+  })
+
   test('a day over 24 hours says so', async () => {
     server.use(calendar({ entries: [entry({ hours: 20 }), entry({ id: 'e2', milestone_id: 'm2', hours: 6 })] }))
     render()
@@ -131,6 +139,17 @@ describe('Month view bars', () => {
     expect(bar).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m2')
   })
 
+  test('a bar 3 or more columns wide shows its state after the name; a narrower one shows the name only', async () => {
+    const short = milestone('m8', 'Sign-off', { start_date: '2026-10-14', end_date: '2026-10-15' })
+    server.use(calendar({ milestones: [m2, short] }))
+    render()
+    const wide = await screen.findByRole('link', { name: 'Build, Oct 13 to Oct 16, In progress' })
+    expect(wide).toHaveTextContent('Build · In progress')
+    const narrow = screen.getByRole('link', { name: 'Sign-off, Oct 14 to Oct 15, In progress' })
+    expect(narrow).toHaveTextContent(/^Sign-off/)
+    expect(narrow).not.toHaveTextContent('In progress')
+  })
+
   test('a bar ending this week marks its due day, and an unfinished one past its end is overdue', async () => {
     server.use(calendar({ milestones: [m2, milestone('m5', 'Discovery', { start_date: '2026-09-28', end_date: '2026-10-02' })] }))
     render()
@@ -144,10 +163,12 @@ describe('Month view bars', () => {
   test('a fourth overlapping milestone goes behind 1 more milestone this week', async () => {
     server.use(calendar({ milestones: [m1, m2, m3, m4] }))
     render()
-    await userEvent.click(await screen.findByRole('button', { name: '1 more milestone this week' }))
+    const more = await screen.findByRole('button', { name: '1 more milestone this week' })
+    expect(screen.queryByRole('link', { name: /^Hypercare/ })).not.toBeInTheDocument()
+    await userEvent.click(more)
     const list = await screen.findByRole('list', { name: 'More milestones this week' })
     expect(within(list).getByRole('link', { name: 'Hypercare, Oct 13 to Oct 15, In progress' })).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^Hypercare/ })).toBeInTheDocument() // only the popover's
+    expect(screen.getAllByRole('link', { name: /^Hypercare/ })).toHaveLength(1) // only the popover's
   })
 
   test('hidden milestones are counted in the plural too', async () => {
@@ -235,6 +256,10 @@ describe('Month view header, loading and states', () => {
     const legend = screen.getByRole('list', { name: 'Legend' })
     for (const item of ['Approved', 'Pending', 'Rejected', 'From timer', 'Due', 'Overdue']) {
       expect(within(legend).getByText(item)).toBeInTheDocument()
+    }
+    const states = screen.getByRole('list', { name: 'Milestone states' })
+    for (const item of ['Not started', 'In progress', 'Ready for review', 'Completed', 'Waiting (striped)', 'Blocked (striped)']) {
+      expect(within(states).getByText(item)).toBeInTheDocument()
     }
   })
 })

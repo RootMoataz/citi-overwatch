@@ -24,14 +24,14 @@ export function DayBox({ date, info, names, due, overtime, inMonth, weekend, pas
     <ButtonBase component="button" aria-label={name} aria-pressed={phone ? selected : undefined} onClick={() => onPick(date)}
       sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', width: '100%', height: '100%',
         textAlign: 'left', gap: 0.25, p: { xs: 0.5, sm: 0.75 }, minHeight: { xs: 56, sm: 104 },
-        opacity: inMonth ? 1 : 0.5, bgcolor: weekend ? 'action.hover' : 'transparent',
+        bgcolor: weekend ? 'action.hover' : 'transparent',
         boxShadow: (t) => {
           if (isToday) return `inset 0 0 0 2px ${t.palette.primary.main}`
           return selected ? `inset 0 0 0 2px ${t.palette.text.secondary}` : 'none'
         },
         '&:hover': { bgcolor: 'action.selected' } }}>
       <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 0.5 }}>
-        <Typography component="span" variant="body2" sx={{ fontWeight: isToday ? 700 : 500 }}>{dayNumber(date)}</Typography>
+        <Typography component="span" variant="body2" sx={{ fontWeight: isToday ? 700 : 500, color: inMonth ? 'text.primary' : 'text.disabled' }}>{dayNumber(date)}</Typography>
         {lines.length ? (
           <Typography component="span" variant="caption" sx={{ fontWeight: 700, color: total > DAY_CAP ? red : 'text.primary' }}>
             {formatHours(total)}
