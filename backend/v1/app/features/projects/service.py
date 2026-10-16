@@ -470,27 +470,70 @@ def decorated(conn, rows: list[dict]) -> list[dict]:
     return [decorate(r, milestones[str(r["id"])], consumed.get(str(r["id"]), Decimal(0))) for r in rows]
 
 
+SORTS = ("name", "status", "manager", "progress", "budget_used", "due", "risk")
+DIRS = ("asc", "desc")
+STATUS_ORDER = ("planned", "active", "on_hold", "completed")
+RISK_ORDER = ("PAST_DUE", "BUDGET_BURN", "OVERDUE_MILESTONE", "BLOCKED_MILESTONE")
+
+
+def _risk_rank(item: dict) -> int:
+    """Rank of the most severe reason (0 is worst); a project with none ranks after every reason."""
+    ranks = [RISK_ORDER.index(r) for r in item["at_risk_reasons"] if r in RISK_ORDER]
+    return min(ranks) if ranks else len(RISK_ORDER)
+
+
+_SORT_KEYS = {
+    "name": lambda i: i["name"].lower(),
+    "status": lambda i: STATUS_ORDER.index(i["status"]),
+    "manager": lambda i: i["manager"]["name"].lower(),
+    "progress": lambda i: i["progress_pct"],
+    "budget_used": lambda i: i["budget_pct"],
+    "due": lambda i: i["predicted_end_date"],
+    "risk": _risk_rank,
+}
+
+
+def sort_projects(items: list[dict], sort: str, direction: str) -> list[dict]:
+    """A sorted copy. Equal keys stay in name order (then id) whichever way it sorts, because the list is put in
+    that order first and Python's sort keeps equal keys in place even with reverse=True."""
+    ordered = sorted(items, key=lambda i: (i["name"].lower(), str(i["id"])))
+    ordered.sort(key=_SORT_KEYS[sort], reverse=direction == "desc")
+    return ordered
+
+
+def project_counts(items: list[dict]) -> dict:
+    return {"total": len(items), "active": sum(1 for i in items if i["status"] == "active"),
+            "at_risk": sum(1 for i in items if i["at_risk_reasons"])}
+
+
 def list_projects(conn, ctx: Ctx, params: dict) -> dict:
     page, size = page_params(params)
-    rows = visible_projects(conn, ctx, archived=ctx.sees_all and params.get("archived") == "true",
-                            department=params.get("department") or None)
+    sort = as_enum(params["sort"], "sort", SORTS) if params.get("sort") else "name"
+    direction = as_enum(params["dir"], "dir", DIRS) if params.get("dir") else "asc"
+    department = as_uuid(params["department"], "department") if params.get("department") else None
+    live = decorated(conn, visible_projects(conn, ctx))
+    counts = project_counts(live)  # every live project the caller can see, whatever the filters
+    items = (decorated(conn, visible_projects(conn, ctx, archived=True))
+             if ctx.sees_all and params.get("archived") == "true" else live)
+    if department:
+        items = [i for i in items if i["department"] and str(i["department"]["id"]) == department]
     if params.get("q"):
         needle = params["q"].strip().lower()
-        rows = [r for r in rows if needle in r["name"].lower() or needle in (r["description"] or "").lower()]
+        items = [i for i in items if needle in i["name"].lower() or needle in (i["description"] or "").lower()]
     if params.get("status"):
         status = as_enum(params["status"], "status", STATUSES)
-        rows = [r for r in rows if r["status"] == status]
+        items = [i for i in items if i["status"] == status]
     if params.get("manager"):
-        rows = [r for r in rows if str(r["manager_id"]) == params["manager"]]
-    items = decorated(conn, rows)
+        items = [i for i in items if str(i["manager"]["id"]) == params["manager"]]
     if params.get("at_risk") == "true":
         items = [i for i in items if i["at_risk_reasons"]]
+    items = sort_projects(items, sort, direction)
     total = len(items)
     items = items[(page - 1) * size: page * size]
     teams = _teams(conn, [str(i["id"]) for i in items])
     for item in items:
         item["team"] = teams.get(str(item["id"]), [])  # who's on it, for the list's avatar group
-    return {"items": items, "total": total}
+    return {"items": items, "total": total, "counts": counts}
 
 
 def _teams(conn, project_ids: list[str]) -> dict[str, list[dict]]:
