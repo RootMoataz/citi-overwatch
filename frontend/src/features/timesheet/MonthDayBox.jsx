@@ -31,16 +31,16 @@ function LineChip({ line, name }) {
   )
 }
 
-const SHAPE = { approved: 'circle', pending: 'ring', rejected: 'square', draft: 'dashed' }
+const SHAPE = { approved: 'circle', pending: 'ring', rejected: 'square', draft: 'dashed-square' }
 const shapeSx = (kind, t) => {
   const c = kindColor(kind, t)
   return { width: 8, height: 8, boxSizing: 'border-box', flexShrink: 0, display: 'inline-block',
     ...(kind === 'approved' ? { bgcolor: c, borderRadius: '50%' } : kind === 'pending' ? { border: `2px solid ${c}`, borderRadius: '50%' }
-      : kind === 'rejected' ? { bgcolor: c, borderRadius: '1px' } : { border: `1px dashed ${c}`, borderRadius: '50%' }) }
+      : kind === 'rejected' ? { bgcolor: c, borderRadius: '1px' } : { border: `2px dashed ${c}`, borderRadius: '1px' }) }
 }
 
 /** A status as a small shape, so phones don't rely on colour alone: approved a filled circle, pending a ring, needs revision
- * a square, a timer draft a dashed ring. In the legend it is decorative. */
+ * a square, a timer draft a dashed square. In the legend it is decorative. */
 export function StatusShape({ kind, legend }) {
   return (
     <Box component="span" data-shape={SHAPE[kind]} {...(legend ? { 'data-testid': 'legend-shape', 'aria-hidden': true } : { role: 'img', 'aria-label': KIND[kind].legend })}

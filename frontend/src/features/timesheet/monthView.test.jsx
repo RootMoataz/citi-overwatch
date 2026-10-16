@@ -226,7 +226,7 @@ describe('Month view on a phone', () => {
     const shapes = ['Approved', 'Pending', 'Needs revision'].map((n) => within(box).getByRole('img', { name: n }).getAttribute('data-shape'))
     expect(shapes).toEqual(['circle', 'ring', 'square'])
     expect(within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('legend-shape').map((e) => e.getAttribute('data-shape')))
-      .toEqual(['circle', 'ring', 'square', 'dashed'])
+      .toEqual(['circle', 'ring', 'square', 'dashed-square'])
     expect(chips(box)).toHaveLength(0) // no chips on a phone, only dots
     expect(within(screen.getByRole('list', { name: 'Legend' })).getByText('Approved')).toBeInTheDocument()
 
