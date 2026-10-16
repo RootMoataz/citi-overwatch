@@ -16,6 +16,7 @@ import { demoBlocks } from '../../lib/permissions.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import { useBreadcrumb } from '../../app/breadcrumbs.js'
 import { fullName } from '../../lib/format.js'
 import ShowOnceDialog from './ShowOnceDialog.jsx'
 import { relayCredentials } from '../../lib/emailRelay.js'
@@ -57,6 +58,7 @@ export default function UserDetailPage() {
   const [confirm, setConfirm] = useState(null)
   const [shown, setShown] = useState(null)
   const leaving = useRedirectOnDenied(person.error)
+  useBreadcrumb(person.data ? fullName(person.data) : undefined)
   const back = <Link component={RouterLink} to="/people" underline="hover" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
     <ArrowBack fontSize="small" /> People</Link>
 

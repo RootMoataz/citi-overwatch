@@ -13,6 +13,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import RiskBadges from '../../components/RiskBadges.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { can } from '../../lib/permissions.js'
+import { useBreadcrumb } from '../../app/breadcrumbs.js'
 import { projectTabs } from './tabs.js'
 import ProjectForm from './ProjectForm.jsx'
 
@@ -28,6 +29,7 @@ export default function ProjectDetailPage() {
   const [editing, setEditing] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const leaving = useRedirectOnDenied(project.error)
+  useBreadcrumb(project.data?.name)
 
   const back = <Link component={RouterLink} to="/projects" underline="hover"
     sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}><ArrowBack fontSize="small" /> Projects</Link>

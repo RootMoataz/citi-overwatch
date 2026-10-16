@@ -3,11 +3,12 @@ import Forum from '@mui/icons-material/ForumOutlined'
 import { Box, Button, Paper } from '@mui/material'
 import { useMediaQuery } from 'react-responsive'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useBreadcrumb } from '../../app/breadcrumbs.js'
 import { useConversations } from '../../api/messages.js'
 import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
-import { directWith } from '../../lib/messaging.js'
+import { conversationTitle, directWith } from '../../lib/messaging.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import ComposeDialog from './ComposeDialog.jsx'
 import ConversationList from './ConversationList.jsx'
@@ -26,6 +27,8 @@ export default function MessagesPage() {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const conversations = useConversations({ fast: true })
   const to = params.get('to')
+  const open = id ? conversations.data?.items?.find((c) => String(c.id) === String(id)) : null
+  useBreadcrumb(open ? conversationTitle(open, user) : undefined)
   const composing = params.has('compose') || Boolean(to)
 
   if (to && conversations.data) {

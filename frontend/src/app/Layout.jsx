@@ -24,6 +24,8 @@ import { ROLE_LABEL } from '../lib/labels.js'
 import { EASE, useCalmMotion } from '../lib/motion.js'
 import { DEMO_DISABLED, can, demoBlocks } from '../lib/permissions.js'
 import { useDemoNotice } from '../lib/demoSession.js'
+import Breadcrumbs from './Breadcrumbs.jsx'
+import { BreadcrumbProvider } from './breadcrumbs.js'
 import { DemoBanner, DemoChip, DemoWelcome } from './DemoSession.jsx'
 import { useColorMode } from './colorMode.js'
 import { COLLAPSED_WIDTH, DRAWER_WIDTH, NAV } from './nav.jsx'
@@ -146,6 +148,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
   )
 
   return (
+    <BreadcrumbProvider>
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="fixed" color="inherit" elevation={0}
         sx={{ borderBottom: 1, borderColor: 'divider', width: desktop ? `calc(100% - ${sidebarWidth}px)` : '100%',
@@ -157,6 +160,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
             </IconButton>
           ) : null}
           {!desktop ? <BrandLogo size={30} /> : null}
+          <Breadcrumbs user={user} desktop={desktop} />
           <Box sx={{ flexGrow: 1 }} />
           <DemoChip notice={demo} />
           <Box sx={{ mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
@@ -232,5 +236,6 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
         </motion.div>
       </Box>
     </Box>
+    </BreadcrumbProvider>
   )
 }
