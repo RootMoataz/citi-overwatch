@@ -192,11 +192,11 @@ describe('where sign-in lands', () => {
   const ready = (u) => ({ ...u, must_change_password: false })
   const restoreAs = (u) => http.post(`${API}/auth/refresh`, () => HttpResponse.json({ access_token: 't', user: ready(u) }))
   const loggedOut = () => http.post(`${API}/auth/logout`, () => new HttpResponse(null, { status: 204 }))
-  const here = () => screen.getByTestId('where').textContent
+  const here = () => screen.getByRole('status', { name: 'current page' }).textContent
 
   function Where() {
     const { pathname } = useLocation()
-    return <output data-testid="where">{pathname}</output>
+    return <output aria-label="current page">{pathname}</output>
   }
 
   async function startOn(route, u) {
@@ -274,6 +274,32 @@ describe('where sign-in lands', () => {
     await userEvent.click(await screen.findByRole('link', { name: /messages/i }))
     expect(here()).toBe('/messages')
     await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })
+    await signInAs(users.employee)
+    expect(here()).toBe('/')
+  })
+
+  test('the server ending a demo session before the timer lands the next sign-in on home', async () => {
+    let restored = false
+    server.use(http.post(`${API}/auth/refresh`, () => {
+      if (restored) return HttpResponse.json({ error: { code: 'DEMO_SESSION_EXPIRED', message: 'ended' } }, { status: 401 })
+      restored = true
+      return HttpResponse.json({ access_token: 't', user: ready(users.employee) })
+    }), dashboardStub())
+    renderWithProviders(<><App /><Where /></>, { route: '/' })
+    await screen.findByRole('navigation', { name: /main/i })
+    server.use(http.get(`${API}/conversations`, () => HttpResponse.json(
+      { error: { code: 'TOKEN_EXPIRED', message: 'expired' } }, { status: 401 })))
+    await userEvent.click(within(screen.getByRole('navigation', { name: /main/i })).getByRole('link', { name: /messages/i }))
+    await screen.findByText('Your 5-minute demo session has ended.')
+    await signInAs(users.employee)
+    expect(here()).toBe('/')
+  })
+
+  test('a late expiry after a sign-out does not bring the return path back', async () => {
+    await startOn('/messages', users.employee)
+    await signOutFromMenu()
+    server.use(noSession())
+    await act(async () => { await api.refresh().catch(() => {}) })
     await signInAs(users.employee)
     expect(here()).toBe('/')
   })

@@ -19,10 +19,12 @@ export default function SessionProvider({ children }) {
     api.onSessionExpired((err) => {
       if (!alive) return
       queryClient.clear()
-      setState((s) => ({ user: null, status: 'anon', ended: err?.code === 'DEMO_SESSION_EXPIRED' ? 'demo' : null,
-        signedOut: false, lastUserId: s.user?.id ?? s.lastUserId }))
+      // A demo ending is a sign-out, and so is any late expiry after one: neither keeps a return path.
+      const demo = err?.code === 'DEMO_SESSION_EXPIRED'
+      setState((s) => ({ user: null, status: 'anon', ended: demo ? 'demo' : null,
+        signedOut: demo || s.signedOut, lastUserId: s.user?.id ?? s.lastUserId }))
     })
-    const off = api.onSessionRefreshed((user) => alive && setState({ user, status: statusFor(user), ended: null }))
+    const off = api.onSessionRefreshed((user) => alive && setState((s) => ({ ...s, user, status: statusFor(user), ended: null, signedOut: false })))
     // A failed restore keeps the reason the expiry handler just recorded.
     api.refresh().catch(() => alive && setState((s) => ({ ...s, user: null, status: 'anon' })))
     return () => { alive = false; off() }
@@ -39,7 +41,7 @@ export default function SessionProvider({ children }) {
     const data = await api.post('/auth/change-password',
       { current_password: currentPassword, new_password: newPassword })
     api.setToken(data.access_token)
-    setState({ user: data.user, status: statusFor(data.user), ended: null })
+    setState((s) => ({ ...s, user: data.user, status: statusFor(data.user), ended: null, signedOut: false }))
     return data.user
   }, [])
 
