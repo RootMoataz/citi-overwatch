@@ -44,7 +44,7 @@ export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, lo
           <li key={getRowId ? getRowId(row) : row.id} {...liProps}>
             <Card sx={cardSx}>
               {clickable ? (
-                <CardActionArea onClick={() => onRowClick(row)}><CardContent>{renderCard(row)}</CardContent></CardActionArea>
+                <CardActionArea onClick={(e) => { if (e.currentTarget.contains(e.target)) onRowClick(row) }}><CardContent>{renderCard(row)}</CardContent></CardActionArea>
               ) : <CardContent>{renderCard(row)}</CardContent>}
             </Card>
           </li>

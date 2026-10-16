@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Menu, MenuItem } from '@mui/material'
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
@@ -223,6 +224,31 @@ describe('DataTable', () => {
     renderWithProviders(<DataTable {...base} columns={cols} onRowOpen={onRowOpen} />)
     await userEvent.click(screen.getByRole('button', { name: 'Open Alpha' }))
     expect(onInner).toHaveBeenCalledWith(2)
+    expect(onRowOpen).not.toHaveBeenCalled()
+  })
+
+  test('a click in a menu opened from a cell does not open the row', async () => {
+    const onRowOpen = vi.fn()
+    const onPick = vi.fn()
+    function Cell() {
+      const [anchor, setAnchor] = useState(null)
+      return (
+        <>
+          <button onClick={(e) => setAnchor(e.currentTarget)}>More</button>
+          <Menu open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}>
+            <MenuItem onClick={() => { onPick(); setAnchor(null) }}>Edit details</MenuItem>
+          </Menu>
+        </>
+      )
+    }
+    const cols = [{ key: 'name', header: 'Name', render: (r) => (r.id === 1 ? <Cell /> : r.name) }]
+    renderWithProviders(<DataTable {...base} columns={cols} onRowOpen={onRowOpen} />)
+    await userEvent.click(screen.getByRole('button', { name: 'More' }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Edit details' }))
+    expect(onPick).toHaveBeenCalledTimes(1)
+    expect(onRowOpen).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'More' }))
+    await userEvent.click(document.querySelector('.MuiBackdrop-root'))
     expect(onRowOpen).not.toHaveBeenCalled()
   })
 

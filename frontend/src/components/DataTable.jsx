@@ -148,6 +148,8 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
                 return (
                   <TableRow key={id} hover={Boolean(onRowOpen)} onClick={onRowOpen ? (e) => {
                     const inner = e.target.closest?.(INTERACTIVE)
+                    // A portalled menu or backdrop opened from a cell bubbles here through React but is not inside the row.
+                    if (!e.currentTarget.contains(e.target)) return
                     if (inner && e.currentTarget.contains(inner)) return
                     onRowOpen(row)
                   } : undefined}
