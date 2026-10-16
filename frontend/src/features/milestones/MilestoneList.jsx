@@ -7,30 +7,17 @@ import DataTable from '../../components/DataTable.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { effortText } from '../../lib/estimates.js'
 import { formatDate, formatHours, nyTodayIso } from '../../lib/format.js'
+import { STATUS_ORDER, assigneePeople, predecessorNames, stateOf } from './milestoneOrder.js'
 
-// The status bar's order (Part C), which the Status column sorts by.
-const STATUS_ORDER = ['completed', 'ready_for_review', 'in_progress', 'not_started', 'waiting', 'blocked']
 const NARROW = ['index', 'name', 'status']
 const EFFORT_INFO = 'Logged counts pending and approved hours of everyone on the milestone.'
 
-const stateOf = (m) => [m.display_status, m.status].find((s) => STATUS_ORDER.includes(s)) ?? 'not_started'
 const firstName = (name) => String(name ?? '').split(' ')[0]
 const youTag = <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 20, fontSize: '0.6875rem' }} />
 
-/** Primary assignees first, then the people only supporting. */
-function assigneesOf(m) {
-  const supporting = new Set((m.supporting_ids ?? []).map(String))
-  const ordered = [...(m.assignees ?? [])].sort((a, b) => supporting.has(String(a.id)) - supporting.has(String(b.id)))
-  const mixed = ordered.some((a) => supporting.has(String(a.id)))
-  return ordered.map((a) => {
-    const helper = supporting.has(String(a.id))
-    return { id: a.id, name: a.name, detail: helper ? 'Supporting' : 'Primary', highlight: mixed && !helper }
-  })
-}
-
 /** Up to three avatars, then "+N" for the rest, then everyone's first name. */
 function Assignees({ milestone: m }) {
-  const people = assigneesOf(m)
+  const people = assigneePeople(m)
   if (!people.length) return <Typography variant="body2" sx={{ color: 'text.secondary' }}>Unassigned</Typography>
   const rest = people.slice(3)
   const others = rest.map((p) => p.name).join(', ')
@@ -61,15 +48,15 @@ function PendingChip({ pending }) {
  * list in the API's dependency order and gives each row its "#" and its dependencies' names). Columns follow the
  * viewer: Approvals for `view.decides`, Your hours for `view.mine`, and the "⋯" from `menuFor(milestone)` when given.
  * `narrow` (a panel is open beside it) keeps #, Milestone and Status, where the pending chip then sits. The name is a
- * button, the row's one keyboard target; a click anywhere on the row opens it too (`onOpen`). Phones get cards.
+ * button, the row's one keyboard target; a click anywhere on the row opens it too (`onOpen`). Phones get cards, with
+ * the "⋯" beside each card's tap area.
  */
 export default function MilestoneList({ items, all = items, view, pendingByMilestone, myHoursByMilestone, selectedId, narrow,
   onOpen, menuFor, loading = false, empty }) {
   const today = nyTodayIso()
-  const byId = Object.fromEntries(all.map((m) => [String(m.id), m]))
   const position = Object.fromEntries(all.map((m, i) => [String(m.id), i + 1]))
   const dependency = (m) => {
-    const names = (m.predecessors ?? []).map((id) => byId[String(id)]?.name).filter(Boolean)
+    const names = predecessorNames(m, all)
     return names.length ? `Dependency: after ${names.join(', ')}` : 'Dependency: None'
   }
   const pendingOf = (m) => pendingByMilestone?.[String(m.id)]
@@ -131,7 +118,7 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
       </Stack>) },
   ]
 
-  // Phones: the whole card is the button, so it holds no buttons of its own; the "⋯" is in the panel's header.
+  // Phones: the card's tap area is a button, so it holds no buttons; the "⋯" sits beside it (`renderCardActions`).
   const renderCard = (m) => (
     <Stack data-milestone-card={m.id} sx={{ gap: 0.75 }}>
       <Box>
@@ -145,7 +132,7 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
       <CardLine label="Planned dates">{dates(m)}</CardLine>
       <CardLine label="Effort">{effort(m)}</CardLine>
       <CardLine label="Assignees">
-        {m.assignees?.length ? assigneesOf(m).map((p) => firstName(p.name)).join(', ') : 'Unassigned'}
+        {m.assignees?.length ? assigneePeople(m).map((p) => firstName(p.name)).join(', ') : 'Unassigned'}
       </CardLine>
       {view.mine ? <CardLine label="Your hours">{myHours(m)}</CardLine> : null}
     </Stack>
@@ -154,6 +141,7 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
   return (
     <DataTable ariaLabel="Milestones" columns={columns} rows={items} getRowId={(m) => String(m.id)}
       visibleKeys={narrow ? NARROW : undefined} onRowOpen={onOpen} selectedId={selectedId} renderCard={renderCard}
+      renderCardActions={menuFor}
       loading={loading} empty={empty} />
   )
 }

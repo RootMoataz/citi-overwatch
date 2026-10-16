@@ -34,10 +34,7 @@ import MilestoneHistory from './MilestoneHistory.jsx'
 import MilestoneMenu from './MilestoneMenu.jsx'
 import MilestoneNotes from './MilestoneNotes.jsx'
 import WorkLog from './WorkLog.jsx'
-
-const STATES = ['completed', 'ready_for_review', 'in_progress', 'not_started', 'waiting', 'blocked']
-const stateOf = (m) => [m.display_status, m.status].find((s) => STATES.includes(s)) ?? 'not_started'
-const namesOf = (ids, items) => (ids ?? []).map((id) => items.find((x) => String(x.id) === String(id))?.name).filter(Boolean)
+import { assigneePeople, predecessorNames, stateOf } from './milestoneOrder.js'
 
 // The sections of the milestone's details, one open at a time (Details first).
 const SECTIONS = [
@@ -58,14 +55,8 @@ function Fact({ icon: Icon, children }) {
 
 /** The three facts under the description: dates and dependencies, the people, and the hours. */
 function Facts({ milestone: m, items, project, myHours }) {
-  const after = namesOf(m.predecessors, items)
-  const supporting = new Set((m.supporting_ids ?? []).map(String))
-  const ordered = [...(m.assignees ?? [])].sort((a, b) => supporting.has(String(a.id)) - supporting.has(String(b.id)))
-  const mixed = ordered.some((a) => supporting.has(String(a.id)))
-  const people = ordered.map((a) => {
-    const helper = supporting.has(String(a.id))
-    return { id: a.id, name: a.name, detail: helper ? 'Supporting' : 'Primary', highlight: mixed && !helper }
-  })
+  const after = predecessorNames(m, items)
+  const people = assigneePeople(m)
   const logged = Number(m.logged_hours) || 0
   const hours = m.estimated_hours != null
     ? `${formatHours(logged)} logged / ${formatHours(m.estimated_hours)} estimated` : `${formatHours(logged)} logged`
@@ -81,10 +72,10 @@ function Facts({ milestone: m, items, project, myHours }) {
           <>
             <AvatarStack people={people} max={4} label={`People on ${m.name}`} />
             <Typography variant="body2" component="div" sx={{ minWidth: 0 }}>
-              {ordered.map((a, i) => (
-                <Fragment key={a.id}>
-                  {i ? ', ' : ''}<PersonLink person={a} context={{ project }} />
-                  {supporting.has(String(a.id)) ? <SupportingChip person={a.name} /> : null}
+              {people.map((person, i) => (
+                <Fragment key={person.id}>
+                  {i ? ', ' : ''}<PersonLink person={person} context={{ project }} />
+                  {person.supporting ? <SupportingChip person={person.name} /> : null}
                 </Fragment>
               ))}
             </Typography>
@@ -109,7 +100,7 @@ function MilestoneBody({ milestone: m, project, items, manage, decides, onEdit }
   const [section, setSection] = useState('details')
   const [kicking, setKicking] = useState(false)
   const [failure, setFailure] = useState(null)
-  const waitingOn = namesOf(m.predecessors, items)
+  const waitingOn = predecessorNames(m, items)
   const actions = statusActions(m, { manager: manage, assignee: m.is_assignee })
 
   const run = async (action) => {
@@ -181,10 +172,10 @@ function MilestoneBody({ milestone: m, project, items, manage, decides, onEdit }
  * name (H2) and its state, then "Edit" and the "⋯" for managers, and Close. Under it: the description and three facts
  * (dates and dependencies, people, hours with "· You: <N>h" for an assignee). Below the facts comes `children` when
  * given, otherwise the milestone's details and actions. Below `lg` the header has less room, so the state chip opens
- * the body instead and Edit is an icon.
+ * the body instead and Edit is an icon. `onArchiveStart` and `onArchiveFailed` go to the "⋯" (see MilestoneMenu).
  */
-export default function MilestonePanel({ project, milestone, items, members, user, view, myHours, onClose, returnFocus,
-  onOpenPanel, onWarning, onArchive, list, children }) {
+export default function MilestonePanel({ project, milestone, items, members, view, myHours, onClose, returnFocus,
+  onOpenPanel, onWarning, onArchiveStart, onArchiveFailed, list, children }) {
   const wide = useMediaQuery(WIDE_QUERY)
   const [editing, setEditing] = useState(false)
   const m = milestone
@@ -198,8 +189,8 @@ export default function MilestonePanel({ project, milestone, items, members, use
           <IconButton aria-label="Edit" onClick={() => setEditing(true)} sx={{ width: 44, height: 44 }}><EditIcon /></IconButton>
         </Tooltip>
       )}
-      <MilestoneMenu milestone={m} project={project} items={items} members={members} user={user} onOpenPanel={onOpenPanel}
-        onWarning={onWarning} onArchive={onArchive} />
+      <MilestoneMenu milestone={m} project={project} items={items} members={members} manage={view.manage}
+        onOpenPanel={onOpenPanel} onWarning={onWarning} onArchiveStart={onArchiveStart} onArchiveFailed={onArchiveFailed} />
     </>
   ) : null
 

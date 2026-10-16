@@ -51,11 +51,12 @@ function CardLine({ label, value, main = false }) {
 
 /**
  * A table on MUI `Table`; stacked cards (via `CardList`) below 900 px. Sorts on the client unless `serverSort`
- * (then the caller owns the order). `pagination.page` is zero-based, as in `TablePagination`.
+ * (then the caller owns the order). `pagination.page` is zero-based, as in `TablePagination`. On phones,
+ * `renderCardActions(row)` puts a row's actions (a "⋯") beside its card's tap area; the Total card gets none.
  */
 export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => r.id, sort, defaultSort, onSortChange,
-  serverSort = false, visibleKeys, onRowOpen, selectedId, rowTone, totalRow, renderCard, loading = false, skeletonRows = 5,
-  empty, pagination }) {
+  serverSort = false, visibleKeys, onRowOpen, selectedId, rowTone, totalRow, renderCard, renderCardActions, loading = false,
+  skeletonRows = 5, empty, pagination }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const [ownSort, setOwnSort] = useState(defaultSort)
   const active = sort ?? ownSort
@@ -92,6 +93,7 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
       <Box aria-busy={loading || undefined}>
         <CardList rows={cardRows} renderCard={card} ariaLabel={ariaLabel} loading={loading}
           onRowClick={onRowOpen} isRowClickable={(row) => !row[TOTAL_ID]}
+          renderCardActions={renderCardActions ? (row) => (row[TOTAL_ID] ? null : renderCardActions(row)) : undefined}
           getRowProps={(row) => {
             if (row[TOTAL_ID]) return {}
             const tone = rowTone?.(row)

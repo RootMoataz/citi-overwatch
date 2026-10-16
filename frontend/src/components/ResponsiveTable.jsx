@@ -30,8 +30,12 @@ export default function ResponsiveTable({ rows, columns, renderCard, loading = f
     loading={loading} />
 }
 
-/** The phone layout: one tappable card per row (a plain card when there is no row click). */
-export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, loading = false, isRowClickable, getRowProps }) {
+/**
+ * The phone layout: one tappable card per row (a plain card when there is no row click). `renderCardActions(row)`
+ * (optional) adds controls such as a "⋯" beside the tappable area, never inside it, so no button nests in a button.
+ */
+export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, loading = false, isRowClickable, getRowProps,
+  renderCardActions }) {
   if (loading) {
     return <Stack sx={{ gap: 1 }}>{[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={88} />)}</Stack>
   }
@@ -40,12 +44,19 @@ export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, lo
       {rows.map((row) => {
         const { sx: cardSx, ...liProps } = getRowProps?.(row) ?? {}
         const clickable = onRowClick && (isRowClickable ? isRowClickable(row) : true)
+        const body = clickable ? (
+          <CardActionArea onClick={(e) => { if (e.currentTarget.contains(e.target)) onRowClick(row) }}><CardContent>{renderCard(row)}</CardContent></CardActionArea>
+        ) : <CardContent>{renderCard(row)}</CardContent>
+        const actions = renderCardActions?.(row)
         return (
           <li key={getRowId ? getRowId(row) : row.id} {...liProps}>
             <Card sx={cardSx}>
-              {clickable ? (
-                <CardActionArea onClick={(e) => { if (e.currentTarget.contains(e.target)) onRowClick(row) }}><CardContent>{renderCard(row)}</CardContent></CardActionArea>
-              ) : <CardContent>{renderCard(row)}</CardContent>}
+              {actions ? (
+                <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>{body}</Box>
+                  <Box sx={{ flexShrink: 0, pt: 1, pr: 1 }}>{actions}</Box>
+                </Box>
+              ) : body}
             </Card>
           </li>
         )

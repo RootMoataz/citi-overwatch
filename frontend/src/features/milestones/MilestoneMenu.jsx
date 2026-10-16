@@ -6,14 +6,17 @@ import { useToast } from '../../app/toast.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import { statusActions } from '../../lib/milestoneActions.js'
 import MilestoneDialog from './MilestoneDialog.jsx'
+import { predecessorNames } from './milestoneOrder.js'
 
 /**
- * The "⋯" on a milestone, in its row and in its panel, for whoever manages the project (callers render it only for
- * `view.manage`): Edit details, Assign people and Dependencies (today's dialog, focused on that field), the status moves
- * `statusActions` allows, Open discussion (the panel's Discussion tab) and Archive milestone (after a confirmation).
- * `onWarning` gets the dialog's dependency warning; `onArchive(milestone)` is told just before the archive request.
+ * The "⋯" on a milestone (its row, its phone card and its panel), which callers render only for `view.manage`: Edit
+ * details, Assign people and Dependencies (today's dialog, focused on that field), the status moves `statusActions`
+ * allows for `manage`, Open discussion (`onOpenPanel(milestone, 'discussion')`) and Archive milestone (after a
+ * confirmation). `onWarning` gets the dialog's dependency warning. `onArchiveStart(milestone)` is told just before the
+ * archive request and `onArchiveFailed(milestone)` if it fails.
  */
-export default function MilestoneMenu({ milestone: m, project, items, members, onOpenPanel, onWarning, onArchive }) {
+export default function MilestoneMenu({ milestone: m, project, items, members, manage, onOpenPanel, onWarning, onArchiveStart,
+  onArchiveFailed }) {
   const menuId = useId()
   const toast = useToast()
   const status = useMilestoneStatus(project.id)
@@ -21,9 +24,9 @@ export default function MilestoneMenu({ milestone: m, project, items, members, o
   const [anchor, setAnchor] = useState(null)
   const [editing, setEditing] = useState(null)   // the field the dialog opens on
   const [archiving, setArchiving] = useState(false)
-  const moves = statusActions(m, { manager: true, assignee: m.is_assignee })
+  const moves = statusActions(m, { manager: manage, assignee: m.is_assignee })
   const waiting = m.blocked && m.status === 'not_started'
-  const waitingOn = (m.predecessors ?? []).map((id) => items.find((x) => String(x.id) === String(id))?.name).filter(Boolean)
+  const waitingOn = predecessorNames(m, items)
 
   const close = () => setAnchor(null)
   const edit = (field) => { close(); setEditing(field) }
@@ -32,8 +35,13 @@ export default function MilestoneMenu({ milestone: m, project, items, members, o
     try { await status.mutateAsync({ id: m.id, status: target }) } catch (err) { toast.error(err.message) }
   }
   const confirmArchive = async () => {
-    onArchive?.(m)
-    try { await archive.mutateAsync(m.id) } catch (err) { toast.error(err.message) }
+    onArchiveStart?.(m)
+    try {
+      await archive.mutateAsync(m.id)
+    } catch (err) {
+      onArchiveFailed?.(m)
+      toast.error(err.message)
+    }
     setArchiving(false)
   }
 

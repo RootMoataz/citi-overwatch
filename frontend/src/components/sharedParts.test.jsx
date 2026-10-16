@@ -280,6 +280,25 @@ describe('DataTable', () => {
     expect(onRowOpen).toHaveBeenCalledWith(rows[0])
   })
 
+  test('375 px: renderCardActions puts actions beside the card button, never inside it, and not on the Total card', async () => {
+    setViewport(375)
+    const onRowOpen = vi.fn()
+    const act = vi.fn()
+    renderWithProviders(<DataTable {...base} totalRow={{ name: 'Total', n: 5 }} onRowOpen={onRowOpen}
+      renderCardActions={(r) => <button type="button" onClick={() => act(r.id)}>{`Actions for ${r.name}`}</button>} />)
+    const cards = screen.getAllByRole('listitem')
+    const action = within(cards[0]).getByRole('button', { name: 'Actions for Beta' })
+    const open = within(cards[0]).getAllByRole('button').find((b) => b !== action)
+    expect(open).not.toContainElement(action)
+    expect(action).not.toContainElement(open)
+    await userEvent.click(action)
+    expect(act).toHaveBeenCalledWith(1)
+    expect(onRowOpen).not.toHaveBeenCalled()
+    await userEvent.click(open)
+    expect(onRowOpen).toHaveBeenCalledWith(rows[0])
+    expect(within(cards[cards.length - 1]).queryByRole('button')).not.toBeInTheDocument()
+  })
+
   test('375 px: cards carry rowTone and the selected row', () => {
     setViewport(375)
     renderWithProviders(<DataTable {...base} selectedId={2} rowTone={(r) => (r.id === 1 ? 'warning' : null)} />)

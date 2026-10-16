@@ -487,6 +487,24 @@ describe('Milestones tab: opening a milestone', () => {
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
   })
 
+  test('a link to a milestone newer than the cached list asks the server again before calling it gone', async () => {
+    function Go() {
+      const navigate = useNavigate()
+      return <button type="button" onClick={() => navigate('/m?milestone=m9')}>Go</button>
+    }
+    const golive = ms({ id: 'm9', name: 'Go-live', start_date: '2026-12-01', end_date: '2026-12-20' })
+    server.use(...handlers())
+    const view = projectView(users.manager, project)
+    renderAsUser(<><MilestonesTab project={project} manage={view.manage} user={users.manager} view={view} /><Go /></>,
+      { user: users.manager, route: '/m' })
+    await table()   // the cache now holds the list without m9, and is fresh enough not to refetch by itself
+    server.use(http.get(`${API}/projects/p1/milestones`, () => HttpResponse.json([...apollo, golive])))
+    await userEvent.click(screen.getByRole('button', { name: 'Go' }))
+    expect(await panel('Go-live')).toBeInTheDocument()
+    expect(location()).toHaveTextContent('/m?milestone=m9')
+    expect(screen.queryByText('That milestone is no longer available.')).not.toBeInTheDocument()
+  })
+
   test('clicking a timeline row opens its panel', async () => {
     server.use(...handlers())
     renderTab(users.manager, { route: '/m?view=timeline' })
@@ -599,6 +617,41 @@ describe('Milestones tab: the "⋯" menu', () => {
   })
 })
 
+describe('Milestones tab: archiving', () => {
+  const archiveFrom = async (scope, name) => {
+    const user = userEvent.setup()
+    await user.click(within(scope).getByRole('button', { name: `More actions for ${name}` }))
+    await user.click(screen.getByRole('menuitem', { name: 'Archive milestone' }))
+    await user.click(within(await screen.findByRole('dialog', { name: 'Archive this milestone?' })).getByRole('button', { name: 'Archive' }))
+  }
+
+  test('a failed archive keeps the row and says why', async () => {
+    server.use(...handlers(apollo, [http.delete(`${API}/milestones/:id`, () => HttpResponse.json(
+      { error: { code: 'CONFLICT', message: 'Discovery has hours waiting for approval' } }, { status: 409 }))]))
+    renderTab(users.manager)
+    await table()
+    await archiveFrom(row('Discovery'), 'Discovery')
+    expect(await screen.findByText('Discovery has hours waiting for approval')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Archive this milestone?' })).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Discovery' })).toBeInTheDocument()
+  })
+
+  test('archiving the open milestone closes its panel without "no longer available", and focus goes to the search', async () => {
+    let gone = false
+    server.use(...handlers(apollo, [
+      http.get(`${API}/projects/p1/milestones`, () => HttpResponse.json(gone ? apollo.filter((m) => m.id !== 'm2') : apollo)),
+      http.delete(`${API}/milestones/:id`, () => { gone = true; return new HttpResponse(null, { status: 204 }) }),
+    ]))
+    renderTab(users.manager, { route: '/m?milestone=m2' })
+    await archiveFrom(await panel('Build: frontend'), 'Build: frontend')
+    expect(await screen.findByText('Milestone archived')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+    await waitFor(() => expect(location()).toHaveTextContent(/^\/m$/))
+    expect(screen.queryByText('That milestone is no longer available.')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Search milestones' })).toHaveFocus()
+  })
+})
+
 describe('Milestones tab: states', () => {
   test('skeleton rows while the list loads', async () => {
     server.use(...handlers(apollo, [http.get(`${API}/projects/p1/milestones`, async () => { await delay('infinite') })]))
@@ -634,6 +687,22 @@ describe('Milestones tab: states', () => {
 })
 
 describe('Milestones tab: phones', () => {
+  test('at 375 px a manager\'s card has its "⋯" beside it, and picking an item doesn\'t open the panel', async () => {
+    setViewport(375)
+    server.use(...handlers())
+    const first = renderTab(users.manager)
+    const cards = within(await screen.findByRole('list', { name: 'Milestones' })).getAllByRole('listitem')
+    const user = userEvent.setup()
+    await user.click(within(cards[1]).getByRole('button', { name: 'More actions for Build: frontend' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Edit details' }))
+    expect(await screen.findByRole('dialog', { name: 'Edit milestone' })).toBeInTheDocument()
+    expect(location()).toHaveTextContent(/^\/m$/)
+    first.unmount()
+    renderTab(users.employee)
+    const list = await screen.findByRole('list', { name: 'Milestones' })
+    expect(within(list).queryByRole('button', { name: /^More actions for/ })).not.toBeInTheDocument()
+  })
+
   test('at 375 px the rows are cards and the panel is a full-screen dialog', async () => {
     setViewport(375)
     server.use(...handlers())
@@ -643,7 +712,7 @@ describe('Milestones tab: phones', () => {
     const items = within(list).getAllByRole('listitem')
     expect(items).toHaveLength(7)
     expect(items[1]).toHaveTextContent('Build: frontend')
-    await userEvent.click(within(items[1]).getByRole('button'))
+    await userEvent.click(within(items[1]).getByRole('button', { name: /^2\. Build: frontend/ }))
     expect(location()).toHaveTextContent('/m?milestone=m2')
     const dialog = await screen.findByRole('dialog', { name: 'Build: frontend' })
     expect(dialog).toHaveAttribute('aria-modal', 'true')
@@ -843,11 +912,12 @@ describe('Milestones tab: kept behaviour', () => {
     expect(within(mine).getByRole('link', { name: 'Eli Employee' })).toBeInTheDocument()
   })
 
-  test('a milestone with nobody on it reads "Unassigned" in the row and the panel', async () => {
-    server.use(...handlers([cutover]))
+  test('a milestone with nobody on it reads "Unassigned" in the row and the panel; an assigned one never does', async () => {
+    server.use(...handlers([cutover, discovery]))
     renderLegacy(users.manager)
     await table()
     expect(cells('Cutover')[3]).toHaveTextContent(/^Unassigned$/)
+    expect(cells('Discovery')[3]).not.toHaveTextContent('Unassigned')
     await userEvent.click(screen.getByRole('button', { name: 'Cutover' }))
     const cut = await panel('Cutover')
     expect(within(cut).getByText('Unassigned')).toBeInTheDocument()
@@ -861,6 +931,10 @@ describe('Milestones tab: kept behaviour', () => {
     const priority = within(cut).getByLabelText('Priority: Critical')
     expect(priority).toHaveTextContent('Critical')
     expect(priority.compareDocumentPosition(within(cut).getByLabelText('Difficulty: Hard')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Discovery' }))
+    const disc = await panel('Discovery')
+    expect(within(disc).getByLabelText('Priority: Medium')).toHaveTextContent('Medium')
+    expect(within(disc).getByLabelText('Difficulty: Medium')).toHaveTextContent('Medium')
     first.unmount()
     renderLegacy(users.employee, '/m?view=timeline')
     const timeline = await screen.findByRole('list', { name: 'Milestone timeline' })
@@ -973,6 +1047,11 @@ describe('Milestones tab: kept behaviour', () => {
     expect(cells('Cutover')[5]).toHaveTextContent(/^—$/)
     await userEvent.click(screen.getByRole('button', { name: 'Schema Mapping' }))
     expect(within(await panel('Schema Mapping')).getByText('130h logged · 130% of estimate · over estimate')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Cutover' }))
+    const cut = await panel('Cutover')
+    expect(within(cut).getByText('92 days (66 working days)')).toBeInTheDocument()
+    // Nothing logged: no usage line, only the hours fact.
+    expect(within(cut).getAllByText(/logged/).map((el) => el.textContent)).toEqual(['0h logged'])
   })
 
   test('the manager sets, checks and clears the estimated effort', async () => {

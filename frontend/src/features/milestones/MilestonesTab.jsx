@@ -6,11 +6,10 @@ import ShowChart from '@mui/icons-material/ShowChart'
 import {
   Alert, Box, Button, InputAdornment, Link, MenuItem, Paper, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useApprovals, useMembers, useMilestones, useProfile } from '../../api/queries.js'
-import { useToast } from '../../app/toast.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import FilterBar from '../../components/FilterBar.jsx'
@@ -23,6 +22,8 @@ import MilestoneDialog from './MilestoneDialog.jsx'
 import MilestoneList from './MilestoneList.jsx'
 import MilestoneMenu from './MilestoneMenu.jsx'
 import MilestonePanel from './MilestonePanel.jsx'
+import { stateOf } from './milestoneOrder.js'
+import { useMilestonePanelUrl } from './useMilestonePanelUrl.js'
 
 // List or Timeline is kept per browser; the URL's ?view= wins. Blocked storage just means List every time.
 const VIEW_KEY = 'overwatch.milestones.view'
@@ -35,23 +36,22 @@ const storeView = (view) => {
 
 const STATUS_FILTERS = [['', 'All'], ['not_started', 'Not started'], ['in_progress', 'In progress'],
   ['ready_for_review', 'Ready for review'], ['completed', 'Completed'], ['waiting', 'Waiting'], ['blocked', 'Blocked']]
-const GONE = 'That milestone is no longer available.'
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
-const displayStatus = (m) => m.display_status ?? m.status
 
 /**
  * The Milestones tab: a summary card (milestones complete and the status bar, with the pending entries for people
  * who decide hours, or "Your part"), a toolbar (search, status, List or Timeline, Add milestone), the List or the
- * Timeline, and the milestone's side panel. URL state: ?milestone= opens the panel (opening pushes a history entry, so
- * Back closes it; closing replaces), ?view=timeline picks the Timeline. Variants come from `view` (projectView).
+ * Timeline, and the milestone's side panel. URL state: ?milestone= opens the panel (see useMilestonePanelUrl),
+ * ?view=timeline picks the Timeline. Variants come from `view` (projectView).
  */
 export default function MilestonesTab({ project, user, view }) {
   const milestones = useMilestones(project.id)
   const members = useMembers(project.id)
   const approvals = useApprovals({ project: project.id }, view.decides)
   const profile = useProfile(user?.id, view.mine && Boolean(user?.id))
+  const listRef = useRef(null)
+  const { current, open, close, returnFocus, archiveStarted, archiveFailed } = useMilestonePanelUrl(milestones, listRef)
   const [params, setParams] = useSearchParams()
-  const toast = useToast()
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const wide = useMediaQuery(WIDE_QUERY)
   const [remembered, setRemembered] = useState(readView)
@@ -59,19 +59,13 @@ export default function MilestonesTab({ project, user, view }) {
   const [state, setState] = useState('')
   const [adding, setAdding] = useState(false)
   const [warning, setWarning] = useState('')
-  const listRef = useRef(null)
-  const lastOpen = useRef(null)          // the milestone whose row gets focus back when the panel closes
-  const archivedHere = useRef(new Set()) // archived from this tab: its panel closes without the "no longer available" toast
-  const handled = useRef(null)
 
   const items = milestones.data ?? []
-  const openId = params.get('milestone')
-  const current = openId ? items.find((m) => String(m.id) === openId) : undefined
   const urlView = params.get('view')
   const mode = urlView === 'timeline' || urlView === 'list' ? urlView : remembered
 
   const needle = search.trim().toLowerCase()
-  const shown = items.filter((m) => (!state || displayStatus(m) === state)
+  const shown = items.filter((m) => (!state || stateOf(m) === state)
     && (!needle || `${m.name}\n${m.description ?? ''}`.toLowerCase().includes(needle)))
 
   // Pending entries per milestone, and in all, for people who decide hours (the server lists only what they may decide).
@@ -90,17 +84,6 @@ export default function MilestonesTab({ project, user, view }) {
   const myHoursByMilestone = Object.fromEntries((mine?.milestones ?? []).map((x) => [String(x.id), Number(x.logged_hours)]))
   const myProject = (mine?.projects ?? []).find((p) => String(p.id) === String(project.id))
 
-  const openMilestone = (m, panel) => {
-    // Already showing exactly this: no second history entry, so one Back still closes the panel.
-    if (openId === String(m.id) && (panel ?? null) === params.get('panel')) return
-    setParams((p) => {
-      p.set('milestone', m.id)
-      if (panel) p.set('panel', panel)
-      else p.delete('panel')
-      return p
-    })
-  }
-  const closePanel = () => setParams((p) => { p.delete('milestone'); p.delete('panel'); return p }, { replace: true })
   const changeMode = (next) => {
     storeView(next)
     setRemembered(next)
@@ -108,32 +91,9 @@ export default function MilestonesTab({ project, user, view }) {
   }
   const clearFilters = () => { setSearch(''); setState('') }
 
-  useEffect(() => { if (openId) lastOpen.current = openId }, [openId])
-
-  // A milestone named in the URL that the loaded list doesn't have was archived or removed meanwhile: close its panel.
-  useEffect(() => {
-    if (!openId) { handled.current = null; return }
-    if (!milestones.isSuccess || handled.current === openId) return
-    if ((milestones.data ?? []).some((m) => String(m.id) === openId)) return
-    handled.current = openId
-    if (!archivedHere.current.has(openId)) toast.info(GONE)
-    setParams((p) => { p.delete('milestone'); p.delete('panel'); return p }, { replace: true })
-  }, [openId, milestones.isSuccess, milestones.data, toast, setParams])
-
-  // Focus after the panel closes: the milestone's name in the list, its timeline row or its card; failing those (it's
-  // filtered out, or gone) the search field, never the page body.
-  const returnFocus = () => {
-    const root = listRef.current
-    const id = lastOpen.current
-    const found = id && (root?.querySelector(`[data-milestone-name="${id}"]`)
-      ?? root?.querySelector(`li[data-milestone-id="${id}"]`)
-      ?? root?.querySelector(`[data-milestone-card="${id}"]`)?.closest('button'))
-    return found || root?.querySelector('input[aria-label="Search milestones"]') || null
-  }
-
   const menuFor = (m) => (
-    <MilestoneMenu milestone={m} project={project} items={items} members={members.data ?? []} user={user}
-      onOpenPanel={openMilestone} onWarning={setWarning} onArchive={(x) => archivedHere.current.add(String(x.id))} />
+    <MilestoneMenu milestone={m} project={project} items={items} members={members.data ?? []} manage={view.manage}
+      onOpenPanel={open} onWarning={setWarning} onArchiveStart={archiveStarted} onArchiveFailed={archiveFailed} />
   )
 
   const done = items.filter((m) => m.status === 'completed').length
@@ -195,7 +155,7 @@ export default function MilestonesTab({ project, user, view }) {
     <>
       <MilestoneList items={shown} all={items} view={view} pendingByMilestone={pendingByMilestone}
         myHoursByMilestone={myHoursByMilestone} selectedId={current ? String(current.id) : undefined}
-        narrow={desktop && Boolean(current)} onOpen={(m) => openMilestone(m)} menuFor={view.manage ? menuFor : undefined}
+        narrow={desktop && Boolean(current)} onOpen={(m) => open(m)} menuFor={view.manage ? menuFor : undefined}
         loading={milestones.isLoading} empty={noMatch} />
       {shown.length ? (
         <Stack sx={{ flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', gap: { xs: 0.5, md: 2 },
@@ -222,7 +182,7 @@ export default function MilestonesTab({ project, user, view }) {
       {milestones.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
       {!milestones.isLoading && shown.length ? (
         <Timeline items={shown} all={items} range={{ start: project.start_date, end: project.predicted_end_date }}
-          onOpen={(m) => openMilestone(m)} layout={wide && !current ? 'detailed' : 'default'} />
+          onOpen={(m) => open(m)} layout={wide && !current ? 'detailed' : 'default'} />
       ) : null}
       {!milestones.isLoading && !shown.length ? noMatch : null}
       <FootNote note="Select a milestone to inspect dependencies, approvals and history." />
@@ -261,10 +221,10 @@ export default function MilestonesTab({ project, user, view }) {
         </Paper>
       ) : null}
       {!empty && !failed ? (
-        <MilestonePanel project={project} milestone={current} items={items} members={members.data ?? []} user={user} view={view}
+        <MilestonePanel project={project} milestone={current} items={items} members={members.data ?? []} view={view}
           myHours={view.mine && profile.data ? (myHoursByMilestone[String(current?.id)] ?? 0) : undefined}
-          onClose={closePanel} returnFocus={returnFocus} onOpenPanel={openMilestone} onWarning={setWarning}
-          onArchive={(x) => archivedHere.current.add(String(x.id))} list={listCard} />
+          onClose={close} returnFocus={returnFocus} onOpenPanel={open} onWarning={setWarning}
+          onArchiveStart={archiveStarted} onArchiveFailed={archiveFailed} list={listCard} />
       ) : null}
       {adding ? (
         <MilestoneDialog project={project} milestone={null} milestones={items} members={members.data ?? []}
