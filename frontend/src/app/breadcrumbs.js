@@ -35,6 +35,18 @@ export function crumbsFor(pathname, user, lastLabel) {
   return [{ label: WORK }, { label: 'Page not found' }]
 }
 
+// Pages that draw their own back control on phones (a thread's "Back to conversations"): no second one in the top bar.
+const OWN_BACK = /^\/messages\/[^/]+\/?$/
+
+/** The crumb a phone's back link goes to on a nested page (a project, a person), or null on a page with none. The
+ * parent never depends on the page's own name, so the top bar knows it before the page loads. */
+export function parentCrumb(pathname, user) {
+  if (OWN_BACK.test(pathname)) return null
+  const crumbs = crumbsFor(pathname, user, null)
+  const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : null
+  return parent?.to ? parent : null
+}
+
 const BreadcrumbContext = createContext(null)
 
 /** Holds the name the open page gives its last crumb, with the address it was given for. Wrap the shell (top bar

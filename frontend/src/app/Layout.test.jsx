@@ -1,10 +1,25 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
+import Puppy from '../features/puppy/Puppy.jsx'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
+import { API, HttpResponse, http, server } from '../test/server.js'
 import { setViewport } from '../test/setup.js'
 import Layout from './Layout.jsx'
+
+/** What Puppy and its panel read (nothing unread, nothing waiting). */
+function serveForPuppy() {
+  server.use(
+    http.get(`${API}/notifications`, () => HttpResponse.json([])),
+    http.get(`${API}/approvals`, () => HttpResponse.json([])),
+    http.get(`${API}/insights/smart`, () => HttpResponse.json([])),
+    http.get(`${API}/projects`, () => HttpResponse.json({ items: [], total: 0 })),
+    http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })),
+    http.get(`${API}/allocations`, () => HttpResponse.json([])),
+    http.get(`${API}/users`, () => HttpResponse.json({ items: [], total: 0 })),
+  )
+}
 
 function renderLayout(user, onLogout = () => {}, { badges, extras } = {}) {
   return renderWithProviders(
@@ -342,6 +357,29 @@ describe('top bar order', () => {
     renderAsUser(<Layout user={users.manager} onLogout={() => {}} />, { user: users.manager })
     await userEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  test('under 375 px Puppy moves from the bar into the account menu, and opens from there', async () => {
+    serveForPuppy()
+    setViewport(320)
+    renderAsUser(<Layout user={users.manager} onLogout={() => {}} topBarExtras={<Puppy />} />, { user: users.manager })
+    const bar = screen.getByRole('banner')
+    expect(within(bar).queryByRole('button', { name: 'Puppy assistant' })).toBeNull()
+    await userEvent.click(within(bar).getByRole('button', { name: 'Account menu' }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Puppy assistant' }))
+    expect(await screen.findByRole('dialog', { name: 'Puppy assistant' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+  })
+
+  test('from 375 px Puppy stays in the bar and the account menu has no Puppy item', async () => {
+    serveForPuppy()
+    setViewport(375)
+    renderAsUser(<Layout user={users.manager} onLogout={() => {}} topBarExtras={<Puppy />} />, { user: users.manager })
+    const bar = screen.getByRole('banner')
+    expect(within(bar).getByRole('button', { name: 'Puppy assistant' })).toBeInTheDocument()
+    await userEvent.click(within(bar).getByRole('button', { name: 'Account menu' }))
+    expect(await screen.findByRole('menuitem', { name: 'My profile' })).toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: 'Puppy assistant' })).toBeNull()
   })
 
   test('below md Search is icon-only but keeps its name', () => {

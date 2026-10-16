@@ -25,8 +25,9 @@ const ABOVE = { anchorOrigin: { vertical: 'top', horizontal: 'left' }, transform
  * opener)` for the openers, `openedFrom` (the opener whose menu is open, or null) and `menuId` for their
  * aria-expanded / aria-controls, and `menu` to render once: the menu itself plus the profile photo dialog it can open.
  * `placement` is 'above' for an opener at the bottom of the screen; `onClosed` runs whenever the menu closes.
+ * `puppy` ({ icon, open() }, narrow phones only) adds a "Puppy assistant" item that opens Puppy's panel.
  */
-export function useAccountMenu({ user, onLogout, onClosed }) {
+export function useAccountMenu({ user, onLogout, onClosed, puppy }) {
   const [anchor, setAnchor] = useState(null)
   const [placement, setPlacement] = useState('below')
   const [openedFrom, setOpenedFrom] = useState(null)
@@ -66,6 +67,14 @@ export function useAccountMenu({ user, onLogout, onClosed }) {
         ) : (
           <MenuItem onClick={() => { close(); setPhotoOpen(true) }}>Profile photo</MenuItem>
         )}
+        {/* An array, not a fragment: MUI menus don't take fragments as children. */}
+        {puppy ? [
+          <Divider key="puppy-divider" />,
+          <MenuItem key="puppy" onClick={() => { close(); puppy.open() }}>
+            <ListItemIcon>{puppy.icon}</ListItemIcon>
+            <ListItemText primary="Puppy assistant" />
+          </MenuItem>,
+        ] : null}
         <Divider />
         <ListSubheader disableSticky sx={{ lineHeight: '32px', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em',
           textTransform: 'uppercase', color: 'text.secondary', bgcolor: 'transparent' }}>Theme</ListSubheader>

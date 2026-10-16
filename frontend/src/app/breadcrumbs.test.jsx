@@ -87,12 +87,27 @@ describe('breadcrumbs', () => {
     expect(within(nav).getByRole('link', { name: 'People' })).toHaveAttribute('href', '/people')
   })
 
-  test('on a phone a project page has a Projects back link and no full trail', () => {
+  test('on a phone a project page has a "Back to Projects" link and no full trail', () => {
     setViewport(400)
     renderAt(users.manager, '/projects/p1', 'Apollo')
-    expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute('href', '/projects')
+    const back = screen.getByRole('link', { name: 'Back to Projects' })
+    expect(back).toHaveAttribute('href', '/projects')
+    // The name holds the words it shows (label in name), whether or not there's room for them.
+    expect(back).toHaveTextContent(/^Projects$/)
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.queryByText('Apollo')).toBeNull()
+  })
+
+  test("on a phone the back link takes the logo's place on a nested page; a top-level page keeps the logo", () => {
+    setViewport(390)
+    const { unmount } = renderAt(users.admin, '/people/u-9/profile', 'Sam Smith')
+    const bar = screen.getByRole('banner')
+    expect(within(bar).getByRole('link', { name: 'Back to People' })).toHaveAttribute('href', '/people')
+    expect(within(bar).queryByRole('link', { name: 'ACME Scout' })).toBeNull()
+    unmount()
+    renderAt(users.admin, '/people')
+    expect(within(screen.getByRole('banner')).getByRole('link', { name: 'ACME Scout' })).toHaveAttribute('href', '/')
+    expect(within(screen.getByRole('banner')).queryByRole('link', { name: /^Back to/ })).toBeNull()
   })
 
   test('when the page fails to load the last crumb says "Not found", not a skeleton', () => {

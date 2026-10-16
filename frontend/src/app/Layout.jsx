@@ -7,23 +7,24 @@ import {
   Toolbar, Tooltip, Typography,
 } from '@mui/material'
 import { motion } from 'framer-motion'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { Link as RouterLink, NavLink, Outlet, useLocation } from 'react-router-dom'
 import BrandLogo from '../components/BrandLogo.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import UserAvatar from '../components/UserAvatar.jsx'
 import PaletteButton from '../features/palette/PaletteButton.jsx'
-import { DESKTOP_QUERY } from '../lib/responsive.js'
+import { DESKTOP_QUERY, NARROW_QUERY } from '../lib/responsive.js'
 import { fullName } from '../lib/format.js'
 import { EASE, useCalmMotion } from '../lib/motion.js'
 import { can } from '../lib/permissions.js'
 import { useDemoNotice } from '../lib/demoSession.js'
 import { useAccountMenu } from './AccountMenu.jsx'
-import Breadcrumbs from './Breadcrumbs.jsx'
-import { BreadcrumbProvider } from './breadcrumbs.js'
+import Breadcrumbs, { BackLink } from './Breadcrumbs.jsx'
+import { BreadcrumbProvider, parentCrumb } from './breadcrumbs.js'
 import { DemoPill, DemoWelcome } from './DemoSession.jsx'
 import { COLLAPSED_WIDTH, DRAWER_WIDTH, NAV } from './nav.jsx'
+import { PuppyDock } from './puppyDock.js'
 import { SIDEBAR_SHORTCUT, useSidebarCollapsed } from './sidebar.js'
 import { AVATAR_SIZE } from '../lib/avatarLook.js'
 
@@ -153,6 +154,7 @@ function CollapseToggle({ collapsed, onToggle }) {
 /** App shell: permanent sidebar on desktop, a menu drawer on phones (React Responsive picks). */
 export default function Layout({ user, onLogout, topBarExtras, badges }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
+  const narrow = useMediaQuery(NARROW_QUERY)
   const [mobileOpen, setMobileOpen] = useState(false)
   const location = useLocation()
   const calm = useCalmMotion()
@@ -160,7 +162,13 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
   const collapsed = desktop && collapsedChoice
   const sidebarWidth = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH
   const demo = useDemoNotice(user)
-  const { openMenu, openedFrom, menuId, menu } = useAccountMenu({ user, onLogout, onClosed: () => setMobileOpen(false) })
+  // Phones: on a nested page (a project, a person) a back link to its parent takes the logo's place.
+  const back = desktop ? null : parentCrumb(location.pathname, user)
+  // Under 375 px Puppy's button moves into the account menu; its panel then opens under the header avatar.
+  const [dockedPuppy, setDockedPuppy] = useState(null)
+  const avatarRef = useRef(null)
+  const puppy = narrow && dockedPuppy ? { icon: dockedPuppy.icon, open: () => dockedPuppy.open(avatarRef.current) } : null
+  const { openMenu, openedFrom, menuId, menu } = useAccountMenu({ user, onLogout, onClosed: () => setMobileOpen(false), puppy })
 
   const brand = (compact, onClick) => (
     <Toolbar disableGutters sx={{ px: '18px', overflow: 'hidden' }}>
@@ -170,25 +178,26 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
 
   return (
     <BreadcrumbProvider>
+    <PuppyDock.Provider value={setDockedPuppy}>
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="fixed" color="inherit" elevation={0}
         sx={{ borderBottom: 1, borderColor: 'divider', width: desktop ? `calc(100% - ${sidebarWidth}px)` : '100%',
           ml: desktop ? `${sidebarWidth}px` : 0, transition: `width ${SLIDE}, margin ${SLIDE}` }}>
-        {/* Every control keeps its size (flexShrink 0); only the crumbs give way, with an ellipsis. Phones get tighter
-            gutters and gaps and the logo's glyph alone, so the bar fits at 375 px with a timer or the demo pill. */}
-        <Toolbar sx={{ gap: { xs: 0.5, sm: 1 }, px: { xs: 1, sm: 3 } }}>
+        {/* Every control keeps its size (flexShrink 0); only the crumbs (desktop) or the back link (phones) give way,
+            and they take the bar's spare room (no spacer). Phones get tighter gutters and gaps and the logo's glyph
+            alone; under 375 px tighter still, with Puppy in the account menu, so the bar fits at 320 px with a timer or
+            the demo pill. */}
+        <Toolbar sx={{ gap: narrow ? 0.25 : { xs: 0.5, sm: 1 }, px: narrow ? 0.5 : { xs: 1, sm: 3 } }}>
           {!desktop ? (
             <IconButton aria-label="Open navigation" onClick={() => setMobileOpen(true)} sx={{ flexShrink: 0, ml: { xs: 0, sm: -1 } }}>
               <MenuIcon />
             </IconButton>
           ) : null}
-          {!desktop ? <BrandLink variant="glyph" size={30} /> : null}
-          <Breadcrumbs user={user} desktop={desktop} />
-          <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{ flexShrink: 0, mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
+          {desktop ? <Breadcrumbs user={user} /> : back ? <BackLink crumb={back} /> : <BrandLink variant="glyph" size={30} />}
+          <Box sx={{ flexShrink: 0, ml: 'auto', mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
           {topBarExtras}
           <DemoPill notice={demo} />
-          <IconButton aria-label="Account menu" aria-haspopup="menu" aria-expanded={openedFrom === 'header'}
+          <IconButton ref={avatarRef} aria-label="Account menu" aria-haspopup="menu" aria-expanded={openedFrom === 'header'}
             aria-controls={openedFrom === 'header' ? menuId : undefined} onClick={(e) => openMenu(e, 'below', 'header')}
             sx={{ p: 0.5, flexShrink: 0 }}>
             <UserAvatar userId={user?.id} name={fullName(user)} size={AVATAR_SIZE.header} />
@@ -230,6 +239,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
         </motion.div>
       </Box>
     </Box>
+    </PuppyDock.Provider>
     </BreadcrumbProvider>
   )
 }

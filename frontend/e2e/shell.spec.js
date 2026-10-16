@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
 import { openProject, signIn, signOut } from './helpers.js'
 
-// Layout checks a unit test can't make (jsdom has no layout): the top bar's controls never overlap on a phone, the
-// desktop crumbs give way to the controls beside them, and no page scrolls sideways at 375 px.
+// Layout checks a unit test can't make (jsdom has no layout): the top bar's controls never overlap on a phone (320 to
+// 390 px) and the phone back link stays a 24 px target; the desktop crumbs give way to the controls beside them (at
+// 1440 px with a long name, and between md and lg for the demo admin); no page scrolls sideways at 375 px, nor the
+// Dashboard and Control centre between md and lg.
 
 /** Runs in the page (it is self-contained). Each in-flow child of `container` as the stretch of x it draws over: its own box and everything drawn inside it,
  * text included (a logo box squeezed by flexbox while its wordmark kept drawing at full width was the bug, and so was
@@ -72,21 +74,44 @@ async function closeDemoWelcome(page) {
   await expect(gotIt).toBeHidden()
 }
 
+/** The phone bar's back link stays a real target, at least 24 × 24 px (WCAG 2.5.8), however full the bar is. */
+async function expectBackTarget(page, label) {
+  const back = page.getByRole('banner').getByRole('link', { name: /Projects/ })
+  await expect(back).toHaveCount(1)
+  const box = await back.evaluate((el) => el.getBoundingClientRect().toJSON())
+  expect.soft(box.width, `${label}: the back link is at least 24 px wide`).toBeGreaterThanOrEqual(24)
+  expect.soft(box.height, `${label}: the back link is at least 24 px tall`).toBeGreaterThanOrEqual(24)
+}
+
 // @phone checks run in the mobile project only and @desktop ones in the desktop project (playwright.config.js).
 test.describe('phone top bar', { tag: '@phone' }, () => {
-  for (const width of [375, 390]) {
-    test(`${width} px: demo admin home, an employee's project page, and an employee with a running timer`, async ({ page }) => {
+  for (const width of [320, 375, 390]) {
+    test(`${width} px: demo admin home and project page, an employee's project page, and an employee with a running timer`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 })
 
       await signIn(page, 'demo.admin')
       await closeDemoWelcome(page)
-      await expect(page.getByRole('button', { name: /^Demo session, signed out in/ })).toBeVisible()
+      await expect(page.getByRole('button', { name: /left in the demo session, signed out in/ })).toBeVisible()
       await expectTopBarFits(page, width, 'demo admin home')
+      // Every action stays reachable: under 375 px Puppy moves from the bar into the account menu.
+      if (width < 375) {
+        await expect(page.getByRole('banner').getByRole('button', { name: 'Puppy assistant' })).toHaveCount(0)
+        await page.getByRole('banner').getByRole('button', { name: 'Account menu' }).click()
+        await page.getByRole('menuitem', { name: 'Puppy assistant' }).click()
+        await expect(page.getByRole('dialog', { name: 'Puppy assistant' })).toBeVisible()
+        await page.keyboard.press('Escape')
+        await expect(page.getByRole('dialog', { name: 'Puppy assistant' })).toBeHidden()
+      } else {
+        await expect(page.getByRole('banner').getByRole('button', { name: 'Puppy assistant' })).toBeVisible()
+      }
+      await openProject(page, 'Apollo Data Migration')
+      await expectBackTarget(page, 'demo admin project page')
+      await expectTopBarFits(page, width, 'demo admin project page')
       await signOut(page)
 
       await signIn(page, 'employee.demo')
       await openProject(page, 'Apollo Data Migration')
-      await expect(page.getByRole('banner').getByRole('link', { name: 'Projects' })).toBeVisible()
+      await expectBackTarget(page, 'employee project page')
       await expectTopBarFits(page, width, 'employee project page')
 
       // A running timer adds its chip to the bar.
@@ -98,6 +123,7 @@ test.describe('phone top bar', { tag: '@phone' }, () => {
         await expectTopBarFits(page, width, 'employee home with a timer')
         await openProject(page, 'Apollo Data Migration')
         await expect(chip).toBeVisible()
+        await expectBackTarget(page, 'employee project page with a timer')
         await expectTopBarFits(page, width, 'employee project page with a timer')
       } finally {
         // Leave no clock running for the next journey (under 7.5 minutes it records nothing).
@@ -132,6 +158,57 @@ test('desktop crumbs: a long project name ends in an ellipsis and never runs und
   expect(await last.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true) // cut short with an ellipsis
   await expect(last).toHaveCSS('text-overflow', 'ellipsis')
   await expectTopBarFits(page, 1440, 'desktop project page')
+})
+
+// Between md (900 px) and lg (1200 px) the sidebar is open and the bar is short of room, most of all for the demo admin
+// (its pill). The crumbs never run under the search field, and the current page keeps a few letters.
+test.describe('desktop top bar between md and lg', { tag: '@desktop' }, () => {
+  for (const width of [900, 960, 1024]) {
+    test(`${width} px: the demo admin's crumbs on home, a project page and a person page`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 })
+      await signIn(page, 'demo.admin')
+      await closeDemoWelcome(page)
+      const check = async (where) => {
+        const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' })
+        const current = crumbs.locator('[aria-current="page"]')
+        await expect(current).not.toHaveAttribute('aria-busy', 'true') // the page has named its crumb
+        await page.waitForLoadState('networkidle')
+        const items = await crumbs.getByRole('list').evaluate(drawnChildren)
+        const search = await page.getByRole('button', { name: /^Search \(/ }).boundingBox()
+        expectApart(items, search.x, `${where} crumbs`)
+        const shown = await current.evaluate((el) => el.getBoundingClientRect().width)
+        expect.soft(shown, `${where}: the current page's crumb keeps a few letters`).toBeGreaterThanOrEqual(40)
+        await expectTopBarFits(page, width, where)
+      }
+      await check('home')
+      await openProject(page, 'Apollo Data Migration')
+      await check('project page')
+      await page.goto('/people')
+      await page.locator('main a[href^="/people/"]').first().click()
+      await expect(page).toHaveURL(/\/people\/[^/?]+/)
+      await check('person page')
+    })
+  }
+})
+
+test.describe('no sideways page scroll between md and lg', { tag: '@desktop' }, () => {
+  for (const [username, home] of [['manager.demo', 'Dashboard'], ['demo.admin', 'Control centre']]) {
+    test(`${username}: ${home} at 900, 960 and 1024 px`, async ({ page }) => {
+      await signIn(page, username)
+      if (username === 'demo.admin') await closeDemoWelcome(page)
+      const wide = []
+      for (const width of [900, 960, 1024]) {
+        await page.setViewportSize({ width, height: 800 })
+        await page.goto('/')
+        // The risk tiles (the widest row when this was found) have drawn.
+        await expect(page.getByRole('list', { name: 'At-risk projects by reason' })).toBeVisible()
+        await page.waitForLoadState('networkidle')
+        const scroll = await sideways(page)
+        if (scroll > width) wide.push(`${width} px (${scroll}px)`)
+      }
+      expect(wide, `${home} wider than the window`).toEqual([])
+    })
+  }
 })
 
 // Names can be 120 characters, and a surname can be one long word. This stretches every name the API returns (projects,
