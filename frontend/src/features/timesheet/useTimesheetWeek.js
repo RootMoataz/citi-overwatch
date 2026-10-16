@@ -40,6 +40,8 @@ export function useTimesheetWeek(week) {
   const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
   // A day counts the same hours as the server: pending and approved entries plus whatever is being typed.
   const dayTotal = (d) => rows.reduce((s, r) => s + (countsToward(key(r.milestone.id, d)) ? num(valueOf(key(r.milestone.id, d))) : 0), 0)
+  // A row counts the same way: rejected hours are left out unless re-typed.
+  const rowTotal = (milestoneId) => allDays.reduce((s, d) => s + (countsToward(key(milestoneId, d)) ? num(valueOf(key(milestoneId, d))) : 0), 0)
   const overDays = allDays.filter((d) => dayTotal(d) > DAY_CAP)
   const tooMany = cellKeys.some((k) => num(valueOf(k)) > DAY_CAP) || overDays.length > 0
   const tooFewKeys = cellKeys.filter((k) => k in drafts && tooLow(drafts[k]))
@@ -97,7 +99,7 @@ export function useTimesheetWeek(week) {
 
   return {
     week, sheet, rows, groups, allDays, entries, locks,
-    valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal,
+    valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal,
     total, overDays, tooMany, tooFew, tooFewKeys, changed,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, discard,
     nameOf, closedLabel,

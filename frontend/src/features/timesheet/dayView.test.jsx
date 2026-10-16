@@ -283,8 +283,10 @@ describe('Timesheet day view', () => {
     http.put(`${API}/time-entries`, async ({ request }) => { body = await request.json(); return saved() }))
     renderSheet()
     const user = userEvent.setup()
-    expect(await screen.findByText('Rejected')).toBeInTheDocument()
-    expect(screen.getByText(/wrong milestone/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Reason: wrong milestone/i)).toBeInTheDocument()
+    const row = screen.getByLabelText('Work note, Schema Mapping').closest('li')
+    expect(within(row).getByText('Needs revision')).toBeInTheDocument()
+    expect(screen.queryByText('Rejected')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Resubmit Schema Mapping, Wed Oct 14' }))
     await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
@@ -501,5 +503,23 @@ describe('Timesheet day view', () => {
     expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Week' }))
     expect(await screen.findByRole('table', { name: 'Timesheet for the week of Oct 12, 2026' })).toBeInTheDocument()
+  })
+})
+
+describe('Day view status words', () => {
+  test('an over-40 pending entry reads Pending and Overtime, not the server label', async () => {
+    server.use(sheetWith({ entries: [entry({ id: 'e4', work_date: WED, over_40: true, label: 'Pending (Overtime requested from Eli Employee)' })] }))
+    renderSheet()
+    const row = (await screen.findByLabelText('Work note, Schema Mapping')).closest('li')
+    expect(within(row).getByText('Pending')).toBeInTheDocument()
+    expect(within(row).getByText('Overtime')).toBeInTheDocument()
+    expect(screen.queryByText(/Overtime requested from/)).not.toBeInTheDocument()
+  })
+
+  test('Edited and the source chip stay', async () => {
+    server.use(sheetWith({ entries: [entry({ id: 'e5', work_date: WED, edited_after_decision: true, source: 'manual' })] }))
+    renderSheet()
+    expect(await screen.findByText('Edited')).toBeInTheDocument()
+    expect(screen.getByText('Manual')).toBeInTheDocument()
   })
 })

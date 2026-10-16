@@ -9,6 +9,7 @@ import { renderAsUser, renderWithProviders, users } from '../../test/render.jsx'
 import TimesheetsPage from '../timesheets/TimesheetsPage.jsx'
 import BreakdownPanel from '../approvals/BreakdownPanel.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
+import { setViewport } from '../../test/setup.js'
 import TimesheetPage from './TimesheetPage.jsx'
 
 const WEEK = '2026-10-12'
@@ -121,16 +122,17 @@ describe('TimesheetPage', () => {
     await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WEEK, hours: 7.25 }] }))
   })
 
-  test('cells show backend labels, Edited tag and rejection reason', async () => {
+  test('cells show the status words, Edited tag and rejection reason', async () => {
     server.use(weekHandler([
       entry({ id: 'e1', label: 'Pending (Overtime requested from Eli Employee)', over_40: true }),
       entry({ id: 'e2', work_date: '2026-10-13', status: 'pending', edited_after_decision: true, label: 'Pending approval' }),
       entry({ id: 'e3', work_date: '2026-10-14', status: 'rejected', label: 'Rejected', rejection_reason: 'Wrong milestone' }),
     ]))
     renderSheet()
-    expect(await screen.findByText('Pending (Overtime requested from Eli Employee)')).toBeInTheDocument()
+    const table = await screen.findByRole('table')
+    expect(await within(table).findByText('Overtime')).toBeInTheDocument()
     expect(screen.getByText('Edited')).toBeInTheDocument()
-    const rejected = screen.getByText('Rejected')
+    const rejected = within(table).getByText('Needs revision')
     await userEvent.hover(rejected)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Wrong milestone')
   })
@@ -550,5 +552,86 @@ describe('My timesheet header, totals and week bar', () => {
     await screen.findByRole('heading', { name: 'October 2026' })
     expect(urls.length).toBeGreaterThan(0)
     expect(urls.filter((u) => u.searchParams.has('user') || u.pathname.includes('/approvals'))).toEqual([])
+  })
+})
+
+describe('Week grid columns, status words and legend', () => {
+  const grid = (entries) => http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: WEEK,
+    user: { id: users.employee.id, name: 'Eli Employee' }, rows, entries, totals: { logged: 0, approved: 0 } }))
+  beforeEach(() => {
+    localStorage.setItem('overwatch.timesheet.view', 'week')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  test('the headers read Milestone, weekday over date, Today and Counted', async () => {
+    server.use(grid([]))
+    renderSheet()
+    const table = await screen.findByRole('table')
+    const heads = within(table).getAllByRole('columnheader')
+    expect(heads.map((h) => h.textContent)).toEqual(['Milestone', 'MonOct 12', 'TueOct 13', 'WedOct 14', 'ThuOct 15Today',
+      'FriOct 16', 'SatOct 17', 'SunOct 18', 'Counted'])
+    expect(within(table).getByRole('columnheader', { name: /Mon\s*Oct 12/ })).not.toHaveAttribute('data-today')
+    expect(within(table).getByRole('columnheader', { name: /Thu\s*Oct 15\s*Today/ })).toHaveAttribute('data-today', 'true')
+    expect(within(table).getByRole('columnheader', { name: /Sat\s*Oct 17/ })).toHaveAttribute('data-weekend', 'true')
+    expect(within(table).getByRole('columnheader', { name: /Sun\s*Oct 18/ })).toHaveAttribute('data-weekend', 'true')
+  })
+
+  test('a past week has no Today column', async () => {
+    server.use(grid([]))
+    renderSheet('/timesheet?week=2026-10-05')
+    const table = await screen.findByRole('table')
+    expect(table.querySelector('[data-today]')).toBeNull()
+    expect(within(table).queryByText('Today')).not.toBeInTheDocument()
+  })
+
+  test('a project row reads its name', async () => {
+    server.use(grid([]))
+    renderSheet()
+    expect(await screen.findByRole('row', { name: 'Apollo' })).toBeInTheDocument()
+  })
+
+  test('cells use the status words, with Overtime separate, and none of the server labels', async () => {
+    server.use(grid([
+      entry({ id: 'e1', status: 'approved', label: 'Approved' }),
+      entry({ id: 'e2', work_date: '2026-10-13', over_40: true, label: 'Pending (Overtime requested from Eli Employee)' }),
+      entry({ id: 'e3', work_date: '2026-10-14', status: 'rejected', label: 'Rejected', rejection_reason: 'Wrong milestone' }),
+    ]))
+    renderSheet()
+    const table = await screen.findByRole('table')
+    const body = within(table)
+    expect(await body.findByText('Pending')).toBeInTheDocument()
+    expect(body.getByText('Overtime')).toBeInTheDocument()
+    expect(body.getByText('Needs revision')).toBeInTheDocument()
+    expect(body.getAllByText('Approved').length).toBeGreaterThan(0)
+    expect(body.queryByText(/Pending approval|Rejected|Overtime requested from/)).not.toBeInTheDocument()
+  })
+
+  test('Counted leaves rejected hours out and Daily total (counted) is a row header', async () => {
+    server.use(grid([
+      entry({ id: 'e1', status: 'approved' }),
+      entry({ id: 'e3', work_date: '2026-10-14', status: 'rejected', label: 'Rejected', rejection_reason: 'x' }),
+    ]))
+    renderSheet()
+    const row = (await screen.findByRole('rowheader', { name: /schema mapping/i })).closest('tr')
+    const cells = within(row).getAllByRole('cell')
+    expect(cells[cells.length - 1]).toHaveTextContent('8h')
+    expect(screen.getByRole('rowheader', { name: 'Daily total (counted)' })).toBeInTheDocument()
+  })
+
+  test('a Legend list names the three statuses', async () => {
+    server.use(grid([]))
+    renderSheet()
+    const legend = await screen.findByRole('list', { name: 'Legend' })
+    expect(within(legend).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Approved', 'Pending', 'Needs revision'])
+  })
+
+  test('on a phone the grid is still a table and the Weekend switch shows', async () => {
+    setViewport(375)
+    server.use(grid([]))
+    renderSheet()
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Weekend' })).toBeInTheDocument()
   })
 })

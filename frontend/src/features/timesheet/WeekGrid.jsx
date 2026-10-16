@@ -1,19 +1,20 @@
+import Folder from '@mui/icons-material/FolderOutlined'
 import EditNote from '@mui/icons-material/EditNoteOutlined'
 import {
-  Box, Button, Chip, IconButton, Paper, Popover, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Box, Button, IconButton, Popover, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   TextField, Tooltip, Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
-import SourceChip from '../timer/SourceChip.jsx'
 import TimerButton from '../timer/TimerButton.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
+import { CellStatus, StatusDot } from './EntryStatus.jsx'
 import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
-import { STATUS, statusColor } from '../../app/theme.js'
 import SupportingChip from '../../components/SupportingChip.jsx'
-import { formatDate, formatDayLabel, formatHours } from '../../lib/format.js'
+import { KIND, KINDS } from './monthText.js'
+import { formatDate, formatDayLabel, formatHours, nyTodayIso } from '../../lib/format.js'
 
 /** The work note of one cell: an icon that shows whether there is one, opening a small editor.
  * attention: this cell needs a note (the server asked for proof, or a timer saved hours without one). */
@@ -54,88 +55,90 @@ function NoteButton({ cellLabel, note, onChange, attention, disabled }) {
   )
 }
 
-/** The saved entry's status, source and Resubmit. inlineReason: print a rejection's reason instead of hiding it in a tooltip. */
-export function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed, inlineReason }) {
-  if (!entry) return null
-  const meta = STATUS[entry.status] ?? STATUS.pending
-  const label = (
-    <Typography variant="caption" sx={{ display: 'block', color: (t) => statusColor(meta, t), lineHeight: 1.2, mt: 0.5 }}>{entry.label}</Typography>
-  )
-  const reason = entry.status === 'rejected' ? entry.rejection_reason : null
-  return (
-    <>
-      {reason && !inlineReason ? <Tooltip title={`Rejected: ${reason}`}><span>{label}</span></Tooltip> : label}
-      {reason && inlineReason ? (
-        <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', lineHeight: 1.2, mt: 0.25 }}>
-          Reason: {reason}
-        </Typography>
-      ) : null}
-      {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ mt: 0.5, height: 18 }} /> : null}
-      <SourceChip source={entry.source} hours={entry.hours} trackedHours={entry.tracked_hours} sx={{ mt: 0.5 }} />
-      {entry.status === 'rejected' && !resubmitting && !closed ? (
-        <Button size="small" onClick={onResubmit} aria-label={`Resubmit ${cellLabel}`} sx={{ mt: 0.25, minWidth: 0, px: 0.5 }}>
-          Resubmit
-        </Button>
-      ) : null}
-    </>
-  )
-}
+// The first column stays put when the grid scrolls inside its card on a phone.
+const STICKY = { position: 'sticky', left: 0, zIndex: 2, bgcolor: 'background.paper' }
+const PROJECT_TINT = { backgroundImage: (t) => `linear-gradient(${alpha(t.palette.primary.main, 0.06)}, ${alpha(t.palette.primary.main, 0.06)})` }
+const isWeekend = (iso) => [0, 6].includes(new Date(`${iso}T00:00:00Z`).getUTCDay())
+/** Today's column is tinted; weekend columns are dimmed. */
+const dayTint = (d, today) => (d === today ? { bgcolor: (t) => alpha(t.palette.primary.main, 0.08) }
+  : isWeekend(d) ? { bgcolor: (t) => alpha(t.palette.text.primary, 0.03) } : null)
 
 /** The week as a table: one row per milestone, one column per shown day, with a daily-total row.
  * state: the useTimesheetWeek result. days: the columns to show. onRequest(cell): a locked cell asks for a change. */
 export default function WeekGrid({ state, days, thisWeek, onRequest }) {
   const { groups, overDays, dayTotal, total } = state
+  const today = thisWeek ? nyTodayIso() : null
   return (
-    <TableContainer component={Paper} variant="outlined">
-      <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.week)}`}>
-        <TableHead>
-          <TableRow>
-            <TableCell sx={{ minWidth: 160 }}>Milestone</TableCell>
-            {days.map((d) => (
-              <TableCell key={d} align="center" sx={{ minWidth: 84, color: overDays.includes(d) ? 'error.main' : undefined }}>
-                {formatDayLabel(d)}
-              </TableCell>
+    <>
+      <TableContainer sx={{ overflowX: 'auto' }}>
+        <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.week)}`}>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ ...STICKY, minWidth: 140 }}>Milestone</TableCell>
+              {days.map((d) => {
+                const [weekday, ...date] = formatDayLabel(d).split(' ')
+                return (
+                  <TableCell key={d} align="center" data-today={d === today || undefined} data-weekend={isWeekend(d) || undefined}
+                    sx={[{ minWidth: 84, color: overDays.includes(d) ? 'error.main' : isWeekend(d) ? 'text.secondary' : undefined },
+                      dayTint(d, today)]}>
+                    <Box component="span" sx={{ display: 'block', fontWeight: 600 }}>{weekday}</Box>
+                    <Box component="span" sx={{ display: 'block', fontWeight: 400 }}>{date.join(' ')}</Box>
+                    {d === today ? (
+                      <Typography variant="caption" component="span" sx={{ display: 'block', color: 'primary.main', fontWeight: 700 }}>Today</Typography>
+                    ) : null}
+                  </TableCell>
+                )
+              })}
+              <TableCell align="right">Counted</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {groups.map((g) => (
+              <GroupRows key={g.project.id} group={g} days={days} today={today} state={state} thisWeek={thisWeek} onRequest={onRequest} />
             ))}
-            <TableCell align="right">Total</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {groups.map((g) => (
-            <GroupRows key={g.project.id} group={g} days={days} state={state} thisWeek={thisWeek} onRequest={onRequest} />
-          ))}
-          <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
-            <TableCell component="th" scope="row">Daily total</TableCell>
-            {days.map((d) => {
-              const over = overDays.includes(d)
-              return (
-                <TableCell key={d} align="center" data-testid={`day-total-${d}`} data-over={over}
-                  sx={{ color: over ? 'error.main' : undefined }}>{formatHours(dayTotal(d))}</TableCell>
-              )
-            })}
-            <TableCell align="right">{formatHours(total)}</TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </TableContainer>
+            <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
+              <TableCell component="th" scope="row" sx={STICKY}>Daily total (counted)</TableCell>
+              {days.map((d) => {
+                const over = overDays.includes(d)
+                return (
+                  <TableCell key={d} align="center" data-testid={`day-total-${d}`} data-over={over}
+                    sx={[{ color: over ? 'error.main' : undefined }, dayTint(d, today)]}>{formatHours(dayTotal(d))}</TableCell>
+                )
+              })}
+              <TableCell align="right">{formatHours(total)}</TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <Box component="ul" aria-label="Legend" sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, listStyle: 'none', m: 0, mt: 1.5, p: 0 }}>
+        {KINDS.filter((k) => k !== 'draft').map((k) => (
+          <Box component="li" key={k} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, typography: 'caption', color: 'text.secondary' }}>
+            <StatusDot kind={k} />{KIND[k].legend}
+          </Box>
+        ))}
+      </Box>
+    </>
   )
 }
 
-function GroupRows({ group, days, state, thisWeek, onRequest }) {
-  const { allDays, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, setHours, setNote, closedLabel } = state
+function GroupRows({ group, days, today, state, thisWeek, onRequest }) {
+  const { rowTotal, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, setHours, setNote, closedLabel } = state
   return (
     <>
       <TableRow>
-        <TableCell colSpan={days.length + 2} sx={{ bgcolor: (t) => alpha(t.palette.primary.main, 0.06), fontWeight: 700 }}>
-          {group.project.name}
+        <TableCell component="th" scope="row" sx={{ ...STICKY, ...PROJECT_TINT, fontWeight: 700 }}>
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+            <Folder aria-hidden="true" fontSize="small" />{group.project.name}
+          </Box>
         </TableCell>
+        <TableCell colSpan={days.length + 1} sx={PROJECT_TINT} />
       </TableRow>
       {group.rows.map((r) => {
-        const rowTotal = allDays.reduce((s, d) => s + num(valueOf(key(r.milestone.id, d))), 0)
         const closed = closedLabel(r)
         return (
           <TableRow key={r.milestone.id} aria-disabled={closed ? true : undefined}
             sx={closed ? { bgcolor: 'action.hover', '& th, & td': { color: 'text.disabled' } } : undefined}>
-            <TableCell component="th" scope="row">
+            <TableCell component="th" scope="row" sx={STICKY}>
               {r.milestone.name}
               {r.role === 'supporting' ? <SupportingChip /> : null}
               {closed ? (
@@ -150,7 +153,7 @@ function GroupRows({ group, days, state, thisWeek, onRequest }) {
               const value = valueOf(k)
               const label = `${r.milestone.name}, ${formatDayLabel(d)}`
               return (
-                <TableCell key={d} align="center" sx={{ verticalAlign: 'top' }}>
+                <TableCell key={d} align="center" sx={[{ verticalAlign: 'top' }, dayTint(d, today)]}>
                   {locks[k] ? (
                     <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
                       onRequest={() => onRequest({ milestoneId: r.milestone.id, date: d, hours: locks[k].hours, label })} />
@@ -170,7 +173,7 @@ function GroupRows({ group, days, state, thisWeek, onRequest }) {
                 </TableCell>
               )
             })}
-            <TableCell align="right">{formatHours(rowTotal)}</TableCell>
+            <TableCell align="right">{formatHours(rowTotal(r.milestone.id))}</TableCell>
           </TableRow>
         )
       })}

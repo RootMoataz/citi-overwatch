@@ -7,23 +7,13 @@ import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { STATUS, statusColor } from '../../app/theme.js'
 import { formatDayFull, formatHours } from '../../lib/format.js'
+import { EntryStatusChip } from './EntryStatus.jsx'
 import { closedLabel } from './useTimesheetWeek.js'
-import { KIND, KIND_ICON, chipSx, daySummary, isOverdue, kindColor, kindText, milestoneHref, num, shortDate, sourceOf } from './monthText.js'
+import { KIND, daySummary, isOverdue, kindText, milestoneHref, num, shortDate, sourceOf } from './monthText.js'
 
 const LOCK_NOTE = 'Timer hours are locked; your manager approves any change'
 const term = { typography: 'body2', color: 'text.secondary' }
 const value = { typography: 'body2', fontWeight: 600, m: 0, display: 'flex', alignItems: 'center', gap: 0.75 }
-
-/** The line's approval status as a chip: icon and word, in the status colours. */
-function StatusChip({ kind }) {
-  const Icon = KIND_ICON[kind]
-  return (
-    <Box component="span" sx={[{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.25, typography: 'caption',
-      fontWeight: 600, whiteSpace: 'nowrap', color: (t) => kindText(kind, t) }, chipSx(kind)]}>
-      <Icon sx={{ fontSize: 15, color: (t) => kindColor(kind, t) }} />{KIND[kind].panel}
-    </Box>
-  )
-}
 
 /** One hours line of the day: what it is, read-only, and what can be done about it. Timer hours are locked and changed
  * only through a request to the manager; any other line is edited in the Day view. */
@@ -43,7 +33,7 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
     <Paper component="li" variant="outlined" sx={{ p: 2, listStyle: 'none' }}>
       <Stack direction="row" useFlexGap sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
         <Typography component="h4" variant="subtitle1" sx={{ fontWeight: 600, minWidth: 0, overflowWrap: 'anywhere' }}>{name}</Typography>
-        <StatusChip kind={line.kind} />
+        <EntryStatusChip kind={line.kind} />
       </Stack>
       {milestone ? <Typography variant="body2" sx={{ color: 'text.secondary' }}>{`Project: ${milestone.project.name}`}</Typography> : null}
       <Box component="dl" sx={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 1.25, alignItems: 'center',
