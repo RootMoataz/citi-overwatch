@@ -183,7 +183,7 @@ Each group has a header button with the group name and its count, e.g. "In progr
   - an admin sees them.
 - **Archived milestones for employees:**
   - `GET /milestones/{id}` and its notes, updates and history are 404 for an employee when the milestone or its project is archived;
-  - the same reads still work for the project's manager;
+  - managers and admins keep today's behaviour (an archived milestone is reached through Archive and restore, not its direct link);
   - `GET /projects/{id}/milestones` leaves them out for an employee.
 
 **Frontend:**
