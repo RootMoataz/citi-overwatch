@@ -19,7 +19,9 @@ export const primaryRisk = (reasons) => orderedRisks(reasons)[0] ?? null
 /** One sentence for the tooltip. `today` is the New York date (YYYY-MM-DD). */
 export function riskSentence(code, project, today) {
   if (code === 'PAST_DUE') {
-    const ago = Math.max(daysBetween(project.predicted_end_date, today), 0)
+    const ago = daysBetween(project.predicted_end_date, today)
+    // The server counts from the New York date too, so this shouldn't happen; if it does, never "0 days ago".
+    if (!(ago > 0)) return "Ended today and isn't completed."
     return `Ended ${formatDate(project.predicted_end_date)}, ${plural(ago, 'day')} ago, and isn't completed.`
   }
   if (code === 'BUDGET_BURN') {

@@ -28,6 +28,13 @@ describe('riskSentence', () => {
       .toBe("Ended Oct 14, 2026, 1 day ago, and isn't completed.")
   })
 
+  test('past due never reads "0 days ago": a project ending today says so', () => {
+    expect(riskSentence('PAST_DUE', { predicted_end_date: '2026-10-15' }, '2026-10-15'))
+      .toBe("Ended today and isn't completed.")
+    expect(riskSentence('PAST_DUE', { predicted_end_date: '2026-10-16' }, '2026-10-15'))
+      .toBe("Ended today and isn't completed.")
+  })
+
   test('budget burn uses whole percents and the difference of the two shown numbers', () => {
     expect(riskSentence('BUDGET_BURN', { budget_pct: 81.2, progress_pct: 61.9 }))
       .toBe('81% of the budget used against 62% progress: 19 points ahead.')

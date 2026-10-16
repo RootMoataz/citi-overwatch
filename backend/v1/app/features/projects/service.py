@@ -3,7 +3,8 @@ summaries and the list."""
 
 import json
 import math
-from datetime import datetime, timezone
+import uuid
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from pg8000.exceptions import DatabaseError
@@ -19,6 +20,7 @@ from app.presets import department_key, plan_for, templates
 from app.rules.at_risk import at_risk_reasons, weighted_progress
 from app.rules.estimates import duration_days, used_pct, working_days
 from app.rules.overtime import forecast_total
+from app.rules.time_tracking import ny_date
 from app.validation import as_date, as_decimal, as_enum, as_str, as_uuid, page_params, require
 
 STATUSES = ("planned", "active", "on_hold", "completed")
@@ -34,6 +36,16 @@ TENTH = Decimal("0.1")
 
 def today() -> "datetime.date":
     return datetime.now(timezone.utc).date()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def risk_today() -> date:
+    """The day the at-risk check counts from: the New York date, the business day the timesheets use, so a project
+    ending today in New York isn't "Past due" in the New York evening after the UTC date has rolled over."""
+    return ny_date(_now())
 
 
 # ---------- numbers shared with summaries, the dashboard and time approvals ----------
@@ -103,7 +115,7 @@ def decorate(project: dict, milestones: list[dict], consumed: Decimal) -> dict:
         "at_risk_reasons": at_risk_reasons(
             status=project["status"], is_archived=project["is_archived"],
             predicted_end=project["predicted_end_date"], budget=project["budget"],
-            consumed=consumed, milestones=milestones, today=today()),
+            consumed=consumed, milestones=milestones, today=risk_today()),
         "manager": {"id": project["manager_id"],
                     "name": f"{project.get('manager_first', '')} {project.get('manager_last', '')}".strip()},
         "department": ({"id": project["department_id"], "name": project.get("department_name")}
@@ -510,7 +522,8 @@ def list_projects(conn, ctx: Ctx, params: dict) -> dict:
     page, size = page_params(params)
     sort = as_enum(params["sort"], "sort", SORTS) if params.get("sort") else "name"
     direction = as_enum(params["dir"], "dir", DIRS) if params.get("dir") else "asc"
-    department = as_uuid(params["department"], "department") if params.get("department") else None
+    # Normalised, so an upper-case id still matches the lower-case ids the rows carry.
+    department = str(uuid.UUID(as_uuid(params["department"], "department"))) if params.get("department") else None
     live = decorated(conn, visible_projects(conn, ctx))
     counts = project_counts(live)  # every live project the caller can see, whatever the filters
     items = (decorated(conn, visible_projects(conn, ctx, archived=True))

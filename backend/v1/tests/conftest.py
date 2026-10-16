@@ -41,6 +41,18 @@ def reminder_clock_midweek(monkeypatch):
     monkeypatch.setattr(reminders, "_now", lambda: datetime(2026, 10, 14, 15, 0, tzinfo=timezone.utc))
 
 
+@pytest.fixture(autouse=True)
+def risk_clock_midday(monkeypatch):
+    """The at-risk check counts from the New York date. Pin its clock to 16:00 UTC (midday in New York) of today's
+    UTC date, so tests that build dates from the UTC date get the same day at any hour of the run. The New York
+    evening tests move it with their own clock."""
+    from datetime import datetime, time, timezone
+
+    from app.features.projects import service as projects
+    midday = datetime.combine(datetime.now(timezone.utc).date(), time(16, 0), tzinfo=timezone.utc)
+    monkeypatch.setattr(projects, "_now", lambda: midday)
+
+
 @pytest.fixture
 def conn(db):
     yield db

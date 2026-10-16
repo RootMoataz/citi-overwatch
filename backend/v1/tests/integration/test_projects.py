@@ -286,3 +286,69 @@ def test_list_items_carry_the_active_team_for_avatars(client, conn):
     assert items["Teamed"]["team"] == [{"id": str(bob["id"]), "name": "Bob Ames"},
                                        {"id": str(ada["id"]), "name": "Ada Byron"}]
     assert items["Empty"]["team"] == []
+
+
+# ---------- the at-risk check runs on the New York date (the timesheets' business day) ----------
+
+def _at(monkeypatch, moment):
+    from app.features.projects import service as projects_service
+    monkeypatch.setattr(projects_service, "_now", lambda: moment)
+
+
+def _reasons(client, token, project):
+    detail = client.request("GET", f"/projects/{project['id']}", token=token)[1]["at_risk_reasons"]
+    risky = [p["name"] for p in client.request("GET", "/projects?at_risk=true", token=token)[1]["items"]]
+    counted = client.request("GET", "/projects?counts=true", token=token)[1]["counts"]["at_risk"]
+    dashboard = [p["name"] for p in client.request("GET", "/dashboard", token=token)[1]["at_risk"]]
+    listed = project["name"] in risky
+    assert listed == (counted == 1) == (project["name"] in dashboard), (detail, risky, counted, dashboard)
+    return detail
+
+
+def test_a_project_ending_today_in_new_york_is_not_past_due_before_new_york_midnight(client, conn, monkeypatch):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    project = make_project(conn, mgr, name="Ends Oct 15", start=date(2026, 9, 1), end=date(2026, 10, 15))
+    token = token_for(conn, admin)
+    _at(monkeypatch, datetime(2026, 10, 16, 2, 0, tzinfo=timezone.utc))  # 22:00 on Oct 15 in New York
+    assert _reasons(client, token, project) == []
+    _at(monkeypatch, datetime(2026, 10, 16, 5, 0, tzinfo=timezone.utc))  # 01:00 on Oct 16 in New York
+    assert _reasons(client, token, project) == ["PAST_DUE"]
+
+
+def test_a_milestone_ending_today_in_new_york_is_not_overdue_before_new_york_midnight(client, conn, monkeypatch):
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    project = make_project(conn, mgr, name="Milestone Oct 15", start=date(2026, 9, 1), end=date(2026, 12, 31))
+    make_milestone(conn, project, name="Due Oct 15", start=date(2026, 9, 1), end=date(2026, 10, 15))
+    token = token_for(conn, admin)
+    _at(monkeypatch, datetime(2026, 10, 16, 2, 0, tzinfo=timezone.utc))
+    assert _reasons(client, token, project) == []
+    _at(monkeypatch, datetime(2026, 10, 16, 5, 0, tzinfo=timezone.utc))
+    assert _reasons(client, token, project) == ["OVERDUE_MILESTONE"]
+
+
+# ---------- list filters: an upper-case department id, and archived rows for employees ----------
+
+def test_department_filter_matches_an_upper_case_id(client, conn):
+    admin = make_user(conn, role="admin")
+    dept = query_one(conn, "INSERT INTO departments (name) VALUES ('Technology') RETURNING *")
+    inside = make_project(conn, admin, name="In tech")
+    conn.run("UPDATE projects SET department_id = :d WHERE id = :i", d=dept["id"], i=inside["id"])
+    make_project(conn, admin, name="Elsewhere")
+    upper = str(dept["id"]).upper()
+    status, body, _, _ = client.request("GET", f"/projects?department={upper}", token=token_for(conn, admin))
+    assert status == 200
+    assert [p["name"] for p in body["items"]] == ["In tech"]
+
+
+def test_an_employee_asking_for_archived_projects_gets_live_rows_only(client, conn):
+    admin, mgr, emp = make_user(conn, role="admin"), make_user(conn, role="manager"), make_user(conn)
+    live = make_project(conn, mgr, name="Live")
+    gone = make_project(conn, mgr, name="Gone", archived=True)
+    for project in (live, gone):
+        add_member(conn, project, emp)
+    status, body, _, _ = client.request("GET", "/projects?archived=true", token=token_for(conn, emp))
+    assert status == 200
+    assert [p["name"] for p in body["items"]] == ["Live"]
+    assert body["total"] == 1
+    admin_rows = client.request("GET", "/projects?archived=true", token=token_for(conn, admin))[1]["items"]
+    assert [p["name"] for p in admin_rows] == ["Gone"]  # control: the flag itself works
