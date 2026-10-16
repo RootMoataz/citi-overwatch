@@ -94,6 +94,32 @@ describe('Timesheet Month view', () => {
     expect(viewToggle('Week')).toHaveAttribute('aria-pressed', 'true')
   })
 
+  test('leaving Month drops ?month= so a reload keeps the chosen view', async () => {
+    const first = renderSheet('/timesheet?month=2026-10')
+    const user = userEvent.setup()
+    expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
+    await user.click(viewToggle('Day'))
+    expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toBeInTheDocument()
+    expect(screen.getByTestId('location')).not.toHaveTextContent('month=')
+    const search = screen.getByTestId('location').textContent
+    first.unmount()
+    renderSheet(`/timesheet${search.includes('?') ? search.slice(search.indexOf('?')) : ''}`)
+    expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'October 2026' })).not.toBeInTheDocument()
+  })
+
+  test('Back to that week also drops ?month=', async () => {
+    renderSheet(`/timesheet?week=${WEEK}`)
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Schema Mapping, Wed Oct 14'), '6')
+    await user.click(viewToggle('Month'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('month=2026-10'))
+    await user.click(screen.getByRole('button', { name: 'Back to that week' }))
+    expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toHaveValue('6')
+    expect(screen.getByTestId('location')).not.toHaveTextContent('month=')
+    expect(screen.getByTestId('location')).toHaveTextContent(`week=${WEEK}`)
+  })
+
   test('clicking a day in the month opens it in the Day view', async () => {
     localStorage.setItem(VIEW_KEY, 'month')
     renderSheet('/timesheet?month=2026-10')

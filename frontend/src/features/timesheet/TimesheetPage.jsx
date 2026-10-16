@@ -111,6 +111,8 @@ export default function TimesheetPage() {
     if (next !== 'month') setSheetView(next)
     setView(next)
     storeView(next)
+    // Leaving Month drops ?month=, or a reload would open Month again.
+    if (next !== 'month' && params.has('month')) setParams((p) => { const q = new URLSearchParams(p); q.delete('month'); return q }, { replace: true })
   }
   // A cell named in an error; in the day view it links to its day.
   const cellRef = (milestoneId, date) => {
