@@ -618,6 +618,123 @@ describe('ProjectDetailPage', () => {
     expect(within(row).getByRole('meter', { name: /schema mapping share of budget/i })).toHaveAttribute('aria-valuenow', '12')
   })
 
+  describe('the header', () => {
+    const full = () => project({ department: { id: 'd1', name: 'Technology' }, start_date: '2026-07-15',
+      predicted_end_date: '2026-12-27' })
+    const open = (p, user = users.manager, tab = 'overview') => {
+      server.use(...detailHandlers(p))
+      return renderAsUser(<ProjectDetailPage />, { user, route: `/projects/p1?tab=${tab}`, path: '/projects/:id' })
+    }
+
+    test.each(['overview', 'milestones', 'team', 'budget', 'hours'])('is the same on the %s tab', async (tab) => {
+      open(full(), users.manager, tab)
+      expect(await screen.findByRole('heading', { level: 1, name: 'Apollo Data Migration' })).toBeInTheDocument()
+      expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+      expect(screen.getByText('On track')).toBeInTheDocument()
+      expect(screen.getAllByText('Morgan Manager').length).toBeGreaterThan(0)
+      expect(screen.getByText('Technology')).toBeInTheDocument()
+      expect(screen.getByText('Jul 15 – Dec 27, 2026')).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: /^projects$/i })).not.toBeInTheDocument()
+    })
+
+    test('a missing department drops its segment, and a past-due project says so', async () => {
+      open(project({ at_risk_reasons: ['PAST_DUE'] }))
+      expect(await screen.findByRole('img', { name: 'Risk: Past due' })).toBeInTheDocument()
+      expect(screen.queryByText('Technology')).not.toBeInTheDocument()
+      expect(screen.getAllByText('·')).toHaveLength(1)
+    })
+
+    test('a completed project has no health chip; an archived one says Archived and has none', async () => {
+      const { unmount } = open(project({ status: 'completed', completed_at: '2026-10-01' }))
+      expect(await screen.findByRole('heading', { level: 1 })).toBeInTheDocument()
+      expect(screen.queryByText('On track')).not.toBeInTheDocument()
+      unmount()
+      open(project({ is_archived: true }), users.admin)
+      expect(await screen.findByText('Archived')).toBeInTheDocument()
+      expect(screen.queryByText('On track')).not.toBeInTheDocument()
+    })
+
+    test('a long description is clamped behind More; a short one has none', async () => {
+      const { unmount } = open(project({ description: 'x'.repeat(300) }))
+      await userEvent.click(await screen.findByRole('button', { name: 'More' }))
+      expect(screen.getByRole('button', { name: 'Less' })).toBeInTheDocument()
+      unmount()
+      open(project({ description: 'Move records' }))
+      expect((await screen.findAllByText('Move records')).length).toBeGreaterThan(0)
+      expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument()
+    })
+
+    test('Edit project is for the manager of a live project only, and opens the form', async () => {
+      const { unmount } = open(project())
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit project' }))
+      expect(await screen.findByRole('dialog', { name: /edit project/i })).toBeInTheDocument()
+      unmount()
+      for (const [user, p] of [[users.employee, project()], [users.executive, project()], [users.admin, project({ is_archived: true })]]) {
+        const view = open(p, user)
+        await screen.findByRole('heading', { level: 1 })
+        expect(screen.queryByRole('button', { name: 'Edit project' })).not.toBeInTheDocument()
+        view.unmount()
+      }
+    })
+
+    test('the actions menu is for admins; Archive project confirms and archives', async () => {
+      let archived = 0
+      const { unmount } = open(project(), users.manager)
+      await screen.findByRole('heading', { level: 1 })
+      expect(screen.queryByRole('button', { name: 'More project actions' })).not.toBeInTheDocument()
+      unmount()
+      open(project(), users.admin)
+      server.use(http.delete(`${API}/projects/p1`, () => { archived += 1; return new HttpResponse(null, { status: 204 }) }))
+      await userEvent.click(await screen.findByRole('button', { name: 'More project actions' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Archive project' }))
+      const dialog = await screen.findByRole('dialog', { name: /archive this project/i })
+      expect(archived).toBe(0)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Archive' }))
+      await waitFor(() => expect(archived).toBe(1))
+    })
+
+    test('on an archived project the menu holds Restore project', async () => {
+      open(project({ is_archived: true }), users.admin)
+      await userEvent.click(await screen.findByRole('button', { name: 'More project actions' }))
+      expect(screen.getByRole('menuitem', { name: 'Restore project' })).toBeEnabled()
+      expect(screen.queryByRole('menuitem', { name: 'Archive project' })).not.toBeInTheDocument()
+    })
+
+    test('for the public demo admin the items are disabled with the demo tooltip', async () => {
+      open(project(), users.demoAdmin)
+      await userEvent.click(await screen.findByRole('button', { name: 'More project actions' }))
+      const item = screen.getByRole('menuitem', { name: 'Archive project' })
+      expect(item).toHaveAttribute('aria-disabled', 'true')
+      await userEvent.hover(item.parentElement)
+      expect(await screen.findByText('Disabled in the public demo')).toBeInTheDocument()
+    })
+  })
+
+  describe('tabs', () => {
+    const open = (p, route) => {
+      server.use(...detailHandlers(p))
+      return renderAsUser(<ProjectDetailPage />, { user: users.manager, route, path: '/projects/:id' })
+    }
+    test('Plan shows while planning or after a finalized plan; it is the default only while planning', async () => {
+      const { unmount } = open(project({ status: 'planned' }), '/projects/p1')
+      expect(await screen.findByRole('tab', { name: 'Plan', selected: true })).toBeInTheDocument()
+      unmount()
+      const second = open(project({ status: 'active', plan_finalized_at: '2026-09-01T00:00:00Z' }), '/projects/p1')
+      expect(await screen.findByRole('tab', { name: 'Overview', selected: true })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Plan' })).toBeInTheDocument()
+      second.unmount()
+      open(project(), '/projects/p1')
+      expect(await screen.findByRole('tab', { name: 'Overview', selected: true })).toBeInTheDocument()
+      expect(screen.queryByRole('tab', { name: 'Plan' })).not.toBeInTheDocument()
+    })
+
+    test('an old milestone link lands on Milestones with its parameter intact', async () => {
+      open(project(), '/projects/p1?tab=milestones&milestone=m1')
+      expect(await screen.findByRole('tab', { name: 'Milestones', selected: true })).toBeInTheDocument()
+      expect(screen.getByTestId('location')).toHaveTextContent('milestone=m1')
+    })
+  })
+
   describe('cost by milestone bars', () => {
     const fillWidth = (meter) => parseFloat(getComputedStyle(meter.firstChild).width)
 
@@ -676,17 +793,6 @@ describe('ProjectDetailPage', () => {
     await user.type(within(dialog).getByLabelText(/planned hours/i), '12')
     await user.click(within(dialog).getByRole('button', { name: /^add$/i }))
     expect(await within(dialog).findByText('Bo Peep is already planned for 30h of 40h per week.')).toBeInTheDocument()
-  })
-
-  test('admin archives with confirmation', async () => {
-    let archived = false
-    server.use(...detailHandlers(), http.delete(`${API}/projects/p1`, () => { archived = true; return new HttpResponse(null, { status: 204 }) }))
-    renderAsUser(<ProjectDetailPage />, { user: users.admin, route: '/projects/p1', path: '/projects/:id' })
-    const user = userEvent.setup()
-    await user.click(await screen.findByRole('button', { name: /^archive$/i }))
-    const dialog = await screen.findByRole('dialog', { name: /archive this project/i })
-    await user.click(within(dialog).getByRole('button', { name: /^archive$/i }))
-    await waitFor(() => expect(archived).toBe(true))
   })
 
   test('overview says progress is weighted by difficulty', async () => {

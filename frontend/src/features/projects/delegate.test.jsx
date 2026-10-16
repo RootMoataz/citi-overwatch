@@ -34,7 +34,7 @@ describe('delegate approver on a project', () => {
   let puts
   beforeEach(() => { puts = [] })
 
-  test('the overview says who the approvals are delegated to and until when', async () => {
+  test('the header says who the approvals are delegated to and until when', async () => {
     server.use(...handlers(project({ delegate: { id: 'u-dee', name: 'Dee Legate', until: '2026-10-20', active: true } }), puts))
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1', path: '/projects/:id' })
     expect(await screen.findByText(/approvals delegated to/i)).toHaveTextContent('Approvals delegated to Dee Legate until Oct 20, 2026')

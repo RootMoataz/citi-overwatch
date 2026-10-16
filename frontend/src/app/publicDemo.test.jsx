@@ -303,8 +303,12 @@ describe('blocked actions are disabled for the demo admin', () => {
       http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })))
     const { unmount } = renderAsUser(<ProjectDetailPage />, { user: users.demoAdmin, route: '/projects/p1',
       path: '/projects/:id' })
-    await expectDisabledWithTooltip(await screen.findByRole('button', { name: /^archive$/i }))
-    expect(screen.getByRole('button', { name: /edit/i })).toBeEnabled()
+    expect(await screen.findByRole('button', { name: /edit project/i })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'More project actions' }))
+    const item = screen.getByRole('menuitem', { name: 'Archive project' })
+    expect(item).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.hover(item.parentElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(DISABLED)
     unmount()
 
     server.use(http.get(`${API}/archive`, () => HttpResponse.json({ items: [
