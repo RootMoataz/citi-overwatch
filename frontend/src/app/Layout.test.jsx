@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
-import { describe, expect, test, vi } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
 import { setViewport } from '../test/setup.js'
 import Layout from './Layout.jsx'
@@ -274,6 +274,8 @@ describe('account menu and user chip', () => {
 })
 
 describe('top bar order', () => {
+  afterEach(() => { try { sessionStorage.clear() } catch { /* nothing stored */ } })
+
   test('Search, timer, Puppy, Notifications, then the account avatar', () => {
     const extras = <><button>Timer</button><button>Puppy</button><button>Notifications</button></>
     renderLayout(users.manager, () => {}, { extras })
@@ -289,7 +291,6 @@ describe('top bar order', () => {
     const names = within(screen.getByRole('banner')).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(names).toEqual(['Search (Ctrl+K)', 'Timer', 'Puppy', 'Notifications',
       expect.stringMatching(/^Demo session, signed out in 4 minutes \d+ seconds$/), 'Account menu'])
-    sessionStorage.clear()
   })
 
   test('Search is named "Search (Ctrl+K)" and opens the palette', async () => {

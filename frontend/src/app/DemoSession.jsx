@@ -36,6 +36,12 @@ export function DemoPill({ notice }) {
       setAnnouncement('1 minute left in the demo session')
     }
   }, [notice.active, urgent, left])
+  // The region empties itself shortly after speaking, so a repeat would be visible (and heard again).
+  useEffect(() => {
+    if (!announcement) return undefined
+    const timer = setTimeout(() => setAnnouncement(''), 5000)
+    return () => clearTimeout(timer)
+  }, [announcement])
   if (!notice.active) return null
   return (
     <>
@@ -48,6 +54,7 @@ export function DemoPill({ notice }) {
         <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Demo session · </Box>{notice.clock}
       </Button>
       <Popover id={popoverId} open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}
+        slotProps={{ paper: { role: 'dialog', 'aria-label': 'About the demo session' } }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
         <Typography variant="body2" sx={{ p: 2, maxWidth: 280 }}>{POPOVER_TEXT}</Typography>
       </Popover>

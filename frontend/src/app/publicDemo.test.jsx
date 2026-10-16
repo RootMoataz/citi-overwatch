@@ -29,8 +29,9 @@ function renderLayout(user) {
 
 /** The demo admin with 4 minutes 32 seconds left, on a frozen clock that only moves when the test says.
  * Unless `welcomed` is false, the welcome dialog was already seen this session (it would hide the page behind it). */
-function demoWithTimeLeft(seconds = 272, { welcomed = true } = {}) {
-  vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'] })
+function demoWithTimeLeft(seconds = 272, { welcomed = true, timeouts = false } = {}) {
+  vi.useFakeTimers({ toFake: timeouts ? ['Date', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout']
+    : ['Date', 'setInterval', 'clearInterval'] })
   vi.setSystemTime(NOW)
   const user = { ...users.demoAdmin, session_expires_at: new Date(NOW.getTime() + seconds * 1000).toISOString() }
   if (welcomed) sessionStorage.setItem(`acme-scout:demo-welcomed:${user.session_expires_at}`, '1')
@@ -81,19 +82,38 @@ describe('demo pill and welcome', () => {
   })
 
   test('one polite announcement at 1:00, never each second', () => {
-    renderLayout(demoWithTimeLeft(63))
+    renderLayout(demoWithTimeLeft(90, { timeouts: true }))
     const live = screen.getByRole('status')
     expect(live).toHaveAttribute('aria-live', 'polite')
     expect(live).toBeEmptyDOMElement()
-    act(() => { vi.advanceTimersByTime(3000) })
-    expect(live).toHaveTextContent('1 minute left in the demo session')
+    act(() => { vi.advanceTimersByTime(20_000) }) // 1:10 left, still above the line
+    expect(live).toBeEmptyDOMElement()
+    act(() => { vi.advanceTimersByTime(10_000) }) // 1:00
+    expect(live).toHaveTextContent(/^1 minute left in the demo session$/)
+    act(() => { vi.advanceTimersByTime(6000) }) // it empties itself after speaking
+    expect(live).toBeEmptyDOMElement()
+    // From here on any repeat would refill it.
     const changes = []
     const observer = new MutationObserver((records) => changes.push(...records))
     observer.observe(live, { childList: true, characterData: true, subtree: true })
-    act(() => { vi.advanceTimersByTime(10_000) })
+    act(() => { vi.advanceTimersByTime(20_000) })
     observer.disconnect()
     expect(changes).toHaveLength(0)
-    expect(live).toHaveTextContent(/^1 minute left in the demo session$/)
+    expect(live).toBeEmptyDOMElement()
+  })
+
+  test('the pill popover opens with Enter and closes with Escape, returning focus to the pill', async () => {
+    const end = new Date(Date.now() + 200_000).toISOString()
+    sessionStorage.setItem(`acme-scout:demo-welcomed:${end}`, '1')
+    renderLayout({ ...users.demoAdmin, session_expires_at: end })
+    const pill = screen.getByRole('button', { name: /demo session, signed out/i })
+    pill.focus()
+    await userEvent.keyboard('{Enter}')
+    const popover = await screen.findByRole('dialog', { name: /about the demo session/i })
+    expect(popover).toHaveTextContent('Public demo admin.')
+    await userEvent.keyboard('{Escape}')
+    await vi.waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(pill).toHaveFocus()
   })
 
   test('the announcement still comes, once, when a hidden tab wakes up below 1:00', () => {
@@ -143,6 +163,16 @@ describe('demo pill and welcome', () => {
     expect(photo).toHaveAttribute('aria-disabled', 'true')
     expect(photo).toHaveTextContent(DISABLED)
   })
+})
+
+test('a demo-locked action shows its reason when reached with the keyboard', async () => {
+  server.use(http.get(`${API}/users`, () => HttpResponse.json({ items: [], total: 0 })),
+    http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })))
+  renderAsUser(<PeoplePage />, { user: users.demoAdmin, route: '/people', path: '/people' })
+  const wrapper = (await screen.findByRole('button', { name: /new account/i })).parentElement
+  for (let i = 0; i < 30 && document.activeElement !== wrapper; i += 1) await userEvent.tab()
+  expect(wrapper).toHaveFocus()
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(DISABLED)
 })
 
 async function expectDisabledWithTooltip(button) {
