@@ -1,20 +1,23 @@
 import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
 import ChevronLeft from '@mui/icons-material/ChevronLeft'
 import ChevronRight from '@mui/icons-material/ChevronRight'
-import { Alert, Button, IconButton, Link, Paper, Popover, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, IconButton, Link, Paper, Popover, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
-import { useAllocations, useMilestones, useWeek } from '../../api/queries.js'
+import { useAllocations, useMembers, useMilestones, useWeek } from '../../api/queries.js'
 import DataTable from '../../components/DataTable.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import FootNote from '../../components/FootNote.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
+import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 import { addDays, formatDate, formatHours, formatWeekRange, mondayOf, nyTodayIso } from '../../lib/format.js'
 import { can } from '../../lib/permissions.js'
 
 const sum = (rows, key) => rows.reduce((total, r) => total + r[key], 0)
+const LOGGED_INFO = 'Logged means pending + approved. Rejected hours excluded.'
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
 /** Monday of the week containing an ISO day. */
@@ -83,17 +86,19 @@ function TeamHours({ project, week }) {
     }))
   const pending = sum(rows, 'pending')
   const columns = [
-    { key: 'person', header: 'Person', render: (r) => <PersonLink person={r.person} context={{ project }} /> },
+    { key: 'person', header: 'Person', render: (r) => (
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+        <UserAvatar userId={r.person.id} name={r.person.name} size={AVATAR_SIZE.row} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}><PersonLink person={r.person} context={{ project }} /></Typography>
+          <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{r.person.job_title || 'No title'}</Typography>
+          {r.logged > r.planned ? (
+            <Typography variant="caption" component="div" sx={{ color: 'warning.main' }}>{`${formatHours(r.logged - r.planned)} above project plan`}</Typography>
+          ) : null}
+        </Box>
+      </Stack>) },
     { key: 'planned', header: 'Planned / week', align: 'right', render: (r) => formatHours(r.planned) },
-    { key: 'logged', header: 'Logged', align: 'right', render: (r) => (
-      <>
-        <span>{formatHours(r.logged)}</span>
-        {r.logged > r.planned ? (
-          <Typography variant="caption" component="span" sx={{ display: 'block', color: 'warning.main' }}>
-            {`${formatHours(r.logged - r.planned)} above project plan`}
-          </Typography>
-        ) : null}
-      </>) },
+    { key: 'logged', header: 'Logged', align: 'right', render: (r) => formatHours(r.logged) },
     { key: 'approved', header: 'Approved', align: 'right', render: (r) => formatHours(r.approved) },
     { key: 'pending', header: 'Pending', align: 'right', render: (r) => formatHours(r.pending) },
     { key: 'review', header: 'Review', align: 'right', render: (r) => (r.pending > 0
@@ -104,7 +109,7 @@ function TeamHours({ project, week }) {
     approved: formatHours(sum(rows, 'approved')), pending: formatHours(pending), review: null }
   const items = [
     { key: 'planned', label: 'Planned', value: formatHours(sum(rows, 'planned')) },
-    { key: 'logged', label: 'Logged', value: formatHours(sum(rows, 'logged')), info: 'Logged means pending + approved. Rejected hours excluded.' },
+    { key: 'logged', label: 'Logged', value: formatHours(sum(rows, 'logged')), info: LOGGED_INFO },
     { key: 'approved', label: 'Approved', value: formatHours(sum(rows, 'approved')) },
     { key: 'pending', label: 'Pending', value: formatHours(pending), tone: pending > 0 ? 'warning' : undefined },
   ]
@@ -132,15 +137,16 @@ function TeamHours({ project, week }) {
   )
 }
 
-function YourHours({ project, week }) {
+function YourHours({ project, user, week }) {
   const entries = useWeek(week, undefined, true)
   const milestones = useMilestones(project.id)
+  const members = useMembers(project.id)
   const names = new Map((milestones.data ?? []).map((m) => [String(m.id), m.name]))
   const byMilestone = new Map()
   for (const e of entries.data?.entries ?? []) {
     if (String(e.project_id) !== String(project.id)) continue
     const key = String(e.milestone_id)
-    const row = byMilestone.get(key) ?? { id: key, name: names.get(key) ?? 'Milestone', logged: 0, approved: 0, pending: 0, rejected: 0 }
+    const row = byMilestone.get(key) ?? { id: key, name: names.get(key) ?? 'Unknown milestone', logged: 0, approved: 0, pending: 0, rejected: 0 }
     const hours = Number(e.hours)
     if (e.status === 'approved') { row.approved += hours; row.logged += hours }
     else if (e.status === 'pending') { row.pending += hours; row.logged += hours }
@@ -148,6 +154,13 @@ function YourHours({ project, week }) {
     byMilestone.set(key, row)
   }
   const rows = [...byMilestone.values()]
+  const me = (members.data ?? []).find((m) => String(m.user.id) === String(user.id))
+  const items = [
+    { key: 'planned', label: 'Planned', value: me ? formatHours(me.planned_hours_per_week) : '—' },
+    { key: 'logged', label: 'Logged', value: formatHours(sum(rows, 'logged')), info: LOGGED_INFO },
+    { key: 'approved', label: 'Approved', value: formatHours(sum(rows, 'approved')) },
+    { key: 'pending', label: 'Pending', value: formatHours(sum(rows, 'pending')), tone: sum(rows, 'pending') > 0 ? 'warning' : undefined },
+  ]
   const columns = [
     { key: 'name', header: 'Milestone', render: (r) => r.name },
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => formatHours(r.logged) },
@@ -165,9 +178,12 @@ function YourHours({ project, week }) {
       </Stack>
       <ErrorAlert error={entries.error} onRetry={() => entries.refetch()} />
       {entries.error ? null : (
+        <Stack sx={{ gap: 2 }}>
+        <KpiStrip ariaLabel="Your hours this week" items={items} loading={entries.isLoading} />
         <DataTable ariaLabel="Your hours by milestone" columns={columns} rows={rows} getRowId={(r) => r.id}
           loading={entries.isLoading} skeletonRows={3} totalRow={totalRow}
           empty={<EmptyState title="No hours this week" description="Hours appear as the team logs them." />} />
+        </Stack>
       )}
     </Paper>
   )
@@ -181,7 +197,7 @@ export default function HoursTab({ project, user, view }) {
     <Stack sx={{ gap: 2 }}>
       {view.lead || own ? <WeekBar week={week} thisWeek={thisWeek} setWeek={setWeek} /> : null}
       {view.lead ? <TeamHours project={project} week={week} /> : null}
-      {own ? <YourHours project={project} week={week} /> : null}
+      {own ? <YourHours project={project} user={user} week={week} /> : null}
       {!view.lead && !own ? (
         <EmptyState title="Team hours are private" description="Only the project's manager and admins see everyone's hours." />
       ) : null}

@@ -155,7 +155,7 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
                     if (inner && e.currentTarget.contains(inner)) return
                     onRowOpen(row)
                   } : undefined}
-                    aria-current={selected ? 'true' : undefined} selected={selected}
+                    aria-current={selected ? 'true' : undefined} selected={selected} data-tone={tone || undefined}
                     sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default', ...tintFor(theme, tone) })}>
                     {shown.map((c) => <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>)}
                   </TableRow>

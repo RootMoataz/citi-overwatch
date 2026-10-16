@@ -31,12 +31,13 @@ const allocations = [
 ]
 const entry = (id, milestone, hours, status) => ({ id, project_id: 'p1', milestone_id: milestone, work_date: '2026-10-13', hours, status })
 
-function renderTab(user, { route = '/hours-under-test', requests = [], alloc = allocations, entries = [] } = {}) {
+function renderTab(user, { route = '/hours-under-test', requests = [], alloc = allocations, entries = [], team = [{ user: { id: users.employee.id, first_name: 'Eli', last_name: 'Employee' }, planned_hours_per_week: 12 }] } = {}) {
   const note = (request) => { const url = new URL(request.url); requests.push(url.pathname + url.search) }
   server.use(
     http.get(`${API}/allocations`, ({ request }) => { note(request); return HttpResponse.json(alloc) }),
     http.get(`${API}/time-entries`, ({ request }) => { note(request)
       return HttpResponse.json({ rows: [], entries, totals: { logged: 0, approved: 0 } }) }),
+    http.get(`${API}/projects/p1/members`, () => HttpResponse.json(team)),
     http.get(`${API}/projects/p1/milestones`, () => HttpResponse.json([
       { id: 'm1', name: 'Discovery', project_id: 'p1', is_archived: false }, { id: 'm2', name: 'Build', project_id: 'p1', is_archived: false }])),
   )
@@ -81,6 +82,10 @@ describe('HoursTab team table', () => {
     expect(within(row).getByText('10h')).toBeInTheDocument()
     expect(within(row).getByText('14h')).toBeInTheDocument()
     expect(within(row).getByText('4h above project plan')).toBeInTheDocument()
+    expect(within(row).getByText('Analyst')).toBeInTheDocument()
+    expect(within(row).getByText('AL')).toBeInTheDocument()
+    expect(row).toHaveAttribute('data-tone', 'warning')
+    expect(within(screen.getByText('Cy Doe').closest('tr')).queryByText(/above project plan/)).not.toBeInTheDocument()
     expect(within(row).getByRole('link', { name: 'View entries' })).toHaveAttribute('href', '/timesheets?project=p1&user=u1')
     const cy = screen.getByText('Cy Doe').closest('tr')
     expect(within(cy).getByText('—')).toBeInTheDocument()
@@ -121,6 +126,9 @@ describe('HoursTab team table', () => {
     renderTab(users.manager)
     const card = (await screen.findByText('Ada Lovelace')).closest('[data-tone]')
     expect(card).toHaveAttribute('data-tone', 'warning')
+    expect(within(card).getByText('Analyst')).toBeInTheDocument()
+    expect(within(card).getByText('AL')).toBeInTheDocument()
+    expect(within(card).getByText('4h above project plan')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 })
@@ -142,6 +150,20 @@ describe('HoursTab for an employee', () => {
     expect(requests.some((r) => r.includes('/time-entries') && r.includes('week=2026-10-12'))).toBe(true)
     expect(requests.some((r) => r.includes('/allocations'))).toBe(false)
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument()
+    const strip = screen.getByRole('group', { name: 'Your hours this week' })
+    const value = (label) => within(strip).getByText(label).parentElement.textContent
+    expect(value('Planned')).toBe('Planned12h')
+    expect(value('Logged')).toContain('13h')
+    expect(value('Approved')).toBe('Approved6h')
+    expect(value('Pending')).toBe('Pending7h')
+    expect(within(strip).getByRole('img', { name: 'Logged means pending + approved. Rejected hours excluded.' })).toBeInTheDocument()
+  })
+
+  test('names a milestone that is no longer listed, and shows Planned as a dash off the team', async () => {
+    renderTab(users.employee, { entries: [entry('e1', 'm9', 2, 'pending')], team: [] })
+    expect(await screen.findByText('Unknown milestone')).toBeInTheDocument()
+    const strip = screen.getByRole('group', { name: 'Your hours this week' })
+    await waitFor(() => expect(within(strip).getByText('Planned').parentElement.textContent).toBe('Planned—'))
   })
 
   test('says so when they logged nothing on this project', async () => {
