@@ -266,8 +266,8 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,200 backend tests (97% coverage at the last full run), 1,009 frontend component tests, and 17 end-to-end tests
-> (3 journeys on desktop and iPhone, plus layout checks on a phone); the frontend and end-to-end suites all passed on 16 October.
+> Tests: 1,227 backend tests (97% coverage at the last full run), 1,016 frontend component tests, and 23 end-to-end tests
+> (3 journeys on desktop and iPhone, plus layout checks on phones and narrow desktops); the frontend and end-to-end suites all passed on 16 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
 > renamed to ACME Scout after this presentation."
@@ -307,9 +307,10 @@ One open kickback per milestone and one running timer per person are enforced by
 submissions keep a frozen copy of each payroll CSV.
 
 **Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (387 unit tests).
-813 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,009 component tests use Vitest
-and MSW, where an unhandled request fails the test. 17 Playwright tests cover 3 journeys on desktop Chrome and iPhone
-13 and 11 layout checks (the phone top bar never overlaps, long names never push a page sideways at 375 px); these and
+840 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,016 component tests use Vitest
+and MSW, where an unhandled request fails the test. 23 Playwright tests cover 3 journeys on desktop Chrome and iPhone
+13 and 17 layout checks (the top bar never overlaps from 320 px phones to 1440 px desktops, long names never push a page
+sideways at 375 px); these and
 the component tests all passed on 16 October. Two fail-closed tests walk every write route for the executive and demo-admin guards.
 
 **Don't know?** "Good question. Let me show you where that lives." Open `LOGIC_WALKTHROUGH.md` or `DECISIONS.md`.

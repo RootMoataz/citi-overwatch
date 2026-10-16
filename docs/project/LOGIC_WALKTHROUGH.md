@@ -208,7 +208,10 @@ A read-only, hours-first calendar of one person's month, opened with the **Day |
 - **Day boxes.** Each day shows its date, its total ("–" when empty) and one chip per line, each with an icon and a word: approved (a tick, green), pending (a clock, amber, "Pending"), rejected (an exclamation mark, red, "Needs revision", hours struck through) and a timer draft (a timer, dashed, "Not submitted"). More than 3 lines become "+N more". The day total counts pending and approved hours only; rejected and timer hours are shown but not counted, and a total over 24h turns red. "⚠ Over 40h" marks a day holding an over-40 entry, and "📅 N milestone deadlines" a day where an assigned, unfinished milestone ends. On a phone each line is a small shape in its status colour (approved a filled circle, pending a ring, needs revision a square, not submitted a dashed square), so colour is never the only cue. All the date maths is on `YYYY-MM-DD` strings, so a daylight-saving change can't shift a day.
 - **Selecting a day.** Each day is a button named like "Wed 14 Oct, 9 hours, Schema Mapping 9 hours pending". Clicking it selects it (`?month=YYYY-MM&day=YYYY-MM-DD`; today if it is in the month, otherwise the 1st) and never leaves the Month view.
 - **The day panel** (beside the grid from 900px, under it on a phone): the full date, a summary ("8h · 6h approved, 2h pending"), a card per line (status chip, project, hours, "Timer-linked entry", Source: Manual when `tracked_hours` is 0, Tracked when it is at least the hours, Mixed otherwise, and the manager's reason on a rejected line), then the milestones due that day with **View milestones**. A cell holding timer hours (a `locks` entry) is locked: its card shows the lock, "Timer hours are locked; your manager approves any change" and **Request a change** (the existing dialog; "Change requested" while one waits). A timer draft's card says "Not submitted yet — submit it in the Day view" with its own **Edit in Day view** (no request: nothing is submitted yet). A request waiting shows "Change requested" and "You asked for 1.5h", even on a closed project. Hours on a milestone you are no longer assigned to show "You're no longer assigned to this milestone" and no action. Any other line has **Edit in Day view**, which opens the Day view on that date; a day with only locked lines or none offers the same button under "Other hours" ("Submit timer hours or log other hours" when the day holds a draft) or on its own. The buttons' names start with their visible words and add the milestone for screen readers ("Request a change, Schema Mapping", "Edit in Day view, Schema Mapping", "View milestones, Schema Mapping"). A saved typed line that shares its cell with timer hours says "This request covers the cell's 3.5h, including 1.5h from your timer", because a change request is for the whole cell.
-- **Keyboard.** The grid stays a table (column headers Mon–Sun, one cell per day) but is a single Tab stop: Tab lands on the selected day (or the last day you moved to) and the next Tab leaves the grid. The arrow keys move between days (left/right a day, up/down a week), Home and End go to the Monday and Sunday of that week, and Page Up / Page Down open the previous or next month on the same date (the 31st becomes the month's last day). An arrow that steps off the grid opens that month too. Moving never selects: **Enter** or **Space** selects the focused day and moves focus to the panel's heading; when that day is in another month, focus waits until the new month has rendered. The table's description tells screen-reader users these keys. On a phone the legend also explains the "⚠ Over 40h" and milestone-deadline marks, and the panel adds "Over 40h this week" for a day with an over-40 entry. The Source shown is the entry's `source` when the API sends it. The Month view never saves hours; typed hours stay editable in the Day view.
+- **Keyboard.** The grid stays a table (column headers Mon–Sun, one cell per day) but is a single Tab stop: Tab lands on the selected day (or the last day you moved to) and the next Tab leaves the grid. The arrow keys move between days (left/right a day, up/down a week), Home and End go to the Monday and Sunday of that week, and Page Up / Page Down open the month before or after the one shown, on the same day of the month (the 31st becomes the month's last day). They count from the month shown, also from a day of the month before or after that the grid shows: from 28 Sep in the October grid, Page Up opens September on the 28th. An arrow that steps off the grid opens that month too. Moving never selects: **Enter** or **Space** selects the focused day and moves focus to the panel's heading; when that day is in another month, focus waits until the new month has rendered. The table's description tells screen-reader users these keys.
+- **On a phone** the legend also explains the "⚠ Over 40h" and milestone-deadline marks, and the panel adds "Over 40h this week" for a day with an over-40 entry.
+- **Source.** The Source shown is the entry's `source` when the API sends it.
+- **Read-only.** The Month view never saves hours; typed hours stay editable in the Day view.
 - **UI:** [`MonthView.jsx`](../../frontend/src/features/timesheet/MonthView.jsx), [`MonthDayBox.jsx`](../../frontend/src/features/timesheet/MonthDayBox.jsx), [`MonthDayPanel.jsx`](../../frontend/src/features/timesheet/MonthDayPanel.jsx), [`monthLayout.js`](../../frontend/src/features/timesheet/monthLayout.js), [`monthText.js`](../../frontend/src/features/timesheet/monthText.js) and the toggle in [`TimesheetPage.jsx`](../../frontend/src/features/timesheet/TimesheetPage.jsx).
 
 ## 6. The at-risk rule
@@ -739,7 +742,9 @@ be filled in on them is a missing estimate). A second run adds nothing.
    `ENTRY_REJECTED` alert) and one normal 32–38h week. This week gets only everyone else's hours so far (at most
    38h), so the result has the same shape on every weekday and the seed's Eli stays this week's one overtime. A
    person's week is left alone once it has pending or rejected hours, and each example is made once: a run that
-   finds one from an earlier run (by its notes and its wrong-day reason) doesn't make another.
+   finds one from an earlier run (by its notes and its wrong-day reason) doesn't make another. That search only
+   looks from last week's Monday onward, so a run in a later week adds that week's hours and, two or more weeks
+   later, a fresh set of examples in the new "last week". It only ever adds: it never moves or deletes the older ones.
 8. **Estimates** on every demo milestone that has none ([section 24](#24-expected-time-frame)).
 9. One `curate_demo_plan` audit entry per changed project, by System, and a JSON summary per project (`added`,
    `dependencies_added`, `team_added`, `hours_added`, `pending_added`, `rejected_added`, `estimates_set`,
@@ -863,11 +868,13 @@ demo account per rolling minute (`429 RATE_LIMITED`), counted in `demo_login_att
 caller can set the header to dodge the limit, but can't limit anyone else without knowing their address.
 
 **In the app.** [`app/DemoSession.jsx`](../../frontend/src/app/DemoSession.jsx) shows a one-time welcome dialog and a
-tinted pill in the top bar, "Demo session · 4:32" (the timer icon and "4:32" alone on a phone), counting down to
-`session_expires_at`; it turns red under 1:00 and opens a popover ("Public demo admin. Some actions are disabled, and
-you'll be signed out when the timer ends.", then "Time left: 4:32", because an open popover hides the page and its
-live region from screen readers). Its name carries the time left ("Demo session, signed out in 4 minutes 32 seconds")
-and holds still while the pill has focus, so it isn't re-read every second; a polite live region says "1 minute left in
+tinted pill in the top bar, "Demo session · 4:32" (the timer icon and "4:32" alone under 1200px: on a phone, and on a
+desktop with the sidebar open, where the bar is short of room), counting down to `session_expires_at`; it turns red
+under 1:00 and opens a popover ("Public demo admin. Some actions are disabled, and you'll be signed out when the timer
+ends.", then "Time left: 4:32", because an open popover hides the page and its live region from screen readers). Its
+name carries the time left and starts with what the pill shows, so speech-control users can say it ("Demo session,
+signed out in 4 minutes 32 seconds"; on the compact pill "4:32 left in the demo session, signed out in 4 minutes 32
+seconds"), and it holds still while the pill has focus, so it isn't re-read every second; a polite live region says "1 minute left in
 the demo session" once, at 1:00. The pill's and notices' amber text reaches 4.5:1 on its tint in light and dark
 (`demoTone` in [`lib/demoSession.js`](../../frontend/src/lib/demoSession.js)). People, Departments, Skills and Archive
 also open with a tinted "**Demo access** · …" notice (a timer icon, the lead in bold) saying what is unavailable; the
@@ -885,7 +892,9 @@ if no `demo.admin` exists, and never flags an existing ordinary account of that 
 Puppy is the small dog next to the bell (`frontend/src/features/puppy/`). It's labelled **"Puppy · your rule-based
 assistant"** and its panel says "Puppy follows rules from your data — no AI service involved." The Lambda has no
 internet access, so everything is fixed rules running in the browser. Puppy adds no backend endpoint and no new
-polling: it reuses the bell's `GET /notifications` query and the caches the pages already use.
+polling: it reuses the bell's `GET /notifications` query and the caches the pages already use. On a phone narrower
+than 375px the top bar has no room for its button, so Puppy moves into the account menu ("Puppy assistant", which opens
+the same panel under the avatar); its alerts work the same either way.
 
 ```mermaid
 flowchart TD

@@ -260,7 +260,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
     - "⚠ Over 40h" marks an overtime day, and "📅 N milestone deadlines" a day when one of my unfinished milestones ends.
     - The header reads "<total>h logged in <Month>" with "Pending + approved · Rejected hours excluded."; a legend explains the statuses.
     - Clicking a day selects it. A panel (beside the grid, or under it on a phone) lists that day's hours, one card per line with status, project, hours, whether it is timer-linked and its source (Manual, Tracked or Mixed), and the manager's reason on a rejected line. Timer hours are locked, with **Request a change** (a timer draft instead says to submit it in the Day view; hours on a milestone I am no longer assigned to have no action); other lines have **Edit in Day view**. The day's milestone dates follow, with **View milestones**.
-    - From the keyboard the grid is one Tab stop: the arrow keys move between days, Home and End to the ends of the week, Page Up and Page Down to the previous and next month, and Enter or Space selects the day and moves focus to its panel.
+    - From the keyboard the grid is one Tab stop: the arrow keys move between days, Home and End to the ends of the week, Page Up and Page Down to the month before and after the one shown, and Enter or Space selects the day and moves focus to its panel.
   - Each saved entry shows its status:
     - "Pending approval"
     - "Pending (Overtime requested from *First Last*)" for the entry that takes my week past 40 hours, and any after it
@@ -441,12 +441,12 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - Colours come from one theme, with contrast checked against WCAG AA.
 
 ### X3. Know where I am (R)
-- **Success:** every page has breadcrumbs (a `Breadcrumb` navigation): "Workspace" or, for an admin's pages, "Administration", then the page, and for a project or person its name; the last crumb is the current page. Earlier crumbs are links, and the root is plain text. On a phone the top bar shows a back link to the parent instead ("‹ Projects").
+- **Success:** every page has breadcrumbs (a `Breadcrumb` navigation): "Workspace" or, for an admin's pages, "Administration", then the page, and for a project or person its name; the last crumb is the current page. Earlier crumbs are links, and the root is plain text. When a narrow desktop (sidebar open) has no room for the whole trail, a project or person page shows only the parent and the current page. On a phone the top bar shows a back link to the parent instead ("‹ Projects", named "Back to Projects"), in the logo's place; with no room for its text it shows the arrow alone, still a 24 px target.
 - **Loading:** a short skeleton stands in for the name.
 - **Failure:** a project or person that can't be loaded shows "Not found" as its last crumb.
 
 ### X4. One account menu (R)
-- **Success:** my name at the bottom of the sidebar (or just my avatar when it's collapsed) and the avatar in the top bar open the same menu: My profile, Profile photo, Theme (Light, Dark, System) and Sign out. The top bar reads Search, running timer, Puppy, notifications, then the avatar.
+- **Success:** my name at the bottom of the sidebar (or just my avatar when it's collapsed) and the avatar in the top bar open the same menu: My profile, Profile photo, Theme (Light, Dark, System) and Sign out. The top bar reads Search, running timer, Puppy, notifications, then the avatar; on a phone narrower than 375px Puppy moves into this menu.
 
 ---
 
