@@ -60,8 +60,11 @@ const breakdown = (id, hours) => ({
 
 let listed
 let seen
-/** `approve(body, n)` may answer the n-th approve-week itself; otherwise the entries are approved and leave the list. */
-function api({ list = queue(), approve } = {}) {
+/**
+ * `approve(body, n)` may answer the n-th approve-week itself, and `reject(id, n)` the n-th reject; otherwise the entries
+ * are decided and leave the list.
+ */
+function api({ list = queue(), approve, reject } = {}) {
   listed = list
   seen = { approved: [], rejected: [], approvals: [] }
   server.use(
@@ -83,6 +86,8 @@ function api({ list = queue(), approve } = {}) {
     }),
     http.post(`${API}/time-entries/:id/reject`, async ({ request, params }) => {
       seen.rejected.push({ id: params.id, body: await request.json() })
+      const answer = await reject?.(params.id, seen.rejected.length)
+      if (answer) return answer
       listed = listed.filter((i) => i.entry.id !== params.id)
       return HttpResponse.json({ id: params.id, status: 'rejected' })
     }),
@@ -103,6 +108,9 @@ const OCT12 = 'Gia Rossi · Week of Oct 12, 2026 · 3 entries · 24h'
 const box = (name) => screen.getByRole('checkbox', { name: `Select Gia Rossi, ${name}` })
 const selectAll = (title) => screen.getByRole('checkbox', { name: `Select all: ${title}` })
 const footerButton = (name) => screen.getByRole('button', { name })
+const STALE = 'These hours changed since you loaded them. Refresh and check again.'
+const staleAnswer = () => HttpResponse.json({ error: { code: 'STALE_ENTRY', message: STALE } }, { status: 409 })
+const ada = { id: 'u-ada', name: 'Ada Lovelace' }
 
 describe('Approvals tab: heading, tab count and groups', () => {
   test('the tab shows its count; the heading counts entries and hours and warns that completion approves nothing', async () => {
@@ -141,6 +149,18 @@ describe('Approvals tab: heading, tab count and groups', () => {
     await userEvent.click(within(newer).getByRole('button', { name: OCT12 }))
     await userEvent.hover(within(newer).getByText('Mixed'))
     expect(await screen.findByText('Tracked 92% · Manual 8%')).toBeInTheDocument()
+  })
+
+  test("the week's share chip is reachable from the keyboard", async () => {
+    api()
+    renderPanel()
+    const c = await panel()
+    const toggle = await within(c).findByRole('button', { name: OCT12 })
+    toggle.focus()   // the group's toggle; its share chip is the next tab stop
+    await userEvent.tab()
+    expect(document.activeElement).toHaveTextContent('Mixed')
+    // jsdom has no :focus-visible, so the tooltip itself stays shut here; the share is the chip's description either way.
+    expect(document.activeElement).toHaveAccessibleDescription('Tracked 92% · Manual 8%')
   })
 
   test('a group collapses and expands', async () => {
@@ -191,14 +211,14 @@ describe('Approvals tab: rows', () => {
     const table = await within(c).findByRole('table', { name: `Entries of ${OCT5}` })
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
       .toEqual(['', 'Date', 'Hours', 'Source', 'Work note', 'Flags'])
-    const row = box('Oct 6, 2026, 8.5h').closest('tr')
+    const row = within(table).getByRole('row', { name: /Oct 6, 2026/ })
     expect(within(row).getByText('Oct 6, 2026')).toBeInTheDocument()
     expect(within(row).getByText('8.5h')).toBeInTheDocument()
     expect(within(row).getByText('Manual')).toBeInTheDocument()
     expect(within(row).getByText('Fixed layout issues from the design review')).toBeInTheDocument()
     expect(within(row).getByText('⚠ Repeated hours')).toBeInTheDocument()
     expect(within(row).getByText('⚠ Over plan')).toBeInTheDocument()
-    const update = box('Oct 9, 2026, 8.5h').closest('tr')
+    const update = within(table).getByRole('row', { name: /Oct 9, 2026/ })
     expect(within(update).getByText('Update: Built the account settings screens')).toBeInTheDocument()
     await userEvent.hover(within(row).getByText('⚠ Repeated hours'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent(SAME.message)
@@ -208,9 +228,10 @@ describe('Approvals tab: rows', () => {
     api()
     renderPanel()
     await panel()
-    const row = (await screen.findByRole('checkbox', { name: 'Select Gia Rossi, Oct 14, 2026, 8h' })).closest('tr')
-    expect(within(row).getByLabelText(`Red flag: ${OVER.message}`)).toHaveClass('MuiChip-colorWarning')
-    expect(within(row).getByLabelText(`Red flag: ${LATE.message}`)).toHaveClass('MuiChip-colorDefault')
+    const table = await screen.findByRole('table', { name: `Entries of ${OCT12}` })
+    const row = within(table).getByRole('row', { name: /Oct 14, 2026/ })
+    expect(within(row).getByLabelText(`Red flag: ${OVER.message}`)).toHaveAttribute('data-tone', 'warning')
+    expect(within(row).getByLabelText(`Red flag: ${LATE.message}`)).toHaveAttribute('data-tone', 'neutral')
   })
 
   test('on a phone the entries are cards, and the select-all sits in the group header', async () => {
@@ -225,6 +246,19 @@ describe('Approvals tab: rows', () => {
     expect(within(sheet).getByText('4 selected · 34h')).toBeInTheDocument()
     expect(within(sheet).getByRole('button', { name: 'Approve 34h' })).toBeEnabled()
   })
+
+  test("on a phone the footer is the last thing in the sheet and sticks flush to the bottom of its scroller", async () => {
+    setViewport(375)
+    api()
+    renderPanel()
+    const sheet = await screen.findByRole('dialog', { name: 'Build: frontend' })
+    const footer = await within(sheet).findByRole('group', { name: 'Review selected entries' })
+    expect(getComputedStyle(footer).position).toBe('sticky')
+    expect(getComputedStyle(footer).bottom).toBe('-16px')   // the sheet's scroller has 16 px of padding
+    const after = [...sheet.querySelectorAll('*')]
+      .filter((el) => !footer.contains(el) && footer.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+    expect(after).toEqual([])
+  })
 })
 
 describe('Approvals tab: footer and approving', () => {
@@ -236,6 +270,9 @@ describe('Approvals tab: footer and approving', () => {
     expect(footerButton('View budget impact')).toBeDisabled()
     expect(footerButton('Request changes')).toBeDisabled()
     expect(footerButton('Approve')).toBeDisabled()
+    const footer = screen.getByRole('group', { name: 'Review selected entries' })
+    expect(getComputedStyle(footer).position).toBe('sticky')
+    expect(getComputedStyle(footer).bottom).toBe('0px')
     await userEvent.click(box('Oct 6, 2026, 8.5h'))
     await userEvent.click(box('Oct 7, 2026, 8.5h'))
     expect(screen.getByText('2 selected · 17h')).toBeInTheDocument()
@@ -244,10 +281,10 @@ describe('Approvals tab: footer and approving', () => {
     expect(footerButton('Approve 17h')).toBeEnabled()
   })
 
-  test('Approve sends one approve-week per person-week with only its selected entries, and toasts each', async () => {
+  test('Approve sends one approve-week per person-week, one after another, each with only its selected entries; one toast', async () => {
     let release
     const gate = new Promise((resolve) => { release = resolve })
-    api({ approve: async (_body, n) => { if (n === 2) await gate } })
+    api({ approve: async (_body, n) => { if (n === 1) await gate } })
     renderPanel()
     await panel()
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Gia Rossi, Oct 6, 2026, 8.5h' }))
@@ -255,25 +292,50 @@ describe('Approvals tab: footer and approving', () => {
     await userEvent.click(selectAll(OCT12))
     expect(screen.getByText('5 selected · 41h')).toBeInTheDocument()
     await userEvent.click(footerButton('Approve 41h'))
-    expect(await screen.findByText('Approved 17h for Gia Rossi')).toBeInTheDocument()
+    // The second week waits for the first one's answer.
+    await waitFor(() => expect(seen.approved).toHaveLength(1))
+    await new Promise((resolve) => { setTimeout(resolve, 150) })
+    expect(seen.approved).toHaveLength(1)
+    expect(screen.queryByText(/^Approved/)).not.toBeInTheDocument()
     release()
-    expect(await screen.findByText('Approved 24h for Gia Rossi')).toBeInTheDocument()
+    expect(await screen.findByText('Approved 41h for Gia Rossi')).toBeInTheDocument()
     expect(seen.approved).toEqual([
       { entries: [{ id: 'e1', expected_hours: 8.5 }, { id: 'e2', expected_hours: 8.5 }] },
       { entries: [{ id: 'e5', expected_hours: 8 }, { id: 'e6', expected_hours: 8 }, { id: 'e7', expected_hours: 8 }] },
     ])
+    expect(screen.queryByText('Approved 17h for Gia Rossi')).not.toBeInTheDocument()
     expect(await screen.findByText('2 entries · 17h awaiting approval')).toBeInTheDocument()
     expect(screen.getByText('Select entries to review')).toBeInTheDocument()
   })
 
+  test("approving two people's weeks names both in the one toast", async () => {
+    api({ list: [item('e1', '2026-10-06', 8.5), { ...item('a1', '2026-10-07', 3.5), user: ada }] })
+    renderPanel()
+    await panel()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Gia Rossi, Oct 6, 2026, 8.5h' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select Ada Lovelace, Oct 7, 2026, 3.5h' }))
+    await userEvent.click(footerButton('Approve 12h'))
+    expect(await screen.findByText('Approved 12h for Gia Rossi and Ada Lovelace')).toBeInTheDocument()
+    expect(seen.approved).toHaveLength(2)
+  })
+
+  test('nothing approved: the error, and no success toast', async () => {
+    api({ approve: () => staleAnswer() })
+    renderPanel()
+    const c = await panel()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Gia Rossi, Oct 6, 2026, 8.5h' }))
+    await userEvent.click(footerButton('Approve 8.5h'))
+    expect(await within(c).findByRole('alert')).toHaveTextContent(STALE)
+    expect(screen.queryByText(/^Approved/)).not.toBeInTheDocument()
+  })
+
   test("a stale week shows the server's message, the other week's approval stands, and the list refreshes", async () => {
-    const STALE = 'These hours changed since you loaded them. Refresh and check again.'
     api({
       approve: (_body, n) => {
         if (n !== 2) return undefined
         // Gia edited Oct 12 from 8h to 7h after the manager loaded the list.
         listed = listed.map((i) => (i.entry.id === 'e5' ? { ...i, entry: { ...i.entry, hours: 7 } } : i))
-        return HttpResponse.json({ error: { code: 'STALE_ENTRY', message: STALE } }, { status: 409 })
+        return staleAnswer()
       },
     })
     renderPanel()
@@ -288,10 +350,12 @@ describe('Approvals tab: footer and approving', () => {
     // The refetch: Oct 6 and 7 are gone, Oct 12 shows its new hours.
     expect(await within(c).findByText('5 entries · 40h awaiting approval')).toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: 'Select Gia Rossi, Oct 6, 2026, 8.5h' })).not.toBeInTheDocument()
-    expect(box('Oct 12, 2026, 7h')).toBeChecked()
-    // Review Focus 5: the selection counts only what is still listed.
-    expect(screen.getByText('3 selected · 23h')).toBeInTheDocument()
-    expect(footerButton('Approve 23h')).toBeEnabled()
+    // The changed entry leaves the selection: the manager ticks it again after checking the new hours.
+    expect(box('Oct 12, 2026, 7h')).not.toBeChecked()
+    expect(box('Oct 13, 2026, 8h')).toBeChecked()
+    // Review Focus 5: the selection counts only what is still listed, at the hours shown.
+    expect(screen.getByText('2 selected · 16h')).toBeInTheDocument()
+    expect(footerButton('Approve 16h')).toBeEnabled()
   })
 
   test('the demo admin may approve and request changes: nothing here is demo-disabled', async () => {
@@ -330,6 +394,39 @@ describe('Approvals tab: request changes', () => {
     expect(await screen.findByText('Requested changes on 2 entries')).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Request changes' })).not.toBeInTheDocument())
     expect(screen.queryByText('Hours rejected')).not.toBeInTheDocument()
+  })
+
+  test('one reject fails: one toast for the one that went through, and the error in the panel', async () => {
+    api({ reject: (_id, n) => (n === 2 ? staleAnswer() : undefined) })
+    renderPanel()
+    const c = await panel()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Gia Rossi, Oct 6, 2026, 8.5h' }))
+    await userEvent.click(box('Oct 7, 2026, 8.5h'))
+    await userEvent.click(footerButton('Request changes'))
+    const dialog = await screen.findByRole('dialog', { name: 'Request changes' })
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason' }), 'Missing notes')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Request changes' }))
+    expect(await screen.findByText('Requested changes on 1 entry')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Request changes' })).not.toBeInTheDocument())
+    expect(await within(c).findByRole('alert')).toHaveTextContent(STALE)
+    expect(seen.rejected.map((r) => r.id)).toEqual(['e1', 'e2'])
+  })
+
+  test('nothing rejected: the dialog stays open with the reason and the error', async () => {
+    const DOWN = 'The server had a problem. Try again.'
+    api({ reject: () => HttpResponse.json({ error: { code: 'INTERNAL', message: DOWN } }, { status: 500 }) })
+    renderPanel()
+    await panel()
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Select Gia Rossi, Oct 6, 2026, 8.5h' }))
+    await userEvent.click(footerButton('Request changes'))
+    const dialog = await screen.findByRole('dialog', { name: 'Request changes' })
+    await userEvent.type(within(dialog).getByRole('textbox', { name: 'Reason' }), 'Missing notes')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Request changes' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(DOWN)
+    expect(screen.getByRole('dialog', { name: 'Request changes' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('textbox', { name: 'Reason' })).toHaveValue('Missing notes')
+    expect(within(dialog).getByRole('button', { name: 'Request changes' })).toBeEnabled()
+    expect(screen.queryByText(/^Requested changes/)).not.toBeInTheDocument()
   })
 
   test('Cancel closes the dialog and sends nothing', async () => {
@@ -382,10 +479,9 @@ describe('Approvals tab: budget impact', () => {
     for (const title of ['Gia Rossi · Week of Sep 28, 2026 · 7 entries · 7h', 'Gia Rossi · Week of Oct 5, 2026 · 7 entries · 7h',
       'Gia Rossi · Week of Oct 12, 2026 · 7 entries · 7h']) await userEvent.click(selectAll(title))
     expect(screen.getByText('21 selected · 21h')).toBeInTheDocument()
-    const impact = footerButton('View budget impact')
-    expect(impact).toBeDisabled()
-    await userEvent.hover(impact.parentElement)
-    expect(await screen.findByText('Select 20 entries or fewer to see the budget impact')).toBeInTheDocument()
+    expect(footerButton('View budget impact')).toBeDisabled()
+    await userEvent.hover(screen.getByLabelText('Select 20 entries or fewer to see the budget impact'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Select 20 entries or fewer to see the budget impact')
     expect(footerButton('Approve 21h')).toBeEnabled()
   })
 })

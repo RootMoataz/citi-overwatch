@@ -41,13 +41,16 @@ function workNote(item) {
   return update ? `Update: ${update}` : null
 }
 
-/** One person's week: a collapsible header (with the week's Tracked, Manual or Mixed share) over its entries. */
-function PersonWeek({ group, selected, onToggle, onToggleAll, desktop }) {
+/**
+ * One person's week: a collapsible header (with the week's Tracked, Manual or Mixed share) over its entries.
+ * `isChosen(item)` says whether an entry is selected at the hours it shows now.
+ */
+function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
   const [open, setOpen] = useState(true)
   const headingId = useId()
   const bodyId = useId()
   const title = titleOf(group)
-  const chosen = group.items.filter((i) => selected.has(idOf(i))).length
+  const chosen = group.items.filter(isChosen).length
   const all = chosen === group.items.length
   const entries = group.items.map((i) => i.entry)
   const source = weekSource(entries)
@@ -59,7 +62,7 @@ function PersonWeek({ group, selected, onToggle, onToggleAll, desktop }) {
 
   const rows = group.items.map((item) => {
     const id = idOf(item)
-    const checked = selected.has(id)
+    const checked = isChosen(item)
     const note = workNote(item)
     const box = (
       <Checkbox checked={checked} onChange={() => onToggle(item)} sx={BOX_SX}
@@ -108,8 +111,10 @@ function PersonWeek({ group, selected, onToggle, onToggleAll, desktop }) {
         </Typography>
         {delegatedFrom ? <Chip size="small" variant="outlined" color="info" label={`Delegated from ${delegatedFrom.name}`} /> : null}
         {source ? (
+          // Focusable, so keyboard users can read the share in the tooltip too.
           <Tooltip title={shareText(entries)} describeChild>
-            <Chip size="small" variant="outlined" color={source === 'manual' ? 'default' : 'info'} label={SOURCE_LABEL[source]} />
+            <Chip size="small" variant="outlined" color={source === 'manual' ? 'default' : 'info'} label={SOURCE_LABEL[source]}
+              tabIndex={0} />
           </Tooltip>
         ) : null}
       </Stack>
@@ -135,8 +140,11 @@ function PersonWeek({ group, selected, onToggle, onToggleAll, desktop }) {
   )
 }
 
-/** "Request changes": one required reason for every selected entry (the server's reject rules). */
-function RequestChangesDialog({ busy, onSubmit, onClose }) {
+/**
+ * "Request changes": one required reason for every selected entry (the server's reject rules). `failures` are shown
+ * here when nothing could be rejected, with the reason kept for another try; there is nothing to send once `count` is 0.
+ */
+function RequestChangesDialog({ count, busy, failures, onSubmit, onClose }) {
   const titleId = useId()
   const [reason, setReason] = useState('')
   const [error, setError] = useState('')
@@ -149,13 +157,14 @@ function RequestChangesDialog({ busy, onSubmit, onClose }) {
     <Dialog open onClose={busy ? undefined : onClose} aria-labelledby={titleId} maxWidth="xs" fullWidth>
       <DialogTitle id={titleId}>Request changes</DialogTitle>
       <DialogContent>
+        {failures.map((f) => <ErrorAlert key={f.key} error={f.error} title={f.title} sx={{ mb: 1 }} />)}
         <TextField label="Reason" required multiline minRows={3} fullWidth autoFocus value={reason} error={Boolean(error)}
           helperText={error || undefined} onChange={(e) => { setReason(e.target.value); setError('') }} disabled={busy}
           slotProps={{ htmlInput: { maxLength: REASON_MAX } }} sx={{ mt: 1 }} />
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={busy} sx={{ minHeight: 44 }}>Cancel</Button>
-        <Button variant="contained" onClick={submit} disabled={busy} sx={{ minHeight: 44 }}>Request changes</Button>
+        <Button variant="contained" onClick={submit} disabled={busy || !count} sx={{ minHeight: 44 }}>Request changes</Button>
       </DialogActions>
     </Dialog>
   )
@@ -217,6 +226,8 @@ function BudgetImpactDialog({ items, onClose }) {
   )
 }
 
+const listFormat = new Intl.ListFormat('en', { type: 'conjunction' })
+
 /**
  * The milestone panel's Approvals tab (spec §4.4), for people who decide hours: the milestone's pending entries by
  * person and week, oldest week first, with a sticky footer to act on the selected ones.
@@ -224,48 +235,54 @@ function BudgetImpactDialog({ items, onClose }) {
  * - **Approve <N>h** sends one `POST /approvals/approve-week` per person-week in the selection, one after another, each
  *   with only that week's selected entries and the hours shown (the server's stale-entry guard). Each week is all or
  *   nothing on the server; a week that fails (stale `409`, already decided `400`) shows the server's message here
- *   while the other weeks' results stand, and the list is refetched. Each approved week toasts "Approved <N>h for <name>".
- * - **Request changes** asks for one reason, then rejects each selected entry with it; one toast follows.
+ *   while the other weeks' results stand, and the list is refetched. One toast covers what was approved:
+ *   "Approved 41h for Gia Rossi" (or "… for Gia Rossi and Ada Lovelace"); none when nothing was.
+ * - **Request changes** asks for one reason, then rejects each selected entry with it; one toast follows. When nothing
+ *   could be rejected the dialog stays open with the reason and the errors.
  * - **View budget impact**: up to 20 entries, each breakdown fetched once.
- * - After every refetch the selection keeps only entries still listed, so the counts match what is on screen.
+ * - The selection remembers the hours each entry showed when it was ticked. After every refetch it keeps only entries
+ *   still listed at those hours, so the counts match what is on screen and a changed entry must be ticked again.
  * The server never lists the viewer's own entries, so they can't be selected.
  */
 export default function ApprovalsTab({ milestone }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const toast = useToast()
   const approvals = useApprovals({ milestone: milestone.id })
-  const approveWeek = useApproveWeek({ success: (_data, sent) => `Approved ${formatHours(hoursOf(sent))} for ${sent[0].user.name}` })
+  const approveWeek = useApproveWeek({ success: null })
   const reject = useRejectEntry({ success: null })
-  const [selected, setSelected] = useState(() => new Set())
+  const [selected, setSelected] = useState(() => new Map())   // entry id → the hours it showed when ticked
   const [prunedFor, setPrunedFor] = useState(approvals.data)
   const [busy, setBusy] = useState(false)
   const [failures, setFailures] = useState([])
+  const [rejectFailures, setRejectFailures] = useState([])
   const [dialog, setDialog] = useState(null)   // 'reject' | 'impact'
 
   const items = approvals.data ?? []
-  // Every refetch (after a decision, or the 30-second refresh) drops entries no longer listed from the selection.
+  // Every refetch (after a decision, or the 30-second refresh) drops from the selection the entries no longer listed
+  // and those whose hours changed since they were ticked.
   if (approvals.data !== prunedFor) {
     setPrunedFor(approvals.data)
-    const listed = new Set(items.map(idOf))
+    const listed = new Map(items.map((i) => [idOf(i), Number(i.entry.hours)]))
     setSelected((prev) => {
-      const next = new Set([...prev].filter((id) => listed.has(id)))
+      const next = new Map([...prev].filter(([id, h]) => listed.get(id) === h))
       return next.size === prev.size ? prev : next
     })
   }
-  const chosen = items.filter((i) => selected.has(idOf(i)))
+  const isChosen = (item) => selected.get(idOf(item)) === Number(item.entry.hours)
+  const chosen = items.filter(isChosen)
   const count = chosen.length
   const hours = hoursOf(chosen)
 
   const toggle = (item) => setSelected((prev) => {
-    const next = new Set(prev)
-    if (next.has(idOf(item))) next.delete(idOf(item))
-    else next.add(idOf(item))
+    const next = new Map(prev)
+    if (next.get(idOf(item)) === Number(item.entry.hours)) next.delete(idOf(item))
+    else next.set(idOf(item), Number(item.entry.hours))
     return next
   })
   const toggleAll = (groupItems, on) => setSelected((prev) => {
-    const next = new Set(prev)
+    const next = new Map(prev)
     for (const item of groupItems) {
-      if (on) next.add(idOf(item))
+      if (on) next.set(idOf(item), Number(item.entry.hours))
       else next.delete(idOf(item))
     }
     return next
@@ -274,22 +291,29 @@ export default function ApprovalsTab({ milestone }) {
   const approve = async () => {
     setBusy(true)
     setFailures([])
+    const approved = []
     const failed = []
     for (const week of groupByPersonWeek(chosen)) {
       try {
         await approveWeek.mutateAsync(week.items)
+        approved.push(week)
       } catch (error) {
         failed.push({ key: week.key, title: `${week.user.name} · Week of ${formatDate(week.week)}`, error })
       }
     }
     setFailures(failed)
     setBusy(false)
+    if (approved.length) {
+      const names = [...new Set(approved.map((w) => w.user.name))]
+      toast.success(`Approved ${formatHours(hoursOf(approved.flatMap((w) => w.items)))} for ${listFormat.format(names)}`)
+    }
     if (failed.length) approvals.refetch()
   }
 
   const requestChanges = async (reason) => {
     setBusy(true)
     setFailures([])
+    setRejectFailures([])
     const failed = []
     let done = 0
     for (const item of chosen) {
@@ -300,12 +324,20 @@ export default function ApprovalsTab({ milestone }) {
         failed.push({ key: idOf(item), title: `${item.user.name} · ${formatDate(item.entry.work_date)}`, error })
       }
     }
-    setFailures(failed)
     setBusy(false)
-    setDialog(null)
-    if (done) toast.success(`Requested changes on ${plural(done, 'entry', 'entries')}`)
+    if (done) {
+      setFailures(failed)
+      setDialog(null)
+      toast.success(`Requested changes on ${plural(done, 'entry', 'entries')}`)
+    } else {
+      setRejectFailures(failed)   // nothing was rejected: keep the dialog and its reason
+    }
     if (failed.length) approvals.refetch()
   }
+  const closeDialog = () => { setDialog(null); setRejectFailures([]) }
+  const rejectDialog = dialog === 'reject' ? (
+    <RequestChangesDialog count={count} busy={busy} failures={rejectFailures} onSubmit={requestChanges} onClose={closeDialog} />
+  ) : null
 
   if (approvals.isLoading) {
     return <Stack sx={{ gap: 1 }}>{[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={44} />)}</Stack>
@@ -318,6 +350,7 @@ export default function ApprovalsTab({ milestone }) {
       <>
         {failures.map((f) => <ErrorAlert key={f.key} error={f.error} title={f.title} sx={{ mb: 1 }} />)}
         <EmptyState title="Nothing waiting" />
+        {rejectDialog}
       </>
     )
   }
@@ -344,11 +377,14 @@ export default function ApprovalsTab({ milestone }) {
       {failures.map((f) => <ErrorAlert key={f.key} error={f.error} title={f.title} />)}
       {approvals.error ? <ErrorAlert error={approvals.error} onRetry={() => approvals.refetch()} /> : null}
       {groupByPersonWeek(items).map((g) => (
-        <PersonWeek key={g.key} group={g} selected={selected} onToggle={toggle} onToggleAll={toggleAll} desktop={desktop} />
+        <PersonWeek key={g.key} group={g} isChosen={isChosen} onToggle={toggle} onToggleAll={toggleAll} desktop={desktop} />
       ))}
-      <Stack direction="row" useFlexGap sx={{ position: 'sticky', bottom: 0, zIndex: 1, mx: -2, px: 2, py: 1, gap: 1,
-        flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'background.paper', borderTop: 1,
-        borderColor: 'divider' }}>
+      {/* Sticky at the bottom of the panel. On phones the sheet's scroller has 16 px of padding, which browsers keep
+          between a sticky box and the scroller's edge, so the footer moves down by that much to sit flush. */}
+      <Stack role="group" aria-label="Review selected entries" direction="row" useFlexGap
+        sx={{ position: 'sticky', bottom: desktop ? 0 : (t) => t.spacing(-2), zIndex: 1, mx: -2, px: 2, py: 1, gap: 1,
+          flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'background.paper', borderTop: 1,
+          borderColor: 'divider' }}>
         <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <Typography variant="body2" role="status" sx={{ fontWeight: count ? 600 : 400 }}>
             {count ? `${count} selected · ${formatHours(hours)}` : 'Select entries to review'}
@@ -364,10 +400,8 @@ export default function ApprovalsTab({ milestone }) {
           </Button>
         </Stack>
       </Stack>
-      {dialog === 'reject' && count ? (
-        <RequestChangesDialog busy={busy} onSubmit={requestChanges} onClose={() => setDialog(null)} />
-      ) : null}
-      {dialog === 'impact' && count ? <BudgetImpactDialog items={chosen} onClose={() => setDialog(null)} /> : null}
+      {rejectDialog}
+      {dialog === 'impact' && count && !tooMany ? <BudgetImpactDialog items={chosen} onClose={() => setDialog(null)} /> : null}
     </Stack>
   )
 }
