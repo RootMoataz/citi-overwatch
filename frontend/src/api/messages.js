@@ -16,6 +16,7 @@ export const messageKeys = {
   conversations: ['messages', 'conversations'],
   unread: ['messages', 'unread'],
   thread: (id) => ['messages', 'thread', String(id)],
+  discussion: (milestoneId) => ['messages', 'discussion', String(milestoneId)],
 }
 
 /** Who the viewer may start a conversation with: {items, can_group}. Employees get only their managers. */
@@ -100,3 +101,10 @@ export const useMarkConversationRead = () => useMessagesMutation((id) => api.pos
 
 /** Open (or, for the project's manager or an admin, start) a milestone's discussion → the conversation. */
 export const useOpenDiscussion = () => useMessagesMutation((milestoneId) => api.post(`/milestones/${milestoneId}/discussion`))
+
+/** A milestone's discussion conversation, or a 404 error until one exists (not retried: the 404 is the answer). */
+export const useMilestoneDiscussion = (milestoneId, enabled = true) => useQuery({
+  queryKey: messageKeys.discussion(milestoneId), queryFn: () => api.get(`/milestones/${milestoneId}/discussion`),
+  enabled: enabled && Boolean(milestoneId), retry: (count, err) => err?.status !== 404 && count < 2,
+  refetchInterval: false,
+})

@@ -520,7 +520,7 @@ describe('Milestones tab: the panel header', () => {
     server.use(...handlers())
     renderTab(users.manager, { route: '/m?milestone=m2' })
     const side = await panel('Build: frontend')
-    expect(within(side).getByText('Completed')).toBeInTheDocument()
+    expect(within(side).getAllByText('Completed')).toHaveLength(2)  // its state, and Discovery's under Dependencies
     expect(within(side).getByText('Deliver the screens people use, built against the agreed designs.')).toBeInTheDocument()
     expect(within(side).getByText('Aug 15, 2026 – Oct 23, 2026 · After Discovery')).toBeInTheDocument()
     expect(within(side).getByRole('group', { name: 'People on Build: frontend' })).toBeInTheDocument()
@@ -720,7 +720,7 @@ describe('Milestones tab: phones', () => {
     // A narrow header: Edit is an icon and the state chip opens the body, so the title keeps its room.
     expect(within(dialog).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'More actions for Build: frontend' })).toBeInTheDocument()
-    expect(within(dialog).getByText('Completed')).toBeInTheDocument()
+    expect(within(dialog).getAllByText('Completed')).toHaveLength(2)
   })
 })
 
@@ -858,11 +858,11 @@ describe('Milestones tab: kept behaviour', () => {
       })]))
     renderLegacy(users.employee, '/m?milestone=m1')
     const user = userEvent.setup()
-    await user.click(within(await panel('Discovery')).getByRole('button', { name: /notes/i }))
+    await user.click(within(await panel('Discovery')).getByRole('tab', { name: 'Notes' }))
     expect(await screen.findByText('Inventory done')).toBeInTheDocument()
     expect(screen.getByText('Morgan Manager')).toBeInTheDocument()
     await user.type(screen.getByLabelText(/add a progress note/i), 'Mapped 40 tables')
-    await user.click(screen.getByRole('button', { name: /post note/i }))
+    await user.click(screen.getByRole('button', { name: /add a note/i }))
     await waitFor(() => expect(posted).toEqual({ body: 'Mapped 40 tables' }))
   })
 

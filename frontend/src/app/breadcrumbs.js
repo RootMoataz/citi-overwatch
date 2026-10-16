@@ -60,17 +60,18 @@ export function BreadcrumbProvider({ children }) {
 /**
  * A page calls this with its own name (it may be undefined while loading); the crumb clears when the page goes.
  * Pass `{ failed: true }` when the page couldn't load: with no name the last crumb then reads "Not found" instead of
- * a skeleton that never resolves.
+ * a skeleton that never resolves. Pass `{ enabled: false }` from a view embedded in a page (a thread inside a panel),
+ * which must not rename the page's crumb.
  */
-export function useBreadcrumb(label, { failed = false } = {}) {
+export function useBreadcrumb(label, { failed = false, enabled = true } = {}) {
   const { pathname } = useLocation()
   const setEntry = useContext(BreadcrumbContext)?.setEntry
   const shown = label || (failed ? 'Not found' : null)
   useEffect(() => {
-    if (!setEntry) return undefined
+    if (!setEntry || !enabled) return undefined
     setEntry({ pathname, label: shown })
     return () => setEntry((entry) => (entry?.pathname === pathname ? null : entry))
-  }, [setEntry, pathname, shown])
+  }, [setEntry, pathname, shown, enabled])
 }
 
 /**

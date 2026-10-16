@@ -50,7 +50,7 @@ export default function MilestonesTab({ project, user, view }) {
   const approvals = useApprovals({ project: project.id }, view.decides)
   const profile = useProfile(user?.id, view.mine && Boolean(user?.id))
   const listRef = useRef(null)
-  const { current, open, close, returnFocus, archiveStarted, archiveFailed } = useMilestonePanelUrl(milestones, listRef)
+  const { current, panel, setPanel, open, close, returnFocus, archiveStarted, archiveFailed } = useMilestonePanelUrl(milestones, listRef)
   const [params, setParams] = useSearchParams()
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const wide = useMediaQuery(WIDE_QUERY)
@@ -221,7 +221,7 @@ export default function MilestonesTab({ project, user, view }) {
         </Paper>
       ) : null}
       {!empty && !failed ? (
-        <MilestonePanel project={project} milestone={current} items={items} members={members.data ?? []} view={view}
+        <MilestonePanel project={project} milestone={current} items={items} members={members.data ?? []} view={view} user={user} panel={panel} onPanel={setPanel}
           myHours={view.mine && profile.data ? (myHoursByMilestone[String(current?.id)] ?? 0) : undefined}
           onClose={close} returnFocus={returnFocus} onOpenPanel={open} onWarning={setWarning}
           onArchiveStart={archiveStarted} onArchiveFailed={archiveFailed} list={listCard} />

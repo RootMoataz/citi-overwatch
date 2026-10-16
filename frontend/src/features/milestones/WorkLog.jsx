@@ -52,7 +52,7 @@ export default function WorkLog({ milestone }) {
             error={Boolean(errors.percent)} helperText={errors.percent || 'Optional'}
             slotProps={{ htmlInput: { inputMode: 'numeric', 'aria-label': 'Percent complete' } }} />
           <Button type="submit" variant="outlined" disabled={post.isPending} sx={{ flexShrink: 0, mt: { sm: 1 } }}>
-            Post update
+            Post an update
           </Button>
         </Stack>
       ) : null}

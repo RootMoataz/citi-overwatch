@@ -9,6 +9,8 @@ const GONE = 'That milestone is no longer available.'
  *
  * - `?milestone=<id>` opens the panel. `open(milestone, panel?)` pushes a history entry, so Back closes it (and pushes
  *   nothing when that exact panel is already showing); `close()` removes `milestone` and `panel` with replace.
+ * - `?panel=<tab>` picks the panel's tab: `panel` is the raw value (the panel decides what the viewer may see) and
+ *   `setPanel(tab)` writes it with replace.
  * - An id the loaded list lacks may only mean the list is a stale cache (the Overview fills the same cache, and a
  *   bell link can name a milestone created since). So the list is refetched once, and only if the id is still missing
  *   when that refetch is back does the panel close, with the toast "That milestone is no longer available.". The
@@ -39,6 +41,8 @@ export function useMilestonePanelUrl(milestones, listRef) {
       return p
     })
   }
+  // Switching tabs replaces the entry, so Back still closes the panel rather than stepping through tabs.
+  const setPanel = (next) => setParams((p) => { p.set('panel', next); return p }, { replace: true })
   const close = () => setParams((p) => { p.delete('milestone'); p.delete('panel'); return p }, { replace: true })
 
   useEffect(() => { if (openId) lastOpen.current = openId }, [openId])
@@ -69,7 +73,7 @@ export function useMilestonePanelUrl(milestones, listRef) {
   }
 
   return {
-    openId, panel, current, open, close, returnFocus,
+    openId, panel, setPanel, current, open, close, returnFocus,
     archiveStarted: (m) => { archiving.current.add(String(m.id)) },
     archiveFailed: (m) => { archiving.current.delete(String(m.id)) },
   }

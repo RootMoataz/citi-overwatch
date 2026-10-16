@@ -1,48 +1,26 @@
 import CalendarToday from '@mui/icons-material/CalendarTodayOutlined'
-import ChatBubble from '@mui/icons-material/ChatBubbleOutlineOutlined'
 import EditIcon from '@mui/icons-material/EditOutlined'
 import Group from '@mui/icons-material/GroupOutlined'
-import History from '@mui/icons-material/HistoryOutlined'
-import Info from '@mui/icons-material/InfoOutlined'
-import PanTool from '@mui/icons-material/PanToolOutlined'
 import Schedule from '@mui/icons-material/ScheduleOutlined'
-import Timeline from '@mui/icons-material/TimelineOutlined'
-import { Box, Button, Collapse, IconButton, LinearProgress, Stack, Tooltip, Typography } from '@mui/material'
+import { Box, Button, IconButton, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { Fragment, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
-import { useClaimMilestone, useMilestoneStatus } from '../../api/queries.js'
-import { useConversations } from '../../api/messages.js'
 import AvatarStack from '../../components/AvatarStack.jsx'
-import DifficultyChip from '../../components/DifficultyChip.jsx'
-import ErrorAlert from '../../components/ErrorAlert.jsx'
-import EstimateLine from '../../components/EstimateLine.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
-import PriorityChip from '../../components/PriorityChip.jsx'
 import SidePanel from '../../components/SidePanel.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import { formatDate, formatHours } from '../../lib/format.js'
-import { statusActions } from '../../lib/milestoneActions.js'
 import { WIDE_QUERY } from '../../lib/responsive.js'
-import MilestonePendingHours from '../approvals/MilestonePendingHours.jsx'
-import DiscussButton from '../messages/DiscussButton.jsx'
-import KickbackDialog from './KickbackDialog.jsx'
-import KickbackPanel from './KickbackPanel.jsx'
-import MilestoneDetails from './MilestoneDetails.jsx'
 import MilestoneDialog from './MilestoneDialog.jsx'
 import MilestoneHistory from './MilestoneHistory.jsx'
 import MilestoneMenu from './MilestoneMenu.jsx'
 import MilestoneNotes from './MilestoneNotes.jsx'
 import WorkLog from './WorkLog.jsx'
 import { assigneePeople, predecessorNames, stateOf } from './milestoneOrder.js'
-
-// The sections of the milestone's details, one open at a time (Details first).
-const SECTIONS = [
-  { value: 'details', label: 'Details', Icon: Info },
-  { value: 'log', label: 'Work log', Icon: Timeline },
-  { value: 'history', label: 'History', Icon: History },
-  { value: 'notes', label: 'Notes', Icon: ChatBubble },
-]
+import DetailsTab from './panel/DetailsTab.jsx'
+import DiscussionTab from './panel/DiscussionTab.jsx'
+import { panelTabFor, panelTabsFor } from './panel/panelTabs.js'
 
 function Fact({ icon: Icon, children }) {
   return (
@@ -89,96 +67,22 @@ function Facts({ milestone: m, items, project, myHours }) {
   )
 }
 
-/** Today's milestone details and the viewer's actions on it: priority and difficulty, the estimate and progress, the
- * open kickback, Claim, the status moves, Kick back, the discussion, and the Details, Work log, History
- * and Notes sections (Details, with the objective, open first). People who decide hours also see the milestone's
- * pending entries. */
-function MilestoneBody({ milestone: m, project, items, manage, decides, onEdit }) {
-  const status = useMilestoneStatus(project.id)
-  const claim = useClaimMilestone(project.id)
-  const conversations = useConversations()   // whether the viewer is already in this milestone's discussion
-  const [section, setSection] = useState('details')
-  const [kicking, setKicking] = useState(false)
-  const [failure, setFailure] = useState(null)
-  const waitingOn = predecessorNames(m, items)
-  const actions = statusActions(m, { manager: manage, assignee: m.is_assignee })
-
-  const run = async (action) => {
-    setFailure(null)
-    try { await action() } catch (err) { setFailure(err) }
-  }
-
-  return (
-    <Stack sx={{ gap: 1.5 }}>
-      <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-        <PriorityChip priority={m.priority} />
-        <DifficultyChip difficulty={m.difficulty} />
-      </Stack>
-      <EstimateLine milestone={m} />
-      {m.progress_percent != null && m.status !== 'completed' ? (
-        <Stack direction="row" sx={{ alignItems: 'center', gap: 1, maxWidth: 320 }}>
-          <LinearProgress variant="determinate" value={m.progress_percent} sx={{ flex: 1, height: 6, borderRadius: 3 }}
-            aria-label={`${m.name}: ${m.progress_percent}% complete, from the latest update`} />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>{m.progress_percent}% done</Typography>
-        </Stack>
-      ) : null}
-      <KickbackPanel milestone={m} onEdit={manage ? onEdit : undefined} />
-      <ErrorAlert error={failure} />
-      <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-        {m.can_claim ? (
-          <Button size="small" variant="contained" aria-label={`Claim ${m.name}`} disabled={claim.isPending}
-            onClick={() => run(() => claim.mutateAsync(m.id))}>
-            Claim
-          </Button>
-        ) : null}
-        {actions.map((a) => {
-          const blocked = m.blocked && m.status === 'not_started'
-          const button = (
-            <Button key={a.target + a.label} size="small" variant={a.primary ? 'contained' : 'outlined'}
-              disabled={blocked || status.isPending} onClick={() => run(() => status.mutateAsync({ id: m.id, status: a.target }))}>
-              {a.label}
-            </Button>
-          )
-          return blocked ? <Tooltip key={a.label} title={`Waiting on: ${waitingOn.join(', ')}`}><span>{button}</span></Tooltip> : button
-        })}
-        {m.can_kick_back ? (
-          <Button size="small" color="error" variant="outlined" startIcon={<PanTool />} onClick={() => setKicking(true)}>Kick back</Button>
-        ) : null}
-        <Box sx={{ flexGrow: 1 }} />
-        <DiscussButton milestone={m} manage={manage} conversations={conversations.data?.items} />
-      </Stack>
-      <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap', borderTop: 1, borderColor: 'divider', pt: 1 }}>
-        {SECTIONS.map(({ value, label, Icon }) => (
-          <Button key={value} size="small" startIcon={<Icon />} aria-expanded={section === value}
-            aria-label={`${label} for ${m.name}`} onClick={() => setSection((s) => (s === value ? null : value))}>
-            {label}
-          </Button>
-        ))}
-      </Stack>
-      <Collapse in={section === 'details'} unmountOnExit><MilestoneDetails milestone={m} /></Collapse>
-      <Collapse in={section === 'log'} unmountOnExit><WorkLog milestone={m} /></Collapse>
-      <Collapse in={section === 'history'} unmountOnExit><MilestoneHistory milestone={m} /></Collapse>
-      <Collapse in={section === 'notes'} unmountOnExit>
-        <MilestoneNotes milestoneId={m.id} canPost={manage || m.is_assignee} />
-      </Collapse>
-      {decides ? <MilestonePendingHours milestone={m} /> : null}
-      {kicking ? <KickbackDialog milestone={m} onClose={() => setKicking(false)} /> : null}
-    </Stack>
-  )
-}
-
 /**
  * The milestone's side panel beside `list` (a full-screen sheet on phones), open while `milestone` is set. Header: the
  * name (H2) and its state, then "Edit" and the "⋯" for managers, and Close. Under it: the description and three facts
- * (dates and dependencies, people, hours with "· You: <N>h" for an assignee). Below the facts comes `children` when
- * given, otherwise the milestone's details and actions. Below `lg` the header has less room, so the state chip opens
+ * (dates and dependencies, people, hours with "· You: <N>h" for an assignee). Below the facts come the tabs
+ * (Details, Approvals for people who decide hours, Discussion, Work log, History, Notes), the open one named by
+ * `panel` (the URL's ?panel=; one the viewer doesn't have, or none, opens Details) and changed with `onPanel`; or
+ * `children` when given. Below `lg` the header has less room, so the state chip opens
  * the body instead and Edit is an icon. `onArchiveStart` and `onArchiveFailed` go to the "⋯" (see MilestoneMenu).
  */
-export default function MilestonePanel({ project, milestone, items, members, view, myHours, onClose, returnFocus,
-  onOpenPanel, onWarning, onArchiveStart, onArchiveFailed, list, children }) {
+export default function MilestonePanel({ project, milestone, items, members, view, user, myHours, panel, onPanel, onClose,
+  returnFocus, onOpenPanel, onWarning, onArchiveStart, onArchiveFailed, list, children }) {
   const wide = useMediaQuery(WIDE_QUERY)
   const [editing, setEditing] = useState(false)
   const m = milestone
+  const tabs = panelTabsFor(view)
+  const tab = panelTabFor(view, panel)
   const state = m ? <StatusChip status={stateOf(m)} icon /> : null
   const actions = m && view.manage ? (
     <>
@@ -205,8 +109,28 @@ export default function MilestonePanel({ project, milestone, items, members, vie
             <Facts milestone={m} items={items} project={project} myHours={myHours} />
             <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
               {children ?? (
-                <MilestoneBody key={m.id} milestone={m} project={project} items={items} manage={view.manage} decides={view.decides}
-                  onEdit={() => setEditing(true)} />
+                <>
+                  <Tabs value={tab} onChange={(_, value) => onPanel?.(value)} variant="scrollable" allowScrollButtonsMobile
+                    aria-label={`Sections of ${m.name}`} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2, minHeight: 44 }}>
+                    {tabs.map((t) => <Tab key={t.value} value={t.value} label={t.label} id={`milestone-tab-${t.value}`}
+                      aria-controls={`milestone-panel-${t.value}`} sx={{ minHeight: 44 }} />)}
+                  </Tabs>
+                  <Box role="tabpanel" id={`milestone-panel-${tab}`} aria-labelledby={`milestone-tab-${tab}`} key={`${m.id}-${tab}`}>
+                    {tab === 'details' ? (
+                      <DetailsTab milestone={m} items={items} project={project} manage={view.manage} decides={view.decides}
+                        onEdit={() => setEditing(true)} />
+                    ) : null}
+                    {tab === 'approvals' ? (
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                        Hours waiting on this milestone are listed under Details for now.
+                      </Typography>
+                    ) : null}
+                    {tab === 'discussion' ? <DiscussionTab milestone={m} manage={view.manage} user={user} /> : null}
+                    {tab === 'worklog' ? <WorkLog milestone={m} /> : null}
+                    {tab === 'history' ? <MilestoneHistory milestone={m} /> : null}
+                    {tab === 'notes' ? <MilestoneNotes milestoneId={m.id} canPost={view.manage || m.is_assignee} /> : null}
+                  </Box>
+                </>
               )}
             </Box>
           </Stack>

@@ -311,7 +311,7 @@ describe('Discuss on a milestone', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
-  test('the milestone panel shows it beside Notes', async () => {
+  test('the milestone panel shows the thread under its Discussion tab', async () => {
     const project = { id: 'p1', name: 'Apollo', start_date: '2026-01-01', predicted_end_date: '2026-12-31', status: 'active',
       manager: { id: users.manager.id, name: 'Morgan Manager' }, at_risk_reasons: [] }
     server.use(inbox([discussion]),
@@ -321,12 +321,14 @@ describe('Discuss on a milestone', () => {
         difficulty: 'medium', is_archived: false }])),
       http.get(`${API}/projects/p1/members`, () => HttpResponse.json([])),
       http.get(`${API}/milestones/ms1/notes`, () => HttpResponse.json([])),
+      http.get(`${API}/milestones/ms1/discussion`, () => HttpResponse.json(discussion)),
+      http.get(`${API}/conversations/${discussion.id}/messages`, () => HttpResponse.json({ conversation: discussion, items: [], has_more: false })),
       http.get(`${API}/users/:id/profile`, () => HttpResponse.json({ projects: [], milestones: [] })))
     const view = projectView(users.employee, project)
     renderAsUser(<MilestonesTab project={project} manage={view.manage} user={users.employee} view={view} />,
-      { user: users.employee, route: '/m?milestone=ms1' })
+      { user: users.employee, route: '/m?milestone=ms1&panel=discussion' })
     const panel = await screen.findByRole('complementary', { name: 'Schema Mapping' })
-    expect(await within(panel).findByRole('link', { name: /open the discussion about schema mapping/i })).toBeInTheDocument()
+    expect(await within(panel).findByRole('log', { name: 'Messages' })).toBeInTheDocument()
   })
 })
 

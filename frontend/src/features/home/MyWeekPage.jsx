@@ -5,7 +5,7 @@ import {
 import { useTheme } from '@mui/material/styles'
 import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { useClaimMilestone, useMilestonesOf, useProfile, useProjects, useWeek } from '../../api/queries.js'
+import { useClaimMilestone, useMilestonesOf, useProfile, useProjects } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import CountUp from '../../components/CountUp.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
@@ -16,10 +16,10 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { chartPalette } from '../../app/chartColors.js'
-import { formatDate, formatHours, mondayOf } from '../../lib/format.js'
+import { formatDate, formatHours } from '../../lib/format.js'
 import { priorityRank } from '../../lib/labels.js'
-import { can } from '../../lib/permissions.js'
 import TimerButton from '../timer/TimerButton.jsx'
+import { useLoggable } from '../timer/useLoggable.js'
 import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import Section from '../dashboard/Section.jsx'
 import YourManagerCard from '../people/YourManagerCard.jsx'
@@ -122,16 +122,6 @@ function byUrgency(a, b) {
   const rank = (m) => (done(m) ? 0 : priorityRank(m.priority))
   return done(a) - done(b) || Number(overdue(b)) - Number(overdue(a)) || rank(a) - rank(b)
     || String(a.end_date).localeCompare(String(b.end_date))
-}
-
-/** Milestones the person can log on today, from this week's timesheet rows (the server's rules: assigned, inside the
- * dates, project open). Empty for anyone who keeps no timesheet. */
-function useLoggable() {
-  const { user } = useSession()
-  const enabled = can(user, 'timer.use')
-  const week = useWeek(mondayOf(new Date()), undefined, enabled)
-  if (!enabled) return new Set()
-  return new Set((week.data?.rows ?? []).filter((r) => r.open !== false).map((r) => String(r.milestone.id)))
 }
 
 function MyMilestones({ milestones }) {

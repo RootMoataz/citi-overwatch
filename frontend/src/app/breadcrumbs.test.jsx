@@ -148,6 +148,27 @@ describe('breadcrumbs', () => {
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).not.toHaveTextContent('Apollo')
   })
 
+  test("a disabled useBreadcrumb leaves the page's crumb alone", async () => {
+    function Embedded() {
+      useBreadcrumb('Thread', { enabled: false })
+      return <p>Embedded thread</p>
+    }
+    function Page() {
+      useBreadcrumb('Apollo')
+      return null
+    }
+    renderWithProviders(
+      <Routes>
+        <Route element={<Layout user={users.manager} onLogout={() => {}} />}>
+          <Route path="projects/:id" element={<><Page /><Embedded /></>} />
+        </Route>
+      </Routes>,
+      { route: '/projects/p1' },
+    )
+    expect(await screen.findByText('Embedded thread')).toBeInTheDocument()
+    expect(trail()).toEqual(['Projects', 'Apollo'])
+  })
+
   test('the "/" separators are real aria-hidden elements, not generated content', () => {
     renderAt(users.admin, '/people/u-9', 'Sam Smith')
     const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })

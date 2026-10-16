@@ -39,7 +39,7 @@ export default function MilestoneNotes({ milestoneId, canPost }) {
           <TextField label="Add a progress note" multiline minRows={1} value={text} disabled={add.isPending}
             onChange={(e) => { setText(e.target.value); setError('') }} error={Boolean(error)}
             helperText={error || `${text.length}/${MAX}`} />
-          <Button variant="outlined" onClick={post} disabled={add.isPending} sx={{ flexShrink: 0, mt: { sm: 0.25 } }}>Post note</Button>
+          <Button variant="outlined" onClick={post} disabled={add.isPending} sx={{ flexShrink: 0, mt: { sm: 0.25 } }}>Add a note</Button>
         </Stack>
       ) : null}
     </Box>

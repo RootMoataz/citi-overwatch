@@ -99,11 +99,12 @@ function Header({ conversation, me, onBack }) {
 
 /** One conversation: header, the messages (mine on the right) and the composer. Reading it marks it read. It names
  * the top bar's last crumb: `title` (from the inbox) at once, else the thread's own conversation once it loads (one
- * outside the loaded inbox page too), or "Not found" when it can't be opened. */
-export default function ThreadView({ id, me, title, onBack }) {
+ * outside the loaded inbox page too), or "Not found" when it can't be opened. With `crumb={false}` (a thread embedded
+ * in a page, such as a milestone's panel) it leaves the crumb alone. */
+export default function ThreadView({ id, me, title, onBack, crumb = true }) {
   const thread = useThread(id)
   const loaded = thread.data?.conversation
-  useBreadcrumb(title ?? (loaded ? conversationTitle(loaded, me) : undefined), { failed: Boolean(thread.error) })
+  useBreadcrumb(title ?? (loaded ? conversationTitle(loaded, me) : undefined), { failed: Boolean(thread.error), enabled: crumb })
   const older = useLoadOlder(id)
   const { mutate: markRead, isPending: marking } = useMarkConversationRead()
   const calm = useCalmMotion()
