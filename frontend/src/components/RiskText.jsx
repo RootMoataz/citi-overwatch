@@ -15,6 +15,8 @@ export default function RiskText({ project, today, variant = 'cell' }) {
     if (variant === 'chip') return <Chip size="small" icon={<CheckCircleOutlined />} label="On track" color="success" variant="outlined" />
     return <Box component="span" role="img" aria-label="No risk" sx={{ color: 'text.secondary' }}>—</Box>
   }
+  // tabIndex 0 on at-risk cells is deliberate: it makes the reasons' tooltip reachable by keyboard (WCAG 1.4.13).
+  // It is the only extra tab stop, and only on at-risk rows.
   const words = codes.map((code) => RISK_SHORT[code] ?? code)
   const name = `Risk: ${words.join(', ')}`
   const tip = (

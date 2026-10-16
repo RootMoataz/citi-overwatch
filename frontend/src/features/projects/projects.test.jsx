@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
@@ -359,14 +359,91 @@ describe('ProjectsPage', () => {
       expect(seen.at(-1)).not.toHaveProperty('status')
     })
 
-    test('no projects at all shows the empty state for the role', async () => {
+    test('no projects at all shows the empty state for an admin', async () => {
       serve([], { countsBody: { total: 0, active: 0, at_risk: 0 } })
       go(users.admin)
       expect(await screen.findByText('No projects yet')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /create the first project/i })).toBeInTheDocument()
+    })
+
+    test('no projects at all shows the empty state for an employee', async () => {
       serve([], { countsBody: { total: 0, active: 0, at_risk: 0 } })
       go(users.employee)
       expect(await screen.findByText(/aren't on any projects yet/i)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /create the first project/i })).not.toBeInTheDocument()
+    })
+
+    test('typing quickly sends one request after the 300 ms debounce', async () => {
+      const seen = serve()
+      go(users.admin)
+      await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      const before = seen.length
+      const box = screen.getByRole('textbox', { name: 'Search projects' })
+      for (const value of ['a', 'ap', 'apo']) fireEvent.change(box, { target: { value } })
+      expect(seen).toHaveLength(before)      // nothing yet: still inside the 300 ms window
+      await waitFor(() => expect(seen.filter((q) => q.q).map((q) => q.q)).toEqual(['apo']))
+      await new Promise((r) => setTimeout(r, 400))
+      expect(seen.filter((q) => q.q)).toHaveLength(1)
+    })
+
+    test('Export CSV fetches every page of the filtered, sorted set and sends the active filters', async () => {
+      const blobs = []
+      URL.createObjectURL = vi.fn((blob) => { blobs.push(blob); return 'blob:csv' })
+      URL.revokeObjectURL = vi.fn()
+      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      const all = Array.from({ length: 30 }, (_, i) => project({ id: `p${i}`, name: `Project ${String(30 - i).padStart(2, '0')}` }))
+      const seen = serve([], { respond: (q) => {
+        const size = Number(q.page_size); const from = (Number(q.page ?? 1) - 1) * size
+        return HttpResponse.json({ items: all.slice(from, from + size), total: 30, counts })
+      } })
+      go(users.admin, '/projects?status=active&sort=progress&dir=desc')
+      await screen.findByRole('link', { name: 'Project 30' })
+      seen.length = 0
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Export CSV' }))
+      await waitFor(() => expect(blobs).toHaveLength(1))
+      const lines = (await blobs[0].text()).split(/\r?\n/).filter(Boolean)
+      expect(lines).toHaveLength(31)            // header + 30
+      expect(lines[1]).toContain('Project 30')
+      expect(lines[30]).toContain('Project 01')
+      expect(seen.every((q) => q.status === 'active' && q.sort === 'progress' && q.dir === 'desc' && q.page_size === '100')).toBe(true)
+      vi.restoreAllMocks()
+    })
+
+    test('a page past the last one goes to the last page and keeps the pager', async () => {
+      const seen = serve([], { respond: (q) => (Number(q.page ?? 1) > 2
+        ? HttpResponse.json({ items: [], total: 30, counts })
+        : HttpResponse.json({ items: [project()], total: 30, counts })) })
+      go(users.admin, '/projects?page=9')
+      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('page=2'))
+      expect(await screen.findByRole('link', { name: 'Apollo Data Migration' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /previous page/i })).toBeInTheDocument()
+      expect(seen.at(-1)).toMatchObject({ page: '2' })
+    })
+
+    test('an employee never sends ?archived=true', async () => {
+      const seen = serve()
+      go(users.employee, '/projects?archived=true')
+      await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      expect(seen.every((q) => !('archived' in q))).toBe(true)
+    })
+
+    test('closing the create form keeps the page', async () => {
+      serve([project()], { total: 30 })
+      server.use(departmentsHandler())
+      go(users.admin, '/projects?new=1&page=2')
+      const dialog = await screen.findByRole('dialog', { name: /new project/i })
+      await userEvent.setup().click(within(dialog).getByRole('button', { name: /cancel/i }))
+      await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('new=1'))
+      expect(screen.getByTestId('location')).toHaveTextContent('page=2')
+    })
+
+    test('phones: tapping a project card opens the project', async () => {
+      setViewport(375)
+      serve()
+      go(users.admin)
+      const list = await screen.findByRole('list', { name: 'Projects' })
+      await userEvent.setup().click(within(list).getByText('Apollo Data Migration'))
+      expect(await screen.findByText('project page p1')).toBeInTheDocument()
     })
 
     test('phones: cards instead of a table, with name, status, risk, both bars and the due line; the KPI strip keeps 3 values', async () => {

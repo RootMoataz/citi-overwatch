@@ -1,8 +1,10 @@
 import Add from '@mui/icons-material/Add'
+import FileDownload from '@mui/icons-material/FileDownloadOutlined'
 import WarningAmber from '@mui/icons-material/WarningAmber'
 import { Button, Chip, FormControlLabel, Link, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
+import { api } from '../../api/client.js'
 import { useCreateProject, useDepartments, useManagers, useProjects } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
@@ -10,7 +12,6 @@ import DataBar from '../../components/DataBar.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
-import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import FilterBar from '../../components/FilterBar.jsx'
 import FootNote from '../../components/FootNote.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
@@ -19,7 +20,7 @@ import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
 import RiskText from '../../components/RiskText.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { budgetTone } from '../../lib/chartData.js'
-import { num } from '../../lib/csv.js'
+import { csvFilename, downloadCsv, num, toCsv } from '../../lib/csv.js'
 import { formatDate, formatLongDate, nyTodayIso } from '../../lib/format.js'
 import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
@@ -28,6 +29,7 @@ import ProjectForm from './ProjectForm.jsx'
 
 const FILTERS = ['q', 'status', 'manager', 'at_risk', 'department', 'archived']
 const PAGE_SIZE = 25
+const EXPORT_PAGE_SIZE = 100
 const DEFAULT_SORT = { key: 'name', dir: 'asc' }
 const SORT_KEYS = ['name', 'status', 'manager', 'progress', 'budget_used', 'due', 'risk']
 
@@ -81,7 +83,10 @@ export default function ProjectsPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const today = nyTodayIso(new Date())
-  const filters = useMemo(() => Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? '']).filter(([, v]) => v)), [params])
+  const showArchived = can(user, 'archive.everything')
+  // `archived` only counts for people who can see its switch, so an employee's ?archived=true is never forwarded.
+  const filters = useMemo(() => Object.fromEntries(FILTERS.filter((k) => k !== 'archived' || showArchived)
+    .map((k) => [k, params.get(k) ?? '']).filter(([, v]) => v)), [params, showArchived])
   const sort = useMemo(() => {
     const key = params.get('sort')
     return SORT_KEYS.includes(key) ? { key, dir: params.get('dir') === 'desc' ? 'desc' : 'asc' } : DEFAULT_SORT
@@ -91,7 +96,6 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false)
   const projects = useProjects({ ...filters, sort: sort.key, dir: sort.dir, page, page_size: PAGE_SIZE })
   const showManagerFilter = can(user, 'projects.filterByManager')  // admins and executives see every manager's projects
-  const showArchived = can(user, 'archive.everything')
   const managers = useManagers(showManagerFilter)
   const create = useCreateProject()
   const departments = useDepartments({ enabled: Boolean(filters.department) })
@@ -128,6 +132,32 @@ export default function ProjectsPage() {
 
   const rows = projects.data?.items ?? []
   const total = projects.data?.total ?? 0
+  const [exporting, setExporting] = useState(false)
+
+  // A page past the last one (the list shrank, or the URL was edited) goes to the last page that has rows.
+  const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  useEffect(() => {
+    if (projects.isSuccess && !projects.isPlaceholderData && page > 1 && rows.length === 0 && total > 0) {
+      change({ page: lastPage > 1 ? String(lastPage) : '' }, { keepPage: true })
+    }
+  }, [projects.isSuccess, projects.isPlaceholderData, page, rows.length, total, lastPage]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Export what the filters and sort select, not just the page on screen: fetch every page at click time.
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      const all = []
+      for (let next = 1; ; next += 1) {
+        const res = await api.get('/projects', { ...filters, sort: sort.key, dir: sort.dir, page: next, page_size: EXPORT_PAGE_SIZE })
+        const items = res.items ?? []
+        all.push(...items)
+        if (!items.length || all.length >= (res.total ?? 0)) break
+      }
+      downloadCsv(csvFilename('projects'), toCsv(CSV_COLUMNS, all))
+    } finally {
+      setExporting(false)
+    }
+  }
   const counts = projects.data?.counts
   const open = (row) => navigate(`/projects/${row.id}`)
 
@@ -179,7 +209,7 @@ export default function ProjectsPage() {
   const canCreate = can(user, 'project.create')
   // ?new=1 (the command palette's "new project") opens the create form straight away.
   const createFromUrl = canCreate && params.get('new') === '1'
-  const closeCreate = () => { setCreating(false); if (createFromUrl) setFilter('new', '') }
+  const closeCreate = () => { setCreating(false); if (createFromUrl) change({ new: '' }, { keepPage: true }) }
   const filtered = Object.keys(filters).length > 0
   const empty = filtered
     ? <EmptyState title="No projects match" description="Try clearing a filter or searching for something else."
@@ -201,7 +231,10 @@ export default function ProjectsPage() {
     <>
       <PageHeader title="Projects" subtitle="Keep delivery, budget and risk in view."
         actions={<>
-          <ExportCsvButton name="projects" columns={CSV_COLUMNS} rows={rows} />
+          <Button size="small" variant="outlined" startIcon={<FileDownload />} disabled={!rows.length || exporting}
+            title={rows.length ? `Download all ${total} projects as a CSV file` : 'Nothing to export'} onClick={exportCsv}>
+            Export CSV
+          </Button>
           {canCreate ? <Button variant="contained" startIcon={<Add />} onClick={() => setCreating(true)}>New project</Button> : null}
           {can(user, 'request.submit')
             ? <Button variant="contained" component={RouterLink} to="/requests?new=1">Request a project</Button> : null}
@@ -238,7 +271,7 @@ export default function ProjectsPage() {
               onSortChange={(next) => change({ sort: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.key,
                 dir: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.dir })}
               onRowOpen={open} renderCard={renderCard} loading={projects.isLoading} empty={empty}
-              pagination={total > PAGE_SIZE ? { page: page - 1, pageSize: PAGE_SIZE, total,
+              pagination={total > PAGE_SIZE || page > 1 ? { page: page - 1, pageSize: PAGE_SIZE, total,
                 onPageChange: (zeroBased) => change({ page: zeroBased > 0 ? String(zeroBased + 1) : '' }, { keepPage: true }) } : undefined} />
             <FootNote note={FOOT_NOTE} end={`Today is ${formatLongDate(today)}`} />
           </div>
