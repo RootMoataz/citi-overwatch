@@ -1,7 +1,7 @@
 """'Might come your way' on a person's own profile: the milestones auto-routing could give them (rules/routing.py,
 the same rule as after a completion, minus 'predecessors done'), closest to their skills and most urgent first."""
 
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone
 from decimal import Decimal
 
 from app.db import query
@@ -58,5 +58,5 @@ def coming_up_for(conn, user_id: str, today: date) -> list[dict]:
                     "ready": not after, "after": after,
                     "skills": sorted(names[s] for s in pick["matched"]),
                     "match": {"have": len(pick["matched"]), "need": len(m["required_skills"])},
-                    "is_new": m["created_at"].date() >= today - timedelta(days=NEW_DAYS)})
+                    "is_new": m["created_at"].astimezone(timezone.utc).date() >= today - timedelta(days=NEW_DAYS)})
     return out

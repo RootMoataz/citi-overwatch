@@ -66,9 +66,9 @@ describe('PersonProfilePage', () => {
     expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
 
-  test("an employee's own history lists past work on completed and archived projects, read-only", async () => {
+  const ownBody = (viewer) => {
     const body = profile()
-    const own = { ...body, user: { ...body.user, id: users.employee.id },
+    return { ...body, user: { ...body.user, id: viewer.id },
       milestones: [...body.milestones,
         { id: 'm8', name: 'Wrap', status: 'completed', start_date: '2025-05-01', end_date: '2025-06-30', is_archived: false,
           role: 'primary', project: { id: 'p9', name: 'Done', status: 'completed', is_archived: false }, logged_hours: 6,
@@ -76,7 +76,10 @@ describe('PersonProfilePage', () => {
         { id: 'm9', name: 'Old', status: 'in_progress', start_date: '2025-01-01', end_date: '2025-03-01', is_archived: true,
           role: null, project: { id: 'p8', name: 'Shelved', status: 'active', is_archived: true }, logged_hours: 4,
           approved_hours: 4, can_open: false, difficulty: 'easy' }] }
-    renderProfile(users.employee, own)
+  }
+
+  test("a manager's own history lists past work on completed and archived projects, read-only", async () => {
+    renderProfile(users.manager, ownBody(users.manager))
     const milestones = await screen.findByRole('table', { name: /milestones ada lovelace has worked on/i })
     const wrap = within(milestones).getByRole('rowheader', { name: 'Wrap' }).closest('tr')
     expect(within(wrap).getByText('Project completed')).toBeInTheDocument()
@@ -84,10 +87,17 @@ describe('PersonProfilePage', () => {
     expect(within(old).getByText('Archived')).toBeInTheDocument()
     expect(within(old).getByText('Shelved')).not.toHaveAttribute('href')
     expect(within(old).getAllByText('4h')).toHaveLength(2)                   // logged and approved
-    expect(screen.getByText(/read-only record/i)).toBeInTheDocument()
+    expect(screen.getByText(/read-only record of your work, including finished and archived projects/i)).toBeInTheDocument()
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument()
+  })
+
+  test("an employee's own history says it covers finished projects, not archived ones", async () => {
+    renderProfile(users.employee, ownBody(users.employee))
+    await screen.findByRole('table', { name: /milestones ada lovelace has worked on/i })
+    expect(screen.getByText(/read-only record of your work, including finished projects\./i)).toBeInTheDocument()
+    expect(screen.queryByText(/archived projects/i)).not.toBeInTheDocument()
   })
 
   test('shows the department the person is in', async () => {

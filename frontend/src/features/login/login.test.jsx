@@ -271,17 +271,24 @@ describe('where sign-in lands', () => {
 
   test('the demo session ending lands the next sign-in on home', async () => {
     const demo = { ...users.employee, username: 'demo.admin', is_public_demo: true,
-      session_expires_at: new Date(Date.now() + 1500).toISOString() }
+      session_expires_at: new Date(Date.now() + 60_000).toISOString() }
     server.use(noSession(), dashboardStub(), loginReturns(ready(demo)), loggedOut())
-    renderWithProviders(<><App /><Where /></>, { route: '/login' })
-    await userEvent.click(within(await screen.findByRole('group', { name: /try the demo/i }))
-      .getByRole('button', { name: 'Admin' }))
-    await userEvent.click(await screen.findByRole('button', { name: /got it/i }))
-    await userEvent.click(await screen.findByRole('link', { name: /messages/i }))
-    expect(here()).toBe('/messages')
-    await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })
-    await signInAs(users.employee)
-    expect(here()).toBe('/')
+    // The session timer runs on a controlled clock, so the end comes from advancing time, not from how fast the clicks are.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true })
+    try {
+      renderWithProviders(<><App /><Where /></>, { route: '/login' })
+      await userEvent.click(within(await screen.findByRole('group', { name: /try the demo/i }))
+        .getByRole('button', { name: 'Admin' }))
+      await userEvent.click(await screen.findByRole('button', { name: /got it/i }))
+      await userEvent.click(await screen.findByRole('link', { name: /messages/i }))
+      expect(here()).toBe('/messages')
+      await act(async () => { vi.advanceTimersByTime(61_000) })
+      await screen.findByText('Your 5-minute demo session has ended.')
+      await signInAs(users.employee)
+      expect(here()).toBe('/')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test('the server ending a demo session before the timer lands the next sign-in on home', async () => {

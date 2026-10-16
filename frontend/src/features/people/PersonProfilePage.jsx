@@ -91,7 +91,7 @@ export default function PersonProfilePage() {
       </Grid>
       {own ? (
         <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-          A read-only record of your work, including finished and archived projects. Hours are changed on My timesheet while a project is open.
+          A read-only record of your work, including finished{viewer.role === 'employee' ? '' : ' and archived'} projects. Hours are changed on My timesheet while a project is open.
         </Typography>
       ) : null}
       <Stack sx={{ gap: 2 }}>

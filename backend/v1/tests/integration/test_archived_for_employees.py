@@ -70,6 +70,8 @@ def test_manager_and_admin_behave_as_before_for_an_archived_milestone(client, co
     for token in (mgr_token, admin_token):
         body = client.request("GET", f"/projects/{project['id']}/milestones", token=token)[1]
         assert [m["id"] for m in body] == [str(kept["id"])]
+    for token in (mgr_token, admin_token):                    # archived milestones are not readable by id for anyone
+        assert client.request("GET", f"/milestones/{ms['id']}", token=token)[0] == 404
     items = client.request("GET", "/archive?type=milestone", token=admin_token)[1]["items"]
     assert [i["id"] for i in items] == [str(ms["id"])]
     assert client.request("POST", f"/milestones/{ms['id']}/restore", token=mgr_token)[0] == 200

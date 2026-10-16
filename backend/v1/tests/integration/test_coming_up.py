@@ -69,6 +69,14 @@ def test_new_urgent_close_match_comes_first(client, conn):
     assert str(fresh["id"]) == items[0]["milestone"]["id"] and six and old
 
 
+def test_is_new_boundary_is_seven_days(client, conn):
+    _, emp, project, sk = world(conn, skills=("Backend",))
+    seven = milestone(conn, project, "Seven days", sk["Backend"], age_days=7)
+    eight = milestone(conn, project, "Eight days", sk["Backend"], age_days=8)
+    items = {i["milestone"]["name"]: i["is_new"] for i in coming(client, conn, emp)}
+    assert items == {"Seven days": True, "Eight days": False} and seven and eight
+
+
 def test_no_skills_means_no_predictions(client, conn):
     _, emp, project, sk = world(conn, skills=())
     other = make_skill(conn, "Design")

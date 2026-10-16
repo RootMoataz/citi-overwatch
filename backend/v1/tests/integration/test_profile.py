@@ -104,7 +104,7 @@ def test_manager_loses_access_when_person_leaves_their_project(client, conn):
     assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 404
 
 
-def test_own_history_includes_archived_and_completed_work_read_only(client, conn):
+def test_archived_work_is_visible_to_admins_not_to_the_employee_or_their_manager(client, conn):
     mgr = make_user(conn, role="manager")
     emp = make_user(conn, manager_id=mgr["id"])
     done = make_project(conn, mgr, name="Done", status="completed", **SPAN)
@@ -119,7 +119,7 @@ def test_own_history_includes_archived_and_completed_work_read_only(client, conn
     log_entry(conn, emp, old, MONDAY - timedelta(days=14), 4)
     log_entry(conn, emp, cut, MONDAY - timedelta(days=14), 2, status="pending")
 
-    # An employee's own page is live work only; admins still see the archive (and a manager's own page does too).
+    # Admins see the archive; the employee's own page and their manager's view of it are live work only.
     admin = make_user(conn, role="admin")
     body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, admin))[1]
     milestones = {m["name"]: m for m in body["milestones"]}
@@ -135,7 +135,7 @@ def test_own_history_includes_archived_and_completed_work_read_only(client, conn
     assert {m["name"] for m in body["milestones"]} == {"Wrap"}
     assert {p["name"] for p in body["projects"]} == {"Done", "Live"}
 
-    # Their manager still sees only live work: the archive view of someone's history is the owner's and admins'.
+    # Their manager sees only live work too: the archive view of someone's history is admins' alone.
     body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[1]
     assert {m["name"] for m in body["milestones"]} == {"Wrap"}
     assert {p["name"] for p in body["projects"]} == {"Done", "Live"}
@@ -247,8 +247,12 @@ def test_manager_own_profile_still_lists_archived(client, conn):
     for p in (live, shelved):
         add_member(conn, p, mgr)
     assign(conn, make_milestone(conn, live, name="MgrCut", archived=True), mgr)
+    assign(conn, make_milestone(conn, shelved, name="MgrOld"), mgr)
     body = client.request("GET", f"/users/{mgr['id']}/profile", token=token_for(conn, mgr))[1]
-    assert {m["name"] for m in body["milestones"]} == {"MgrCut"}
+    rows = {m["name"]: m for m in body["milestones"]}
+    assert set(rows) == {"MgrCut", "MgrOld"}
+    # The archived project's row is a read-only record: shown, but not linked.
+    assert (rows["MgrOld"]["project"]["is_archived"], rows["MgrOld"]["can_open"]) == (True, False)
     assert {p["name"] for p in body["projects"]} == {"MgrLive", "MgrShelved"}
 
 
