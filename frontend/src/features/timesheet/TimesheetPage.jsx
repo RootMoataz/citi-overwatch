@@ -130,18 +130,21 @@ export default function TimesheetPage() {
   )
 
   // The month calendar never edits; unsaved edits stay in memory (and the leave warning stays on) until you go back to the week.
+  // In Month, ?day= is the selected day; a new month drops it, and a day of another month brings its month along.
+  const inMonthUrl = (change) => setParams((p) => { const q = new URLSearchParams(p); change(q); return q }, { replace: true })
   if (inMonth) {
     return (
       <>
-        <PageHeader title="My timesheet" subtitle="Log hours per day on the milestones you're assigned to. Every entry goes to the project manager for approval." />
-        <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 2 }}>{toggle}</Stack>
+        <PageHeader title="My timesheet" subtitle="Review your hours by day. Select a date for entry details." actions={toggle} />
         {n ? (
           <Alert severity="info" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => chooseView(sheetView)}>Back to that week</Button>}>
             You have {n} unsaved change{n === 1 ? '' : 's'} in the week of {formatDayShort(week)}.
           </Alert>
         ) : null}
-        <MonthView month={month} onOpenDay={openDay}
-          onMonthChange={(next) => setParams((p) => { const q = new URLSearchParams(p); q.set('month', next); return q }, { replace: true })} />
+        <MonthView month={month} day={asked} onOpenDay={openDay} onRequest={(cell) => setAsking(cell)}
+          onSelectDay={(iso) => inMonthUrl((q) => { q.set('month', monthOf(iso)); q.set('day', iso) })}
+          onMonthChange={(next) => inMonthUrl((q) => { q.set('month', next); q.delete('day') })} />
+        {asking ? <RequestChangeDialog cell={asking} onClose={() => setAsking(null)} /> : null}
         <ConfirmDialog open={leaving.open} title={`Discard ${leaving.count} unsaved change${leaving.count === 1 ? '' : 's'}?`}
           body="The hours and notes you typed haven't been submitted and will be lost." confirmLabel="Discard"
           onConfirm={() => { toWeek(leaving.week, leaving.day); stay() }} onClose={stay} />

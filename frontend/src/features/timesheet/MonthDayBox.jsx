@@ -1,108 +1,101 @@
-import { Box, Button, ButtonBase, Link, Paper, Typography } from '@mui/material'
-import { useId } from 'react'
-import { Link as RouterLink } from 'react-router-dom'
+import EventOutlined from '@mui/icons-material/EventOutlined'
+import { Box, ButtonBase } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { STATUS, statusColor } from '../../app/theme.js'
-import { formatDayFull, formatDayShort, formatHours } from '../../lib/format.js'
+import { formatDayShort, formatHours } from '../../lib/format.js'
 import { DAY_CAP } from './useTimesheetWeek.js'
-import { LINE_WORD, hoursWords, isOverdue, lineSx, milestoneHref, num, stateKey } from './monthText.js'
+import { KIND, KIND_ICON, chipSx, deadlineWords, hoursWords, kindColor, kindText, num } from './monthText.js'
 
 const MAX_LINES = 3
-const dayNumber = (iso) => Number(iso.slice(8))
 const red = (t) => statusColor(STATUS.rejected, t)
+const amber = (t) => kindText('pending', t)
 const nameOf = (names, id) => names.get(id)?.name ?? 'Milestone'
+const caption = { fontSize: '0.75rem', lineHeight: 1.3 }
 
-/** One day of the grid. A button: its name lists the date, total, every line and any milestone due that day. */
-export function DayBox({ date, info, names, due, overtime, inMonth, weekend, past, isToday, phone, selected, onPick }) {
-  const lines = info?.lines ?? []
-  const total = num(info?.total)
-  const noHours = inMonth && !weekend && past && !lines.length
-  const name = [formatDayShort(date), isToday ? 'today' : '', noHours ? 'no hours' : hoursWords(total), total > DAY_CAP ? `over ${DAY_CAP} hours` : '',
-    overtime ? 'overtime' : '', ...lines.map((l) => `${nameOf(names, l.milestone_id)} ${hoursWords(l.hours)} ${LINE_WORD[l.kind]}`),
-    ...due.map((m) => `due: ${m.name}`)].filter(Boolean).join(', ')
-  const dots = [...new Set(lines.map((l) => l.milestone_id))].slice(0, MAX_LINES)
+/** One hours line: an icon and the name with its hours, then the status word (approved has none: its ✓ is named instead). */
+function LineChip({ line, name }) {
+  const { kind } = line
+  const Icon = KIND_ICON[kind]
+  const word = KIND[kind].chip
   return (
-    <ButtonBase component="button" aria-label={name} aria-pressed={phone ? selected : undefined} onClick={() => onPick(date)}
-      sx={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', width: '100%', height: '100%',
-        textAlign: 'left', gap: 0.25, p: { xs: 0.5, sm: 0.75 }, minHeight: { xs: 56, sm: 104 },
-        bgcolor: weekend ? 'action.hover' : 'transparent',
-        boxShadow: (t) => {
-          if (isToday) return `inset 0 0 0 2px ${t.palette.primary.main}`
-          return selected ? `inset 0 0 0 2px ${t.palette.text.secondary}` : 'none'
-        },
-        '&:hover': { bgcolor: 'action.selected' } }}>
-      <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 0.5 }}>
-        <Typography component="span" variant="body2" sx={{ fontWeight: isToday ? 700 : 500, color: inMonth ? 'text.primary' : 'text.disabled' }}>{dayNumber(date)}</Typography>
-        {lines.length ? (
-          <Typography component="span" variant="caption" sx={{ fontWeight: 700, color: total > DAY_CAP ? red : 'text.primary' }}>
-            {formatHours(total)}
-          </Typography>
-        ) : null}
+    <Box component="span" data-line={kind}
+      sx={[{ ...caption, display: 'flex', alignItems: 'flex-start', gap: 0.5, px: 0.625, py: 0.375, minWidth: 0 }, chipSx(kind)]}>
+      <Icon titleAccess={word ? undefined : KIND[kind].panel} sx={{ fontSize: 14, mt: '1px', flexShrink: 0, color: (t) => kindColor(kind, t) }} />
+      <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere', color: 'text.primary' }}>
+        {kind === 'rejected'
+          ? <>{name} <Box component="s" sx={{ textDecoration: 'line-through' }}>{formatHours(line.hours)}</Box></>
+          : `${name} ${formatHours(line.hours)}`}
+        {word ? <Box component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: (t) => kindText(kind, t) }}>{word}</Box> : null}
       </Box>
-      {overtime ? (
-        <Typography component="span" variant="caption" sx={{ display: 'flex', gap: 0.5, lineHeight: 1.2, color: (t) => statusColor(STATUS.on_hold, t) }}>
-          <Box component="span" aria-hidden>⚠</Box>{phone ? null : <Box component="span">Overtime</Box>}
-        </Typography>
-      ) : null}
-      {phone ? (
-        <Box component="span" sx={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
-          {dots.map((id) => (
-            <Box component="span" key={id} aria-hidden
-              sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: (t) => statusColor(STATUS[names.has(id) ? stateKey(names.get(id)) : 'not_started'], t) }} />
-          ))}
-        </Box>
-      ) : (
-        <>
-          {lines.slice(0, MAX_LINES).map((l, i) => (
-            <Box component="span" key={i}
-              sx={[{ display: 'block', fontSize: '0.75rem', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-                (t) => lineSx(l.kind, t)]}>
-              {`${nameOf(names, l.milestone_id)} ${formatHours(l.hours)}`}
-            </Box>
-          ))}
-          {lines.length > MAX_LINES
-            ? <Typography component="span" variant="caption" sx={{ color: 'text.secondary' }}>{`+${lines.length - MAX_LINES} more`}</Typography> : null}
-          {noHours ? <Typography component="span" variant="caption" sx={{ color: 'text.disabled' }}>No hours</Typography> : null}
-        </>
-      )}
-    </ButtonBase>
+    </Box>
   )
 }
 
-/** On a phone: the chosen day's milestones and hours, under the grid. */
-export function DayPanel({ date, info, milestones, names, today, onOpen }) {
-  const id = useId()
-  const lines = info?.lines ?? []
-  const active = milestones.filter((m) => m.start_date <= date && date <= m.end_date)
+/** On a phone: one dot per line (at most 3), in its status colour; a timer draft is a hollow, dashed dot. */
+function Dot({ kind }) {
   return (
-    <Paper component="section" variant="outlined" aria-labelledby={id} sx={{ p: 2, mt: 2 }}>
-      <Typography id={id} variant="h6" component="h3">{formatDayFull(date)}</Typography>
-      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>{`${formatHours(info?.total)} logged`}</Typography>
-      {active.length ? (
-        <Box component="ul" aria-label="Milestones" sx={{ m: 0, mb: 1, pl: 2.5 }}>
-          {active.map((m) => {
-            const note = [m.end_date === date ? 'Due' : '', isOverdue(m, today) ? '⚠ Overdue' : ''].filter(Boolean).join(' · ')
-            return (
-              <Typography key={m.id} component="li" variant="body2">
-                <Link component={RouterLink} to={milestoneHref(m)} underline="hover" color="inherit">{m.name}</Link>
-                {` · ${STATUS[stateKey(m)].label}${note ? ` · ${note}` : ''}`}
-              </Typography>
-            )
-          })}
+    <Box component="span" role="img" aria-label={KIND[kind].legend}
+      sx={(t) => ({ width: 7, height: 7, borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
+        ...(kind === 'draft' ? { border: `1px dashed ${kindColor(kind, t)}` } : { bgcolor: kindColor(kind, t) }) })} />
+  )
+}
+
+/** One day of the grid, as a button that selects it. Its name lists the date, total, marks, every line and any deadlines. */
+export function DayBox({ date, info, names, deadlines, overtime, inMonth, weekend, isToday, selected, phone, onPick }) {
+  const lines = info?.lines ?? []
+  const total = num(info?.total)
+  const over = total > DAY_CAP
+  const name = [formatDayShort(date), isToday ? 'today' : '', lines.length ? hoursWords(total) : 'no hours',
+    over ? `over ${DAY_CAP} hours` : '', overtime ? 'over 40 hours' : '',
+    ...lines.map((l) => `${nameOf(names, l.milestone_id)} ${hoursWords(l.hours)} ${KIND[l.kind].spoken}`),
+    deadlines ? deadlineWords(deadlines) : ''].filter(Boolean).join(', ')
+  // A day of the next or previous month reads "28 Sep" (just "28" on a phone).
+  const label = inMonth || phone ? String(Number(date.slice(8))) : formatDayShort(date).split(' ').slice(1).join(' ')
+  const deadlineMark = deadlines ? (
+    <Box component="span" sx={{ ...caption, display: 'flex', alignItems: 'flex-start', gap: 0.5, color: 'text.secondary' }}>
+      <EventOutlined sx={{ fontSize: 14, mt: '1px' }} />{phone ? null : deadlineWords(deadlines)}
+    </Box>
+  ) : null
+  const overtimeMark = overtime ? (
+    <Box component="span" sx={{ ...caption, fontWeight: 600, color: amber }}>
+      <Box component="span" aria-hidden>⚠</Box>{phone ? null : ' Over 40h'}
+    </Box>
+  ) : null
+  return (
+    <ButtonBase component="button" aria-label={name} aria-pressed={selected} onClick={() => onPick(date)}
+      sx={(t) => ({ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 0.5,
+        width: '100%', height: '100%', minWidth: 0, minHeight: phone ? 64 : 112, p: phone ? 0.5 : 1, overflow: 'hidden', textAlign: 'left',
+        bgcolor: selected ? alpha(t.palette.primary.main, 0.08) : weekend ? alpha(t.palette.text.primary, 0.035) : 'transparent',
+        boxShadow: selected ? `inset 0 0 0 2px ${t.palette.primary.main}` : isToday ? `inset 0 0 0 1px ${t.palette.primary.main}` : 'none',
+        '&:hover': { bgcolor: selected ? alpha(t.palette.primary.main, 0.12) : 'action.hover' },
+        '&.Mui-focusVisible': { outline: `2px solid ${t.palette.primary.main}`, outlineOffset: -4 } })}>
+      <Box component="span" sx={{ display: 'flex', flexDirection: phone ? 'column' : 'row', justifyContent: 'space-between',
+        alignItems: phone ? 'flex-start' : 'center', gap: phone ? 0.25 : 0.5 }}>
+        <Box component="span" sx={isToday
+          ? { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: phone ? 20 : 24, height: phone ? 20 : 24, px: 0.5,
+            borderRadius: 12, bgcolor: 'primary.main', color: 'primary.contrastText', typography: 'body2', fontWeight: 700 }
+          : { typography: 'body2', fontWeight: 600, color: inMonth ? 'text.primary' : 'text.disabled' }}>
+          {label}
         </Box>
-      ) : null}
-      {lines.length ? (
-        <Box component="ul" aria-label="Hours" sx={{ listStyle: 'none', m: 0, mb: 1, p: 0, display: 'grid', gap: 0.5 }}>
-          {lines.map((l, i) => (
-            <Box component="li" key={i} sx={{ display: 'flex', gap: 1, alignItems: 'baseline' }}>
-              <Box component="span" sx={[{ fontSize: '0.8125rem' }, (t) => lineSx(l.kind, t)]}>
-                {`${nameOf(names, l.milestone_id)} ${formatHours(l.hours)}`}
-              </Box>
-              <Typography component="span" variant="caption" sx={{ color: 'text.secondary' }}>{LINE_WORD[l.kind]}</Typography>
-            </Box>
-          ))}
+        <Box component="span" sx={{ typography: 'caption', fontWeight: 700, color: over ? red : lines.length ? 'text.primary' : 'text.secondary' }}>
+          {lines.length ? formatHours(total) : '–'}
         </Box>
-      ) : <Typography variant="body2" sx={{ mb: 1 }}>No hours logged.</Typography>}
-      <Button variant="outlined" size="small" onClick={onOpen}>Open this day</Button>
-    </Paper>
+      </Box>
+      {phone ? (
+        <Box component="span" sx={{ display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap', minHeight: 14 }}>
+          {lines.slice(0, MAX_LINES).map((l, i) => <Dot key={i} kind={l.kind} />)}
+          {overtimeMark}
+          {deadlineMark}
+        </Box>
+      ) : (
+        <>
+          {overtimeMark}
+          {lines.slice(0, MAX_LINES).map((l, i) => <LineChip key={i} line={l} name={nameOf(names, l.milestone_id)} />)}
+          {lines.length > MAX_LINES
+            ? <Box component="span" sx={{ ...caption, color: 'text.secondary' }}>{`+${lines.length - MAX_LINES} more`}</Box> : null}
+          {deadlineMark}
+        </>
+      )}
+    </ButtonBase>
   )
 }

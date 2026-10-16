@@ -26,33 +26,10 @@ export function shiftMonth(month, n) {
   return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 7)
 }
 
-// Lay milestones out as bars across one week. Input order is kept; each
-// milestone takes the first lane where it does not overlap, else it is hidden.
-export function weekBars(week, milestones, maxLanes = 3) {
-  const first = week[0]
-  const last = week[6]
-  const lanes = []
-  const hidden = []
-  for (const milestone of milestones) {
-    const { start_date: s, end_date: e } = milestone
-    if (e < first || s > last) continue
-    const startsBefore = s < first
-    const endsAfter = e > last
-    const startCol = startsBefore ? 0 : week.indexOf(s)
-    const endCol = endsAfter ? 6 : week.indexOf(e)
-    const bar = { milestone, startCol, endCol, startsBefore, endsAfter, endsHere: !endsAfter }
-    const lane = lanes.find((bars) => bars.every((b) => endCol < b.startCol || startCol > b.endCol))
-    if (lane) lane.push(bar)
-    else if (lanes.length < maxLanes) lanes.push([bar])
-    else hidden.push(milestone)
-  }
-  return { lanes, hidden }
-}
-
 // Per day: the hour lines and the counted total. Only pending and approved
-// hours count. Lines follow the milestones' list order (the bars'), a milestone
-// unknown to the list after those; a milestone's saved hours come before its
-// timer draft.
+// hours count. Lines follow the milestones' list order, a milestone unknown to
+// the list after those; a milestone's saved hours come before its timer draft.
+// A saved line keeps its entry (tracked hours, rejection reason) for the day panel.
 export function dayLines(entries = [], drafts = [], milestones = []) {
   const listed = new Map(milestones.map((m, i) => [m.id, i]))
   const days = new Map()
@@ -62,7 +39,7 @@ export function dayLines(entries = [], drafts = [], milestones = []) {
     day.lines.push(line)
     if (line.kind === 'approved' || line.kind === 'pending') day.total += Number(line.hours)
   }
-  for (const e of entries) add(e.work_date, { milestone_id: e.milestone_id, hours: Number(e.hours), kind: e.status })
+  for (const e of entries) add(e.work_date, { milestone_id: e.milestone_id, hours: Number(e.hours), kind: e.status, entry: e })
   for (const d of drafts) add(d.work_date, { milestone_id: d.milestone_id, hours: Number(d.hours), kind: 'draft' })
   for (const day of days.values()) {
     const order = new Map()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayLines, gridWeeks, monthOf, shiftMonth, weekBars } from './monthLayout'
+import { dayLines, gridWeeks, monthOf, shiftMonth } from './monthLayout'
 
 const flat = (weeks) => weeks.flat()
 const consecutive = (dates) =>
@@ -50,41 +50,6 @@ describe('month helpers', () => {
   })
 })
 
-describe('weekBars', () => {
-  const week = ['2026-10-12', '2026-10-13', '2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17', '2026-10-18']
-  const ms = (id, start_date, end_date) => ({ id, name: id, start_date, end_date })
-
-  it('puts non-overlapping milestones in one lane', () => {
-    const { lanes, hidden } = weekBars(week, [ms('a', '2026-10-12', '2026-10-13'), ms('b', '2026-10-15', '2026-10-16')])
-    expect(lanes).toHaveLength(1)
-    expect(lanes[0].map((b) => b.milestone.id)).toEqual(['a', 'b'])
-    expect(hidden).toEqual([])
-  })
-
-  it('fills three lanes and hides the fourth overlapping milestone', () => {
-    const all = ['a', 'b', 'c', 'd'].map((id) => ms(id, '2026-10-12', '2026-10-18'))
-    const { lanes, hidden } = weekBars(week, all)
-    expect(lanes).toHaveLength(3)
-    expect(hidden.map((m) => m.id)).toEqual(['d'])
-  })
-
-  it('marks bars cut at both edges', () => {
-    const { lanes } = weekBars(week, [ms('a', '2026-10-01', '2026-10-30')])
-    expect(lanes[0][0]).toMatchObject({ startCol: 0, endCol: 6, startsBefore: true, endsAfter: true, endsHere: false })
-  })
-
-  it('marks a milestone ending on Wednesday', () => {
-    const { lanes } = weekBars(week, [ms('a', '2026-10-12', '2026-10-14')])
-    expect(lanes[0][0]).toMatchObject({ startCol: 0, endCol: 2, startsBefore: false, endsAfter: false, endsHere: true })
-  })
-
-  it('ignores milestones outside the week', () => {
-    const { lanes, hidden } = weekBars(week, [ms('a', '2026-09-01', '2026-09-30')])
-    expect(lanes).toEqual([])
-    expect(hidden).toEqual([])
-  })
-})
-
 describe('dayLines', () => {
   it('totals pending and approved only and keeps kinds', () => {
     const day = '2026-10-14'
@@ -100,6 +65,9 @@ describe('dayLines', () => {
     expect(total).toBe(8)
     expect(lines.map((l) => l.kind)).toEqual(['approved', 'pending', 'rejected', 'draft'])
     expect(lines.map((l) => l.milestone_id)).toEqual([1, 2, 3, 4])
+    // A saved line keeps its entry for the day panel; a timer draft has none.
+    expect(lines[2].entry).toMatchObject({ milestone_id: 3, status: 'rejected' })
+    expect(lines[3].entry).toBeUndefined()
   })
 
   it('orders a day by the milestones list, saved before a timer draft for the same milestone', () => {

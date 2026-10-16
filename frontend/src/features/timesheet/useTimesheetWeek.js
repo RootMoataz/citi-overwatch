@@ -12,7 +12,7 @@ const without = (obj, drop) => Object.fromEntries(Object.entries(obj).filter(([k
 
 // On hold pauses logging; completed closes it. The server refuses changes on both (409 PROJECT_NOT_OPEN).
 const CLOSED = { on_hold: 'Project on hold — logging paused', completed: 'Project completed — logging closed' }
-const closedLabel = (row) => (row.open === false || CLOSED[row.project?.status]
+export const closedLabel = (row) => (row.open === false || CLOSED[row.project?.status]
   ? CLOSED[row.project?.status] ?? 'Logging closed on this project' : null)
 
 /** One week of a person's timesheet: the saved sheet, what is being typed, and everything derived from both. */
