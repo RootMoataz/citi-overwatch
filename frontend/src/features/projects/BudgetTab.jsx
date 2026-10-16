@@ -1,13 +1,13 @@
-import { Grid, Paper, Stack, Typography } from '@mui/material'
-import { useProjectSummary } from '../../api/queries.js'
-import { TONE_TEXT } from '../../app/chartColors.js'
+import { Alert, Link, Paper, Stack, Typography } from '@mui/material'
+import { Link as RouterLink } from 'react-router-dom'
+import { useApprovals, useProjectSummary } from '../../api/queries.js'
 import BulletChart from '../../components/BulletChart.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import { budgetRows, compactMoney, niceMax, ticksTo } from '../../lib/chartData.js'
-import { formatMoney, formatPct } from '../../lib/format.js'
+import { formatHours, formatMoney, formatPct } from '../../lib/format.js'
 import MilestoneCostTable from './MilestoneCostTable.jsx'
-import StatTile from '../../components/StatTile.jsx'
+import KpiStrip from '../../components/KpiStrip.jsx'
 
 /** A round dollar step giving about five ticks up to `max`. */
 function moneyStep(max) {
@@ -24,49 +24,68 @@ function BudgetBullet({ name, budget, consumed, forecast }) {
   const max = niceMax(top, step)
   const note = row.tone === 'alert' ? ' · ⚠ over budget' : row.tone === 'warning' ? ' · ⚠ forecast over budget' : ''
   return (
-    <BulletChart ariaLabel={`${name}: consumed against budget`} max={max} ticks={ticksTo(max, step)} tickFormat={compactMoney}
+    <BulletChart ariaLabel={`${name}: approved spend against budget`} max={max} ticks={ticksTo(max, step)} tickFormat={compactMoney}
       axisLabel="US dollars"
-      legend={[{ kind: 'track', label: 'Budget' }, { kind: 'bar', tone: row.tone, label: 'Consumed (approved hours)' },
-        { kind: 'marker', label: 'Forecast at end date' }]}
+      legend={[{ kind: 'track', label: 'Budget' }, { kind: 'bar', tone: row.tone, label: 'Approved spend' },
+        { kind: 'marker', label: 'Forecast at completion' }]}
       rows={[{
-        id: row.id, label: 'Consumed', tone: row.tone, track: row.budget, value: row.consumed, marker: row.forecast,
+        id: row.id, label: 'Approved spend', tone: row.tone, track: row.budget, value: row.consumed, marker: row.forecast,
         valueText: `${formatMoney(row.consumed)} of ${formatMoney(row.budget)}`,
-        detail: `Forecast at end date ${formatMoney(row.forecast)}${row.hasBudget ? ` (${formatPct(row.forecastPct)} of budget)` : ''}${note}`,
-        summary: `Budget ${formatMoney(row.budget)}\nConsumed ${formatMoney(row.consumed)} (${formatPct(row.usedPct)})\nForecast at end date ${formatMoney(row.forecast)}${note}`,
+        detail: `Forecast at completion ${formatMoney(row.forecast)}${row.hasBudget ? ` (${formatPct(row.forecastPct)} of budget)` : ''}${note}`,
+        summary: `Budget ${formatMoney(row.budget)}\nApproved spend ${formatMoney(row.consumed)} (${formatPct(row.usedPct)})\nForecast at completion ${formatMoney(row.forecast)}${note}`,
       }]} />
   )
 }
 
-export default function BudgetTab({ project }) {
+export default function BudgetTab({ project, view }) {
   const summary = useProjectSummary(project.id)
-  if (summary.error) return <ErrorAlert error={summary.error} onRetry={() => summary.refetch()} />
+  const approvals = useApprovals({ project: project.id }, Boolean(view?.decides))
+  const pending = approvals.data ?? []
+  const pendingHours = pending.reduce((sum, item) => sum + Number(item.entry?.hours ?? 0), 0)
   const s = summary.data ?? { budget: project.budget, consumed: project.consumed, remaining: project.budget - project.consumed,
     budget_pct: project.budget_pct }
-  const over = s.remaining < 0
-  const forecast = s.forecast ?? s.consumed
-  const tone = budgetRows([{ id: 'p', name: project.name, budget: s.budget, consumed: s.consumed, forecast }])[0].tone
+  const budget = Number(s.budget)
+  const consumed = Number(s.consumed)
+  const remaining = Number(s.remaining)
+  const forecast = s.forecast != null ? Number(s.forecast) : consumed
+  const [row] = budgetRows([{ id: 'p', name: project.name, budget, consumed, forecast }])
+  const items = [
+    { key: 'budget', label: 'Budget', value: formatMoney(budget) },
+    { key: 'spend', label: 'Approved spend', value: formatMoney(consumed), hint: `${formatPct(row.usedPct)} of budget used` },
+    { key: 'available', label: 'Available budget', value: remaining < 0 ? `${formatMoney(-remaining)} over budget` : formatMoney(remaining),
+      tone: remaining < 0 ? 'error' : undefined },
+    { key: 'forecast', label: 'Forecast at completion', value: formatMoney(forecast),
+      tone: row.hasBudget && forecast > budget ? 'warning' : undefined,
+      hint: row.hasBudget && forecast > budget ? '⚠ Over budget' : undefined },
+  ]
   return (
     <Stack sx={{ gap: 3 }}>
       <PrintHeader title={`${project.name}: budget`} />
-      <Stack direction="row" data-print="hide" sx={{ justifyContent: 'flex-end', mb: -1 }}><PrintButton /></Stack>
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Planned budget" value={Number(s.budget)} format={formatMoney} /></Grid>
-        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Consumed (approved hours)" value={Number(s.consumed)} format={formatMoney} /></Grid>
-        <Grid size={{ xs: 12, sm: 4 }}><StatTile label="Remaining" tone={over ? 'error' : undefined}
-          value={`${formatMoney(Math.abs(s.remaining))} ${over ? 'over' : 'remaining'}`} /></Grid>
-      </Grid>
-      <Paper variant="outlined" sx={{ p: 2 }} component="section" aria-labelledby="budget-used">
-        <Typography id="budget-used" variant="h3" component="h2" sx={{ mb: 1.5 }}>
-          <Typography component="span" variant="inherit" sx={{ color: TONE_TEXT[tone] }}>
-            {tone === 'ok' ? '' : '⚠ '}{formatPct(s.budget_pct)}
-          </Typography> of the budget used
-        </Typography>
-        <BudgetBullet name={project.name} budget={s.budget} consumed={s.consumed} forecast={forecast} />
-        <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1 }}>
-          Consumed counts approved hours only, at each person's hourly rate (salary ÷ 2,080) when the hours were approved.
-          The forecast carries the last 4 weeks' pace to the end date.
-        </Typography>
-      </Paper>
+      <KpiStrip ariaLabel="Budget figures" items={items} loading={summary.isLoading} error={summary.error}
+        onRetry={() => summary.refetch()} />
+      {pending.length ? (
+        <Alert severity="info" variant="outlined" data-print="hide"
+          action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review pending hours →</Link>}>
+          {`${formatHours(pendingHours)} awaiting approval · Not yet included in spend.`}
+        </Alert>
+      ) : null}
+      {summary.error ? null : (
+        <Paper variant="outlined" sx={{ p: 2 }} component="section" aria-labelledby="budget-spend">
+          <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+            <div>
+              <Typography id="budget-spend" variant="h3" component="h2">Spend and forecast</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {`${formatPct(row.usedPct)} approved spend · ${formatPct(row.forecastPct)} forecast`}
+              </Typography>
+            </div>
+            <span data-print="hide"><PrintButton /></span>
+          </Stack>
+          <BudgetBullet name={project.name} budget={budget} consumed={consumed} forecast={forecast} />
+          <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1 }}>
+            Forecast projects the last 4 weeks of approved spending to the project end date.
+          </Typography>
+        </Paper>
+      )}
       <MilestoneCostTable project={project} />
     </Stack>
   )

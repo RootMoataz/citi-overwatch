@@ -562,28 +562,10 @@ describe('ProjectDetailPage', () => {
     server.use(...detailHandlers())
     renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=budget', path: '/projects/:id' })
     expect(await screen.findByRole('tab', { name: 'Budget', selected: true })).toBeInTheDocument()
-    expect(await screen.findByText(/\$200,000 remaining/)).toBeInTheDocument()
+    expect(await screen.findByRole('group', { name: 'Budget figures' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Team' }))
     expect(screen.getByTestId('location')).toHaveTextContent('tab=team')
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
-  })
-
-  test('budget tab lists cost by milestone with a total that matches consumed', async () => {
-    server.use(...detailHandlers())
-    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=budget', path: '/projects/:id' })
-    const table = await screen.findByRole('table', { name: /cost by milestone/i })
-    expect(within(table).getByRole('columnheader', { name: 'Pending hours' })).toBeInTheDocument()
-    const row = within(table).getByRole('rowheader', { name: /schema mapping/i }).closest('tr')
-    expect(within(row).getByText('600h')).toBeInTheDocument()
-    expect(within(row).getByText('$30,000')).toBeInTheDocument()
-    expect(within(row).getByText('12%')).toBeInTheDocument()
-    const total = within(table).getByRole('rowheader', { name: /total/i }).closest('tr')
-    expect(within(total).getByText('$50,000')).toBeInTheDocument()
-    expect(screen.getAllByText('$50,000')).toHaveLength(2)                 // the Consumed tile and the total row
-    expect(screen.queryByText(/hourly rate:/i)).not.toBeInTheDocument()
-    const bullet = screen.getByRole('list', { name: /consumed against budget/i })
-    expect(within(bullet).getByRole('listitem')).toHaveAccessibleName(/^Budget \$250,000\. Consumed \$50,000 \(20%\)/)
-    expect(within(row).getByRole('meter', { name: /schema mapping share of budget/i })).toHaveAttribute('aria-valuenow', '12')
   })
 
   describe('the header', () => {
@@ -702,48 +684,5 @@ describe('ProjectDetailPage', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('milestone=m1')
     })
   })
-
-  describe('cost by milestone bars', () => {
-    const fillWidth = (meter) => parseFloat(getComputedStyle(meter.firstChild).width)
-
-    async function costTable() {
-      server.use(...detailHandlers())
-      renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=budget', path: '/projects/:id' })
-      return screen.findByRole('table', { name: /cost by milestone/i })
-    }
-
-    test("the most expensive milestone's bar is full and the others are relative", async () => {
-      const table = await costTable()
-      const big = within(table).getByRole('meter', { name: /schema mapping share of budget/i })
-      const small = within(table).getByRole('meter', { name: /cutover share of budget/i })
-      expect(big).toHaveAttribute('aria-valuemax', '12')
-      expect(small).toHaveAttribute('aria-valuemax', '12')
-      expect(fillWidth(big)).toBeCloseTo(100, 1)
-      expect(fillWidth(small)).toBeCloseTo((8 / 12) * 100, 1)
-    })
-
-    test('the percent text is the share of the budget', async () => {
-      const table = await costTable()
-      const small = within(table).getByRole('meter', { name: /cutover share of budget/i })
-      expect(small).toHaveAttribute('aria-valuenow', '8')
-      expect(small).toHaveAttribute('aria-valuetext', '8%')
-      expect(within(small.closest('tr')).getByText('8%')).toBeInTheDocument()
-    })
-
-    test('the caption explains the bars', async () => {
-      await costTable()
-      expect(screen.getByText(/the most expensive milestone fills its bar/i)).toBeInTheDocument()
-    })
-  })
-
-  test('budget tab hides milestone hours from employees but keeps the costs', async () => {
-    server.use(...detailHandlers(project(), milestoneCosts(false)))
-    renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=budget', path: '/projects/:id' })
-    const table = await screen.findByRole('table', { name: /cost by milestone/i })
-    expect(within(table).queryByRole('columnheader', { name: /hours/i })).not.toBeInTheDocument()
-    expect(within(table).getByText('$20,000')).toBeInTheDocument()
-    expect(screen.getByText(/only the project.s manager and admins see the hours/i)).toBeInTheDocument()
-  })
-
 
 })

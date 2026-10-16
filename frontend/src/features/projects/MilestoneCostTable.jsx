@@ -1,13 +1,15 @@
-import { Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
+import { Box, Paper, Skeleton, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { useMilestoneCosts } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import ExportCsvButton from '../../components/ExportCsvButton.jsx'
-import DataBar from '../../components/DataBar.jsx'
+import FootNote from '../../components/FootNote.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import { useTheme } from '@mui/material/styles'
 import { STATUS } from '../../app/theme.js'
+import { chartPalette } from '../../app/chartColors.js'
 import { num } from '../../lib/csv.js'
 import { PRIORITY } from '../../lib/labels.js'
-import { formatHours, formatMoney, formatPct } from '../../lib/format.js'
+import { formatDate, formatHours, formatMoney, formatPct, nyTodayIso } from '../../lib/format.js'
 
 const slug = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'project'
 
@@ -22,6 +24,20 @@ function csvColumns(showHours) {
     { header: 'Approved cost (USD)', value: (r) => num(r.approved_cost) },
     { header: 'Share of budget (%)', value: (r) => num(r.budget_pct) },
   ]
+}
+
+/** A thin bar under the cost: the costliest milestone fills it, the others are relative. The percent is its own cell. */
+function ShareBar({ pct, max, label }) {
+  const palette = chartPalette(useTheme())
+  const value = Number(pct ?? 0)
+  return (
+    <Box role="meter" aria-label={label} aria-valuenow={Math.round(value * 10) / 10} aria-valuemin={0} aria-valuemax={max}
+      aria-valuetext={formatPct(value)}
+      sx={{ position: 'relative', height: 6, mt: 0.5, ml: 'auto', maxWidth: 120, minWidth: 80, borderRadius: 3, bgcolor: palette.track, overflow: 'hidden' }}>
+      <Box sx={{ position: 'absolute', inset: 0, right: 'auto', width: `${Math.min(Math.max((value / max) * 100, 0), 100)}%`,
+        minWidth: value > 0 ? 3 : 0, bgcolor: palette.ok, borderRadius: '0 3px 3px 0' }} />
+    </Box>
+  )
 }
 
 /** Approved cost per milestone. The server's total is the project's Consumed figure, so the two always agree.
@@ -46,7 +62,7 @@ export default function MilestoneCostTable({ project }) {
           <TableRow>
             <TableCell>Milestone</TableCell>
             {showHours ? <><TableCell align="right">Approved hours</TableCell><TableCell align="right">Pending hours</TableCell></> : null}
-            <TableCell align="right">Approved cost</TableCell><TableCell align="right">Share of budget</TableCell>
+            <TableCell align="right">Approved cost</TableCell><TableCell align="right">Share of project budget</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
@@ -55,12 +71,13 @@ export default function MilestoneCostTable({ project }) {
               <TableCell component="th" scope="row">{r.milestone.name} <StatusChip status={r.milestone.status} size="small" /></TableCell>
               {showHours ? <><TableCell align="right">{formatHours(r.approved_hours)}</TableCell>
                 <TableCell align="right">{formatHours(r.pending_hours)}</TableCell></> : null}
-              <TableCell align="right">{formatMoney(r.approved_cost)}</TableCell>
-              <TableCell align="right"><DataBar value={r.budget_pct} max={maxPct} label={`${r.milestone.name} share of budget`} /></TableCell>
+              <TableCell align="right">{formatMoney(r.approved_cost)}
+                <ShareBar pct={r.budget_pct} max={maxPct} label={`${r.milestone.name} share of budget`} /></TableCell>
+              <TableCell align="right">{formatPct(r.budget_pct)}</TableCell>
             </TableRow>
           ))}
           <TableRow data-total-row sx={{ '& th, & td': { borderTop: 2, borderColor: 'divider', borderBottom: 0 } }}>
-            <TableCell component="th" scope="row" sx={bold}>Total (consumed)</TableCell>
+            <TableCell component="th" scope="row" sx={bold}>Total</TableCell>
             {showHours ? <><TableCell align="right" sx={bold}>{formatHours(total.approved_hours)}</TableCell>
               <TableCell align="right" sx={bold}>{formatHours(total.pending_hours)}</TableCell></> : null}
             <TableCell align="right" sx={bold}>{formatMoney(total.approved_cost)}</TableCell>
@@ -68,11 +85,13 @@ export default function MilestoneCostTable({ project }) {
           </TableRow>
         </TableBody>
       </Table>
-      <Typography variant="caption" component="p" sx={{ color: 'text.secondary', px: 2, py: 1 }}>
-        Approved cost uses each person's rate when their hours were approved. Pending hours cost nothing until approved.
-        Bars compare milestones: the most expensive milestone fills its bar, and the percent is its share of the project budget.
-        {showHours ? null : ' Only the project’s manager and admins see the hours.'}
-      </Typography>
+      <Box sx={{ px: 2, pb: 1.5 }}>
+        <Typography variant="caption" component="p" sx={{ color: 'text.secondary', pt: 1 }}>
+          Bars compare the milestones; the percent is each one's share of the budget.
+        </Typography>
+        <FootNote note="Displayed costs are rounded; totals use underlying values. Approved spend uses the rate saved at approval. Pending entries remain uncosted until approved."
+          end={`As of ${formatDate(nyTodayIso())}`} />
+      </Box>
     </TableContainer>
   )
 }

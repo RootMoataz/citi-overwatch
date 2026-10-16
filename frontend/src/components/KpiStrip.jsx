@@ -45,12 +45,12 @@ function Item({ item, layout, divider }) {
     bgcolor: 'background.paper', minHeight: 44, ...divider }
   if (item.onClick) {
     return (
-      <ButtonBase onClick={item.onClick} aria-label={`${item.value} ${item.label}`}
+      <ButtonBase data-tone={item.tone} onClick={item.onClick} aria-label={`${item.value} ${item.label}`}
         sx={{ ...sx, '&:hover': { bgcolor: 'action.hover' },
           '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}>{body}</ButtonBase>
     )
   }
-  return <Box sx={sx}>{body}</Box>
+  return <Box data-tone={item.tone} sx={sx}>{body}</Box>
 }
 
 /**
