@@ -1,3 +1,9 @@
+import CheckCircle from '@mui/icons-material/CheckCircleOutlined'
+import ErrorIcon from '@mui/icons-material/ErrorOutlineOutlined'
+import HourglassEmpty from '@mui/icons-material/HourglassEmpty'
+import PlayCircle from '@mui/icons-material/PlayCircleOutlined'
+import RadioButtonUnchecked from '@mui/icons-material/RadioButtonUnchecked'
+import RateReview from '@mui/icons-material/RateReviewOutlined'
 import { Box, Chip, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
@@ -16,6 +22,9 @@ const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi)
 const shortDate = (iso) => formatDate(iso).replace(/, \d{4}$/, '')
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 const stateKey = (item) => [item.display_status, item.status].find((s) => STATUS[s]) ?? 'not_started'
+// The compact layout names the state under each milestone, with an icon so colour is never the only signal.
+const STATE_ICON = { completed: CheckCircle, in_progress: PlayCircle, ready_for_review: RateReview, waiting: HourglassEmpty,
+  blocked: ErrorIcon, not_started: RadioButtonUnchecked }
 const percentOf = (item) => {
   const n = item.progress_percent == null ? NaN : Number(item.progress_percent)
   return Number.isFinite(n) ? clamp(n, 0, 100) : null
@@ -60,7 +69,17 @@ function RowTip({ view }) {
   )
 }
 
-function TimelineRow({ view, months, todayPct, onOpen }) {
+function StateWord({ view }) {
+  const Icon = STATE_ICON[view.key] ?? RadioButtonUnchecked
+  return (
+    <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+      <Icon aria-hidden sx={{ fontSize: 14 }} />
+      <Typography variant="caption" component="span">{view.meta.label}</Typography>
+    </Stack>
+  )
+}
+
+function TimelineRow({ view, months, todayPct, onOpen, compact }) {
   const { item, meta, key, percent, overdue, after, from, width, placement, text, label } = view
   const filled = key === 'in_progress' && percent != null
   const clickable = Boolean(onOpen)
@@ -91,7 +110,8 @@ function TimelineRow({ view, months, todayPct, onOpen }) {
               <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 18, fontSize: '0.6875rem' }} />
             ) : null}
           </Stack>
-          {after.length ? (
+          {compact ? <StateWord view={view} /> : null}
+          {!compact && after.length ? (
             <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{`after ${after.join(', ')}`}</Typography>
           ) : null}
         </Box>
@@ -129,8 +149,10 @@ function TimelineRow({ view, months, todayPct, onOpen }) {
 }
 
 /** A Gantt-style chart of the milestones: a month axis, a bar per milestone with its dates and state beside it,
- * a progress fill, a "today" line and the dependency chain. Clicking a row (or Enter) calls `onOpen(milestone)`. */
-export default function Timeline({ items, range, onOpen }) {
+ * a progress fill, a "today" line and the dependency chain. `layout="compact"` (the Overview) puts the state word
+ * and icon under each name and drops the legend and the "after …" line. Clicking a row (or Enter) calls `onOpen(milestone)`. */
+export default function Timeline({ items, range, onOpen, layout = 'default' }) {
+  const compact = layout === 'compact'
   const start = toTime(range.start)
   const end = toTime(range.end ?? range.start)
   const span = Number.isFinite(end) ? Math.max(end - start + DAY, DAY) : DAY
@@ -169,7 +191,7 @@ export default function Timeline({ items, range, onOpen }) {
       key === 'waiting' && waitingOn.length ? `waiting on ${waitingOn.join(', ')}` : '',
       PRIORITY[item.priority] ? `${PRIORITY[item.priority]} priority` : '', item.is_assignee ? 'yours' : ''].filter(Boolean).join(', ')
     return { item, key, meta, percent, overdue, after: before.map((p) => p.name), waitingOn, from, width, placement,
-      text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)} · ${state}`, label }
+      text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)}${compact ? '' : ` · ${state}`}`, label }
   })
   // The key lists only the statuses on this timeline, in the order they first appear.
   const shown = [...new Set(views.map((v) => v.key))]
@@ -193,7 +215,7 @@ export default function Timeline({ items, range, onOpen }) {
         </Box>
       </Box>
       <Box component="ul" aria-label="Milestone timeline" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-        {views.map((view) => <TimelineRow key={view.item.id} view={view} months={months} todayPct={todayPct} onOpen={onOpen} />)}
+        {views.map((view) => <TimelineRow key={view.item.id} view={view} months={months} todayPct={todayPct} onOpen={onOpen} compact={compact} />)}
       </Box>
       {todayPct != null ? (
         <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: COLUMNS, columnGap: 2, px: 1, mt: 0.5 }}>
@@ -204,7 +226,7 @@ export default function Timeline({ items, range, onOpen }) {
           </Box>
         </Box>
       ) : null}
-      {shown.length ? (
+      {shown.length && !compact ? (
         <Stack component="ul" direction="row" useFlexGap aria-label="Status colours"
           sx={{ listStyle: 'none', p: 0, m: 0, mt: 2, gap: 2, flexWrap: 'wrap' }}>
           {shown.map((status) => (

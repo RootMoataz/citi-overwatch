@@ -257,7 +257,7 @@ export const useUsers = (filters) => useQuery({
   placeholderData: keepPreviousData,
 })
 export const useUser = (id) => useQuery({ queryKey: ['user', id], queryFn: () => api.get(`/users/${id}`) })
-export const useProfile = (id) => useQuery({ queryKey: ['profile', id], queryFn: () => api.get(`/users/${id}/profile`) })
+export const useProfile = (id, enabled = true) => useQuery({ queryKey: ['profile', id], enabled, queryFn: () => api.get(`/users/${id}/profile`) })
 export const useUsernameCheck = (params, enabled = true) => useQuery({
   queryKey: ['username-check', params], enabled, queryFn: () => api.get('/users/username-availability', params),
   placeholderData: keepPreviousData, refetchInterval: false,

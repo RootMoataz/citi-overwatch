@@ -60,9 +60,17 @@ function Item({ item, layout, divider }) {
 export default function KpiStrip({ ariaLabel, items, layout = 'label-first', phoneColumns = 2, loading = false, error, onRetry }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   if (error) {
+    // Items marked `keepOnError` still show beside the alert (the Overview's Progress, which the project itself carries).
+    const kept = items.filter((item) => item.keepOnError)
     return (
-      <Paper variant="outlined" role="group" aria-label={ariaLabel} sx={{ p: 1.5 }}>
-        <ErrorAlert error={error} onRetry={onRetry} />
+      <Paper variant="outlined" role="group" aria-label={ariaLabel} sx={{ overflow: 'hidden' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: kept.length && desktop ? `repeat(${kept.length}, 1fr) 3fr` : '1fr' }}>
+          {kept.map((item, i) => <Item key={item.key ?? item.label} item={item} layout={layout}
+            divider={!desktop && i ? { borderTop: 1, borderColor: 'divider' } : null} />)}
+          <Box sx={{ p: 1.5, ...(kept.length ? { borderLeft: desktop ? 1 : 0, borderTop: desktop ? 0 : 1, borderColor: 'divider' } : null) }}>
+            <ErrorAlert error={error} onRetry={onRetry} />
+          </Box>
+        </Box>
       </Paper>
     )
   }

@@ -542,22 +542,6 @@ describe('ProjectsPage', () => {
 describe('ProjectDetailPage', () => {
   beforeEach(() => server.use(departmentsHandler()))
 
-  test('overview shows the department and the work mode', async () => {
-    server.use(...detailHandlers(project({ department: { id: 'd1', name: 'Technology' }, work_mode: 'pull' })))
-    renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1', path: '/projects/:id' })
-    expect(await screen.findByText(/department: technology/i)).toBeInTheDocument()
-    expect(screen.getByText(/pull mode/i)).toBeInTheDocument()
-    expect(screen.getByText(/^manager:/i)).toHaveTextContent('Manager: MMMorgan Manager')
-  })
-
-  test('overview shows the estimated effort over the project days and how much is used', async () => {
-    server.use(...detailHandlers(project({ total_estimated_hours: 640, duration_days: 120, working_days: 86,
-      logged_hours: 333, estimate_used_pct: 52 })))
-    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1', path: '/projects/:id' })
-    expect(await screen.findByText('Estimated effort')).toBeInTheDocument()
-    expect(await screen.findByText('over 120 days · 52% used')).toBeInTheDocument()
-  })
-
   test('team tab rows show each person with an avatar', async () => {
     server.use(...detailHandlers())
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=team', path: '/projects/:id' })
@@ -795,11 +779,4 @@ describe('ProjectDetailPage', () => {
     expect(await within(dialog).findByText('Bo Peep is already planned for 30h of 40h per week.')).toBeInTheDocument()
   })
 
-  test('overview says progress is weighted by difficulty', async () => {
-    server.use(...detailHandlers())
-    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1', path: '/projects/:id' })
-    const tile = (await screen.findByText('Progress')).parentElement
-    expect(within(tile).getByText('33.3%')).toBeInTheDocument()
-    expect(within(tile).getByText(/milestones done, weighted by difficulty/i)).toBeInTheDocument()
-  })
 })

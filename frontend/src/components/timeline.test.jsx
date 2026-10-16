@@ -222,4 +222,28 @@ describe('Timeline', () => {
     expect(alone.container.innerHTML).not.toContain('NaN')
     expect(screen.getByText('Jun 1 – Dec 31 · 0% done')).toBeInTheDocument()
   })
+  test("layout=\"compact\" names each state under the milestone, with no legend and no 'after' line", () => {
+    renderWithProviders(<Timeline layout="compact" range={range} items={[
+      ms({ id: 'm1', name: 'Plan', start_date: '2026-07-20', end_date: '2026-08-10', status: 'completed', display_status: 'completed' }),
+      ms({ id: 'm2', name: 'Build', start_date: '2026-09-01', end_date: '2026-10-19', status: 'in_progress', display_status: 'in_progress',
+        progress_percent: 40, predecessors: ['m1'] }),
+    ]} />)
+    expect(within(row('Plan')).getByText('Completed')).toBeInTheDocument()
+    expect(within(row('Build')).getByText('In progress')).toBeInTheDocument()
+    expect(screen.queryByRole('list', { name: 'Status colours' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/^after /)).not.toBeInTheDocument()
+    // The month axis and the Today line stay.
+    expect(screen.getByText('Aug', { exact: true })).toBeInTheDocument()
+    expect(screen.getByText('Today', { exact: true })).toBeInTheDocument()
+    expect(screen.getByText('Sep 1 – Oct 19')).toBeInTheDocument()
+  })
+
+  test('the default layout keeps the legend and the after line', () => {
+    renderWithProviders(<Timeline range={range} items={[
+      ms({ id: 'm1', name: 'Plan', status: 'completed', display_status: 'completed' }),
+      ms({ id: 'm2', name: 'Build', predecessors: ['m1'] }),
+    ]} />)
+    expect(screen.getByRole('list', { name: 'Status colours' })).toBeInTheDocument()
+    expect(screen.getByText('after Plan')).toBeInTheDocument()
+  })
 })
