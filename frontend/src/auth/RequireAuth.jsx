@@ -9,7 +9,7 @@ import { useSession } from './sessionContext.js'
  * open the page is sent home with a message; see ROUTE_ROLES) and, for pages that depend on the person, `allow`
  * (see ROUTE_CHECKS). */
 export default function RequireAuth({ roles, allow, children }) {
-  const { user, status } = useSession()
+  const { user, status, signedOut } = useSession()
   const location = useLocation()
 
   if (status === 'loading') {
@@ -20,7 +20,8 @@ export default function RequireAuth({ roles, allow, children }) {
     )
   }
   if (status === 'anon') {
-    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
+    // A deliberate sign-out leaves no return path; a fresh visit or an expired session returns here after sign-in.
+    return <Navigate to="/login" replace state={signedOut ? null : { from: location.pathname + location.search }} />
   }
   if (status === 'restricted') return <ForcePasswordChange />
   if (roles && !roles.includes(user.role)) return <RedirectHome message={NO_ACCESS} />

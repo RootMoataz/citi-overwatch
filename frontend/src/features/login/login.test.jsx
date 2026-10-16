@@ -1,5 +1,6 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useLocation } from 'react-router-dom'
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import App from '../../app/App.jsx'
 import { api } from '../../api/client.js'
@@ -182,6 +183,108 @@ describe('login page brand and demo', () => {
     const demo = await screen.findByRole('group', { name: /try the demo/i })
     await userEvent.click(within(demo).getByRole('button', { name: 'Manager' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect username or password')
+  })
+})
+
+// Where the next sign-in lands. The app opens signed in as `first` on `route`; `leave` ends that session; then
+// `second` signs in on the login page. Whatever page the sign-in ends on is printed by this probe.
+describe('where sign-in lands', () => {
+  const ready = (u) => ({ ...u, must_change_password: false })
+  const restoreAs = (u) => http.post(`${API}/auth/refresh`, () => HttpResponse.json({ access_token: 't', user: ready(u) }))
+  const loggedOut = () => http.post(`${API}/auth/logout`, () => new HttpResponse(null, { status: 204 }))
+  const here = () => screen.getByTestId('where').textContent
+
+  function Where() {
+    const { pathname } = useLocation()
+    return <output data-testid="where">{pathname}</output>
+  }
+
+  async function startOn(route, u) {
+    server.use(restoreAs(u), loggedOut(), dashboardStub())
+    renderWithProviders(<><App /><Where /></>, { route })
+    await screen.findByRole('navigation', { name: /main/i })
+  }
+
+  async function signOutFromMenu() {
+    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }))
+    await screen.findByRole('heading', { name: /sign in/i })
+  }
+
+  async function signInAs(u) {
+    server.use(loginReturns(ready(u)))
+    await signIn()
+    await screen.findByRole('navigation', { name: /main/i })
+  }
+
+  test('signing out on Messages and signing in as someone else lands on their home page', async () => {
+    await startOn('/messages', users.admin)
+    expect(here()).toBe('/messages')
+    await signOutFromMenu()
+    await signInAs(users.employee)
+    expect(here()).toBe('/')
+  })
+
+  test('signing out and signing back in as the same person also lands on home', async () => {
+    await startOn('/messages', users.employee)
+    await signOutFromMenu()
+    await signInAs(users.employee)
+    expect(here()).toBe('/')
+  })
+
+  test('a deep link opened while signed out returns there after signing in', async () => {
+    server.use(noSession(), dashboardStub())
+    renderWithProviders(<><App /><Where /></>, { route: '/messages' })
+    await screen.findByRole('heading', { name: /sign in/i })
+    await signInAs(users.employee)
+    expect(here()).toBe('/messages')
+  })
+
+  test('a session that expires on a page returns the same person there after signing in again, but not someone else',
+    async () => {
+      for (const [again, lands] of [[users.employee, '/messages'], [users.manager, '/']]) {
+        let restored = false
+        server.use(http.post(`${API}/auth/refresh`, () => {
+          if (restored) return HttpResponse.json({ error: { code: 'REFRESH_INVALID', message: 'ended' } }, { status: 401 })
+          restored = true
+          return HttpResponse.json({ access_token: 't', user: ready(users.employee) })
+        }), dashboardStub())
+        const { unmount } = renderWithProviders(<><App /><Where /></>, { route: '/' })
+        await screen.findByRole('navigation', { name: /main/i })
+        // The session ends while they are on Messages: the next call is refused and the refresh fails.
+        server.use(http.get(`${API}/conversations`, () => HttpResponse.json(
+          { error: { code: 'TOKEN_EXPIRED', message: 'expired' } }, { status: 401 })))
+        await userEvent.click(within(screen.getByRole('navigation', { name: /main/i })).getByRole('link', { name: /messages/i }))
+        await screen.findByRole('heading', { name: /sign in/i })
+        await signInAs(again)
+        expect(here()).toBe(lands)
+        unmount()
+        api.setToken(null)
+      }
+    })
+
+  test('the demo session ending lands the next sign-in on home', async () => {
+    const demo = { ...users.employee, username: 'demo.admin', is_public_demo: true,
+      session_expires_at: new Date(Date.now() + 1500).toISOString() }
+    server.use(noSession(), dashboardStub(), loginReturns(ready(demo)), loggedOut())
+    renderWithProviders(<><App /><Where /></>, { route: '/login' })
+    await userEvent.click(within(await screen.findByRole('group', { name: /try the demo/i }))
+      .getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('button', { name: /got it/i }))
+    await userEvent.click(await screen.findByRole('link', { name: /messages/i }))
+    expect(here()).toBe('/messages')
+    await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })
+    await signInAs(users.employee)
+    expect(here()).toBe('/')
+  })
+
+  test('signing out from the Ctrl+K palette lands the next sign-in on home', async () => {
+    await startOn('/messages', users.admin)
+    fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
+    await userEvent.type(await screen.findByRole('combobox', { name: /search scout/i }), 'sign out{Enter}')
+    await screen.findByRole('heading', { name: /sign in/i })
+    await signInAs(users.employee)
+    expect(here()).toBe('/')
   })
 })
 

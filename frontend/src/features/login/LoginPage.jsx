@@ -80,7 +80,7 @@ function SourceLink() {
 }
 
 export default function LoginPage() {
-  const { status, login, ended } = useSession()
+  const { user: signedIn, status, login, ended, lastUserId } = useSession()
   const navigate = useNavigate()
   const location = useLocation()
   const [failure, setFailure] = useState(null)
@@ -89,13 +89,15 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema), defaultValues: { username: '', password: '' },
   })
 
-  if (status === 'ready' || status === 'restricted') return <Navigate to={location.state?.from ?? '/'} replace />
+  // Back to the page they were sent from only if it is the same person as before; anyone else starts at home.
+  const landing = (who) => (!lastUserId || who.id === lastUserId ? location.state?.from : null) ?? '/'
+
+  if (status === 'ready' || status === 'restricted') return <Navigate to={landing(signedIn)} replace />
 
   const onSubmit = async ({ username, password }) => {
     setFailure(null)
     try {
-      await login(username, password)
-      navigate(location.state?.from ?? '/', { replace: true })
+      navigate(landing(await login(username, password)), { replace: true })
     } catch (err) {
       setFailure(err)
     }
@@ -105,8 +107,7 @@ export default function LoginPage() {
     setFailure(null)
     setDemo(username)
     try {
-      await login(username, DEMO_PASSWORD)
-      navigate(location.state?.from ?? '/', { replace: true })
+      navigate(landing(await login(username, DEMO_PASSWORD)), { replace: true })
     } catch (err) {
       setFailure(err)
       setDemo(null)

@@ -7,17 +7,20 @@ const statusFor = (user) => (user ? (user.must_change_password ? 'restricted' : 
 
 /** Holds the signed-in user. The access token lives only in memory; the refresh cookie restores it.
  * A public demo session (user.is_public_demo) ends at user.session_expires_at: the server refuses it from then on,
- * and the app signs out at that moment and says why (`ended: 'demo'`, shown on the sign-in page). */
+ * and the app signs out at that moment and says why (`ended: 'demo'`, shown on the sign-in page).
+ * `signedOut` marks a deliberate sign-out (RequireAuth then keeps no return path); `lastUserId` is who was signed
+ * in when the session last ended, so a deep link is honoured only for that same person. Both live in memory. */
 export default function SessionProvider({ children }) {
   const queryClient = useQueryClient()
-  const [state, setState] = useState({ user: null, status: 'loading', ended: null })
+  const [state, setState] = useState({ user: null, status: 'loading', ended: null, signedOut: false, lastUserId: null })
 
   useEffect(() => {
     let alive = true
     api.onSessionExpired((err) => {
       if (!alive) return
       queryClient.clear()
-      setState({ user: null, status: 'anon', ended: err?.code === 'DEMO_SESSION_EXPIRED' ? 'demo' : null })
+      setState((s) => ({ user: null, status: 'anon', ended: err?.code === 'DEMO_SESSION_EXPIRED' ? 'demo' : null,
+        signedOut: false, lastUserId: s.user?.id ?? s.lastUserId }))
     })
     const off = api.onSessionRefreshed((user) => alive && setState({ user, status: statusFor(user), ended: null }))
     // A failed restore keeps the reason the expiry handler just recorded.
@@ -28,7 +31,7 @@ export default function SessionProvider({ children }) {
   const login = useCallback(async (username, password) => {
     const data = await api.post('/auth/login', { username, password })
     api.setToken(data.access_token)
-    setState({ user: data.user, status: statusFor(data.user), ended: null })
+    setState((s) => ({ ...s, user: data.user, status: statusFor(data.user), ended: null, signedOut: false }))
     return data.user
   }, [])
 
@@ -44,7 +47,7 @@ export default function SessionProvider({ children }) {
     try { await api.post('/auth/logout') } catch { /* signing out locally is enough */ }
     api.setToken(null)
     queryClient.clear()
-    setState({ user: null, status: 'anon', ended })
+    setState((s) => ({ user: null, status: 'anon', ended, signedOut: true, lastUserId: s.user?.id ?? s.lastUserId }))
   }, [queryClient])
 
   // The demo's hard stop: sign out when the server-set end arrives, whatever the person is doing.
