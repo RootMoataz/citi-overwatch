@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,120 backend (377 unit · 743 integration, 97% coverage) · 923 frontend component (71 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,173 backend (387 unit · 786 integration; 97% coverage at the last full run) · 928 frontend component (72 files) · 6 end-to-end (3 journeys × desktop + mobile); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -31,7 +31,7 @@ Highlights:
 
 - **Four roles plus a public demo.** Admin, manager, employee and a read-only executive, enforced on the server and reflected in the UI ([permission matrix](docs/project/USER_STORIES.md#roles-at-a-glance)). A public demo admin gets 5-minute sessions and a fail-closed list of allowed writes.
 - **Accounts.** Admins create them in a five-step wizard with live username checks and a generated password, or several at once in a conversation with Puppy. The welcome email carries a temporary password, which must be changed at first sign-in. After you sign out, the next sign-in lands on home; if a session merely expires, signing in again returns you to the page you were on, but only for the same person. Everyone sees a **Your manager** card on My week and their profile, with one press to message their manager.
-- **Timesheets.** Employees (and managers or admins an admin has switched to "Tracks own hours") log hours on the milestones they're assigned to, one day at a time: a week strip with each day's hours, a row per milestone with its hours and a work note, and one **Submit** for the whole week (a **Day | Week | Month** toggle brings back the full week grid, or shows the month: milestone bars across the calendar and each day's hours by milestone and status, with approved, pending, rejected and timer hours drawn differently. Clicking a day opens it in the Day view, and `?month=YYYY-MM` in the address keeps the month). Every hour needs the project manager's (or delegate's) approval before it counts toward the budget. Going over 40 hours is a warning, not a block. Admins submit approved pay periods to HR, and later edits come back as corrections.
+- **Timesheets.** Employees (and managers or admins an admin has switched to "Tracks own hours") log hours on the milestones they're assigned to, one day at a time: a week strip with each day's hours, a row per milestone with its hours and a work note, and one **Submit** for the whole week (a **Day | Week | Month** toggle brings back the full week grid, or shows the month: each day's hours with a chip per line (approved, pending, needs revision, not submitted, each with an icon and a word), a "⚠ Over 40h" mark and milestone-deadline markers. Clicking a day selects it and opens its panel with the hours, the lock and **Request a change** for timer hours, and **Edit in Day view**; `?month=YYYY-MM&day=YYYY-MM-DD` in the address keeps the month and day). Every hour needs the project manager's (or delegate's) approval before it counts toward the budget. Going over 40 hours is a warning, not a block. Admins submit approved pay periods to HR, and later edits come back as corrections.
 - **Approvals.** The Timesheets page groups pending hours by person-week. Each entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
 - **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight) whose hours pre-fill a locked timesheet cell until **Submit** sends them (a **Request a change** goes to the manager), a **Live now** card where managers watch running timers tick and can stop one with a message, warnings at 100% of the 8h day, the milestone's estimate or the 40h week (the manager is alerted at 125%), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
 - **Nothing is ever deleted.** Records are archived and an admin can restore them. Every change is written to the **audit log**.
@@ -59,8 +59,8 @@ Screenshots from the live site with the demo data (light mode unless noted).
 | **My week**: hours so far, your manager, assigned milestones, a start/stop timer | **Kick back** a blocked milestone to the manager with a reason |
 | ![My timesheet, Day view, on Thursday 15 Oct: the week strip with each day's hours, a Submit 1 change button, and the Schema Mapping row holding 2h of timer hours, locked, with "from timer, not submitted yet", a Request a change button and the work note](docs/images/timer-locked-cell.png) | ![The This week card above the Your manager card: Morgan Manager, Delivery Manager in Technology, with a Message Morgan button](docs/images/your-manager.png) |
 | **My timesheet, one day at a time**: a week strip, a row per milestone, and timer hours pre-filling a locked row; **Request a change** asks the manager | **Your manager**: who they are, and one press to message them |
-| ![My timesheet, Month view, October 2026: milestone bars across the calendar, each day's hours by milestone and status](docs/images/timesheet-month.png) | |
-| **My timesheet, Month**: bars for your milestones and each day's hours by status (approved solid, pending outlined, rejected struck through, timer dashed); click a day to open it | |
+| ![My timesheet, Month view, October 2026: each day's hours as status chips, deadline markers, and the selected day's panel beside the grid](docs/images/timesheet-month.png) | |
+| **My timesheet, Month**: each day's hours by approval status (icon and word, never colour alone), milestone deadlines as small markers, and a panel for the selected day with **Edit in Day view** | |
 
 <p>
   <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone, Day view: Submit 1 change, the week strip with Thursday selected at 3.5h, and the Schema Mapping row with a Start button for the timer, its hours and a work note" width="30%">
@@ -168,8 +168,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,120 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 923 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,173 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 928 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

@@ -255,7 +255,11 @@ Each panel is titled with the question it answers, and the panels are labelled r
     - Switching day keeps what I typed. **Submit N changes** in the page header sends every changed cell of the week, on any day, in one save.
     - Completed milestones, and milestones of a closed or on-hold project, sit behind **Show N closed milestones**. A completed milestone stays editable while its project is open; a closed or on-hold project's rows are read-only.
   - The **Day | Week | Month** toggle swaps in the **Week grid** (one row per assigned milestone, grouped by project, with daily and weekly totals) or the **Month** calendar. The choice is remembered in this browser. Weekends are hidden behind a switch on phones.
-  - The **Month** calendar (`?month=YYYY-MM`, with previous/next month buttons) shows my milestones as bars across the weeks, labelled "Name · State" on wide bars and in a tooltip on narrow ones, and each day's hours by milestone and status: approved solid, pending outlined, rejected in red with the hours struck through, and timer hours not yet submitted dashed ("from timer"). A day's total counts pending and approved hours only. A legend explains the line styles and milestone states. Clicking a day opens it in the Day view; on a phone, tapping a day shows its details first, with **Open this day**.
+  - The **Month** calendar (`?month=YYYY-MM&day=YYYY-MM-DD`, with previous/next month buttons) is about hours, not milestones:
+    - Each day shows its total (pending and approved only) and a chip per line with an icon and a word: approved, "Pending", "Needs revision" (hours struck through) or "Not submitted" (a timer draft). On a phone the lines are small shapes instead.
+    - "⚠ Over 40h" marks an overtime day, and "📅 N milestone deadlines" a day when one of my unfinished milestones ends.
+    - The header reads "<total>h logged in <Month>" with "Pending + approved · Rejected hours excluded."; a legend explains the statuses.
+    - Clicking a day selects it. A panel (beside the grid, or under it on a phone) lists that day's hours, one card per line with status, project, hours, whether it is timer-linked and its source (Manual, Tracked or Mixed), and the manager's reason on a rejected line. Timer hours are locked, with **Request a change**; other lines have **Edit in Day view**. The day's milestone dates follow, with **View milestones**.
   - Each saved entry shows its status:
     - "Pending approval"
     - "Pending (Overtime requested from *First Last*)" for the entry that takes my week past 40 hours, and any after it

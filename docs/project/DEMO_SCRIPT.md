@@ -265,8 +265,8 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,120 backend tests at 97% coverage, 923 frontend component tests, and 6 end-to-end runs on desktop and
-> iPhone, all passing on 15 October.
+> Tests: 1,173 backend tests (97% coverage at the last full run), 928 frontend component tests, and 6 end-to-end runs on desktop and
+> iPhone; the frontend and end-to-end suites all passed on 16 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
 > renamed to ACME Scout after this presentation."
@@ -305,9 +305,9 @@ Nothing is deleted, only archived. The hourly rate (salary ÷ 2,080) is frozen o
 One open kickback per milestone and one running timer per person are enforced by partial unique indexes. HR
 submissions keep a frozen copy of each payroll CSV.
 
-**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (377 unit tests).
-743 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 923 component tests use Vitest
+**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (387 unit tests).
+786 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 928 component tests use Vitest
 and MSW, where an unhandled request fails the test. 6 Playwright runs cover 3 journeys on desktop Chrome and iPhone
-13, all passing on 15 October. Two fail-closed tests walk every write route for the executive and demo-admin guards.
+13 (these and the component tests all passed on 16 October). Two fail-closed tests walk every write route for the executive and demo-admin guards.
 
 **Don't know?** "Good question. Let me show you where that lives." Open `LOGIC_WALKTHROUGH.md` or `DECISIONS.md`.

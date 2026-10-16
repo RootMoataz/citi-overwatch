@@ -41,11 +41,15 @@ test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager
     await expect(page.getByText(/Overtime requested from/)).toHaveCount(0)
   }
 
-  // The Month view shows the same hours (Friday is the overtime day); picking a day there opens the Day view on it (on a phone, via the panel's "Open this day").
+  // The Month view shows the same hours (Friday is the overtime day). Picking a day selects it and its panel (beside the grid, or under it
+  // on a phone) lists the hours; "Edit in Day view" there opens the Day view on that day.
   const friday = (await page.getByRole('button', { name: /^Fri \d/ }).first().getAttribute('aria-label')).match(/Fri \d+ \w+/)[0]
   await page.getByRole('button', { name: 'Month', exact: true }).click()
-  await page.getByRole('button', { name: new RegExp(`^${friday}, 9 hours, overtime, Schema Mapping 9 hours pending`) }).click()
-  if (testInfo.project.name === 'mobile') await page.getByRole('button', { name: 'Open this day' }).click()
+  await page.getByRole('button', { name: new RegExp(`^${friday}, .*Schema Mapping 9 hours pending`) }).click()
+  const panel = page.getByRole('region', { name: /^Friday \d+ \w+ \d{4}$/ })
+  await expect(panel).toContainText('9h pending')
+  await expect(panel.getByRole('heading', { name: 'Schema Mapping' })).toBeVisible()
+  await panel.getByRole('button', { name: 'Edit in Day view' }).first().click()
   await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByLabel(/^Schema Mapping, Fri/)).toHaveValue('9')
 
