@@ -120,7 +120,10 @@ function Risk({ atRisk }) {
   return (
     <Box component="section" aria-labelledby={id}>
       <Typography id={id} variant="h3" component="h2" sx={{ mb: 1.5 }}>Risk</Typography>
-      <Box component="ul" aria-label="At-risk projects by reason" sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(5, 1fr)' }, gap: 2,
+      {/* Two columns on phones; from md as many 160 px tiles as fit, wrapping onto a second row (five fixed columns ran
+          past the window at 900-970 px with the sidebar open). minmax(0, …) keeps a tile's text from widening its column. */}
+      <Box component="ul" aria-label="At-risk projects by reason" sx={{ display: 'grid', gap: 2,
+        gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(auto-fit, minmax(160px, 1fr))' },
         listStyle: 'none', p: 0, m: 0, mb: 2 }}>
         {counts.map(([label, count], i) => (
           <Reveal as="li" key={label} index={i}>
