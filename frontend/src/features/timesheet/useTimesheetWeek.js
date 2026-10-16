@@ -8,6 +8,7 @@ export const MIN_HOURS = 0.25
 export const key = (milestoneId, date) => `${milestoneId}|${date}`
 export const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v))
 export const tooLow = (v) => num(v) > 0 && num(v) < MIN_HOURS
+const without = (obj, drop) => Object.fromEntries(Object.entries(obj).filter(([k]) => !drop(k)))
 
 // On hold pauses logging; completed closes it. The server refuses changes on both (409 PROJECT_NOT_OPEN).
 const CLOSED = { on_hold: 'Project on hold — logging paused', completed: 'Project completed — logging closed' }
@@ -23,6 +24,7 @@ export function useTimesheetWeek(week) {
   const [failure, setFailure] = useState(null)
 
   const allDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(week, i)), [week])
+  const inWeek = (k) => allDays.includes(k.split('|')[1])
   const entries = useMemo(() => Object.fromEntries((sheet.data?.entries ?? []).map((e) => [key(e.milestone_id, e.work_date), e])), [sheet.data])
   // Cells holding timer hours are locked at saved hours + unsubmitted timer hours (the server refuses anything else).
   const locks = useMemo(() => Object.fromEntries((sheet.data?.locks ?? []).map((l) => [key(l.milestone_id, l.work_date), l])), [sheet.data])
@@ -50,8 +52,10 @@ export function useTimesheetWeek(week) {
     || (!entries[k] && drafts[k] !== '') || (entries[k]?.status === 'rejected' && num(drafts[k]) > 0)))
   const noteChanged = (k) => k in notes && notes[k] !== (entries[k]?.note ?? '')
   // A note alone on an empty cell has nothing to save; it goes with the hours once they're typed.
+  // Only this week's cells count: edits made in another week stay in memory until the person is back in that week.
   const changed = [...new Set([...Object.keys(drafts), ...Object.keys(notes),
     ...Object.keys(locks).filter((k) => hasDraft(k) && rows.some((r) => k.startsWith(`${r.milestone.id}|`)) && !closedKeys.has(k))])]
+    .filter(inWeek)
     .filter((k) => (hoursChanged(k) || noteChanged(k)) && (entries[k] || num(valueOf(k)) > 0))
   // Cells the server said need proof of work (PROOF_REQUIRED), until a note is added to them.
   const proofCells = new Set(failure?.code === 'PROOF_REQUIRED'
@@ -63,11 +67,12 @@ export function useTimesheetWeek(week) {
 
   const setHours = (k, v) => setDrafts((d) => ({ ...d, [k]: v }))
   const setNote = (k, v) => setNotes((n) => ({ ...n, [k]: v }))
-  // Drops everything typed and any save failure (when the person moves to another week).
-  const discard = () => { setDrafts({}); setNotes({}); setFailure(null) }
+  // Drops what was typed in this week and any save failure (when the person moves to another week).
+  const discard = () => { setDrafts((d) => without(d, inWeek)); setNotes((n) => without(n, inWeek)); setFailure(null) }
 
   const onSave = async () => {
     setFailure(null)
+    const sent = new Set(changed)
     const body = { week, entries: changed.map((k) => {
       const [milestoneId, date] = k.split('|')
       const note = k in notes ? notes[k] : hasDraft(k) && !entries[k]?.note && timerNotes[k] ? timerNotes[k] : undefined
@@ -76,8 +81,9 @@ export function useTimesheetWeek(week) {
     if (!body.entries.length) return
     try {
       await save.mutateAsync(body)
-      setDrafts({})
-      setNotes({})
+      // Only what was sent is cleared: a note on a row with no hours has nothing to save yet and stays.
+      setDrafts((d) => without(d, (k) => sent.has(k)))
+      setNotes((n) => without(n, (k) => sent.has(k)))
     } catch (err) { setFailure(err) }
   }
   const nameOf = (milestoneId) => rows.find((r) => String(r.milestone.id) === String(milestoneId))?.milestone.name ?? 'A milestone'

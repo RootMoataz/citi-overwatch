@@ -1,5 +1,6 @@
 import { ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
+import { DAY_CAP } from './useTimesheetWeek.js'
 import { formatDayShort, formatHours } from '../../lib/format.js'
 
 /** The week's days as one row of buttons, each with that day's hours; a day over the cap turns red.
@@ -13,7 +14,7 @@ export default function WeekStrip({ days, selected, dayTotal, overDays, onSelect
         const over = overDays.includes(d)
         const [weekday, dayOfMonth] = formatDayShort(d).split(' ')
         return (
-          <ToggleButton key={d} value={d} aria-label={`${formatDayShort(d)}, ${hours}`} data-over={over}
+          <ToggleButton key={d} value={d} aria-label={`${formatDayShort(d)}, ${hours}${over ? `, over ${DAY_CAP}h` : ''}`} data-over={over}
             sx={{ flexDirection: 'column', minWidth: 0, px: 0.5, py: 0.75, textTransform: 'none', lineHeight: 1.3,
               ...(over ? { color: 'error.main', bgcolor: (t) => alpha(t.palette.error.main, 0.08),
                 '&.Mui-selected, &.Mui-selected:hover': { color: 'error.main', bgcolor: (t) => alpha(t.palette.error.main, 0.16) } } : null) }}>

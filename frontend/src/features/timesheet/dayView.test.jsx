@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Link } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
@@ -28,6 +29,10 @@ const saved = () => HttpResponse.json({ week_start: WEEK, rows, entries: [], tot
 const renderSheet = (route = `/timesheet?week=${WEEK}`) => renderAsUser(<TimesheetPage />,
   { user: users.employee, route, path: '/timesheet' })
 const dayButton = (name) => screen.getByRole('button', { name })
+const completed = (row) => ({ ...row, milestone: { ...row.milestone, status: 'completed' } })
+// A timer draft of 2.5h on Schema Mapping on Tuesday, stopped without a note.
+const timerDraft = { totals: { logged: 0, approved: 0, draft: 2.5 }, drafts: [{ milestone_id: 'm1', work_date: TUE, hours: 2.5, note: '' }],
+  locks: [{ milestone_id: 'm1', work_date: TUE, hours: 2.5, draft_hours: 2.5, tracked_hours: 0, request: null }] }
 
 // "Today" is Wednesday 14 Oct 2026 for every test here; only Date is faked, so timers and requests run normally.
 beforeEach(() => {
@@ -81,7 +86,7 @@ describe('Timesheet day view', () => {
     expect(screen.getAllByRole('button', { name: /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d+ Oct, / })).toHaveLength(7)
     expect(screen.getByTestId('week-total')).toHaveTextContent('9h / 40h')
     await user.type(screen.getByLabelText('Build, Wed Oct 14'), '20')
-    expect(dayButton('Wed 14 Oct, 26h')).toHaveAttribute('data-over', 'true')
+    expect(dayButton('Wed 14 Oct, 26h, over 24h')).toHaveAttribute('data-over', 'true')
     expect(dayButton('Mon 12 Oct, 3h')).toHaveAttribute('data-over', 'false')
   })
 
@@ -189,10 +194,47 @@ describe('Timesheet day view', () => {
     renderSheet()
     const user = userEvent.setup()
     await user.click(await screen.findByRole('button', { name: 'Show 1 closed milestone' }))
-    await user.type(screen.getByLabelText('Schema Mapping, Wed Oct 14'), '3')
+    // Three keystrokes: the row must not move or remount (losing focus) as the first one makes it a change.
+    await user.type(screen.getByLabelText('Schema Mapping, Wed Oct 14'), '7.5')
+    expect(screen.getByLabelText('Schema Mapping, Wed Oct 14')).toHaveValue('7.5')
     await user.type(screen.getByLabelText('Work note, Schema Mapping'), NOTE)
+    // Hiding the closed rows keeps the edited one in view.
+    await user.click(screen.getByRole('button', { name: 'Hide 1 closed milestone' }))
+    expect(screen.getByLabelText('Schema Mapping, Wed Oct 14')).toHaveValue('7.5')
+    expect(screen.queryByRole('button', { name: /closed milestone/ })).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
-    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WED, hours: 3, note: NOTE }] }))
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WED, hours: 7.5, note: NOTE }] }))
+  })
+
+  test('a timer draft with no note on a completed milestone shows its row without expanding, and the PROOF_REQUIRED link reaches a visible note box', async () => {
+    server.use(sheetWith({ sheetRows: [completed(rows[0]), rows[1]], extra: timerDraft }),
+      http.put(`${API}/time-entries`, () => HttpResponse.json({ error: { code: 'PROOF_REQUIRED', message: 'Add a work note',
+        details: { cells: [{ milestone_id: 'm1', milestone: 'Schema Mapping', work_date: TUE, reason: 'no_note' }] }, request_id: 'r1' } },
+      { status: 400 })))
+    renderSheet(`/timesheet?week=${WEEK}&day=${TUE}`)
+    const user = userEvent.setup()
+    const row = (await screen.findByLabelText('Work note, Schema Mapping')).closest('li')
+    expect(row).toHaveAttribute('data-attention', 'true')
+    expect(screen.queryByRole('button', { name: /closed milestone/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    const alert = (await screen.findByText('Add a work note before saving')).closest('[role=alert]')
+    await user.click(dayButton('Wed 14 Oct, 0h'))
+    // On a day where the completed milestone holds nothing it is tucked away again.
+    expect(screen.queryByLabelText('Work note, Schema Mapping')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Show 1 closed milestone' })).toBeInTheDocument()
+    await user.click(within(alert).getByRole('link', { name: 'Schema Mapping, Tue Oct 13' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(`day=${TUE}`)
+    expect(screen.getByLabelText('Work note, Schema Mapping')).toBeVisible()
+    expect(screen.queryByRole('button', { name: /closed milestone/ })).not.toBeInTheDocument()
+  })
+
+  test('a rejected entry on a completed milestone shows its row without expanding', async () => {
+    server.use(sheetWith({ sheetRows: [completed(rows[0]), rows[1]], entries: [entry({ id: 'e3', work_date: WED, hours: 6,
+      status: 'rejected', label: 'Rejected', rejection_reason: 'Wrong milestone' })] }))
+    renderSheet()
+    expect(await screen.findByRole('button', { name: 'Resubmit Schema Mapping, Wed Oct 14' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Work note, Schema Mapping')).toBeVisible()
+    expect(screen.queryByRole('button', { name: /closed milestone/ })).not.toBeInTheDocument()
   })
 
   test('milestones of a project on hold are closed and the Start button only shows on today', async () => {
@@ -256,7 +298,7 @@ describe('Timesheet day view', () => {
     await user.type(hours, '25')
     expect(await screen.findByText('More than 24h on Wed Oct 14')).toBeInTheDocument()
     expect(hours).toHaveAttribute('aria-invalid', 'true')
-    expect(dayButton('Wed 14 Oct, 25h')).toHaveAttribute('data-over', 'true')
+    expect(dayButton('Wed 14 Oct, 25h, over 24h')).toHaveAttribute('data-over', 'true')
     expect(screen.getByRole('button', { name: 'Submit 1 change' })).toBeDisabled()
     await user.clear(hours)
     await user.type(hours, '8')
@@ -271,7 +313,7 @@ describe('Timesheet day view', () => {
     await user.click(dayButton('Mon 12 Oct, 0h'))
     await user.click(await screen.findByRole('link', { name: 'Go to Wed Oct 14' }))
     expect(screen.getByTestId('location')).toHaveTextContent(`day=${WED}`)
-    expect(dayButton('Wed 14 Oct, 25h')).toHaveAttribute('aria-pressed', 'true')
+    expect(dayButton('Wed 14 Oct, 25h, over 24h')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('a value under 0.25 on another day is listed with a link to it', async () => {
@@ -302,6 +344,114 @@ describe('Timesheet day view', () => {
     await user.click(within(alert).getByRole('link', { name: 'Schema Mapping, Tue Oct 13' }))
     expect(screen.getByTestId('location')).toHaveTextContent(`day=${TUE}`)
     expect(dayButton('Tue 13 Oct, 1h')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test("a week change from a link leaves the old week's edits out of Submit and brings them back on return", async () => {
+    let body = null
+    server.use(sheetWith({ extra: { ...timerDraft, drafts: [{ milestone_id: 'm1', work_date: TUE, hours: 2.5, note: NOTE }] } }),
+      http.put(`${API}/time-entries`, async ({ request }) => { body = await request.json(); return saved() }))
+    renderAsUser(<>
+      <TimesheetPage />
+      <Link to="/timesheet?week=2026-10-05">Elsewhere</Link>
+      <Link to={`/timesheet?week=${WEEK}`}>Back here</Link>
+    </>, { user: users.employee, route: `/timesheet?week=${WEEK}`, path: '/timesheet' })
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Wed Oct 14'), '6')
+    await user.type(screen.getByLabelText('Work note, Build'), NOTE)
+    expect(screen.getByRole('button', { name: 'Submit 2 changes' })).toBeEnabled() // the timer draft and the typed hours
+    await user.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    expect(await screen.findByLabelText('Build, Mon Oct 5')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled() // nothing changed in this week
+    await user.type(screen.getByLabelText('Build, Mon Oct 5'), '2')
+    await user.type(screen.getByLabelText('Work note, Build'), 'Wired the settings form')
+    expect(screen.getByRole('button', { name: 'Submit 1 change' })).toBeEnabled()
+    await user.click(screen.getByRole('link', { name: 'Back here' }))
+    expect(await screen.findByLabelText('Build, Wed Oct 14')).toHaveValue('6')
+    await user.click(screen.getByRole('button', { name: 'Submit 2 changes' }))
+    await waitFor(() => expect(body).not.toBeNull())
+    expect(body.week).toBe(WEEK)
+    expect(body.entries.map((e) => e.work_date).sort()).toEqual([TUE, WED])
+  })
+
+  test('This week while already on this week just opens today, with no discard question', async () => {
+    renderSheet(`/timesheet?week=${WEEK}&day=${MON}`)
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Schema Mapping, Mon Oct 12'), '4')
+    await user.click(screen.getByRole('button', { name: 'This week' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByTestId('location')).toHaveTextContent(`day=${WED}`)
+    expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toBeInTheDocument()
+    expect(dayButton('Mon 12 Oct, 4h')).toBeInTheDocument() // the edit is still there
+    expect(screen.getByRole('button', { name: 'Submit 1 change' })).toBeEnabled()
+  })
+
+  test('a note on a row with no hours says it needs hours', async () => {
+    renderSheet()
+    const user = userEvent.setup()
+    await screen.findByLabelText('Work note, Build')
+    expect(screen.queryByText(/add hours to save this note/i)).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Work note, Build'), 'Waiting on the vendor reply')
+    expect(screen.getByText(/add hours to save this note/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled() // a note alone has nothing to save
+    await user.type(screen.getByLabelText('Build, Wed Oct 14'), '2')
+    expect(screen.queryByText(/add hours to save this note/i)).not.toBeInTheDocument()
+  })
+
+  test('a note typed on a row with no hours survives a submit of other rows', async () => {
+    let body = null
+    server.use(http.put(`${API}/time-entries`, async ({ request }) => { body = await request.json(); return saved() }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Work note, Build'), 'Waiting on the vendor reply')
+    await user.type(screen.getByLabelText('Schema Mapping, Wed Oct 14'), '6')
+    await user.type(screen.getByLabelText('Work note, Schema Mapping'), NOTE)
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WED, hours: 6, note: NOTE }] }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled())
+    expect(screen.getByLabelText('Work note, Build')).toHaveValue('Waiting on the vendor reply')
+    expect(screen.getByText(/add hours to save this note/i)).toBeInTheDocument()
+  })
+
+  test('the hours field has a visible Hours label and keeps its accessible name', async () => {
+    renderSheet()
+    expect(await screen.findByRole('textbox', { name: 'Schema Mapping, Wed Oct 14' })).toBeInTheDocument()
+    expect(screen.getAllByText('Hours', { selector: 'label' })).toHaveLength(2) // one per row
+  })
+
+  test('leaving the page with unsaved changes asks the browser to warn, and stops asking once they are gone', async () => {
+    const leaving = () => {
+      const event = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+    const view = renderSheet()
+    const user = userEvent.setup()
+    const hours = await screen.findByLabelText('Schema Mapping, Wed Oct 14')
+    expect(leaving()).toBe(false)
+    await user.type(hours, '6')
+    expect(leaving()).toBe(true)
+    await user.clear(hours)
+    expect(leaving()).toBe(false)
+    await user.type(hours, '6')
+    expect(leaving()).toBe(true)
+    view.unmount()
+    expect(leaving()).toBe(false)
+  })
+
+  test("the server's 24h refusal links to its day", async () => {
+    server.use(http.put(`${API}/time-entries`, () => HttpResponse.json({ error: { code: 'DAY_OVER_24H',
+      message: "More than 24h on Wed 14 Oct (26h across your milestones). A day can't go over 24 hours.",
+      details: { work_date: WED, hours: 26 }, request_id: 'r-24' } }, { status: 400 })))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Wed Oct 14'), '4')
+    await user.click(dayButton('Mon 12 Oct, 0h'))
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('More than 24h on Wed 14 Oct (26h across your milestones)')
+    await user.click(within(alert).getByRole('link', { name: 'Go to Wed Oct 14' }))
+    expect(screen.getByTestId('location')).toHaveTextContent(`day=${WED}`)
+    expect(dayButton('Wed 14 Oct, 4h')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test('changing week with unsaved edits asks to discard them', async () => {

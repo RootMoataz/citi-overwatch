@@ -4,7 +4,7 @@ import {
   Alert, AlertTitle, Box, Button, FormControlLabel, IconButton, Link, Skeleton, Stack, Switch, ToggleButton,
   ToggleButtonGroup, Typography,
 } from '@mui/material'
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
@@ -58,8 +58,20 @@ export default function TimesheetPage() {
   const inDayView = view === 'day'
   const n = changed.length
 
+  // Closing or reloading the tab with unsaved changes asks the browser to confirm.
+  const dirty = n > 0
+  useEffect(() => {
+    if (!dirty) return undefined
+    const warn = (e) => { e.preventDefault(); e.returnValue = '' }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
   const toWeek = (target) => { state.discard(); setParams({ week: target }, { replace: true }) }
   const goTo = (target) => (n ? setLeaving({ open: true, week: target, count: n }) : toWeek(target))
+  // Already on this week there is nothing to leave: just open today.
+  const goThisWeek = () => (thisWeek ? setParams({ week, day: todayIso() }, { replace: true }) : goTo(mondayOf(new Date())))
+  const overDate = failure?.code === 'DAY_OVER_24H' && inDayView && allDays.includes(failure.details?.work_date) ? failure.details.work_date : null
   const stay = () => setLeaving((l) => ({ ...l, open: false }))
   const chooseView = (next) => { setView(next); storeView(next) }
   // A cell named in an error; in the day view it links to its day.
@@ -78,7 +90,7 @@ export default function TimesheetPage() {
           <IconButton aria-label="Previous week" onClick={() => goTo(addDays(week, -7))}><ChevronLeft /></IconButton>
           <Typography variant="subtitle1" component="p">Week of {formatDate(week)}</Typography>
           <IconButton aria-label="Next week" onClick={() => goTo(addDays(week, 7))}><ChevronRight /></IconButton>
-          <Button size="small" onClick={() => goTo(mondayOf(new Date()))}>This week</Button>
+          <Button size="small" onClick={goThisWeek}>This week</Button>
         </Stack>
         <Box sx={{ flexGrow: 1 }} />
         <ToggleButtonGroup exclusive size="small" value={view} aria-label="Timesheet view"
@@ -139,7 +151,9 @@ export default function TimesheetPage() {
         </Alert>
       ) : (
         <ErrorAlert error={failure ?? sheet.error} title={failure ? "Couldn't save your week" : undefined}
-          onRetry={failure ? undefined : () => sheet.refetch()} sx={{ mb: 2 }} />
+          onRetry={failure ? undefined : () => sheet.refetch()} sx={{ mb: 2 }}>
+          {overDate ? <DayLink week={week} date={overDate}>Go to {formatDayLabel(overDate)}</DayLink> : null}
+        </ErrorAlert>
       )}
       <TimerLimitBanner />
       {waitingDraft > 0 ? (

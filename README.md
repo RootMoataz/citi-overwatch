@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,087 backend (364 unit · 723 integration, 97% coverage) · 822 frontend component (66 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,090 backend (364 unit · 726 integration, 97% coverage) · 831 frontend component (66 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -166,8 +166,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,087 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 822 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,090 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 831 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

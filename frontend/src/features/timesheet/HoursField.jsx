@@ -12,10 +12,11 @@ const CLEAN_PASTE = /^\d{1,2}(\.\d{1,2})?$/
 // Keys that could start a negative, an exponent or a letter never reach the cell.
 const allowedKey = (e) => e.ctrlKey || e.metaKey || e.altKey || e.key.length > 1 || /[\d.]/.test(e.key)
 
-/** The hours input of one cell, in the week grid and the day view alike. onChange(text) gets the cleaned text. */
-export default function HoursField({ value, label, onChange, error, disabled }) {
+/** The hours input of one cell, in the week grid and the day view alike. onChange(text) gets the cleaned text.
+ * label is its accessible name; caption (optional) is a visible label that does not replace it. */
+export default function HoursField({ value, label, caption, onChange, error, disabled }) {
   return (
-    <TextField value={value} onChange={(e) => onChange(cleanHours(e.target.value))} disabled={disabled}
+    <TextField label={caption} value={value} onChange={(e) => onChange(cleanHours(e.target.value))} disabled={disabled}
       onKeyDown={(e) => { if (!allowedKey(e)) e.preventDefault() }}
       onPaste={(e) => {
         e.preventDefault()

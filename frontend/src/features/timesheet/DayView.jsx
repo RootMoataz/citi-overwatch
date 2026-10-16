@@ -24,7 +24,9 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
   const short = note.trim().length > 0 && !isProofNote(note)
   const completed = row.milestone.status === 'completed'
   const needed = !closed && attention(k)
-  const hint = short ? `At least ${NOTE_MIN} characters`
+  // A note is saved with hours; on a row with neither hours nor an entry it just waits.
+  const waiting = note.trim().length > 0 && num(value) <= 0 && !entries[k]
+  const hint = short ? `At least ${NOTE_MIN} characters` : waiting ? 'Add hours to save this note'
     : needed ? `Needed: ${NOTE_MIN}-${NOTE_MAX} characters, or post a progress update that day` : `${NOTE_MIN}-${NOTE_MAX} characters`
   return (
     <Box component="li" data-attention={needed || undefined} aria-disabled={closed ? true : undefined}
@@ -45,7 +47,7 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
         {locks[k] ? (
           <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
             onRequest={() => onRequest({ milestoneId: row.milestone.id, date: day, hours: locks[k].hours, label })} />
-        ) : <HoursField value={value} label={label} onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
+        ) : <HoursField value={value} label={label} caption="Hours" onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
           error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(day)) || (isDraft(k) && tooLow(value))} />}
         <CellStatus entry={entries[k]} cellLabel={label} resubmitting={isDraft(k)} closed={Boolean(closed)} inlineReason
           onResubmit={() => setHours(k, String(entries[k].hours))} />
@@ -63,12 +65,19 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
 /** One day of the week: a row per milestone to log on, the closed ones tucked behind a button.
  * state: the useTimesheetWeek result. day: the open day. onRequest(cell): a locked cell asks for a change. */
 export default function DayView({ state, day, thisWeek, onRequest }) {
-  const { groups, dayTotal, overDays, closedLabel } = state
+  const { groups, dayTotal, overDays, closedLabel, changed, attention, entries } = state
   const [showClosed, setShowClosed] = useState(false)
   // Completed milestones are tucked away with the closed ones, but only a closed or on-hold project locks them.
   const tucked = (r) => closedLabel(r) || r.milestone.status === 'completed'
-  const openGroups = groups.map((g) => ({ ...g, rows: g.rows.filter((r) => !tucked(r)) })).filter((g) => g.rows.length)
-  const closedRows = groups.flatMap((g) => g.rows.filter(tucked))
+  // An editable row that holds a change, a flag or a rejection stays in view while the closed ones are hidden, so
+  // nothing out of sight can block Submit. Once they are shown every closed row sits in its section, so typing never moves a row.
+  const pinned = (r) => {
+    const k = key(r.milestone.id, day)
+    return !closedLabel(r) && (changed.includes(k) || attention(k) || entries[k]?.status === 'rejected')
+  }
+  const above = (r) => !tucked(r) || (!showClosed && pinned(r))
+  const openGroups = groups.map((g) => ({ ...g, rows: g.rows.filter(above) })).filter((g) => g.rows.length)
+  const closedRows = groups.flatMap((g) => g.rows.filter((r) => !above(r)))
   const grouped = openGroups.length > 1
   const over = overDays.includes(day)
   const list = (rows, showProject) => (
