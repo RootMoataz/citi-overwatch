@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,173 backend (387 unit · 786 integration; 97% coverage at the last full run) · 928 frontend component (72 files) · 6 end-to-end (3 journeys × desktop + mobile); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,173 backend (387 unit · 786 integration; 97% coverage at the last full run) · 979 frontend component (73 files) · 6 end-to-end (3 journeys × desktop + mobile); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -35,6 +35,7 @@ Highlights:
 - **Approvals.** The Timesheets page groups pending hours by person-week. Each entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
 - **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight) whose hours pre-fill a locked timesheet cell until **Submit** sends them (a **Request a change** goes to the manager), a **Live now** card where managers watch running timers tick and can stop one with a message, warnings at 100% of the 8h day, the milestone's estimate or the 40h week (the manager is alerted at 125%), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
 - **Nothing is ever deleted.** Records are archived and an admin can restore them. Every change is written to the **audit log**.
+- **One shell on every page.** A sidebar (Work for everyone, Admin for admins) with your name at the bottom and a Collapse control (press `[`); breadcrumbs across the top, or a back link on phones; then a search field (Ctrl K), your running timer, Puppy, notifications and your avatar. The name at the bottom of the sidebar and the avatar open the same account menu: profile, photo, theme and sign out.
 - **Responsive.** A sidebar on desktop, a drawer on phones, and tables that become cards on small screens.
 
 - **Planning and milestones.** Department templates, a Backlog → Ready → Scheduled planning board with a finalize checklist, priority and difficulty, skills, auto-routing when work is handed in or completed, and kickbacks when an employee is blocked.
@@ -96,8 +97,8 @@ Screenshots from the live site with the demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![Control centre with the demo admin's countdown banner, admin shortcut tiles, Live now and projects by status](docs/images/control-centre.png) | ![Timesheets HR submission tab: pick a pay period, totals, and past submissions with a payroll CSV](docs/images/hr-submission.png) |
-| **Control centre** (the 5-minute demo banner is visible) | **HR submission**: pay periods, corrections and payroll CSV |
+| ![Control centre with the demo admin's countdown pill, admin shortcut tiles, Live now and projects by status](docs/images/control-centre.png) | ![Timesheets HR submission tab: pick a pay period, totals, and past submissions with a payroll CSV](docs/images/hr-submission.png) |
+| **Control centre** (the 5-minute demo pill is visible in the top bar) | **HR submission**: pay periods, corrections and payroll CSV |
 | ![Puppy's Do it tab for the public demo admin: Create user accounts replaced by the notice "Creating accounts is disabled in the public demo."](docs/images/puppy-create-users.png) | |
 | **Puppy → Do it → Create user accounts**: a real admin gets the create-accounts conversation; the public demo admin gets this notice | |
 
@@ -143,8 +144,8 @@ Open http://localhost:3000 and sign in with a demo login. Locally, emails aren't
 
 The **Admin demo** (the sign-in page's "Admin" button) is a separate public account, Dana Demo-Admin, not the real admin login, whose password stays private. Because its password is published, the server limits it:
 
-- **5-minute sessions.** It is signed out 5 minutes after sign-in, enforced by the server: its access token expires by then and refreshing can't extend it. The app shows a countdown banner and, at the end, "Your 5-minute demo session has ended." on the sign-in page.
-- **Restricted actions** (`403 DEMO_RESTRICTED`, "Disabled in the public demo."): changing its own password, name, email or photo; creating, editing, archiving or restoring people, password resets for anyone, or removing someone's photo; archiving or restoring projects; any department change; anything that changes credentials or submits timesheets to HR. The app shows these buttons disabled with a tooltip.
+- **5-minute sessions.** It is signed out 5 minutes after sign-in, enforced by the server: its access token expires by then and refreshing can't extend it. The top bar shows a "Demo session · m:ss" pill that counts down (it opens a short explanation, and a screen reader hears one notice at 1:00) and, at the end, "Your 5-minute demo session has ended." on the sign-in page.
+- **Restricted actions** (`403 DEMO_RESTRICTED`, "Disabled in the public demo."): changing its own password, name, email or photo; creating, editing, archiving or restoring people, password resets for anyone, or removing someone's photo; archiving or restoring projects; any department change; anything that changes credentials or submits timesheets to HR. The app shows these buttons disabled with a tooltip, and People, Departments, Skills and Archive open with a "Demo access ·" notice saying what is unavailable.
 - **Still allowed:** everything read-only, plus the normal admin workflow: approving and rejecting hours, deciding project requests, creating and editing projects and milestones, archiving and restoring milestones, staffing, messages and notifications.
 - **Sign-in:** like the other demo logins it never locks after wrong passwords; instead each network address gets 20 Admin-demo sign-ins a minute.
 
@@ -169,7 +170,7 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 
 ```bash
 cd backend/v1 && python -m pytest --cov=app              # 1,173 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 928 component tests (Vitest + Testing Library)
+cd frontend && npm test                                  # 979 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

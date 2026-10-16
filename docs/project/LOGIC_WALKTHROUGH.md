@@ -859,8 +859,11 @@ demo account per rolling minute (`429 RATE_LIMITED`), counted in `demo_login_att
 caller can set the header to dodge the limit, but can't limit anyone else without knowing their address.
 
 **In the app.** [`app/DemoSession.jsx`](../../frontend/src/app/DemoSession.jsx) shows a one-time welcome dialog and a
-banner "Demo admin — for demonstration only. You'll be signed out in 4:32." with a live countdown; hiding it leaves a
-counting chip in the header that brings it back. [`auth/SessionProvider.jsx`](../../frontend/src/auth/SessionProvider.jsx)
+pill in the top bar, "Demo session · 4:32", counting down to `session_expires_at`; it turns red under 1:00 and opens
+a popover ("Public demo admin. Some actions are disabled, and you'll be signed out when the timer ends."). Its name
+carries the time left ("Demo session, signed out in 4 minutes 32 seconds") and a polite live region says "1 minute
+left in the demo session" once, at 1:00, never every second. People, Departments, Skills and Archive also open with a
+"Demo access ·" notice saying what is unavailable. [`auth/SessionProvider.jsx`](../../frontend/src/auth/SessionProvider.jsx)
 signs out at `session_expires_at` (or when a refresh answers `DEMO_SESSION_EXPIRED`) and the sign-in page says "Your
 5-minute demo session has ended." [`lib/permissions.js`](../../frontend/src/lib/permissions.js) mirrors the denylist
 (`demoBlocks`), and [`components/DemoLock.jsx`](../../frontend/src/components/DemoLock.jsx) shows those buttons

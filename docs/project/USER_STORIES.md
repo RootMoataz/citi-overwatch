@@ -439,6 +439,14 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - Dashboard panels are labelled regions.
 - Colours come from one theme, with contrast checked against WCAG AA.
 
+### X3. Know where I am (R)
+- **Success:** every page has breadcrumbs (a `Breadcrumb` navigation): "Workspace" or, for an admin's pages, "Administration", then the page, and for a project or person its name; the last crumb is the current page. Earlier crumbs are links, and the root is plain text. On a phone the top bar shows a back link to the parent instead ("‹ Projects").
+- **Loading:** a short skeleton stands in for the name.
+- **Failure:** a project or person that can't be loaded shows "Not found" as its last crumb.
+
+### X4. One account menu (R)
+- **Success:** my name at the bottom of the sidebar (or just my avatar when it's collapsed) and the avatar in the top bar open the same menu: My profile, Profile photo, Theme (Light, Dark, System) and Sign out. The top bar reads Search, running timer, Puppy, notifications, then the avatar.
+
 ---
 
 ## Stories added after the first release
@@ -605,7 +613,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### V1. Try the admin view without the real admin password (U) — Done
 **As** a visitor, **I want** a public Admin demo **so that** I can see the admin experience safely.
-- **Success:** a welcome dialog, then a countdown banner ("You'll be signed out in 4:49"); approving hours, deciding requests, editing projects and milestones, staffing and messages work normally.
+- **Success:** a welcome dialog, then a "Demo session · 4:49" pill in the top bar that counts down and opens a short explanation (a screen reader hears one notice at 1:00); People, Departments, Skills and Archive carry a "Demo access ·" notice; approving hours, deciding requests, editing projects and milestones, staffing and messages work normally.
 - **Failure:** restricted actions are disabled with "Disabled in the public demo." (`403 DEMO_RESTRICTED` if called directly); after 5 minutes the session ends with "Your 5-minute demo session has ended."
 
 ### Operator
