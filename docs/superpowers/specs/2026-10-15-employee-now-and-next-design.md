@@ -1,6 +1,6 @@
 # Employee "now and next"
 
-Date: 2026-10-15. Status: approved in chat; awaiting review of this written spec.
+Date: 2026-10-15. Status: approved by the owner with two additions (urgent, closely matching milestones first; every My week section collapsible, expanded by default), folded in below.
 
 ## Why
 
@@ -46,7 +46,10 @@ They never see archived work.
 - `progress_percent`: from the latest progress update that gave one, or `null`.
 
 **New `coming_up`.** It is filled only when you read **your own** profile; reading anyone else's gives `[]`.
-- Each item is `{milestone: {id, name, start_date, end_date, priority}, project: {id, name}, ready, after: [{id, name}], skills: [names]}`. `skills` are the milestone's required skills you have, sorted by name.
+- Each item is `{milestone: {id, name, start_date, end_date, priority}, project: {id, name}, ready, after: [{id, name}], skills: [names], match: {have, need}, is_new}`.
+  - `skills` are the milestone's required skills you have, sorted by name.
+  - `match` counts them: `have` is how many of its required skills you have, and `need` is how many it lists.
+  - `is_new` is `true` when the milestone was created in the last 7 days.
 - **Which milestones.** The same rule auto-routing uses after a completion (`ready_for_routing` / `person_fits` in `app/rules/routing.py`), minus the "predecessors done" condition. A milestone counts when:
   - it is `not_started`, not archived, and nobody is its primary assignee;
   - its project is `active`, in push mode, and not archived;
@@ -57,9 +60,13 @@ They never see archived work.
   - Milestones with no required skills. Anyone on the team could get those, so they aren't "coming to you".
   - Pull-mode projects. There you claim work, and the ready ones are already in "Milestones you can claim".
 - **`ready`:** `true` when every non-archived predecessor is completed (routing could pick it now). Otherwise `after` lists the predecessors that aren't completed, ordered by name.
-- **Order and limit:**
-  - The order is routing's `urgency`: overdue first, then priority, then the planned workflow order.
-  - At most 5 items are returned.
+- **Order and limit.** A milestone that is more urgent and closer to your skills comes first. The owner asked for this so that a new, urgent milestone that suits the person rises to the top.
+  - The order is:
+    1. overdue first;
+    2. then priority (critical, high, medium, low);
+    3. then closeness to your skills: the share of its required skills you have (`have / need`, higher first), then `have` (higher first);
+    4. then the planned workflow order (routing's `next_milestone_order_key`).
+  - At most 5 items are returned, after ordering.
 
 **Archive rule (changed).**
 - Today a person's own profile lists their archived projects and milestones ("own past work, read-only").
@@ -103,21 +110,35 @@ With nothing in progress, the row reads "Nothing in progress". When an assigned 
 - "Starts <date>";
 - "Waiting on <names>".
 
-With nothing up next, it reads "Nothing else assigned yet". When `coming_up` isn't empty, it adds "See what might come your way", which opens that group.
+With nothing up next, it reads "Nothing else assigned yet". When `coming_up` isn't empty, it adds "See what might come your way", which opens that group and scrolls to it.
+
+**Heads-up:** a third row, shown only when the first `coming_up` item is overdue or has **critical** or **high** priority. It reads "Heads-up: <name> (<Priority> priority) may come your way", plus "New" when `is_new` is true. It links to that row in "Might come your way".
 
 ### My milestones: collapsible groups
 
 Each group has a header button with the group name and its count, e.g. "In progress (1)". The button carries `aria-expanded` and `aria-controls`. Empty groups are hidden.
 
-| Group | Contents | Order | Open by default |
-|---|---|---|---|
-| **In progress** | assigned, `display_status` `in_progress` or `blocked` (kicked back, with its chip) | overdue, priority, end date | yes |
-| **Up next** | assigned, `not_started` | ready to start (not waiting, start date today or earlier) first, then starts in the future (by start date), then waiting (by start date) | yes |
-| **With your manager** | assigned, `ready_for_review` | end date | no |
-| **Might come your way** | `coming_up` | as returned | no |
-| **Completed** | assigned, `completed` | newest end date first | no |
+| Group | Contents | Order |
+|---|---|---|
+| **In progress** | assigned, `display_status` `in_progress` or `blocked` (kicked back, with its chip) | overdue, priority, end date |
+| **Up next** | assigned, `not_started` | ready to start (not waiting, start date today or earlier) first, then starts in the future (by start date), then waiting (by start date) |
+| **With your manager** | assigned, `ready_for_review` | end date |
+| **Might come your way** | `coming_up` | as returned (urgency and closeness) |
+| **Completed** | assigned, `completed` | newest end date first |
 
-- **Remembered state.** Open and closed states are kept in localStorage under `overwatch.myweek.groups`, as JSON such as `{"done": true}`. Every read and write is in try/catch. A blocked store falls back to the defaults.
+### Every My week section collapses (owner's request)
+
+- **Which sections:** every section on My week has a header button that collapses and expands it:
+  - This week;
+  - Your manager;
+  - Now & Next;
+  - My milestones;
+  - each group inside My milestones;
+  - Milestones you can claim.
+- **Defaults:** every section and group is **expanded by default**. It collapses only when the person clicks its header.
+- **Remembered state:** each section stays the way the person leaves it. The state is kept in localStorage under `overwatch.myweek.sections`, as JSON of the collapsed ones only, such as `{"done": true, "claim": true}`. Every read and write is in try/catch, and a blocked store means everything starts expanded.
+- **Header button:** carries `aria-expanded` and `aria-controls`. A collapsed section keeps its header and count visible.
+- **Shared component:** this is built into `features/dashboard/Section.jsx` as an optional `collapsible` mode. The dashboard's sections stay exactly as they are.
 - **Rows** keep today's look: name, project link, due date, the status, priority and difficulty chips, "Supporting", and the timer button. Additions by group:
   - **Up next:** "Ready to start", "Starts <date>" or "Waiting on <names>".
   - **In progress:** "<P>% done".
@@ -125,6 +146,8 @@ Each group has a header button with the group name and its count, e.g. "In progr
   - the name and project;
   - "Needs <skill>, which you have" ("Needs <a> and <b>, which you have" for several skills);
   - "Ready now" or "After <names>";
+  - the priority chip;
+  - "New" when `is_new` is true;
   - a "Prediction" chip.
 
   The group starts with one line: "When the milestone before one of these is completed, auto-routing picks someone on the team with the right skills. It's a likely pick, not a promise."
@@ -148,7 +171,11 @@ Each group has a header button with the group name and its count, e.g. "In progr
   - a milestone you're already on left out;
   - an inactive or archived project left out;
   - no room under 40 h left out;
-  - the 5-item limit and the urgency order;
+  - the order:
+    - overdue, then priority, then closeness to your skills, then planned order;
+    - a new high-priority milestone that matches all your listed skills comes before an older medium one;
+  - `match` and `is_new` (created 6 days ago is new, 8 days ago isn't);
+  - the 5-item limit is applied after ordering;
   - empty for someone else's profile.
 - **Archive rule:**
   - an employee's own profile leaves out archived projects and milestones;
@@ -164,11 +191,14 @@ Each group has a header button with the group name and its count, e.g. "In progr
   - picks the right Now (overdue first) and Next;
   - the "Nothing in progress" and "Nothing else assigned yet" fallbacks;
   - "See what might come your way" opens that group.
-- **Groups:**
-  - contents, order, counts and default open state;
-  - collapse and expand are remembered;
-  - a blocked localStorage falls back to the defaults;
-  - empty groups are hidden.
+- **Heads-up:** shown for a critical, high or overdue first prediction, with "New"; hidden for a medium one.
+- **Groups:** contents, order, counts; empty groups are hidden.
+- **Collapsible sections:**
+  - every section and group starts expanded;
+  - collapsing one hides its content but keeps its header and count;
+  - the state is remembered across a reload;
+  - a blocked localStorage starts everything expanded;
+  - the dashboard's sections are unchanged.
 - **Up next labels:** ready, future start, and waiting on names.
 - **Might come your way:**
   - the skill wording for one and for two skills;
