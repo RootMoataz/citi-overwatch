@@ -44,7 +44,7 @@ Rehearse only the READ and repeatable steps. Save the one-shot steps for the rea
 **Before you start (about 10 minutes ahead):** the live feed needs a timer that is really running, and the seed never
 starts one (it would tick from the seed's time). Open a **second browser or a private window**, sign in there as
 **Employee** and press **Start** on *Schema Mapping*. Leave that window open: it is "Eli at his desk". Eli already
-has 9h on Schema Mapping today, so his timer shows the **Warning: 8h day, 40h week** chip at once and passes 125% (10h) after two
+has 8h on Schema Mapping today, so his timer shows the **8h day** warning at once and passes 125% (10h) after two
 hours, which is when Morgan's bell gets "Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit".
 
 ---
@@ -67,10 +67,10 @@ that each one signs in to a public demo account with sample data.
 
 Click **Employee**.
 
-1. **My week (READ).** Point at "45h of 40h" with the logged and planned bars and the "5h over 40h" chip, then Eli's milestones, overdue
+1. **My week (READ).** Point at "31.75h of 40h" with the logged and planned bars, then Eli's milestones, overdue
    first:
    - *Build* (Atlas): **Overdue**, In progress, **Critical Priority**, **Hard Difficulty**.
-   - *Schema Mapping* (Apollo): In progress, **High Priority**, **Medium Difficulty**.
+   - *Schema Mapping* (Apollo): Ready for review, **High Priority**, **Medium Difficulty**.
    - *Hypercare* (Apollo): Not started, **Easy Difficulty** (the default Medium priority chip is hidden).
 
    Say: "Priority is how urgent. Difficulty is how much the milestone weighs in progress. They're separate, and
@@ -121,7 +121,7 @@ refuses, the reason is under 10 characters. Skip anything that stalls; Puppy is 
 Sign out, click **Manager**.
 
 1. **Dashboard (READ).** Approvals waiting and **Live now** sit on top. Live now shows Eli's timer ticking every
-   second with "9h today" and a **Warning: 8h day, 40h week** chip (**Over: 8h day** past 125%). In **Risk**, Morgan's projects show **Nothing at risk**
+   second with "8h today" and a **Warning: 8h day** chip (**Over: 8h day** past 125%). In **Risk**, Morgan's projects show **Nothing at risk**
    (or Apollo with "Kicked back – needs review" if Eli kicked back Hypercare). **Smart insights** ("Rule-based
    suggestions from your live data") shows "Approvals are piling up" with a **Medium Severity** chip: 6 entries
    waiting more than 3 days, the oldest 14 days. In **Budget used per project**, each bullet shows budget as the
