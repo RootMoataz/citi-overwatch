@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,173 backend (387 unit · 786 integration; 97% coverage at the last full run) · 979 frontend component (73 files) · 6 end-to-end (3 journeys × desktop + mobile); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,200 backend (387 unit · 813 integration; 97% coverage at the last full run) · 1,009 frontend component (73 files) · 17 end-to-end (3 journeys × desktop + mobile, and 11 layout checks: the phone top bar, the desktop crumbs, no sideways scroll at 375 px); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -35,7 +35,7 @@ Highlights:
 - **Approvals.** The Timesheets page groups pending hours by person-week. Each entry shows its budget impact: the cost of the request, the remaining budget before and after, and a 4-week-pace forecast.
 - **Hour-tracking safeguards.** A start/stop timer on My week and the timesheet (one at a time, a live clock in the header, stopped at midnight) whose hours pre-fill a locked timesheet cell until **Submit** sends them (a **Request a change** goes to the manager), a **Live now** card where managers watch running timers tick and can stop one with a message, warnings at 100% of the 8h day, the milestone's estimate or the 40h week (the manager is alerted at 125%), proof of work on new hours (a work note or that day's progress update), and red flags for approvers (same hours daily, long days, closed milestones, backdated, over plan, no activity, no proof) with a "Tracked 68% · Manual 32%" share per person-week ([Logic walkthrough §28](docs/project/LOGIC_WALKTHROUGH.md#28-hour-tracking-safeguards-timers-proof-of-work-red-flags)).
 - **Nothing is ever deleted.** Records are archived and an admin can restore them. Every change is written to the **audit log**.
-- **One shell on every page.** A sidebar (Work for everyone, Admin for admins) with your name at the bottom and a Collapse control (press `[`); breadcrumbs across the top, or a back link on phones; then a search field (Ctrl K), your running timer, Puppy, notifications and your avatar. The name at the bottom of the sidebar and the avatar open the same account menu: profile, photo, theme and sign out.
+- **One shell on every page.** A sidebar (Work for everyone, Admin for admins) with your name at the bottom and a Collapse control (press `[`); breadcrumbs across the top, or a back link on phones; then a search field (Ctrl K), your running timer while one runs, Puppy, notifications and your avatar. The name at the bottom of the sidebar and the avatar open the same account menu: profile, photo, theme and sign out.
 - **Responsive.** A sidebar on desktop, a drawer on phones, and tables that become cards on small screens.
 
 - **Planning and milestones.** Department templates, a Backlog → Ready → Scheduled planning board with a finalize checklist, priority and difficulty, skills, auto-routing when work is handed in or completed, and kickbacks when an employee is blocked.
@@ -64,7 +64,7 @@ Screenshots from the live site with the demo data (light mode unless noted).
 | **My timesheet, Month**: each day's hours by approval status (icon and word, never colour alone), milestone deadlines as small markers, and a panel for the selected day with **Edit in Day view** | |
 
 <p>
-  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone, Day view: Submit 1 change, the week strip with Thursday selected at 3.5h, and the Schema Mapping row with a Start button for the timer, its hours and a work note" width="30%">
+  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone, Day view: the top bar with the Scout glyph, the Day, Week and Month toggle, the week strip with Friday selected at 9h, the notice that the week is 45h, 5h over 40h, and the Schema Mapping row with a Start button for the timer and its pending hours" width="30%">
 </p>
 
 ### Manager
@@ -169,10 +169,10 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,173 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 979 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,200 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 1,009 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
-cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
+cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit), plus 11 layout checks
 cd frontend && npm run lint
 ```
 

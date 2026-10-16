@@ -260,6 +260,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
     - "⚠ Over 40h" marks an overtime day, and "📅 N milestone deadlines" a day when one of my unfinished milestones ends.
     - The header reads "<total>h logged in <Month>" with "Pending + approved · Rejected hours excluded."; a legend explains the statuses.
     - Clicking a day selects it. A panel (beside the grid, or under it on a phone) lists that day's hours, one card per line with status, project, hours, whether it is timer-linked and its source (Manual, Tracked or Mixed), and the manager's reason on a rejected line. Timer hours are locked, with **Request a change** (a timer draft instead says to submit it in the Day view; hours on a milestone I am no longer assigned to have no action); other lines have **Edit in Day view**. The day's milestone dates follow, with **View milestones**.
+    - From the keyboard the grid is one Tab stop: the arrow keys move between days, Home and End to the ends of the week, Page Up and Page Down to the previous and next month, and Enter or Space selects the day and moves focus to its panel.
   - Each saved entry shows its status:
     - "Pending approval"
     - "Pending (Overtime requested from *First Last*)" for the entry that takes my week past 40 hours, and any after it

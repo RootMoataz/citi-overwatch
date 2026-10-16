@@ -11,11 +11,11 @@ The tests are built for **debugging**, not only for a green tick:
 |---|---|---|---|
 | Rules (unit) | pytest | part of 387 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 387 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
-| API (integration) | pytest + real PostgreSQL 17 | 786 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 979 (73 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
-| End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
+| API (integration) | pytest + real PostgreSQL 17 | 813 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
+| Frontend (component) | Vitest + React Testing Library + MSW | 1,009 (73 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| End-to-end | Playwright | 3 journeys × 2 devices + 11 layout checks | The pieces don't fit together in a real browser (real API, real database, real cookies), or the layout breaks where jsdom can't see it: overlapping top-bar controls, crumbs under the search field, a page wider than a phone |
 
-Counts as of 2026-10-16: **1,173 backend** (387 unit, 786 integration, collected; 97% coverage at the last full run) and **979 frontend** in 73 files, plus **6 end-to-end**; the frontend and end-to-end suites all pass. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-16: **1,200 backend** (387 unit, 813 integration, collected; 97% coverage at the last full run) and **1,009 frontend** in 73 files, plus **17 end-to-end** (6 journey runs and 11 layout checks); the frontend and end-to-end suites all pass. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -75,9 +75,15 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 2. **Milestones:** a manager adds a milestone that depends on *Discovery* and assigns Eli. Eli starts it and moves it to *ready for review*; Eli can't complete it. The manager then completes it.
 3. **Overtime:** an employee logs 9 h Monday to Friday in the timesheet's Day view: for each day they pick it in the week strip, type the hours and a work note (proof of work), and they press **Submit** once at the end. Stepping through the days afterwards, only Friday shows "Pending (Overtime requested from …)". The manager gets exactly one notification and opens it on the Timesheets page, filtered to that person. The manager then views the budget impact and approves, and the project's consumed budget goes up.
 
+[`shell.spec.js`](../../frontend/e2e/shell.spec.js) adds 11 layout checks that jsdom can't make (no layout engine). Each runs once, in its own project: tagged `@phone` (mobile only) or `@desktop` (desktop only), so nothing shows as skipped.
+
+4. **Phone top bar** at 375 and 390 px: for the public demo admin's home, an employee's project page, and an employee with a running timer (home and project page), no top-bar control draws over another or off the screen. Each control is measured with everything drawn inside it, text included, minus what an ellipsis clips.
+5. **Desktop crumbs** at 1440 px: a 113-character project name (stretched in the API response; nothing is saved) ends in an ellipsis and stops before the search field.
+6. **No sideways scroll at 375 px:** every page in each role's navigation, a project page and My profile, for employee, manager, executive and admin, once with the seeded names and once with every name stretched (a long name plus a 35-letter word): `document.documentElement.scrollWidth` must stay 375.
+
 ## Current results (2026-10-16)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,173 tests (387 unit, 786 integration), 83 more than before the Month view (the backend counts are collected, not re-run in full; the timed runs below are earlier). The timed runs below come from `59d29fe` (the timer workflow) and `323ea89`, which had 1,087 tests; `f6c27bd` (no timer on a completed milestone) then added 3. The plain run was repeated at `3e61cd3` after 8 pm New York time, so it shows the known issue below. The frontend and end-to-end figures are from runs on 16 October, after Month view v2.
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,200 tests (387 unit, 813 integration), 110 more than before the Month view (the backend counts are collected, not re-run in full; the timed runs below are earlier). The timed runs below come from `59d29fe` (the timer workflow) and `323ea89`, which had 1,087 tests; `f6c27bd` (no timer on a completed milestone) then added 3. The plain run was repeated at `3e61cd3` after 8 pm New York time, so it shows the known issue below. The frontend and end-to-end figures are from runs on 16 October, after the redesign's shell (phase 1) and its fix wave: the frontend suite passed five times in a row with no failure.
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
@@ -92,20 +98,26 @@ TOTAL                                     6456    175    97%
 
 # collected per layer
 tests/unit:        387 tests
-tests/integration: 786 tests
+tests/integration: 813 tests
 
-# frontend: npx vitest run
+# frontend: npx vitest run (five runs in a row, each the same)
  Test Files  73 passed (73)
-      Tests  979 passed (979)
+      Tests  1009 passed (1009)
 
-# frontend: npm run lint && npm run build
-no problems; built in 9.68s
+# frontend: npm run lint
+no problems
 
 # frontend: npx playwright test
-  6 passed (1.8m)
+  17 passed (4.6m)
 ```
 
-The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, 6 tests) was brought up to date on 16 October: the overtime journey logs day by day in the Day view (hours and a work note per day, one **Submit** for the week) and follows the alert to the Timesheets page (after submitting, it switches to **Month**, selects Friday, checks that the day's panel lists its 9h pending, and presses **Edit in Day view** to land on that day; on a phone the panel sits under the grid), and the onboarding journey lands on My week. All 6 pass. When the machine is busy with other suites, the milestones journey can time out waiting on the API; run the end-to-end suite on its own.
+The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, plus 11 layout checks: 17 tests, 4.6 minutes) was last brought up to date on 16 October, with the shell fix wave (the layout checks; the Month panel's buttons are now named "Edit in Day view, <milestone>"): the overtime journey logs day by day in the Day view (hours and a work note per day, one **Submit** for the week) and follows the alert to the Timesheets page (after submitting, it switches to **Month**, selects Friday, checks that the day's panel lists its 9h pending, and presses **Edit in Day view** to land on that day; on a phone the panel sits under the grid), and the onboarding journey lands on My week. All 17 pass. When the machine is busy with other suites, the milestones journey can time out waiting on the API; run the end-to-end suite on its own.
+
+**Load flakes fixed (16 October).** Three tests used to fail now and then when the whole suite ran, and pass alone. Each waited for the wrong thing:
+- `access.test.jsx` (the 403/404 redirects): the toast and the move home start together, but React Router runs navigation as a transition, which can commit after the toast under load. The tests now wait for the landing page or the location, not the toast.
+- `messages.test.jsx` ("shows my messages… and marks it read"): the stubbed thread never moved `last_read_at`, so the page marked it read again after every refetch (22 times in 1.5 s), and "read once" only passed if the check landed between two posts. The stub now behaves like the server.
+- `login.test.jsx` (the demo session running out): it waited 1.5 s of real time; the session timer now runs on a controlled clock.
+Proof: the three files ran 10 times in a row next to a full suite (107/107 each time), and the full suite then passed five times in a row.
 
 ### Known issue: date-dependent backend tests
 

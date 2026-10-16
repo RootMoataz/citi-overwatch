@@ -233,7 +233,7 @@ The UI's [`lib/permissions.js`](../../frontend/src/lib/permissions.js) mirrors t
 ```
 frontend/src/
   app/         App routes, Layout (sidebar ⇄ drawer at md, Theme menu), access rules per route, nav, theme and colour mode,
-               the demo-session banner and countdown, providers, query client, toasts
+               the demo-session countdown pill and page notices, providers, query client, toasts
   api/         client.js (bearer token, request IDs, single shared refresh, ApiError) · queries.js (TanStack Query hooks)
   auth/        SessionProvider, RequireAuth (role-gated routes), ForcePasswordChange
   components/  ErrorAlert, EmptyState, ConfirmDialog, StatusChip, PriorityChip, DifficultyChip, RiskBadges, ResponsiveTable,

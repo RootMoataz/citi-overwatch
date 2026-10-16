@@ -196,6 +196,6 @@ Requirements the owner (**U**) added once the minimum was live, grouped by role.
 
 ### Public demo and operations
 
-- [x] Public demo admin (`demo.admin`): 5-minute sessions, fail-closed allow list of writes, disabled controls with a tooltip, countdown banner
+- [x] Public demo admin (`demo.admin`): 5-minute sessions, fail-closed allow list of writes, disabled controls with a tooltip, a countdown pill in the top bar
 - [x] Fail-closed route tests: every write route must be classified for the public demo and the executive guard
 - [x] Additive demo-data operations (`demo_backfill`, `demo_curate` with a dry run); the live data is never reset
