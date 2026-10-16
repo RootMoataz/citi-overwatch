@@ -1,5 +1,7 @@
-import { screen, within } from '@testing-library/react'
-import { describe, expect, test } from 'vitest'
+import { act, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import { renderWithProviders } from '../test/render.jsx'
 import MilestoneStatusBar from './MilestoneStatusBar.jsx'
 
@@ -46,5 +48,40 @@ describe('MilestoneStatusBar', () => {
   test('nothing renders when every milestone is archived', () => {
     const { container } = renderWithProviders(<MilestoneStatusBar items={[ms(1, 'completed', { is_archived: true })]} />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  describe('counts inside the segments', () => {
+    // The milestones arrive after the bar has mounted, as they do on the Milestones tab.
+    function Late({ list }) {
+      const [loaded, setLoaded] = useState(false)
+      return (
+        <>
+          <button onClick={() => setLoaded(true)}>load</button>
+          <MilestoneStatusBar items={loaded ? list : []} />
+        </>
+      )
+    }
+    const observers = []
+    class FakeObserver {
+      constructor(callback) { this.callback = callback; observers.push(this) }
+      observe() {}
+      disconnect() {}
+    }
+    afterEach(() => { vi.unstubAllGlobals(); observers.length = 0 })
+
+    test('are printed once the bar is measured, at 24px and up, even when the bar appears after mount', async () => {
+      // One quarter of the bar is completed, three quarters in progress; two segments share one 2px gap.
+      vi.stubGlobal('ResizeObserver', FakeObserver)
+      const list = [ms(1, 'completed'), ms(2, 'in_progress'), ms(3, 'in_progress'), ms(4, 'in_progress')]
+      renderWithProviders(<Late list={list} />)
+      await userEvent.click(screen.getByRole('button', { name: 'load' }))
+      const measure = (width) => act(() => observers.forEach((o) => o.callback([{ contentRect: { width } }])))
+      measure(97)
+      const [done, doing] = screen.getAllByRole('img')
+      expect(doing).toHaveTextContent('3') // 72px
+      expect(done).toHaveTextContent('') // (97 - 2) / 4 = 23.75px
+      measure(98) // 24px
+      expect(done).toHaveTextContent('1')
+    })
   })
 })

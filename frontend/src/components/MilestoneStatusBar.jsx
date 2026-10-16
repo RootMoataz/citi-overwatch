@@ -1,5 +1,5 @@
 import { Box, Paper, Stack, Tooltip, Typography } from '@mui/material'
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { STATUS, statusColor } from '../app/theme.js'
 
 // The order the states read in, left to right.
@@ -7,19 +7,20 @@ const ORDER = ['completed', 'ready_for_review', 'in_progress', 'not_started', 'w
 const GAP = 2
 const MIN_LABEL = 24 // a count is printed inside a segment only when the segment is at least this wide, in px
 
-/** The bar's width in px, or 0 where nothing can measure it (jsdom has no layout, and may lack ResizeObserver). */
-function useWidth(ref) {
+/** The width in px of the element given the returned ref, or 0 where nothing can measure it (jsdom has no layout, and may
+ * lack ResizeObserver). The node is held in state, so a bar that mounts after the first render is still measured, and
+ * ResizeObserver reports the width as soon as it starts watching. */
+function useWidth() {
+  const [node, setNode] = useState(null)
   const [width, setWidth] = useState(0)
   useEffect(() => {
-    const node = ref.current
     if (!node) return undefined
-    setWidth(node.getBoundingClientRect().width)
     if (typeof ResizeObserver === 'undefined') return undefined
     const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
     observer.observe(node)
     return () => observer.disconnect()
-  }, [ref])
-  return width
+  }, [node])
+  return [setNode, width]
 }
 
 const plural = (n) => `${n} milestone${n === 1 ? '' : 's'}`
@@ -27,8 +28,7 @@ const plural = (n) => `${n} milestone${n === 1 ? '' : 's'}`
 /** One bar for the whole project: its milestones by state, with the counts. Archived milestones are left out. */
 export default function MilestoneStatusBar({ items }) {
   const headingId = useId()
-  const barRef = useRef(null)
-  const width = useWidth(barRef)
+  const [barRef, width] = useWidth()
   const live = (items ?? []).filter((m) => !m.is_archived)
   if (!live.length) return null
 
