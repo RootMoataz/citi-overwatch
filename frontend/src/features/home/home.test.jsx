@@ -52,13 +52,18 @@ describe('HomePage by role', () => {
     http.get(`${API}/projects/status-counts`, () => HttpResponse.json({ planned: 1, active: 2, on_hold: 0, completed: 1, archived: 0, total: 4 })),
   ))
 
-  test('employees get My week: hours against 40h, their milestones and what they can claim, not the dashboard', async () => {
+  const noDiscussion = http.get(`${API}/milestones/:id/discussion`,
+    () => HttpResponse.json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, { status: 404 }))
+  const headings = (rows) => rows.map((r) => within(r).getByRole('heading', { level: 3 }).textContent)
+
+  test('employees get My week: hours against 40h, their focus and milestones, and what they can claim, not the dashboard', async () => {
     const claimed = []
     server.use(
       http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json(profile)),
       http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject, pullProject], total: 2 })),
       http.get(`${API}/projects/p2/milestones`, () => HttpResponse.json([claimable, taken])),
       http.post(`${API}/milestones/m7/claim`, () => { claimed.push('m7'); return HttpResponse.json({ ...claimable, name: 'Build pipeline' }) }),
+      noDiscussion,
     )
     renderAsUser(<HomePage />, { user: users.employee, route: '/' })
     expect(await screen.findByRole('heading', { level: 1, name: /my week/i })).toBeInTheDocument()
@@ -67,15 +72,27 @@ describe('HomePage by role', () => {
     expect(within(week).getByRole('progressbar', { name: /hours logged this week/i })).toHaveAttribute('aria-valuenow', '80')
     expect(within(week).getByRole('link', { name: /open my timesheet/i })).toHaveAttribute('href', '/timesheet')
 
-    const mine = screen.getByRole('region', { name: /my milestones/i })
-    const rows = within(mine).getAllByRole('listitem')
-    expect(rows.map((r) => within(r).getByRole('heading').textContent)).toEqual(['Design', 'Review'])
-    expect(within(rows[0]).getByText('In progress')).toBeInTheDocument()
-    expect(within(rows[0]).getByText('Hard Difficulty')).toBeInTheDocument()
-    expect(within(rows[0]).getByRole('link', { name: 'Apollo' })).toHaveAttribute('href', '/projects/p1?tab=milestones')
-    expect(within(rows[1]).getByText(/supporting/i)).toBeInTheDocument()
+    const focus = screen.getByRole('region', { name: 'Your focus' })
+    const now = within(focus).getByRole('group', { name: 'Now' })
+    expect(within(now).getByRole('heading', { level: 3, name: 'Design' })).toBeInTheDocument()
+    expect(within(now).getByText('In progress')).toBeInTheDocument()
+    expect(within(now).getByText('Hard difficulty')).toBeInTheDocument()
+    expect(within(now).getByRole('link', { name: 'Apollo' })).toHaveAttribute('href', '/projects/p1?tab=milestones')
+    expect(within(within(focus).getByRole('group', { name: 'Next' })).getByRole('heading', { level: 3, name: 'Review' }))
+      .toBeInTheDocument()
 
-    const open = await screen.findByRole('region', { name: /milestones you can claim/i })
+    // Assigned work sits in its group; the unassigned row and the archived project's row are left out.
+    const inProgress = within(screen.getByRole('region', { name: /^In progress/ })).getAllByRole('listitem')
+    expect(headings(inProgress)).toEqual(['Design'])
+    expect(within(inProgress[0]).getByText('Hard Difficulty')).toBeInTheDocument()
+    expect(within(inProgress[0]).getByRole('link', { name: 'Apollo' })).toHaveAttribute('href', '/projects/p1?tab=milestones')
+    const upcoming = within(screen.getByRole('region', { name: /^Upcoming/ })).getAllByRole('listitem')
+    expect(headings(upcoming)).toEqual(['Review'])
+    expect(within(upcoming[0]).getByRole('link', { name: 'Beacon' })).toHaveAttribute('href', '/projects/p2?tab=milestones')
+    expect(screen.queryByText('Old work')).not.toBeInTheDocument()
+    expect(screen.queryByText('Shelved work')).not.toBeInTheDocument()
+
+    const open = await screen.findByRole('region', { name: /available to claim/i })
     await within(open).findByText('Build pipeline')
     expect(within(open).queryByText('Taken already')).not.toBeInTheDocument()
     await userEvent.setup().click(within(open).getByRole('button', { name: /claim build pipeline/i }))
@@ -84,7 +101,7 @@ describe('HomePage by role', () => {
     expect(screen.queryByRole('region', { name: /^risk$/i })).not.toBeInTheDocument()
   })
 
-  test('My milestones: overdue first, then the most important, then the soonest due; each shows its priority', async () => {
+  test('In progress: overdue first, then the most important, then the soonest due; each shows its priority', async () => {
     const mine = (id, name, end, priority, status = 'in_progress') => ({ id, name, status, priority, difficulty: 'medium',
       start_date: '2020-01-01', end_date: end, is_archived: false, role: 'primary', project: { id: 'p1', name: 'Apollo' },
       can_open: true, logged_hours: 0, approved_hours: 0 })
@@ -94,57 +111,16 @@ describe('HomePage by role', () => {
         mine('c', 'Late medium', '2020-02-01', 'medium'), mine('d', 'Soon high', '2099-01-03', 'high'),
         mine('e', 'Done critical', '2099-01-01', 'critical', 'completed'), mine('f', 'Late high', '2020-03-01', 'high')] })),
       http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
+      noDiscussion,
     )
     renderAsUser(<HomePage />, { user: users.employee, route: '/' })
-    const region = await screen.findByRole('region', { name: /my milestones/i })
-    const rows = await within(region).findAllByRole('listitem')
-    expect(rows.map((r) => within(r).getByRole('heading').textContent)).toEqual(
-      ['Late high', 'Late medium', 'Later critical', 'Soon high', 'Soon low', 'Done critical'])
+    const region = await screen.findByRole('region', { name: /^In progress/ })
+    const rows = within(region).getAllByRole('listitem')
+    expect(headings(rows)).toEqual(['Late high', 'Late medium', 'Later critical', 'Soon high', 'Soon low'])
     expect(within(rows[2]).getByLabelText('Priority: Critical')).toHaveTextContent('Critical')
-    expect(within(region).getByText('Assigned to you: overdue first, then by priority and due date.')).toBeInTheDocument()
-  })
-
-  test('My milestones have a Start timer button where hours can be logged this week', async () => {
-    server.use(
-      http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json(profile)),
-      http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
-      http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: '2026-10-12', entries: [], totals: { logged: 0, approved: 0 },
-        user: { id: 'u-emp', name: 'Eli Employee' },
-        rows: [{ milestone: { id: 'm1', name: 'Design' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true },
-          { milestone: { id: 'm3', name: 'Review' }, project: { id: 'p2', name: 'Beacon', status: 'on_hold' }, open: false }] })),
-    )
-    renderAsUser(<HomePage />, { user: users.employee, route: '/' })
-    const region = await screen.findByRole('region', { name: /my milestones/i })
-    expect(await within(region).findByRole('button', { name: 'Start timer on Design' })).toBeInTheDocument()
-    expect(within(region).queryByRole('button', { name: 'Start timer on Review' })).not.toBeInTheDocument()
-  })
-
-  test('a completed assigned milestone has no Start timer button', async () => {
-    const done = { ...profile.milestones[0], id: 'm9', name: 'Finished design', status: 'completed' }
-    server.use(
-      http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [profile.milestones[0], done] })),
-      http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
-      http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: '2026-10-12', entries: [], totals: { logged: 0, approved: 0 },
-        user: { id: 'u-emp', name: 'Eli Employee' },
-        rows: [{ milestone: { id: 'm1', name: 'Design', status: 'in_progress' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true },
-          { milestone: { id: 'm9', name: 'Finished design', status: 'completed' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true }] })),
-    )
-    renderAsUser(<HomePage />, { user: users.employee, route: '/' })
-    const region = await screen.findByRole('region', { name: /my milestones/i })
-    expect(await within(region).findByRole('button', { name: 'Start timer on Design' })).toBeInTheDocument()
-    expect(within(region).queryByRole('button', { name: 'Start timer on Finished design' })).not.toBeInTheDocument()
-  })
-
-  test('employees with nothing to claim are told so', async () => {
-    server.use(
-      http.get(`${API}/users/u-emp/profile`, () => HttpResponse.json({ ...profile, milestones: [] })),
-      http.get(`${API}/projects`, () => HttpResponse.json({ items: [pushProject], total: 1 })),
-    )
-    renderAsUser(<HomePage />, { user: users.employee, route: '/' })
-    const mine = await screen.findByRole('region', { name: /my milestones/i })
-    expect(within(mine).getByText(/nothing assigned to you/i)).toBeInTheDocument()
-    const open = await screen.findByRole('region', { name: /milestones you can claim/i })
-    expect(await within(open).findByText(/nothing to claim right now/i)).toBeInTheDocument()
+    // Finished work sits in Completed, below the open work.
+    const done = within(screen.getByRole('region', { name: /^Completed/ })).getAllByRole('listitem')
+    expect(headings(done)).toEqual(['Done critical'])
   })
 
   test('managers get Approvals and Live now pinned above Risk and Smart insights', async () => {

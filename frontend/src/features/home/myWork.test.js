@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
-  dueLine, focusSummary, groupMilestones, isOverdue, nowAndNext, skillsSentence, upNextLabel,
+  comingLabel, dueLine, focusSummary, groupMilestones, isOverdue, nowAndNext, skillsSentence, upNextLabel, urgentFirst,
 } from './myWork.js'
 
 const TODAY = '2026-10-15'
@@ -81,6 +81,17 @@ describe('labels', () => {
       .toEqual({ text: 'Due Oct 14, 2026 · 1 day overdue', overdue: true })
     expect(dueLine({ status: 'in_progress', end_date: '2026-10-20' }, TODAY))
       .toEqual({ text: 'Due Oct 20, 2026', overdue: false })
+  })
+  test('comingLabel: Ready now, or After the predecessors still open', () => {
+    expect(comingLabel({ ready: true, after: [] })).toBe('Ready now')
+    expect(comingLabel({ ready: false, after: [{ id: 'a', name: 'Discovery' }, { id: 'b', name: 'Schema Mapping' }] }))
+      .toBe('After Discovery, Schema Mapping')
+  })
+  test('urgentFirst: overdue, then priority, then end date, then name', () => {
+    const list = [ms('Low late', { priority: 'low', end_date: '2026-10-05' }), ms('B high', { priority: 'high' }),
+      ms('A high', { priority: 'high' }), ms('Critical', { priority: 'critical', end_date: '2026-12-01' }),
+      ms('High soon', { priority: 'high', end_date: '2026-10-20' })]
+    expect(names([...list].sort(urgentFirst(TODAY)))).toEqual(['Low late', 'Critical', 'High soon', 'A high', 'B high'])
   })
   test('skillsSentence', () => {
     expect(skillsSentence(['SQL'])).toBe('Needs SQL, which you have')

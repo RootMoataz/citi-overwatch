@@ -1,36 +1,27 @@
 import Schedule from '@mui/icons-material/ScheduleOutlined'
-import {
-  Box, Button, Chip, Grid, Link, Skeleton, Stack, Typography,
-} from '@mui/material'
+import { Box, Button, Chip, Grid, Skeleton, Stack, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
-import { useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Link as RouterLink } from 'react-router-dom'
-import { useClaimMilestone, useMilestonesOf, useProfile, useProjects } from '../../api/queries.js'
+import { useProfile } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import CountUp from '../../components/CountUp.jsx'
-import DifficultyChip from '../../components/DifficultyChip.jsx'
-import PriorityChip from '../../components/PriorityChip.jsx'
 import Reveal from '../../components/Reveal.jsx'
-import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
-import StatusChip from '../../components/StatusChip.jsx'
 import { chartPalette } from '../../app/chartColors.js'
-import { formatDate, formatHours } from '../../lib/format.js'
-import { priorityRank } from '../../lib/labels.js'
-import TimerButton from '../timer/TimerButton.jsx'
-import { useLoggable } from '../timer/useLoggable.js'
+import { formatDate, formatHours, nyTodayIso } from '../../lib/format.js'
 import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import Section from '../dashboard/Section.jsx'
 import YourManagerCard from '../people/YourManagerCard.jsx'
+import Claimable from './Claimable.jsx'
+import MilestoneGroups, { COMING_ID } from './MilestoneGroups.jsx'
+import YourFocusCard from './YourFocusCard.jsx'
+import { groupMilestones } from './myWork.js'
+import { useCollapsedSections } from './sectionState.js'
 
 const WEEKLY_CAP = 40
-// Projects whose milestones can be claimed (the server also refuses claims on other statuses).
-const CLAIMABLE_PROJECT = new Set(['planned', 'active'])
-
-const projectLink = (project) => (
-  <Link component={RouterLink} to={`/projects/${project.id}?tab=milestones`} underline="hover">{project.name}</Link>
-)
+const NONE = []
 
 /** Logged hours as a bar against the 40h week (dashed), with the planned hours as an ink marker. Past 40h the bar runs
  * over the line in the alert colour; the chips below say the same in words. */
@@ -89,120 +80,52 @@ function ThisWeek({ week }) {
   )
 }
 
-const todayIso = () => new Date().toLocaleDateString('en-CA')
-const overdue = (m) => m.status !== 'completed' && String(m.end_date) < todayIso()
-
-function MilestoneItem({ m, action }) {
-  return (
-    <Box component="li" sx={{ py: 1.5, borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0, pt: 0 } }}>
-      <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, justifyContent: 'space-between', alignItems: { sm: 'center' } }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="subtitle1" component="h3" sx={{ lineHeight: 1.3 }}>{m.name}</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {projectLink(m.project)} · due {formatDate(m.end_date)}
-          </Typography>
-        </Box>
-        <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
-          {overdue(m) ? <Chip size="small" color="error" variant="outlined" label="Overdue" /> : null}
-          <StatusChip status={m.status} />
-          <PriorityChip priority={m.priority} hideDefault />
-          <DifficultyChip difficulty={m.difficulty} />
-          {m.role === 'supporting' ? <Chip size="small" variant="outlined" label="Supporting" sx={{ height: 20 }} /> : null}
-          {action}
-        </Stack>
-      </Stack>
-    </Box>
-  )
-}
-
-/** Open work first: overdue, then the most important (priority), then the soonest due. Finished milestones drop to
- * the bottom, soonest due first. */
-function byUrgency(a, b) {
-  const done = (m) => (m.status === 'completed' ? 1 : 0)
-  const rank = (m) => (done(m) ? 0 : priorityRank(m.priority))
-  return done(a) - done(b) || Number(overdue(b)) - Number(overdue(a)) || rank(a) - rank(b)
-    || String(a.end_date).localeCompare(String(b.end_date))
-}
-
-function MyMilestones({ milestones }) {
-  const mine = milestones.filter((m) => m.role && !m.is_archived && !m.project?.is_archived).sort(byUrgency)
-  const loggable = useLoggable()
-  return (
-    <Section question="My milestones" hint="Assigned to you: overdue first, then by priority and due date.">
-      {mine.length ? (
-        <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-          {mine.map((m) => (
-            <MilestoneItem key={m.id} m={m}
-              action={loggable.has(String(m.id)) ? <TimerButton milestone={m} /> : null} />
-          ))}
-        </Box>
-      ) : <EmptyState title="Nothing assigned to you right now" description="Milestones your manager gives you, or that you claim, show up here." />}
-    </Section>
-  )
-}
-
-function ClaimButton({ milestone }) {
-  const claim = useClaimMilestone(milestone.project_id)
-  const [failure, setFailure] = useState(null)
-  const take = async () => {
-    setFailure(null)
-    try { await claim.mutateAsync(milestone.id) } catch (err) { setFailure(err) }
-  }
-  return (
-    <>
-      <Button size="small" variant="contained" aria-label={`Claim ${milestone.name}`} disabled={claim.isPending} onClick={take}>
-        Claim
-      </Button>
-      {failure ? <Box sx={{ flexBasis: '100%' }}><ErrorAlert error={failure} /></Box> : null}
-    </>
-  )
-}
-
-/** Ready, unowned milestones in pull-mode projects the employee is on. */
-function Claimable() {
-  const projects = useProjects({})
-  const pull = (projects.data?.items ?? []).filter((p) => p.work_mode === 'pull' && CLAIMABLE_PROJECT.has(p.status))
-  const milestones = useMilestonesOf(pull.map((p) => p.id))
-  const nameOf = new Map(pull.map((p) => [String(p.id), p.name]))
-  const open = milestones.data.filter((m) => m.can_claim)
-    .map((m) => ({ ...m, project: { id: m.project_id, name: nameOf.get(String(m.project_id)) } })).sort(byUrgency)
-  const loading = projects.isLoading || milestones.isLoading
-  return (
-    <Section question="Milestones you can claim" hint="Pull-mode projects you're on: take a ready milestone that nobody owns yet.">
-      <ErrorAlert error={projects.error ?? milestones.error} onRetry={() => { projects.refetch(); milestones.refetch() }} />
-      {loading ? <Skeleton variant="rounded" height={64} /> : open.length ? (
-        <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-          {open.map((m) => <MilestoneItem key={m.id} m={m} action={<ClaimButton milestone={m} />} />)}
-        </Box>
-      ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>Nothing to claim right now.</Typography>}
-    </Section>
-  )
-}
-
 /** An employee's home: their week and their work, not the managers' delivery dashboard. */
 export default function MyWeekPage() {
   const { user } = useSession()
   const profile = useProfile(user.id)
+  const sections = useCollapsedSections()
+  const today = nyTodayIso()
+  const data = profile.data
+  const groups = groupMilestones(data?.milestones, today)
+  const comingUp = data?.coming_up ?? NONE
+
+  // Open "Might come your way" now (not after the next paint), so the target is in the DOM to scroll to and focus.
+  const reveal = (targetId, focusTarget) => {
+    flushSync(() => sections.open('coming'))
+    const target = document.getElementById(targetId)
+    target?.scrollIntoView?.({ block: 'start' })
+    focusTarget(target)?.focus()
+  }
+  const showComing = () => reveal(COMING_ID, (section) => section?.querySelector('h2 button'))
+  const showPrediction = (id) => reveal(`${COMING_ID}-${id}`, (row) => row)
+
   return (
     <>
       <PageHeader title="My week" subtitle={`Hello, ${user.first_name}. Your hours and the milestones on your plate.`} />
       <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} sx={{ mb: 2 }} />
       <TimerLimitBanner showUnsubmitted />
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 5 }}>
-          {/* This week stretches to the row's height; the manager card sits under it inside the same column. */}
-          <Stack sx={{ gap: 2, height: '100%' }}>
-            <Box sx={{ flexGrow: 1 }}>
-              {profile.data ? <Reveal><ThisWeek week={profile.data.this_week} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
-            </Box>
-            {profile.data?.user?.manager ? <YourManagerCard manager={profile.data.user.manager} /> : null}
+        <Grid size={{ xs: 12, md: 8 }}>
+          <Stack sx={{ gap: 2 }}>
+            {data ? (
+              <>
+                <Reveal>
+                  <YourFocusCard groups={groups} comingUp={comingUp} today={today} sections={sections}
+                    onShowComing={showComing} onShowPrediction={showPrediction} />
+                </Reveal>
+                <MilestoneGroups groups={groups} comingUp={comingUp} today={today} sections={sections} />
+              </>
+            ) : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+            <Claimable sections={sections} />
           </Stack>
         </Grid>
-        <Grid size={{ xs: 12, md: 7 }}>
-          {profile.data ? <Reveal index={1}><MyMilestones milestones={profile.data.milestones} /></Reveal> : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
-        </Grid>
-        <Grid size={12}>
-          <Claimable />
+        <Grid size={{ xs: 12, md: 4 }}>
+          <Stack sx={{ gap: 2 }}>
+            {data ? <Reveal index={1}><ThisWeek week={data.this_week} /></Reveal>
+              : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+            {data?.user?.manager ? <YourManagerCard manager={data.user.manager} /> : null}
+          </Stack>
         </Grid>
       </Grid>
     </>

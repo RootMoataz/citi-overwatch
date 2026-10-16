@@ -14,14 +14,17 @@ const isReady = (m, today) => !isWaiting(m) && m.start_date <= today
 /** Up next order: ready first, then future starts, then waiting. */
 const upNextTier = (m, today) => (isWaiting(m) ? 2 : isReady(m, today) ? 0 : 1)
 
+/** Most urgent first: overdue, then priority, then the soonest end date, then name. In progress and the claim list use it. */
+export const urgentFirst = (today) => (a, b) =>
+  Number(isOverdue(b, today)) - Number(isOverdue(a, today))
+  || priorityRank(a.priority) - priorityRank(b.priority) || byEnd(a, b) || byName(a, b)
+
 /** Groups use the stored `status` (not `display_status`, which would drop waiting work from every group). */
 export function groupMilestones(milestones, today) {
   const mine = (milestones ?? []).filter((m) => m.role != null && !m.is_archived && !m.project?.is_archived)
   const of = (status) => mine.filter((m) => (Array.isArray(status) ? status.includes(m.status) : m.status === status))
   return {
-    inProgress: of(['in_progress', 'blocked']).sort((a, b) =>
-      Number(isOverdue(b, today)) - Number(isOverdue(a, today))
-      || priorityRank(a.priority) - priorityRank(b.priority) || byEnd(a, b) || byName(a, b)),
+    inProgress: of(['in_progress', 'blocked']).sort(urgentFirst(today)),
     upNext: of('not_started').sort((a, b) =>
       upNextTier(a, today) - upNextTier(b, today) || byStart(a, b) || byName(a, b)),
     review: of('ready_for_review').sort((a, b) => byEnd(a, b) || byName(a, b)),
@@ -36,6 +39,9 @@ export function upNextLabel(m, today) {
   if (m.start_date > today) return `Starts ${formatDate(m.start_date)}`
   return 'Ready to start'
 }
+
+/** A prediction's readiness: "Ready now", or "After <the predecessors still open>". */
+export const comingLabel = (item) => (item.ready ? 'Ready now' : `After ${waitingNames({ waiting_on: item.after }).join(', ')}`)
 
 export function nowAndNext(groups, comingUp, today) {
   const now = groups.inProgress[0] ?? null
