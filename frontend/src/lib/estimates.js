@@ -32,6 +32,17 @@ export function usageLine(m) {
   return { text: `${logged} · ${formatPct(Math.round(m.estimate_used_pct))} of estimate${TONE_WORDS[tone]}`, tone }
 }
 
+/** A milestone's Effort cell: "118h / 264h", "114h estimate" (nothing logged), "7.5h logged" (no estimate) or "—";
+ * `over` is "+0.5h over estimate" once logged hours pass the estimate, otherwise null. */
+export function effortText(m) {
+  const logged = Number(m?.logged_hours) || 0
+  const estimate = m?.estimated_hours == null ? null : Number(m.estimated_hours)
+  if (estimate == null) return { text: logged ? `${formatHours(logged)} logged` : '—', over: null }
+  if (!logged) return { text: `${formatHours(estimate)} estimate`, over: null }
+  const extra = Math.round((logged - estimate) * 100) / 100   // hundredths, so 100.3 - 100.1 reads 0.2
+  return { text: `${formatHours(logged)} / ${formatHours(estimate)}`, over: extra > 0 ? `+${formatHours(extra)} over estimate` : null }
+}
+
 /** The project tile: value "640h", hint "over 120 days · 52% used". */
 export function projectEffort(p) {
   if (p?.total_estimated_hours == null) {

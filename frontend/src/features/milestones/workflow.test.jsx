@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { projectView } from '../projects/viewer.js'
 import MilestonesTab from './MilestonesTab.jsx'
 
 const project = {
@@ -38,21 +39,25 @@ function handlers(list, extra = []) {
     http.get(`${API}/milestones/:id/notes`, () => HttpResponse.json([])),
     http.get(`${API}/approvals`, () => HttpResponse.json([])),
     http.get(`${API}/skills`, () => HttpResponse.json({ items: [qa] })),
+    http.get(`${API}/users/:id/profile`, () => HttpResponse.json({ projects: [], milestones: [] })),
   ]
 }
 
-const renderTab = (user, manage, route = '/milestones-under-test') =>
-  renderAsUser(<MilestonesTab project={project} manage={manage} />, { user, route })
-const card = async (name) => (await screen.findByRole('heading', { name, level: 3 })).closest('[data-milestone]')
+// Each milestone opens in the side panel (a link straight to it: ?milestone=<id>).
+function renderTab(user, id, route = `/milestones-under-test?milestone=${id}`) {
+  const view = projectView(user, project)
+  return renderAsUser(<MilestonesTab project={project} manage={view.manage} user={user} view={view} />, { user, route })
+}
+const card = (name) => screen.findByRole('complementary', { name })
 
 describe('milestone workflow', () => {
-  test('the card shows the objective and progress; Details lists the criteria and skills', async () => {
+  test('the panel shows the objective and progress; Details, open from the start, lists the criteria and skills', async () => {
     server.use(...handlers([mapping]))
-    renderTab(users.employee, false)
+    renderTab(users.employee, 'm2')
     const c = await card('Schema Mapping')
     expect(within(c).getByText('Map every legacy field')).toBeInTheDocument()
     expect(within(c).getByRole('progressbar', { name: /40% complete/i })).toBeInTheDocument()
-    await userEvent.click(within(c).getByRole('button', { name: /details for schema mapping/i }))
+    expect(within(c).getByRole('button', { name: /details for schema mapping/i })).toHaveAttribute('aria-expanded', 'true')
     const criteria = await within(c).findByRole('list', { name: /completion criteria/i })
     expect(within(criteria).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Customer tables mapped', 'Addresses split'])
     expect(within(within(c).getByRole('list', { name: /skills needed/i })).getByText('QA')).toBeInTheDocument()
@@ -71,7 +76,7 @@ describe('milestone workflow', () => {
         return HttpResponse.json(updates[0], { status: 201 })
       }),
     ]))
-    renderTab(users.employee, false)
+    renderTab(users.employee, 'm2')
     const c = await card('Schema Mapping')
     await userEvent.click(within(c).getByRole('button', { name: /work log for schema mapping/i }))
     expect(await within(c).findByText('No updates yet.')).toBeInTheDocument()
@@ -92,7 +97,7 @@ describe('milestone workflow', () => {
   test('people who may not post only read the work log', async () => {
     server.use(...handlers([ms({ id: 'm3', name: 'Cutover', can_post_update: false, can_kick_back: false, is_assignee: false,
       assignees: [] })], [http.get(`${API}/milestones/m3/updates`, () => HttpResponse.json([]))]))
-    renderTab(users.employee, false)
+    renderTab(users.employee, 'm3')
     const c = await card('Cutover')
     expect(within(c).queryByRole('button', { name: /kick back/i })).not.toBeInTheDocument()
     await userEvent.click(within(c).getByRole('button', { name: /work log for cutover/i }))
@@ -108,7 +113,7 @@ describe('milestone workflow', () => {
         return HttpResponse.json(kickback, { status: 201 })
       }),
     ]))
-    renderTab(users.employee, false)
+    renderTab(users.employee, 'm2')
     const c = await card('Schema Mapping')
     await userEvent.click(within(c).getByRole('button', { name: /kick back/i }))
     const dialog = await screen.findByRole('dialog', { name: /kick back schema mapping/i })
@@ -128,7 +133,7 @@ describe('milestone workflow', () => {
     const blocked = ms({ id: 'm2', name: 'Schema Mapping', status: 'blocked', display_status: 'blocked',
       open_kickback: kickback, can_kick_back: false })
     server.use(...handlers([blocked]))
-    renderTab(users.employee, false)
+    renderTab(users.employee, 'm2')
     const c = await card('Schema Mapping')
     expect(within(c).getByText('Blocked – needs review')).toBeInTheDocument()
     const panel = within(c).getByRole('alert', { name: /kickback on schema mapping/i })
@@ -148,7 +153,7 @@ describe('milestone workflow', () => {
         return HttpResponse.json({ ...kickback, resolution: 'returned' })
       }),
     ]))
-    renderTab(users.manager, true)
+    renderTab(users.manager, 'm2')
     const c = await card('Schema Mapping')
     const panel = within(c).getByRole('alert', { name: /kickback on schema mapping/i })
     await userEvent.click(within(panel).getByRole('button', { name: /return to employee/i }))
@@ -167,7 +172,7 @@ describe('milestone workflow', () => {
       events: [{ id: 'e1', created_at: new Date().toISOString(), action: 'auto_assign',
         sentence: 'Morgan Manager auto-assigned Eli Employee to Schema Mapping after Discovery was completed' }],
     }))]))
-    renderTab(users.employee, false)
+    renderTab(users.employee, 'm2')
     const c = await card('Schema Mapping')
     await userEvent.click(within(c).getByRole('button', { name: /history for schema mapping/i }))
     const list = await within(c).findByRole('list', { name: 'Kickbacks' })
@@ -176,13 +181,13 @@ describe('milestone workflow', () => {
     expect(within(c).getByRole('list', { name: 'Events' })).toHaveTextContent(/auto-assigned Eli Employee/)
   })
 
-  test('a link to one milestone opens its details', async () => {
+  test('a link to one milestone opens its panel on Details, and only that one', async () => {
     server.use(...handlers([ms({ id: 'm1', name: 'Discovery' }), mapping]))
-    renderTab(users.employee, false, '/milestones-under-test?milestone=m2')
+    renderTab(users.employee, 'm2')
     const c = await card('Schema Mapping')
     expect(within(c).getByRole('button', { name: /details for schema mapping/i })).toHaveAttribute('aria-expanded', 'true')
-    const other = await card('Discovery')
-    expect(within(other).getByRole('button', { name: /details for discovery/i })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getAllByRole('complementary')).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: /details for discovery/i })).not.toBeInTheDocument()
   })
 
   test('the manager edits the objective, criteria and skills needed', async () => {
@@ -193,9 +198,9 @@ describe('milestone workflow', () => {
         return HttpResponse.json(mapping)
       }),
     ]))
-    renderTab(users.manager, true)
+    renderTab(users.manager, 'm2')
     const c = await card('Schema Mapping')
-    await userEvent.click(within(c).getByRole('button', { name: /edit schema mapping/i }))
+    await userEvent.click(within(c).getByRole('button', { name: 'Edit' }))
     const dialog = await screen.findByRole('dialog', { name: /edit milestone/i })
     const objective = within(dialog).getByRole('textbox', { name: 'Objective' })
     expect(objective).toHaveValue('Map every legacy field')

@@ -12,10 +12,13 @@ import { STATUS, statusColor } from '../app/theme.js'
 import { formatDate, formatHours, todayIso } from '../lib/format.js'
 import { PRIORITY } from '../lib/labels.js'
 import { STRIPED, stripes } from './stateStripes.js'
+import StatusChip from './StatusChip.jsx'
 
 const DAY = 86400000
-// A name column beside the chart; under `sm` the name sits above its bar.
+// A name column beside the chart; under `sm` the name sits above its bar. The detailed layout adds a Dependency column.
 const COLUMNS = { xs: 'minmax(0, 1fr)', sm: '200px minmax(0, 1fr)' }
+const DETAILED_COLUMNS = { xs: 'minmax(0, 1fr)', sm: 'minmax(0, 290px) 150px minmax(0, 1fr)' }
+const spacer = <Box sx={{ display: { xs: 'none', sm: 'block' } }} />
 const toTime = (iso) => Date.UTC(...String(iso).slice(0, 10).split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi)
 /** "2026-08-15" → "Aug 15" */
@@ -79,8 +82,10 @@ function StateWord({ view }) {
   )
 }
 
-function TimelineRow({ view, months, todayPct, onOpen, compact }) {
-  const { item, meta, key, percent, overdue, after, from, width, placement, text, label } = view
+function TimelineRow({ view, months, todayPct, onOpen, layout }) {
+  const { item, meta, key, percent, overdue, after, from, width, placement, text, label, number } = view
+  const compact = layout === 'compact'
+  const detailed = layout === 'detailed'
   const filled = key === 'in_progress' && percent != null
   const clickable = Boolean(onOpen)
   // Beside the bar on `sm` and up; under it on a phone, or when the bar leaves no room on either side.
@@ -93,7 +98,7 @@ function TimelineRow({ view, months, todayPct, onOpen, compact }) {
   }
   return (
     <Tooltip describeChild disableInteractive placement="bottom-start" title={<RowTip view={view} />}>
-      <Box component="li" tabIndex={0} aria-label={label}
+      <Box component="li" tabIndex={0} aria-label={label} data-milestone-id={item.id}
         onClick={clickable ? () => onOpen(item) : undefined}
         onKeyDown={clickable ? (e) => {
           if (e.key === 'Enter' || e.key === ' ') {
@@ -101,20 +106,31 @@ function TimelineRow({ view, months, todayPct, onOpen, compact }) {
             onOpen(item)
           }
         } : undefined}
-        sx={{ display: 'grid', gridTemplateColumns: COLUMNS, columnGap: 2, px: 1, borderRadius: 1, cursor: clickable ? 'pointer' : 'default',
+        sx={{ display: 'grid', gridTemplateColumns: detailed ? DETAILED_COLUMNS : COLUMNS, columnGap: 2, px: 1, borderRadius: 1,
+          cursor: clickable ? 'pointer' : 'default',
           '&:nth-of-type(even)': { bgcolor: 'action.hover' }, '&:hover': { bgcolor: 'action.selected' } }}>
         <Box aria-hidden sx={{ minWidth: 0, alignSelf: 'center', pt: 0.75, pb: { xs: 0, sm: 0.75 } }}>
           <Stack direction="row" useFlexGap sx={{ gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+            {detailed ? (
+              <Typography variant="body2" component="span" sx={{ color: 'text.secondary', minWidth: 20 }}>{number}</Typography>
+            ) : null}
             <Typography variant="body2" component="span" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{item.name}</Typography>
             {item.is_assignee ? (
               <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 18, fontSize: '0.6875rem' }} />
             ) : null}
+            {detailed ? <Box sx={{ ml: 'auto' }}><StatusChip status={key} icon /></Box> : null}
           </Stack>
           {compact ? <StateWord view={view} /> : null}
-          {!compact && after.length ? (
+          {layout === 'default' && after.length ? (
             <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{`after ${after.join(', ')}`}</Typography>
           ) : null}
         </Box>
+        {detailed ? (
+          <Typography aria-hidden variant="body2" component="div" sx={{ color: 'text.secondary', alignSelf: 'center', py: 0.75,
+            overflowWrap: 'anywhere' }}>
+            {after.length ? `After ${after.join(', ')}` : 'None'}
+          </Typography>
+        ) : null}
         <Box aria-hidden sx={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center',
           minHeight: 40, pt: { xs: 0.5, sm: 0.75 }, pb: 0.75 }}>
           {/* The lines: the whole cell on `sm` and up; on a phone only the bar strip, since the label sits under it. */}
@@ -150,9 +166,14 @@ function TimelineRow({ view, months, todayPct, onOpen, compact }) {
 
 /** A Gantt-style chart of the milestones: a month axis, a bar per milestone with its dates and state beside it,
  * a progress fill, a "today" line and the dependency chain. `layout="compact"` (the Overview) puts the state word
- * and icon under each name and drops the legend and the "after …" line. Clicking a row (or Enter) calls `onOpen(milestone)`. */
-export default function Timeline({ items, range, onOpen, layout = 'default' }) {
+ * and icon under each name and drops the legend and the "after …" line. `layout="detailed"` (the Milestones tab on wide
+ * screens) numbers each row, puts its state chip beside the name and the dependencies in a column of their own.
+ * `all` (default `items`) is the whole list in dependency order: it numbers the rows and names the dependencies when
+ * `items` is a filtered part of it. Clicking a row (or Enter) calls `onOpen(milestone)`. */
+export default function Timeline({ items, range, onOpen, layout = 'default', all }) {
   const compact = layout === 'compact'
+  const detailed = layout === 'detailed'
+  const columns = detailed ? DETAILED_COLUMNS : COLUMNS
   const start = toTime(range.start)
   const end = toTime(range.end ?? range.start)
   const span = Number.isFinite(end) ? Math.max(end - start + DAY, DAY) : DAY
@@ -165,7 +186,9 @@ export default function Timeline({ items, range, onOpen, layout = 'default' }) {
   const todayPct = todayShare >= 0 && todayShare <= 100 ? todayShare : null
   const months = monthMarks(start, span)
   const labelEvery = Math.ceil(months.length / 12) // a long project skips labels rather than overprinting them
-  const byId = Object.fromEntries(items.map((i) => [String(i.id), i]))
+  const pool = all ?? items
+  const byId = Object.fromEntries(pool.map((i) => [String(i.id), i]))
+  const numberOf = Object.fromEntries(pool.map((i, n) => [String(i.id), n + 1]))
 
   const views = items.map((item) => {
     const key = stateKey(item)
@@ -191,7 +214,8 @@ export default function Timeline({ items, range, onOpen, layout = 'default' }) {
       key === 'waiting' && waitingOn.length ? `waiting on ${waitingOn.join(', ')}` : '',
       PRIORITY[item.priority] ? `${PRIORITY[item.priority]} priority` : '', item.is_assignee ? 'yours' : ''].filter(Boolean).join(', ')
     return { item, key, meta, percent, overdue, after: before.map((p) => p.name), waitingOn, from, width, placement,
-      text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)}${compact ? '' : ` · ${state}`}`, label }
+      text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)}${compact || detailed ? '' : ` · ${state}`}`, label,
+      number: numberOf[String(item.id)] }
   })
   // The key lists only the statuses on this timeline, in the order they first appear.
   const shown = [...new Set(views.map((v) => v.key))]
@@ -199,8 +223,15 @@ export default function Timeline({ items, range, onOpen, layout = 'default' }) {
 
   return (
     <Paper variant="outlined" sx={{ p: 2 }}>
-      <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: COLUMNS, columnGap: 2, px: 1, mb: 0.5 }}>
-        <Box sx={{ display: { xs: 'none', sm: 'block' } }} />
+      <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: columns, columnGap: 2, px: 1, mb: 0.5 }}>
+        {detailed ? (
+          <>
+            <Typography variant="caption" sx={{ display: { xs: 'none', sm: 'block' }, alignSelf: 'end', fontWeight: 600, pl: '28px' }}>
+              Milestone
+            </Typography>
+            <Typography variant="caption" sx={{ display: { xs: 'none', sm: 'block' }, alignSelf: 'end', fontWeight: 600 }}>Dependency</Typography>
+          </>
+        ) : spacer}
         <Box>
           <Stack direction="row" sx={{ justifyContent: 'space-between', mb: 0.5 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatDate(range.start)}</Typography>
@@ -215,11 +246,12 @@ export default function Timeline({ items, range, onOpen, layout = 'default' }) {
         </Box>
       </Box>
       <Box component="ul" aria-label="Milestone timeline" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-        {views.map((view) => <TimelineRow key={view.item.id} view={view} months={months} todayPct={todayPct} onOpen={onOpen} compact={compact} />)}
+        {views.map((view) => <TimelineRow key={view.item.id} view={view} months={months} todayPct={todayPct} onOpen={onOpen} layout={layout} />)}
       </Box>
       {todayPct != null ? (
-        <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: COLUMNS, columnGap: 2, px: 1, mt: 0.5 }}>
-          <Box sx={{ display: { xs: 'none', sm: 'block' } }} />
+        <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: columns, columnGap: 2, px: 1, mt: 0.5 }}>
+          {spacer}
+          {detailed ? spacer : null}
           <Box sx={{ position: 'relative', height: 18 }}>
             <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: `${clamp(todayPct, 3, 97)}%`, transform: 'translateX(-50%)',
               color: 'text.secondary', fontWeight: 600 }}>Today</Typography>

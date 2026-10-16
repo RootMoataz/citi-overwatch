@@ -8,6 +8,7 @@ import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../../test/render.jsx'
 import { setViewport } from '../../test/setup.js'
 import MilestonesTab from '../milestones/MilestonesTab.jsx'
+import { projectView } from '../projects/viewer.js'
 import DiscussButton from './DiscussButton.jsx'
 import MessageButton from './MessageButton.jsx'
 import MessagesPage from './MessagesPage.jsx'
@@ -310,7 +311,7 @@ describe('Discuss on a milestone', () => {
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
 
-  test('milestone cards show it beside Notes', async () => {
+  test('the milestone panel shows it beside Notes', async () => {
     const project = { id: 'p1', name: 'Apollo', start_date: '2026-01-01', predicted_end_date: '2026-12-31', status: 'active',
       manager: { id: users.manager.id, name: 'Morgan Manager' }, at_risk_reasons: [] }
     server.use(inbox([discussion]),
@@ -318,9 +319,14 @@ describe('Discuss on a milestone', () => {
         description: '', status: 'in_progress', display_status: 'in_progress', blocked: false, predecessors: [],
         assignees: [{ id: emp.id, name: emp.name }], is_assignee: true, start_date: '2026-03-01', end_date: '2026-06-30',
         difficulty: 'medium', is_archived: false }])),
-      http.get(`${API}/projects/p1/members`, () => HttpResponse.json([])))
-    renderAsUser(<MilestonesTab project={project} manage={false} />, { user: users.employee })
-    expect(await screen.findByRole('link', { name: /open the discussion about schema mapping/i })).toBeInTheDocument()
+      http.get(`${API}/projects/p1/members`, () => HttpResponse.json([])),
+      http.get(`${API}/milestones/ms1/notes`, () => HttpResponse.json([])),
+      http.get(`${API}/users/:id/profile`, () => HttpResponse.json({ projects: [], milestones: [] })))
+    const view = projectView(users.employee, project)
+    renderAsUser(<MilestonesTab project={project} manage={view.manage} user={users.employee} view={view} />,
+      { user: users.employee, route: '/m?milestone=ms1' })
+    const panel = await screen.findByRole('complementary', { name: 'Schema Mapping' })
+    expect(await within(panel).findByRole('link', { name: /open the discussion about schema mapping/i })).toBeInTheDocument()
   })
 })
 

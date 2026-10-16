@@ -1,4 +1,4 @@
-import MilestonesWithHours from '../milestones/MilestonesWithHours.jsx'
+import MilestonesTab from '../milestones/MilestonesTab.jsx'
 import PlanTab from '../planning/PlanTab.jsx'
 import BudgetTab from './BudgetTab.jsx'
 import HoursTab from './HoursTab.jsx'
@@ -13,7 +13,7 @@ export const PROJECT_TABS = [
   { value: 'plan', label: 'Plan', Component: PlanTab,
     shown: (p) => isPlanning(p) || Boolean(p.plan_finalized_at) },
   { value: 'overview', label: 'Overview', Component: OverviewTab },
-  { value: 'milestones', label: 'Milestones', Component: MilestonesWithHours },
+  { value: 'milestones', label: 'Milestones', Component: MilestonesTab },
   { value: 'team', label: 'Team', Component: TeamTab },
   { value: 'budget', label: 'Budget', Component: BudgetTab },
   { value: 'hours', label: 'Hours', Component: HoursTab },

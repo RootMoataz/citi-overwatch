@@ -26,8 +26,10 @@ function useWidth() {
 
 const plural = (n) => `${n} milestone${n === 1 ? '' : 's'}`
 
-/** One bar for the whole project: its milestones by state, with the counts. Archived milestones are left out. */
-export default function MilestoneStatusBar({ items }) {
+/** One bar for the whole project: its milestones by state, with the counts. Archived milestones are left out.
+ * `title` replaces the heading's words, `headingComponent` its level (h3 by default), and `aside` sits on the right
+ * (under the bar on phones), as on the Milestones tab's summary card. */
+export default function MilestoneStatusBar({ items, title, headingComponent = 'h3', aside }) {
   const headingId = useId()
   const [barRef, width] = useWidth()
   const live = (items ?? []).filter((m) => !m.is_archived)
@@ -44,36 +46,44 @@ export default function MilestoneStatusBar({ items }) {
   const room = Math.max(width - GAP * (states.length - 1), 0)
 
   return (
-    <Paper component="section" variant="outlined" aria-labelledby={headingId} sx={{ p: 2 }}>
-      <Typography id={headingId} variant="subtitle1" component="h3" sx={{ mb: 1 }}>
-        {`${counts.completed} of ${total} ${total === 1 ? 'milestone' : 'milestones'} done`}
-      </Typography>
-      <Stack ref={barRef} direction="row" sx={{ gap: `${GAP}px`, height: 28 }}>
-        {states.map((key) => {
-          const n = counts[key]
-          const text = `${STATUS[key].label}: ${plural(n)}`
-          return (
-            <Tooltip key={key} title={text} describeChild>
-              <Box role="img" aria-label={text} data-count={n}
-                sx={{ width: `${(n / total) * 100}%`, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  bgcolor: (t) => statusColor(STATUS[key], t), color: (t) => t.palette.getContrastText(statusColor(STATUS[key], t)),
-                  fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', backgroundImage: STRIPED.has(key) ? stripes(6) : 'none' }}>
-                {(n / total) * room >= MIN_LABEL ? n : null}
-              </Box>
-            </Tooltip>
-          )
-        })}
-      </Stack>
-      <Stack component="ul" direction="row" useFlexGap aria-label="Milestones by state"
-        sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, gap: 2, flexWrap: 'wrap' }}>
-        {states.map((key) => (
-          <Stack component="li" key={key} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
-            <Box aria-hidden sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: (t) => statusColor(STATUS[key], t),
-              backgroundImage: STRIPED.has(key) ? stripes(3) : 'none' }} />
-            <Typography variant="caption" sx={{ color: 'text.secondary' }}>{`${STATUS[key].label} ${counts[key]}`}</Typography>
-          </Stack>
-        ))}
-      </Stack>
+    <Paper component="section" variant="outlined" aria-labelledby={headingId}
+      sx={{ p: 2, display: 'grid', gap: 2, alignItems: 'center',
+        gridTemplateColumns: aside ? { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) auto' } : 'minmax(0, 1fr)' }}>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography id={headingId} variant="subtitle1" component={headingComponent} sx={{ mb: 1 }}>
+          {title ?? `${counts.completed} of ${total} ${total === 1 ? 'milestone' : 'milestones'} done`}
+        </Typography>
+        <Stack ref={barRef} direction="row" sx={{ gap: `${GAP}px`, height: 28 }}>
+          {states.map((key) => {
+            const n = counts[key]
+            const text = `${STATUS[key].label}: ${plural(n)}`
+            return (
+              <Tooltip key={key} title={text} describeChild>
+                <Box role="img" aria-label={text} data-count={n}
+                  sx={{ width: `${(n / total) * 100}%`, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    bgcolor: (t) => statusColor(STATUS[key], t), color: (t) => t.palette.getContrastText(statusColor(STATUS[key], t)),
+                    fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', backgroundImage: STRIPED.has(key) ? stripes(6) : 'none' }}>
+                  {(n / total) * room >= MIN_LABEL ? n : null}
+                </Box>
+              </Tooltip>
+            )
+          })}
+        </Stack>
+        <Stack component="ul" direction="row" useFlexGap aria-label="Milestones by state"
+          sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, gap: 2, flexWrap: 'wrap' }}>
+          {states.map((key) => (
+            <Stack component="li" key={key} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+              <Box aria-hidden sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: (t) => statusColor(STATUS[key], t),
+                backgroundImage: STRIPED.has(key) ? stripes(3) : 'none' }} />
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{`${STATUS[key].label} ${counts[key]}`}</Typography>
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+      {aside ? (
+        <Box sx={{ pl: { md: 2 }, borderLeft: { md: 1 }, borderColor: { md: 'divider' }, alignSelf: 'stretch', display: 'flex',
+          alignItems: 'center' }}>{aside}</Box>
+      ) : null}
     </Paper>
   )
 }

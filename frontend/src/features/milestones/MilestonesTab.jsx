@@ -1,201 +1,248 @@
 import Add from '@mui/icons-material/Add'
-import Archive from '@mui/icons-material/ArchiveOutlined'
-import ChatBubble from '@mui/icons-material/ChatBubbleOutlineOutlined'
-import EditIcon from '@mui/icons-material/EditOutlined'
-import History from '@mui/icons-material/HistoryOutlined'
-import Info from '@mui/icons-material/InfoOutlined'
-import PanTool from '@mui/icons-material/PanToolOutlined'
-import Timeline from '@mui/icons-material/TimelineOutlined'
+import ChevronRight from '@mui/icons-material/ChevronRight'
+import FormatListBulleted from '@mui/icons-material/FormatListBulleted'
+import Schedule from '@mui/icons-material/ScheduleOutlined'
+import ShowChart from '@mui/icons-material/ShowChart'
 import {
-  Alert, Box, Button, Card, CardContent, Chip, Collapse, IconButton, LinearProgress, Skeleton, Stack, Tooltip, Typography,
+  Alert, Box, Button, InputAdornment, Link, MenuItem, Paper, Skeleton, Stack, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
-import { Fragment, useEffect, useRef, useState } from 'react'
-import { useLocation, useSearchParams } from 'react-router-dom'
-import {
-  useArchiveMilestone, useClaimMilestone, useMembers, useMilestones, useMilestoneStatus,
-} from '../../api/queries.js'
-import { useConversations } from '../../api/messages.js'
-import AvatarStack from '../../components/AvatarStack.jsx'
-import ConfirmDialog from '../../components/ConfirmDialog.jsx'
-import DifficultyChip from '../../components/DifficultyChip.jsx'
+import { useEffect, useRef, useState } from 'react'
+import { useMediaQuery } from 'react-responsive'
+import { Link as RouterLink, useSearchParams } from 'react-router-dom'
+import { useApprovals, useMembers, useMilestones, useProfile } from '../../api/queries.js'
+import { useToast } from '../../app/toast.js'
 import EmptyState from '../../components/EmptyState.jsx'
-import PersonLink from '../../components/PersonLink.jsx'
-import PriorityChip from '../../components/PriorityChip.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
-import StatusChip from '../../components/StatusChip.jsx'
-import SupportingChip from '../../components/SupportingChip.jsx'
-import EstimateLine from '../../components/EstimateLine.jsx'
+import FilterBar from '../../components/FilterBar.jsx'
+import FootNote from '../../components/FootNote.jsx'
 import MilestoneStatusBar from '../../components/MilestoneStatusBar.jsx'
-import MilestoneTimeline from '../../components/Timeline.jsx'
-import { formatDate } from '../../lib/format.js'
-import { statusActions } from '../../lib/milestoneActions.js'
-import DiscussButton from '../messages/DiscussButton.jsx'
+import Timeline from '../../components/Timeline.jsx'
+import { formatDateRange, formatHours } from '../../lib/format.js'
+import { DESKTOP_QUERY, WIDE_QUERY } from '../../lib/responsive.js'
 import MilestoneDialog from './MilestoneDialog.jsx'
-import KickbackDialog from './KickbackDialog.jsx'
-import KickbackPanel from './KickbackPanel.jsx'
-import MilestoneDetails from './MilestoneDetails.jsx'
-import MilestoneHistory from './MilestoneHistory.jsx'
-import MilestoneNotes from './MilestoneNotes.jsx'
-import WorkLog from './WorkLog.jsx'
+import MilestoneList from './MilestoneList.jsx'
+import MilestoneMenu from './MilestoneMenu.jsx'
+import MilestonePanel from './MilestonePanel.jsx'
 
-// The sections a card can open, one at a time.
-const PANELS = [
-  { value: 'details', label: 'Details', Icon: Info },
-  { value: 'log', label: 'Work log', Icon: Timeline },
-  { value: 'history', label: 'History', Icon: History },
-  { value: 'notes', label: 'Notes', Icon: ChatBubble },
-]
-
-function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, conversations, focused, navKey }) {
-  const status = useMilestoneStatus(m.project_id)
-  const claim = useClaimMilestone(m.project_id)
-  // A link straight to this milestone (from the bell) opens its details and scrolls it into view.
-  const [panel, setPanel] = useState(focused ? 'details' : null)
-  const [kicking, setKicking] = useState(false)
-  const [failure, setFailure] = useState(null)
-  const ref = useRef(null)
-  useEffect(() => {
-    if (focused) ref.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  }, [focused, navKey]) // a repeat click on the same row is a new navigation, so it scrolls again
-  const waitingOn = m.predecessors.map((id) => names[String(id)]).filter(Boolean)
-  const supporting = new Set((m.supporting_ids ?? []).map(String))
-  const actions = statusActions(m, { manager: manage, assignee: m.is_assignee })
-  // Primary assignees first; when some people are only supporting, the primaries get a ring to tell them apart.
-  const mixed = m.assignees.some((a) => supporting.has(String(a.id)))
-  const ordered = [...m.assignees].sort((a, b) => supporting.has(String(a.id)) - supporting.has(String(b.id)))
-  const people = ordered.map((a) => {
-    const helper = supporting.has(String(a.id))
-    return { id: a.id, name: a.name, detail: helper ? 'Supporting' : 'Primary', highlight: mixed && !helper }
-  })
-
-  const move = async (target) => {
-    setFailure(null)
-    try { await status.mutateAsync({ id: m.id, status: target }) } catch (err) { setFailure(err) }
-  }
-
-  const take = async () => {
-    setFailure(null)
-    try { await claim.mutateAsync(m.id) } catch (err) { setFailure(err) }
-  }
-
-  return (
-    <Card data-milestone={m.id} ref={ref}
-      sx={focused ? { outline: 2, outlineColor: 'primary.main', outlineOffset: 2, scrollMarginTop: 80 } : undefined}>
-      <CardContent>
-        <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, justifyContent: 'space-between' }}>
-          <Box sx={{ minWidth: 0 }}>
-            <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Typography variant="subtitle1" component="h3">{m.name}</Typography>
-              <StatusChip status={m.display_status} />
-              <PriorityChip priority={m.priority} />
-              <DifficultyChip difficulty={m.difficulty} />
-              {m.is_assignee ? <Chip size="small" variant="outlined" label="Assigned to you" /> : null}
-            </Stack>
-            <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {formatDate(m.start_date)} – {formatDate(m.end_date)}
-              {waitingOn.length ? ` · after ${waitingOn.join(', ')}` : ''}
-            </Typography>
-            <EstimateLine milestone={m} />
-            <Stack direction="row" useFlexGap
-              sx={{ mt: 1.25, gap: 1, alignItems: 'center' }}>
-              {people.length ? (
-                <>
-                  <AvatarStack people={people} max={4} label={`People on ${m.name}`} sx={{ ml: '-2px' }} />
-                  <Typography variant="body2" component="div" sx={{ minWidth: 0 }}>
-                    {ordered.map((a, i) => (
-                      <Fragment key={a.id}>
-                        {i ? ', ' : ''}<PersonLink person={a} context={{ project }} />
-                        {supporting.has(String(a.id)) ? <SupportingChip person={a.name} /> : null}
-                      </Fragment>
-                    ))}
-                  </Typography>
-                </>
-              ) : (
-                <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>Nobody assigned</Typography>
-              )}
-            </Stack>
-            {m.objective ? <Typography variant="body2" sx={{ mt: 1, fontWeight: 500 }}>{m.objective}</Typography> : null}
-            {m.description ? <Typography variant="body2" sx={{ mt: 1 }}>{m.description}</Typography> : null}
-            {m.progress_percent != null && m.status !== 'completed' ? (
-              <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mt: 1, maxWidth: 320 }}>
-                <LinearProgress variant="determinate" value={m.progress_percent} sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                  aria-label={`${m.name}: ${m.progress_percent}% complete, from the latest update`} />
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>{m.progress_percent}% done</Typography>
-              </Stack>
-            ) : null}
-          </Box>
-          {manage ? (
-            <Stack direction="row" sx={{ alignSelf: 'flex-start' }}>
-              <Tooltip title="Edit"><IconButton aria-label={`Edit ${m.name}`} onClick={() => onEdit(m)}><EditIcon /></IconButton></Tooltip>
-              <Tooltip title="Archive"><IconButton aria-label={`Archive ${m.name}`} onClick={() => onArchive(m)}><Archive /></IconButton></Tooltip>
-            </Stack>
-          ) : null}
-        </Stack>
-        <KickbackPanel milestone={m} onEdit={manage ? onEdit : undefined} />
-        <ErrorAlert error={failure} sx={{ mt: 1 }} />
-        <Stack direction="row" useFlexGap sx={{ gap: 1, mt: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-          {m.can_claim ? (
-            <Button size="small" variant="contained" aria-label={`Claim ${m.name}`} disabled={claim.isPending} onClick={take}>
-              Claim
-            </Button>
-          ) : null}
-          {actions.map((a) => {
-            const blocked = m.blocked && m.status === 'not_started'
-            const button = (
-              <Button key={a.target + a.label} size="small" variant={a.primary ? 'contained' : 'outlined'}
-                disabled={blocked || status.isPending} onClick={() => move(a.target)}>{a.label}</Button>
-            )
-            return blocked ? (
-              <Tooltip key={a.label} title={`Waiting on: ${waitingOn.join(', ')}`}><span>{button}</span></Tooltip>
-            ) : button
-          })}
-          {m.can_kick_back ? (
-            <Button size="small" color="error" variant="outlined" startIcon={<PanTool />} onClick={() => setKicking(true)}>
-              Kick back
-            </Button>
-          ) : null}
-          <Box sx={{ flexGrow: 1 }} />
-          <DiscussButton milestone={m} manage={manage} conversations={conversations} />
-          {PANELS.map(({ value, label, Icon }) => (
-            <Button key={value} size="small" startIcon={<Icon />} aria-expanded={panel === value}
-              aria-label={`${label} for ${m.name}`} onClick={() => setPanel((p) => (p === value ? null : value))}>
-              {label}
-            </Button>
-          ))}
-        </Stack>
-        <Collapse in={panel === 'details'} unmountOnExit><MilestoneDetails milestone={m} /></Collapse>
-        <Collapse in={panel === 'log'} unmountOnExit><WorkLog milestone={m} /></Collapse>
-        <Collapse in={panel === 'history'} unmountOnExit><MilestoneHistory milestone={m} /></Collapse>
-        <Collapse in={panel === 'notes'} unmountOnExit>
-          <MilestoneNotes milestoneId={m.id} canPost={manage || m.is_assignee} />
-        </Collapse>
-        {extra ? extra(m) : null}
-        {kicking ? <KickbackDialog milestone={m} onClose={() => setKicking(false)} /> : null}
-      </CardContent>
-    </Card>
-  )
+// List or Timeline is kept per browser; the URL's ?view= wins. Blocked storage just means List every time.
+const VIEW_KEY = 'overwatch.milestones.view'
+const readView = () => {
+  try { return window.localStorage.getItem(VIEW_KEY) === 'timeline' ? 'timeline' : 'list' } catch { return 'list' }
+}
+const storeView = (view) => {
+  try { window.localStorage.setItem(VIEW_KEY, view) } catch { /* blocked: the choice lasts until the page closes */ }
 }
 
-export default function MilestonesTab({ project, manage, extra }) {
+const STATUS_FILTERS = [['', 'All'], ['not_started', 'Not started'], ['in_progress', 'In progress'],
+  ['ready_for_review', 'Ready for review'], ['completed', 'Completed'], ['waiting', 'Waiting'], ['blocked', 'Blocked']]
+const GONE = 'That milestone is no longer available.'
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+const displayStatus = (m) => m.display_status ?? m.status
+
+/**
+ * The Milestones tab: a summary card (milestones complete and the status bar, with the pending entries for people
+ * who decide hours, or "Your part"), a toolbar (search, status, List or Timeline, Add milestone), the List or the
+ * Timeline, and the milestone's side panel. URL state: ?milestone= opens the panel (opening pushes a history entry, so
+ * Back closes it; closing replaces), ?view=timeline picks the Timeline. Variants come from `view` (projectView).
+ */
+export default function MilestonesTab({ project, user, view }) {
   const milestones = useMilestones(project.id)
   const members = useMembers(project.id)
-  const archive = useArchiveMilestone(project.id)
-  const conversations = useConversations()  // which milestones already have a discussion the viewer is in
+  const approvals = useApprovals({ project: project.id }, view.decides)
+  const profile = useProfile(user?.id, view.mine && Boolean(user?.id))
   const [params, setParams] = useSearchParams()
-  const navKey = useLocation().key
-  const focus = params.get('milestone')
-  const [editing, setEditing] = useState(null)
-  const [archiving, setArchiving] = useState(null)
+  const toast = useToast()
+  const desktop = useMediaQuery(DESKTOP_QUERY)
+  const wide = useMediaQuery(WIDE_QUERY)
+  const [remembered, setRemembered] = useState(readView)
+  const [search, setSearch] = useState('')
+  const [state, setState] = useState('')
+  const [adding, setAdding] = useState(false)
   const [warning, setWarning] = useState('')
+  const listRef = useRef(null)
+  const lastOpen = useRef(null)          // the milestone whose row gets focus back when the panel closes
+  const archivedHere = useRef(new Set()) // archived from this tab: its panel closes without the "no longer available" toast
+  const handled = useRef(null)
+
   const items = milestones.data ?? []
-  const names = Object.fromEntries(items.map((m) => [String(m.id), m.name]))
+  const openId = params.get('milestone')
+  const current = openId ? items.find((m) => String(m.id) === openId) : undefined
+  const urlView = params.get('view')
+  const mode = urlView === 'timeline' || urlView === 'list' ? urlView : remembered
+
+  const needle = search.trim().toLowerCase()
+  const shown = items.filter((m) => (!state || displayStatus(m) === state)
+    && (!needle || `${m.name}\n${m.description ?? ''}`.toLowerCase().includes(needle)))
+
+  // Pending entries per milestone, and in all, for people who decide hours (the server lists only what they may decide).
+  const pendingByMilestone = {}
+  let pendingHours = 0
+  const pending = view.decides ? approvals.data ?? [] : []
+  for (const item of pending) {
+    const key = String(item.milestone?.id)
+    pendingByMilestone[key] ??= { count: 0, hours: 0 }
+    pendingByMilestone[key].count += 1
+    pendingByMilestone[key].hours += Number(item.entry?.hours ?? 0)
+    pendingHours += Number(item.entry?.hours ?? 0)
+  }
+  // Your hours: the viewer's own logged hours per milestone and on the project, from their profile.
+  const mine = view.mine ? profile.data : undefined
+  const myHoursByMilestone = Object.fromEntries((mine?.milestones ?? []).map((x) => [String(x.id), Number(x.logged_hours)]))
+  const myProject = (mine?.projects ?? []).find((p) => String(p.id) === String(project.id))
+
+  const openMilestone = (m, panel) => {
+    // Already showing exactly this: no second history entry, so one Back still closes the panel.
+    if (openId === String(m.id) && (panel ?? null) === params.get('panel')) return
+    setParams((p) => {
+      p.set('milestone', m.id)
+      if (panel) p.set('panel', panel)
+      else p.delete('panel')
+      return p
+    })
+  }
+  const closePanel = () => setParams((p) => { p.delete('milestone'); p.delete('panel'); return p }, { replace: true })
+  const changeMode = (next) => {
+    storeView(next)
+    setRemembered(next)
+    setParams((p) => { if (next === 'timeline') p.set('view', 'timeline'); else p.delete('view'); return p }, { replace: true })
+  }
+  const clearFilters = () => { setSearch(''); setState('') }
+
+  useEffect(() => { if (openId) lastOpen.current = openId }, [openId])
+
+  // A milestone named in the URL that the loaded list doesn't have was archived or removed meanwhile: close its panel.
+  useEffect(() => {
+    if (!openId) { handled.current = null; return }
+    if (!milestones.isSuccess || handled.current === openId) return
+    if ((milestones.data ?? []).some((m) => String(m.id) === openId)) return
+    handled.current = openId
+    if (!archivedHere.current.has(openId)) toast.info(GONE)
+    setParams((p) => { p.delete('milestone'); p.delete('panel'); return p }, { replace: true })
+  }, [openId, milestones.isSuccess, milestones.data, toast, setParams])
+
+  // Focus after the panel closes: the milestone's name in the list, its timeline row or its card; failing those (it's
+  // filtered out, or gone) the search field, never the page body.
+  const returnFocus = () => {
+    const root = listRef.current
+    const id = lastOpen.current
+    const found = id && (root?.querySelector(`[data-milestone-name="${id}"]`)
+      ?? root?.querySelector(`li[data-milestone-id="${id}"]`)
+      ?? root?.querySelector(`[data-milestone-card="${id}"]`)?.closest('button'))
+    return found || root?.querySelector('input[aria-label="Search milestones"]') || null
+  }
+
+  const menuFor = (m) => (
+    <MilestoneMenu milestone={m} project={project} items={items} members={members.data ?? []} user={user}
+      onOpenPanel={openMilestone} onWarning={setWarning} onArchive={(x) => archivedHere.current.add(String(x.id))} />
+  )
+
+  const done = items.filter((m) => m.status === 'completed').length
+  const summaryAside = (
+    <>
+      {view.decides && pending.length ? (
+        <Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover"
+          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, color: 'warning.main', fontWeight: 600, minHeight: 44 }}>
+          <Schedule aria-hidden="true" fontSize="small" />
+          {`${plural(pending.length, 'pending entry', 'pending entries')} · ${formatHours(pendingHours)}`}
+          <ChevronRight aria-hidden="true" fontSize="small" />
+        </Link>
+      ) : null}
+      {view.mine ? (
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {`Your part: ${items.filter((m) => m.is_assignee).length} of ${plural(items.length, 'milestone', 'milestones')}`
+            + (myProject ? ` · ${formatHours(myProject.logged_hours)} logged` : '')}
+        </Typography>
+      ) : null}
+    </>
+  )
+  const hasAside = (view.decides && pending.length > 0) || view.mine
+
+  const noMatch = (
+    <EmptyState title="No milestones match" description="Try clearing the search or the status filter."
+      action={<Button onClick={clearFilters}>Clear</Button>} />
+  )
+  const addButton = view.manage ? (
+    <Button variant="contained" startIcon={<Add />} onClick={() => setAdding(true)} sx={{ minHeight: { xs: 44, md: 'auto' } }}>
+      Add milestone
+    </Button>
+  ) : null
+
+  const toolbar = (
+    <FilterBar search={{ label: 'Search milestones', placeholder: 'Search milestones…', value: search, onChange: setSearch }}
+      end={(
+        <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <ToggleButtonGroup exclusive size="small" value={mode} aria-label="Milestones view"
+            onChange={(_e, next) => { if (next) changeMode(next) }}
+            sx={{ '& .MuiToggleButton-root': { gap: 0.75, px: 1.5, minHeight: desktop ? 'auto' : 44 } }}>
+            <ToggleButton value="list"><FormatListBulleted fontSize="small" />List</ToggleButton>
+            <ToggleButton value="timeline"><ShowChart fontSize="small" />Timeline</ToggleButton>
+          </ToggleButtonGroup>
+          {addButton}
+        </Stack>
+      )}>
+      <TextField select size="small" value={state} onChange={(e) => setState(e.target.value)} sx={{ minWidth: 190 }}
+        slotProps={{
+          select: { displayEmpty: true },
+          htmlInput: { 'aria-label': 'Status' },
+          input: { startAdornment: <InputAdornment position="start">Status</InputAdornment> },
+        }}>
+        {STATUS_FILTERS.map(([value, label]) => <MenuItem key={value} value={value}>{label}</MenuItem>)}
+      </TextField>
+    </FilterBar>
+  )
+
+  const listView = (
+    <>
+      <MilestoneList items={shown} all={items} view={view} pendingByMilestone={pendingByMilestone}
+        myHoursByMilestone={myHoursByMilestone} selectedId={current ? String(current.id) : undefined}
+        narrow={desktop && Boolean(current)} onOpen={(m) => openMilestone(m)} menuFor={view.manage ? menuFor : undefined}
+        loading={milestones.isLoading} empty={noMatch} />
+      {shown.length ? (
+        <Stack sx={{ flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', gap: { xs: 0.5, md: 2 },
+          color: 'text.secondary', mt: 1.5 }}>
+          <Typography variant="caption" component="p" sx={{ m: 0 }}>
+            {`${plural(shown.length, 'milestone', 'milestones')} · Select a row to view details, discussion and history.`}
+          </Typography>
+          <Typography variant="caption" component="p" sx={{ m: 0 }}>
+            <span aria-hidden="true">ⓘ</span>{' '}Effort shows logged / estimated hours. Status does not imply hours are approved.
+          </Typography>
+        </Stack>
+      ) : null}
+    </>
+  )
+
+  const timelineView = (
+    <>
+      <Stack sx={{ flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'baseline' }, gap: { xs: 0.5, sm: 2 }, mb: 1.5 }}>
+        <Typography variant="h3" component="h2">Planned schedule</Typography>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {`${formatDateRange(project.start_date, project.predicted_end_date)} · Bars show planned dates, colours show current status.`}
+        </Typography>
+      </Stack>
+      {milestones.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+      {!milestones.isLoading && shown.length ? (
+        <Timeline items={shown} all={items} range={{ start: project.start_date, end: project.predicted_end_date }}
+          onOpen={(m) => openMilestone(m)} layout={wide && !current ? 'detailed' : 'default'} />
+      ) : null}
+      {!milestones.isLoading && !shown.length ? noMatch : null}
+      <FootNote note="Select a milestone to inspect dependencies, approvals and history." />
+    </>
+  )
+
+  const listCard = (
+    <Paper ref={listRef} variant="outlined" sx={{ p: 2, minWidth: 0 }}>
+      {toolbar}
+      <Box sx={{ mt: 2 }}>{mode === 'timeline' ? timelineView : listView}</Box>
+    </Paper>
+  )
+  const failed = Boolean(milestones.error) && !milestones.data
+  const empty = milestones.isSuccess && items.length === 0
 
   return (
     <Stack sx={{ gap: 2 }}>
-      {manage ? (
-        <Stack direction="row" sx={{ justifyContent: 'flex-end' }}>
-          <Button variant="contained" startIcon={<Add />} onClick={() => setEditing({ milestone: null })}>Add milestone</Button>
-        </Stack>
+      {items.length ? (
+        <MilestoneStatusBar items={items} headingComponent="h2"
+          title={`${done} of ${plural(items.length, 'milestone', 'milestones')} complete`} aside={hasAside ? summaryAside : undefined} />
       ) : null}
       {project.work_mode === 'pull' ? (
         <Alert severity="info">
@@ -205,29 +252,24 @@ export default function MilestonesTab({ project, manage, extra }) {
       ) : null}
       {warning ? <Alert severity="warning" onClose={() => setWarning('')}>{warning}</Alert> : null}
       <ErrorAlert error={milestones.error} onRetry={() => milestones.refetch()} />
-      {milestones.isLoading ? <Skeleton variant="rounded" height={160} /> : null}
-      {!milestones.isLoading && !milestones.error && items.length === 0 ? (
-        <EmptyState title="No milestones yet"
-          description={manage ? 'Break the project into milestones with dates, owners and dependencies.' : 'The project manager adds milestones here.'} />
+      {empty ? (
+        <Paper variant="outlined">
+          <EmptyState title="No milestones yet"
+            description={view.manage ? 'Break the project into milestones with dates, owners and dependencies.'
+              : "Your manager hasn't planned any milestones yet."}
+            action={addButton} />
+        </Paper>
       ) : null}
-      <MilestoneStatusBar items={items} />
-      {items.length ? (
-        <MilestoneTimeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }}
-          onOpen={(m) => setParams((p) => { p.set('milestone', m.id); return p }, { replace: true })} />
+      {!empty && !failed ? (
+        <MilestonePanel project={project} milestone={current} items={items} members={members.data ?? []} user={user} view={view}
+          myHours={view.mine && profile.data ? (myHoursByMilestone[String(current?.id)] ?? 0) : undefined}
+          onClose={closePanel} returnFocus={returnFocus} onOpenPanel={openMilestone} onWarning={setWarning}
+          onArchive={(x) => archivedHere.current.add(String(x.id))} list={listCard} />
       ) : null}
-      {items.map((m) => (
-        <MilestoneCard key={m.id} m={m} project={project} names={names} manage={manage} extra={extra}
-          conversations={conversations.data?.items} focused={focus === String(m.id)} navKey={navKey}
-          onEdit={(milestone) => setEditing({ milestone })} onArchive={setArchiving} />
-      ))}
-      {editing ? (
-        <MilestoneDialog project={project} milestone={editing.milestone} milestones={items} members={members.data ?? []}
-          onClose={() => setEditing(null)} onWarning={setWarning} />
+      {adding ? (
+        <MilestoneDialog project={project} milestone={null} milestones={items} members={members.data ?? []}
+          onClose={() => setAdding(false)} onWarning={setWarning} />
       ) : null}
-      <ConfirmDialog open={Boolean(archiving)} title="Archive this milestone?" confirmLabel="Archive" busy={archive.isPending}
-        body="It's hidden from the project and stops counting toward progress and budget. An admin can restore it."
-        onClose={() => setArchiving(null)}
-        onConfirm={async () => { await archive.mutateAsync(archiving.id); setArchiving(null) }} />
     </Stack>
   )
 }

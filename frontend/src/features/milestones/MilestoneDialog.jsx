@@ -18,8 +18,9 @@ const FIELDS = ['name', 'description', 'start_date', 'end_date', 'difficulty', '
   'completion_criteria']
 const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x))
 
-/** Create or edit a milestone, its dependencies and its assignees. */
-export default function MilestoneDialog({ project, milestone, milestones, members, onClose, onWarning }) {
+/** Create or edit a milestone, its dependencies and its assignees. `focusField` ('name', 'assignee_ids' or
+ * 'predecessor_ids') picks the field that takes focus on open, so "Assign people" lands on "Assigned to". */
+export default function MilestoneDialog({ project, milestone, milestones, members, onClose, onWarning, focusField = 'name' }) {
   const titleId = useId()
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const save = useSaveMilestone(project.id)
@@ -74,7 +75,7 @@ export default function MilestoneDialog({ project, milestone, milestones, member
 
   const multi = (name, label, options, render, helper) => (
     <Controller name={name} control={control} render={({ field }) => (
-      <TextField select label={label} {...field} error={Boolean(errors[name])} disabled={isSubmitting}
+      <TextField select label={label} {...field} autoFocus={focusField === name} error={Boolean(errors[name])} disabled={isSubmitting}
         helperText={errors[name]?.message ?? helper}
         slotProps={{ select: { multiple: true, renderValue: (ids) => ids.map(render).join(', ') } }}>
         {options.map((o) => (
@@ -98,7 +99,7 @@ export default function MilestoneDialog({ project, milestone, milestones, member
             : <ErrorAlert error={failure} sx={{ mb: 2 }} />) : null}
           <Grid container spacing={2} sx={{ pt: 1 }}>
             <Grid size={12}>
-              <TextField label="Name" required autoFocus {...register('name')} error={Boolean(errors.name)}
+              <TextField label="Name" required autoFocus={focusField === 'name'} {...register('name')} error={Boolean(errors.name)}
                 helperText={errors.name?.message} disabled={isSubmitting} />
             </Grid>
             <Grid size={12}>

@@ -39,6 +39,20 @@ describe('shared components', () => {
     expect(screen.getByText('On hold')).toBeInTheDocument()
   })
 
+  test('StatusChip with icon keeps the same label and adds an icon; waiting is striped', () => {
+    const { unmount } = renderWithProviders(<StatusChip status="completed" icon />)
+    const chip = screen.getByText('Completed').closest('.MuiChip-root')
+    expect(chip.querySelector('.MuiChip-icon')).not.toBeNull()
+    expect(chip.querySelector('.MuiChip-icon')).toHaveAttribute('aria-hidden', 'true')
+    unmount()
+    const plain = renderWithProviders(<StatusChip status="completed" />)
+    expect(screen.getByText('Completed').closest('.MuiChip-root').querySelector('.MuiChip-icon')).toBeNull()
+    plain.unmount()
+    renderWithProviders(<StatusChip status="waiting" icon />)
+    const waiting = screen.getByText('Waiting on dependencies').closest('.MuiChip-root').querySelector('.MuiChip-icon')
+    expect(getComputedStyle(waiting).backgroundImage).toContain('repeating-linear-gradient')
+  })
+
   test('RiskBadges translate reason codes', () => {
     renderWithProviders(<RiskBadges reasons={['OVERDUE_MILESTONE', 'PAST_DUE', 'BUDGET_BURN']} />)
     for (const text of ['Overdue milestone', 'Past due date', 'Budget burning faster than progress']) {

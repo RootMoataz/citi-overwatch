@@ -238,6 +238,34 @@ describe('Timeline', () => {
     expect(screen.getByText('Sep 1 – Oct 19')).toBeInTheDocument()
   })
 
+  test('layout="detailed" numbers each row, shows its state chip and adds a Dependency column', () => {
+    renderWithProviders(<Timeline layout="detailed" range={range} items={[
+      ms({ id: 'm1', name: 'Plan', start_date: '2026-07-20', end_date: '2026-08-10', status: 'completed', display_status: 'completed' }),
+      ms({ id: 'm2', name: 'Build', start_date: '2026-09-01', end_date: '2026-10-19', status: 'in_progress', display_status: 'in_progress',
+        predecessors: ['m1'] }),
+    ]} />)
+    expect(screen.getByText('Milestone')).toBeInTheDocument()
+    expect(screen.getByText('Dependency')).toBeInTheDocument()
+    expect(within(row('Plan')).getByText('1')).toBeInTheDocument()
+    expect(within(row('Plan')).getByText('Completed')).toBeInTheDocument()
+    expect(within(row('Plan')).getByText('None')).toBeInTheDocument()
+    expect(within(row('Build')).getByText('2')).toBeInTheDocument()
+    expect(within(row('Build')).getByText('In progress')).toBeInTheDocument()
+    expect(within(row('Build')).getByText('After Plan')).toBeInTheDocument()
+    expect(screen.queryByText(/^after /)).not.toBeInTheDocument()   // the Dependency column replaces the "after" line
+    expect(screen.getByText('Sep 1 – Oct 19')).toBeInTheDocument()   // the chip carries the state, so the bar shows dates only
+    expect(screen.getByRole('list', { name: 'Status colours' })).toBeInTheDocument()
+  })
+
+  test('`all` keeps numbers and dependency names when only some rows are shown', () => {
+    const plan = ms({ id: 'm1', name: 'Plan', status: 'completed', display_status: 'completed' })
+    const build = ms({ id: 'm2', name: 'Build', predecessors: ['m1'] })
+    renderWithProviders(<Timeline layout="detailed" range={range} items={[build]} all={[plan, build]} />)
+    expect(screen.queryByRole('listitem', { name: /^Plan,/ })).not.toBeInTheDocument()
+    expect(within(row('Build')).getByText('2')).toBeInTheDocument()
+    expect(within(row('Build')).getByText('After Plan')).toBeInTheDocument()
+  })
+
   test('the default layout keeps the legend and the after line', () => {
     renderWithProviders(<Timeline range={range} items={[
       ms({ id: 'm1', name: 'Plan', status: 'completed', display_status: 'completed' }),

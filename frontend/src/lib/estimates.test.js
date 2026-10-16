@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { estimateTone, projectEffort, timeFrameLine, usageLine } from './estimates.js'
+import { effortText, estimateTone, projectEffort, timeFrameLine, usageLine } from './estimates.js'
 
 const m = (overrides = {}) => ({ estimated_hours: 120, duration_days: 30, working_days: 22, logged_hours: 0,
   estimate_used_pct: 0, ...overrides })
@@ -19,6 +19,16 @@ describe('estimates', () => {
     expect(usageLine(m({ logged_hours: 130, estimate_used_pct: 108.3 }))).toEqual(
       { text: '130h logged · 108% of estimate · over estimate', tone: 'alert' })
     expect(usageLine(m({ logged_hours: 5, estimated_hours: null, estimate_used_pct: null }))).toEqual({ text: '5h logged', tone: 'ok' })
+  })
+
+  test('effort text: logged / estimate, the estimate alone, logged alone, or a dash; and what is over', () => {
+    expect(effortText({ logged_hours: 118, estimated_hours: 264 })).toEqual({ text: '118h / 264h', over: null })
+    expect(effortText({ logged_hours: 0, estimated_hours: 114 })).toEqual({ text: '114h estimate', over: null })
+    expect(effortText({ logged_hours: '7.5', estimated_hours: null })).toEqual({ text: '7.5h logged', over: null })
+    expect(effortText({ logged_hours: 0, estimated_hours: null })).toEqual({ text: '—', over: null })
+    expect(effortText({ logged_hours: 100.5, estimated_hours: 100 })).toEqual({ text: '100.5h / 100h', over: '+0.5h over estimate' })
+    expect(effortText({ logged_hours: 100.3, estimated_hours: 100.1 }).over).toBe('+0.2h over estimate')   // no float noise
+    expect(effortText({ logged_hours: 100, estimated_hours: 100 }).over).toBeNull()
   })
 
   test('tones switch above 90% and above 100%', () => {
