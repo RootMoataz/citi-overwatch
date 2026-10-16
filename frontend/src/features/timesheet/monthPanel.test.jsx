@@ -330,6 +330,30 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
     await waitFor(() => expect(day('Wed 14 Oct')).toHaveFocus())
   })
 
+  test('Page Up and Page Down go by the month shown, also from a day of the month before or after in the grid', async () => {
+    const user = userEvent.setup()
+    render('2026-10', undefined, { follow: true })
+    await panel('Wednesday 14 October 2026')
+    // 28 Sep leads the October grid: Page Up is September (the month before October), not August.
+    day('Mon 28 Sep').focus()
+    await user.keyboard('{PageUp}')
+    expect(calls.onMonthChange).toHaveBeenLastCalledWith('2026-09')
+    expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(day('Mon 28 Sep')).toHaveFocus())
+    // 4 Oct trails the September grid: Page Down is October, on the 4th.
+    day('Sun 4 Oct').focus()
+    await user.keyboard('{PageDown}')
+    expect(calls.onMonthChange).toHaveBeenLastCalledWith('2026-10')
+    expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(day('Sun 4 Oct')).toHaveFocus())
+    // 1 Nov trails the October grid: Page Down is November, on the 1st.
+    day('Sun 1 Nov').focus()
+    await user.keyboard('{PageDown}')
+    expect(calls.onMonthChange).toHaveBeenLastCalledWith('2026-11')
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(day('Sun 1 Nov')).toHaveFocus())
+  })
+
   test('an arrow past the edge of the grid opens the next month there', async () => {
     const user = userEvent.setup()
     render('2026-10', undefined, { follow: true })

@@ -23,16 +23,19 @@ const isRealDay = (iso) => typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test
 const KEYBOARD_HINT = 'Arrow keys move between days, Home and End to the start and end of the week, Page Up and Page Down to '
   + 'the previous and next month. Enter or Space selects a day.'
 
-/** The same day of the month `n` months away, or that month's last day when it is shorter ("Jan 31" + 1 → "Feb 28"). */
-function sameDayIn(iso, n) {
-  const month = shiftMonth(iso.slice(0, 7), n)
+/** `iso`'s day of the month in the month `n` months from `shown`, or that month's last day when it is shorter ("Jan 31"
+ * + 1 → "Feb 28"). It counts from the month shown, not from `iso`'s own month: from 28 Sep in the October grid, Page Up
+ * is 28 Sep (September), not 28 Aug. */
+function sameDayIn(iso, n, shown) {
+  const month = shiftMonth(shown, n)
   const [y, m] = month.split('-').map(Number)
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
   return `${month}-${String(Math.min(Number(iso.slice(8)), last)).padStart(2, '0')}`
 }
 
-/** Where a key moves the focus from `iso` (WAI-ARIA grid keys), or null for any other key. Weeks start on Monday. */
-function moveFrom(iso, key) {
+/** Where a key moves the focus from `iso` in the grid of month `shown` (WAI-ARIA grid keys), or null for any other key.
+ * Weeks start on Monday. */
+function moveFrom(iso, key, shown) {
   const weekday = (new Date(`${iso}T00:00:00Z`).getUTCDay() + 6) % 7
   switch (key) {
     case 'ArrowLeft': return addDays(iso, -1)
@@ -41,8 +44,8 @@ function moveFrom(iso, key) {
     case 'ArrowDown': return addDays(iso, 7)
     case 'Home': return addDays(iso, -weekday)
     case 'End': return addDays(iso, 6 - weekday)
-    case 'PageUp': return sameDayIn(iso, -1)
-    case 'PageDown': return sameDayIn(iso, 1)
+    case 'PageUp': return sameDayIn(iso, -1, shown)
+    case 'PageDown': return sameDayIn(iso, 1, shown)
     default: return null
   }
 }
@@ -144,7 +147,7 @@ export default function MonthView({ month, day, onMonthChange, onSelectDay, onOp
   }
   const onGridKey = (from, event) => {
     if (event.altKey || event.ctrlKey || event.metaKey) return // browser shortcuts (Alt+Left is Back) stay the browser's
-    const to = moveFrom(from, event.key)
+    const to = moveFrom(from, event.key, month)
     if (!to) return
     event.preventDefault()
     setFocusDay(to)
