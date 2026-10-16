@@ -26,6 +26,12 @@ export default function ResponsiveTable({ rows, columns, renderCard, loading = f
     )
   }
 
+  return <CardList rows={rows} renderCard={renderCard} onRowClick={onRowClick} getRowId={getRowId} ariaLabel={ariaLabel}
+    loading={loading} />
+}
+
+/** The phone layout: one tappable card per row (a plain card when there is no row click). */
+export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, loading = false }) {
   if (loading) {
     return <Stack sx={{ gap: 1 }}>{[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={88} />)}</Stack>
   }

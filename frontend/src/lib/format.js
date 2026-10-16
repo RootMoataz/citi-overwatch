@@ -61,3 +61,34 @@ export const formatDayShort = (iso) =>
 /** "2026-10-14" → "Wednesday 14 October 2026" */
 export const formatDayFull = (iso) => `${dayPart(iso, { weekday: 'long' })} ${dayPart(iso, { day: 'numeric' })} `
   + `${dayPart(iso, { month: 'long' })} ${dayPart(iso, { year: 'numeric' })}`
+
+const nyParts = new Intl.DateTimeFormat('en-CA',
+  { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
+
+/** Today's date (YYYY-MM-DD) on the New York calendar, which every project footer and due line uses. */
+export function nyTodayIso(now = new Date()) {
+  const parts = Object.fromEntries(nyParts.formatToParts(now).map((p) => [p.type, p.value]))
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+/** "2026-10-15" → "October 15, 2026" */
+export function formatLongDate(iso) {
+  if (!iso) return '—'
+  return dayPart(String(iso).slice(0, 10), { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+/** Whole days from one date to another (negative when `toIso` is earlier). */
+export function daysBetween(fromIso, toIso) {
+  const ms = (iso) => {
+    const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+    return Date.UTC(y, m - 1, d)
+  }
+  return Math.round((ms(toIso) - ms(fromIso)) / 86400000)
+}
+
+/** "Jul 15 – Dec 27, 2026" within a year; "Dec 1, 2025 – Mar 3, 2026" across years. */
+export function formatDateRange(startIso, endIso) {
+  const sameYear = String(startIso).slice(0, 4) === String(endIso).slice(0, 4)
+  const start = sameYear ? dayPart(startIso, { month: 'short', day: 'numeric' }) : formatDate(startIso)
+  return `${start} – ${formatDate(endIso)}`
+}
