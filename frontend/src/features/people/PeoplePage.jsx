@@ -67,7 +67,7 @@ export default function PeoplePage() {
             <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreating(true)}>New account</Button>
           </DemoLock>
         </>} />
-      <DemoAccessNotice text="Demo access · Account creation and editing are unavailable in this session." />
+      <DemoAccessNotice page="people" text="Demo access · Account creation and editing are unavailable in this session." />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>
           <TextField type="search" label="Search people" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 2 }}

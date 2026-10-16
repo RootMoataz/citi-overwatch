@@ -1,7 +1,21 @@
-// The public demo admin's session: a countdown to the server-set end, and per-session "seen" flags for the welcome
-// dialog and the hidden banner. The server enforces the end (backend auth/service.py); this only shows it.
+// The public demo admin's session: a countdown to the server-set end, per-session flags (the welcome dialog seen, a
+// page's demo notice hidden) and the colours of the demo pill and notices. The server enforces the end (backend
+// auth/service.py); this only shows it.
+import { alpha, lighten } from '@mui/material/styles'
 import { useCallback, useEffect, useState } from 'react'
 import { isPublicDemo } from './permissions.js'
+
+/**
+ * The demo pill's and notices' colours: a tint of the warning colour (error under 1:00) with text in a shade that reads
+ * at 4.5:1 or more on it: the darker tone on a solid cream in light mode, the lighter one on a see-through tint in dark.
+ */
+export function demoTone(theme, { urgent = false } = {}) {
+  const palette = urgent ? theme.palette.error : theme.palette.warning
+  if (theme.palette.mode === 'dark') {
+    return { text: palette.light, fill: alpha(palette.main, 0.16), hover: alpha(palette.main, 0.26), edge: alpha(palette.main, 0.45) }
+  }
+  return { text: palette.dark, fill: lighten(palette.main, 0.9), hover: lighten(palette.main, 0.8), edge: alpha(palette.main, 0.35) }
+}
 
 /** "4:32" for 272 seconds; never negative. */
 export function formatClock(seconds) {

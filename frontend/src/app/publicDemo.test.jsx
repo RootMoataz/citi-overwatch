@@ -1,4 +1,5 @@
-// The public demo admin (demo.admin): the countdown banner, the welcome dialog, and the actions it can't take.
+// The public demo admin (demo.admin): the countdown pill, the welcome dialog, the page notices, and the actions it can't take.
+import { getContrastRatio } from '@mui/material/styles'
 import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
@@ -10,9 +11,13 @@ import UserDetailPage from '../features/people/UserDetailPage.jsx'
 import ProfilePage from '../features/profile/ProfilePage.jsx'
 import SkillsPage from '../features/skills/SkillsPage.jsx'
 import ProjectDetailPage from '../features/projects/ProjectDetailPage.jsx'
+import { demoTone } from '../lib/demoSession.js'
 import { API, HttpResponse, http, server } from '../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
+import { setViewport } from '../test/setup.js'
+import { DemoAccessNotice } from './DemoSession.jsx'
 import Layout from './Layout.jsx'
+import { buildTheme } from './theme.js'
 
 const NOW = new Date('2026-10-15T12:00:00Z')
 const DISABLED = 'Disabled in the public demo'
@@ -52,6 +57,52 @@ describe('demo pill and welcome', () => {
     expect(screen.getByRole('button', { name: /demo session/i })).toBeInTheDocument()
     expect(screen.queryByText(/for demonstration only/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('region', { name: /demo session/i })).not.toBeInTheDocument()
+  })
+
+  test('the pill label is one run of text, so the space after "·" is kept', () => {
+    renderLayout(demoWithTimeLeft(269))
+    const pill = screen.getByRole('button', { name: /demo session/i })
+    // Split over two flex items the space at the end of the first one collapses ("Demo session ·4:29").
+    expect(within(pill).getByText('Demo session · 4:29')).toBeInTheDocument()
+  })
+
+  test('below md the pill is compact: the timer icon and m:ss, with the same name', () => {
+    setViewport(390)
+    renderLayout(demoWithTimeLeft(269))
+    const pill = screen.getByRole('button', { name: 'Demo session, signed out in 4 minutes 29 seconds' })
+    expect(pill).toHaveTextContent(/^4:29$/)
+    expect(pill.querySelector('svg')).not.toBeNull()
+  })
+
+  test("the pill's name holds still while it has focus, and catches up when focus leaves", () => {
+    renderLayout(demoWithTimeLeft(269))
+    const pill = screen.getByRole('button', { name: /demo session/i })
+    act(() => { pill.focus() })
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(pill).toHaveTextContent('Demo session · 4:26')
+    expect(pill).toHaveAccessibleName('Demo session, signed out in 4 minutes 29 seconds')
+    act(() => { pill.blur() })
+    expect(pill).toHaveAccessibleName('Demo session, signed out in 4 minutes 26 seconds')
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(pill).toHaveAccessibleName('Demo session, signed out in 4 minutes 25 seconds')
+  })
+
+  test('the 1:00 live region is visually hidden, not as wide as the bar', () => {
+    renderLayout(demoWithTimeLeft(90))
+    const live = screen.getByRole('status')
+    const style = getComputedStyle(live)
+    expect(style.width).toBe('1px')
+    expect(style.height).toBe('1px')
+    expect(style.position).toBe('absolute')
+  })
+
+  test('the popover says how much time is left (the 1:00 announcement is muted while it is open)', async () => {
+    renderLayout(demoWithTimeLeft(65))
+    act(() => { screen.getByRole('button', { name: /demo session/i }).click() })
+    const popover = await screen.findByRole('dialog', { name: /about the demo session/i })
+    expect(popover).toHaveTextContent('Time left: 1:05')
+    act(() => { vi.advanceTimersByTime(6000) })
+    expect(popover).toHaveTextContent('Time left: 0:59')
   })
 
   test('the pill counts down and its name says the time left in words', () => {
@@ -260,29 +311,65 @@ describe('Demo access notices', () => {
       http.get(`${API}/archive`, () => HttpResponse.json({ items: [] })))
   }
 
+  // The notice: a tinted box with a timer icon, "Demo access" in bold, then the page's text.
+  const notice = () => screen.queryByRole('note', { name: 'Demo access' })
+
   test.each(PAGES)('%s shows its notice to the demo admin and nobody else', async (title, Page, route, text) => {
     stubLists()
     const { unmount } = renderAsUser(<Page />, { user: users.demoAdmin, route, path: route })
     expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
-    expect(screen.getByText(text)).toBeInTheDocument()
+    expect(notice().textContent).toBe(text)
+    expect(within(notice()).getByText('Demo access').tagName).toBe('STRONG')
+    expect(notice().querySelector('svg[data-testid="TimerOutlinedIcon"]')).not.toBeNull()
     unmount()
     renderAsUser(<Page />, { user: users.admin, route, path: route })
     expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
-    expect(screen.queryByText(/^Demo access/)).not.toBeInTheDocument()
+    expect(notice()).toBeNull()
   })
 
   test('the Archive notice can be hidden for the session, the others cannot', async () => {
     stubLists()
     const { unmount } = renderAsUser(<DepartmentsPage />, { user: users.demoAdmin, route: '/departments', path: '/departments' })
-    expect(await screen.findByText(/^Demo access/)).toBeInTheDocument()
+    expect(await screen.findByRole('note', { name: 'Demo access' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /hide demo access notice/i })).not.toBeInTheDocument()
     unmount()
     const first = renderAsUser(<ArchivePage />, { user: users.demoAdmin, route: '/archive', path: '/archive' })
     await userEvent.click(await screen.findByRole('button', { name: /hide demo access notice/i }))
-    expect(screen.queryByText(/^Demo access/)).not.toBeInTheDocument()
+    expect(notice()).toBeNull()
     first.unmount()
     renderAsUser(<ArchivePage />, { user: users.demoAdmin, route: '/archive', path: '/archive' })
     expect(await screen.findByRole('heading', { name: 'Archive' })).toBeInTheDocument()
-    expect(screen.queryByText(/^Demo access/)).not.toBeInTheDocument()
+    expect(notice()).toBeNull()
+  })
+
+  test("hiding one page's notice leaves another page's dismissible notice alone", async () => {
+    stubLists()
+    const first = renderAsUser(<ArchivePage />, { user: users.demoAdmin, route: '/archive', path: '/archive' })
+    await userEvent.click(await screen.findByRole('button', { name: /hide demo access notice/i }))
+    first.unmount()
+    renderAsUser(<DemoAccessNotice page="another-page" text="Demo access · Something else is limited." dismissible />,
+      { user: users.demoAdmin })
+    expect(notice()).toHaveTextContent('Demo access · Something else is limited.')
+  })
+})
+
+describe('demo pill and notice colours', () => {
+  // A see-through tint (dark mode) is seen laid over the surface under it; a solid one (light mode) as it is.
+  const over = (tint, surface) => {
+    const [r, g, b, a = 1] = tint.match(/[\d.]+/g).map(Number)
+    const base = surface.replace('#', '').match(/../g).map((h) => parseInt(h, 16))
+    return `rgb(${[r, g, b].map((c, i) => Math.round(c * a + base[i] * (1 - a))).join(', ')})`
+  }
+  test.each(['light', 'dark'])('%s: the pill and the notice text reach 4.5:1 on their tint', (mode) => {
+    const theme = buildTheme(mode)
+    const bar = theme.components.MuiAppBar.styleOverrides.root.backgroundColor
+    for (const urgent of [false, true]) {
+      const tone = demoTone(theme, { urgent })
+      expect(getContrastRatio(tone.text, over(tone.fill, bar))).toBeGreaterThanOrEqual(4.5)
+    }
+    const tone = demoTone(theme)
+    for (const surface of [theme.palette.background.default, theme.palette.background.paper]) {
+      expect(getContrastRatio(tone.text, over(tone.fill, surface))).toBeGreaterThanOrEqual(4.5)
+    }
   })
 })
