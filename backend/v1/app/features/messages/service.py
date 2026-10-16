@@ -198,6 +198,14 @@ CONVERSATION_SELECT = """
     LEFT JOIN projects p ON p.id = m.project_id"""
 
 
+def _archived_hidden(ctx: Ctx) -> str:
+    """An employee doesn't see conversations about archived work (a milestone that is archived or sits in an archived
+    project); everyone else is unchanged. Needs CONVERSATION_SELECT's m and p."""
+    if ctx.role != "employee":
+        return ""
+    return " AND (c.milestone_id IS NULL OR (NOT m.is_archived AND NOT p.is_archived))"
+
+
 def _views(conn, ctx: Ctx, rows: list[dict]) -> list[dict]:
     if not rows:
         return []
@@ -243,7 +251,8 @@ def _load(conn, ctx: Ctx, conversation_id) -> dict:
     """The conversation row if the caller takes part in it; 404 otherwise (whether or not it exists)."""
     if not is_uuid(conversation_id):
         raise _not_found()
-    row = query_one(conn, CONVERSATION_SELECT + " WHERE c.id = CAST(:c AS uuid)", c=str(conversation_id), me=ctx.user_id)
+    row = query_one(conn, CONVERSATION_SELECT + " WHERE c.id = CAST(:c AS uuid)" + _archived_hidden(ctx),
+                    c=str(conversation_id), me=ctx.user_id)
     if not row:
         raise _not_found()
     return row
@@ -254,7 +263,7 @@ def _view(conn, ctx: Ctx, conversation_id) -> dict:
 
 
 def list_conversations(conn, ctx: Ctx) -> dict:
-    rows = query(conn, CONVERSATION_SELECT + """
+    rows = query(conn, CONVERSATION_SELECT + " WHERE true" + _archived_hidden(ctx) + """
         ORDER BY coalesce(c.last_message_at, c.created_at) DESC, c.id LIMIT 200""", me=ctx.user_id)
     return {"items": _views(conn, ctx, rows)}
 
@@ -264,7 +273,11 @@ def unread_count(conn, ctx: Ctx) -> dict:
         SELECT count(*) AS unread, count(DISTINCT m.conversation_id) AS conversations
         FROM conversation_participants cp JOIN messages m ON m.conversation_id = cp.conversation_id
         WHERE cp.user_id = CAST(:me AS uuid) AND m.sender_id <> CAST(:me AS uuid)
-          AND m.created_at > coalesce(cp.last_read_at, '-infinity'::timestamptz)""", me=ctx.user_id)
+          AND m.created_at > coalesce(cp.last_read_at, '-infinity'::timestamptz)
+          AND cp.conversation_id IN (SELECT c.id FROM conversations c
+                                     LEFT JOIN milestones m ON m.id = c.milestone_id
+                                     LEFT JOIN projects p ON p.id = m.project_id
+                                     WHERE true""" + _archived_hidden(ctx) + ")", me=ctx.user_id)
     return {"unread": row["unread"], "conversations": row["conversations"]}
 
 
