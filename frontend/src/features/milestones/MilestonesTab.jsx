@@ -180,7 +180,7 @@ export default function MilestonesTab({ project, manage, extra }) {
   const members = useMembers(project.id)
   const archive = useArchiveMilestone(project.id)
   const conversations = useConversations()  // which milestones already have a discussion the viewer is in
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const focus = params.get('milestone')
   const [editing, setEditing] = useState(null)
   const [archiving, setArchiving] = useState(null)
@@ -208,7 +208,10 @@ export default function MilestonesTab({ project, manage, extra }) {
         <EmptyState title="No milestones yet"
           description={manage ? 'Break the project into milestones with dates, owners and dependencies.' : 'The project manager adds milestones here.'} />
       ) : null}
-      {items.length ? <MilestoneTimeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }} /> : null}
+      {items.length ? (
+        <MilestoneTimeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }}
+          onOpen={(m) => setParams((p) => { p.set('milestone', m.id); return p })} />
+      ) : null}
       {items.map((m) => (
         <MilestoneCard key={m.id} m={m} project={project} names={names} manage={manage} extra={extra}
           conversations={conversations.data?.items} focused={focus === String(m.id)}

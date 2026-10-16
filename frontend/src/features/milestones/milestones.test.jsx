@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import MilestonesTab from './MilestonesTab.jsx'
@@ -132,6 +132,22 @@ describe('MilestonesTab', () => {
     expect(bars).toHaveLength(3)
     expect(bars[1]).toHaveAccessibleName(/Schema Mapping, Mar 1, 2026 to Jun 30, 2026, Waiting on dependencies/)
     expect(bars[1]).toHaveAttribute('tabindex', '0')
+  })
+
+  test('clicking a timeline row sets ?milestone and scrolls that card into view', async () => {
+    const scroll = vi.fn()
+    HTMLElement.prototype.scrollIntoView = scroll // jsdom has no layout, so no scrollIntoView
+    try {
+      server.use(...handlers())
+      renderTab(users.employee, false)
+      const timeline = await screen.findByRole('list', { name: /milestone timeline/i })
+      await userEvent.click(within(timeline).getByRole('listitem', { name: /^Cutover,/ }))
+      expect(screen.getByTestId('location')).toHaveTextContent('?milestone=m3')
+      await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1))
+      expect(scroll.mock.contexts[0]).toBe(await card('Cutover'))
+    } finally {
+      delete HTMLElement.prototype.scrollIntoView
+    }
   })
 
   test('notes thread shows authors and lets assignees post', async () => {
