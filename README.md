@@ -217,7 +217,7 @@ aws lambda invoke --function-name coding-workshop-v1-<suffix>   --cli-binary-for
 ./bin/deploy-frontend.sh                 # builds the React app and syncs it to S3 + invalidates CloudFront
 ```
 
-**Windows notes:** the workshop scripts expect Linux tools. On Windows, put shims for `dig`, `jq`, `terraform` and `python3` in `~/bin`, and run AWS CLI log commands with `MSYS_NO_PATHCONV=1` so Git Bash doesn't rewrite `/aws/lambda/...` paths. The workshop's original setup guide is preserved in [docs/WORKSHOP_README.md](docs/WORKSHOP_README.md).
+**Windows notes:** the workshop scripts expect Linux tools. On Windows, put shims for `dig`, `jq`, `terraform` and `python3` in `~/bin`, and run AWS CLI log commands with `MSYS_NO_PATHCONV=1` so Git Bash doesn't rewrite `/aws/lambda/...` paths. If a deploy script stops at "Failed to retrieve AWS Account ID" (`SignatureDoesNotMatch`), run it again: each run fetches fresh workshop credentials. If checks against the live site fail with TLS resets (curl exit 35), the network's IPv6 route to CloudFront may be the cause; `curl -4` works around it. The workshop's original setup guide is preserved in [docs/WORKSHOP_README.md](docs/WORKSHOP_README.md).
 
 ## Trade-offs and assumptions
 

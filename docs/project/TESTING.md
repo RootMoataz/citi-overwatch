@@ -85,7 +85,7 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 
 ## Current results (2026-10-16)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The frontend and end-to-end figures are from runs on 16 October, after the redesign's shell (phase 1), its fix wave and the last layout fixes (wave 3): the frontend suite passed twice in a row with no failure (and five times in a row at the fix wave).
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The frontend and end-to-end figures are from runs on 16 October, after the redesign's shell (phase 1), its fix wave and the last layout fixes (wave 3): the frontend suite passed twice in a row with no failure (and five times in a row at the fix wave). The release run at `bc663bf`, just before the 16 October deploy, repeated all three: backend 1,227 passed, frontend 1,016 passed twice in a row, lint clean, end-to-end 23 passed (5.4 minutes, run alone).
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
@@ -93,6 +93,7 @@ Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit,
 1086 passed, 4 failed in 172.21s (0:02:52)        # at 3e61cd3, Thursday evening New York = Friday UTC: the 4 weekday-dependent tests
 1227 passed in 209.94s (0:03:29)                  # 16 Oct, 07:53 UTC (a Friday), with the weekday fix
 1227 passed in 211.16s (0:03:31)                  # 16 Oct, 08:05 UTC, with Delta's $37,000 budget too
+1227 passed in 312.50s (0:05:12)                  # 16 Oct, 09:04 UTC, at bc663bf: the release run before the deploy
 
 # backend/v1: same, with --cov=app (at 323ea89)
 app\features\time\timers.py                240      9    96%
@@ -113,6 +114,7 @@ no problems
 
 # frontend: npx playwright test
   23 passed (5.2m)
+  23 passed (5.4m)                                 # the release run at bc663bf, alone
 ```
 
 The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, plus 17 layout checks: 23 tests, 5.2 minutes) was last brought up to date on 16 October, with the shell fix wave and wave 3 (the layout checks: 320 px phones, the 24 px back link, 900–1024 px desktops; the Month panel's buttons are now named "Edit in Day view, <milestone>"): the overtime journey logs day by day in the Day view (hours and a work note per day, one **Submit** for the week) and follows the alert to the Timesheets page (after submitting, it switches to **Month**, selects Friday, checks that the day's panel lists its 9h pending, and presses **Edit in Day view** to land on that day; on a phone the panel sits under the grid), and the onboarding journey lands on My week. All 23 pass. When the machine is busy with other suites, the milestones journey can time out waiting on the API; run the end-to-end suite on its own.
