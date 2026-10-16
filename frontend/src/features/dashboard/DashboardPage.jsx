@@ -296,7 +296,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
               {d.projects.filter((p) => p.status !== 'completed').map((p) => (
                 <Stack key={p.id} direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
                   <Typography variant="body2">{p.name}</Typography>
-                  <Link component={RouterLink} to={`/projects/${p.id}?tab=milestones`} aria-label={`${p.name} timeline`}>Timeline</Link>
+                  <Link component={RouterLink} to={`/projects/${p.id}?tab=milestones&view=timeline`} aria-label={`${p.name} timeline`}>Timeline</Link>
                 </Stack>
               ))}
             </Stack>

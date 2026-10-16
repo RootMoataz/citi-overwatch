@@ -9,7 +9,6 @@ import { renderAsUser, renderWithProviders, users } from '../../test/render.jsx'
 import { setViewport } from '../../test/setup.js'
 import MilestonesTab from '../milestones/MilestonesTab.jsx'
 import { projectView } from '../projects/viewer.js'
-import DiscussButton from './DiscussButton.jsx'
 import MessageButton from './MessageButton.jsx'
 import MessagesPage from './MessagesPage.jsx'
 
@@ -159,7 +158,7 @@ describe('a conversation', () => {
     server.use(inbox(), threadHandler(discussion, lines))
     renderPage(users.employee, '/messages/c2')
     expect(await screen.findByRole('heading', { name: 'Schema Mapping · Apollo' })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /milestone schema mapping in apollo/i })).toHaveAttribute('href', '/projects/p1?tab=milestones')
+    expect(screen.getByRole('link', { name: /milestone schema mapping in apollo/i })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=ms1&panel=discussion')
     // In a group, other people's messages carry their name.
     const log = screen.getByRole('log', { name: 'Messages' })
     expect(within(log).getByText('Ana Ruiz')).toBeInTheDocument()
@@ -287,30 +286,8 @@ describe('Message buttons', () => {
   })
 })
 
+// The milestone panel's Discussion tab took over from the old Discuss button on milestone cards.
 describe('Discuss on a milestone', () => {
-  const milestone = { id: 'ms1', name: 'Schema Mapping', assignees: [{ id: emp.id, name: emp.name }] }
-
-  test('the manager starts the discussion and is taken to it', async () => {
-    server.use(http.post(`${API}/milestones/ms1/discussion`, () => HttpResponse.json({ ...discussion }, { status: 201 })))
-    renderAsUser(<DiscussButton milestone={milestone} manage conversations={[]} />, { user: users.manager })
-    await userEvent.click(screen.getByRole('button', { name: 'Discuss Schema Mapping' }))
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/messages/c2'))
-  })
-
-  test("needs someone assigned first", () => {
-    renderAsUser(<DiscussButton milestone={{ ...milestone, assignees: [] }} manage conversations={[]} />, { user: users.manager })
-    expect(screen.getByRole('button', { name: 'Discuss Schema Mapping' })).toBeDisabled()
-  })
-
-  test('assignees open an existing discussion and see nothing when there is none', () => {
-    const { unmount } = renderAsUser(<DiscussButton milestone={milestone} manage={false} conversations={[discussion]} />, { user: users.employee })
-    expect(screen.getByRole('link', { name: /open the discussion about schema mapping/i })).toHaveAttribute('href', '/messages/c2')
-    unmount()
-    renderAsUser(<DiscussButton milestone={milestone} manage={false} conversations={[]} />, { user: users.employee })
-    expect(screen.queryByRole('button')).not.toBeInTheDocument()
-    expect(screen.queryByRole('link')).not.toBeInTheDocument()
-  })
-
   test('the milestone panel shows the thread under its Discussion tab', async () => {
     const project = { id: 'p1', name: 'Apollo', start_date: '2026-01-01', predicted_end_date: '2026-12-31', status: 'active',
       manager: { id: users.manager.id, name: 'Morgan Manager' }, at_risk_reasons: [] }

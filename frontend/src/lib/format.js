@@ -10,6 +10,9 @@ export const formatHours = (value) => `${Number(value ?? 0).toLocaleString('en-U
 
 export const formatPct = (value) => `${Number(value ?? 0).toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
 
+/** "1 day", "3 days"; `many` for irregular plurals: plural(2, 'entry', 'entries') → "2 entries". */
+export const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
 /** "2026-10-13" → "Oct 13, 2026" without timezone shifts. */
 export function formatDate(iso) {
   if (!iso) return '—'
@@ -27,6 +30,12 @@ export function mondayOf(date = new Date()) {
   const shift = (d.getUTCDay() + 6) % 7
   d.setUTCDate(d.getUTCDate() - shift)
   return d.toISOString().slice(0, 10)
+}
+
+/** "2026-10-14" → "2026-10-12": the Monday of an ISO day's week, without timezone shifts. */
+export function mondayOfIso(iso) {
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number)
+  return mondayOf(new Date(y, m - 1, d))
 }
 
 /** Today's date (YYYY-MM-DD) on the viewer's own calendar. */

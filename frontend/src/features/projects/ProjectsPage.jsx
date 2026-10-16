@@ -166,7 +166,7 @@ export default function ProjectsPage() {
   const open = (row) => navigate(`/projects/${row.id}`)
 
   const columns = [
-    { key: 'name', header: 'Project', sortable: true,
+    { key: 'name', header: 'Project', sortable: true, rowHeader: true,
       render: (p) => (
         <div>
           <Link component={RouterLink} to={`/projects/${p.id}`} underline="hover" sx={{ fontWeight: 600 }}>{p.name}</Link>
@@ -196,7 +196,7 @@ export default function ProjectsPage() {
         </div>
         <StatusCell project={p} />
       </Stack>
-      <RiskText project={p} today={today} />
+      <RiskText project={p} today={today} focusable={false} />
       <Stack sx={{ gap: 0.5 }}>
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>Progress</Typography>
         <ProgressBar project={p} />

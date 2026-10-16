@@ -13,17 +13,18 @@ import KpiStrip from '../../components/KpiStrip.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
-import { addDays, formatDate, formatHours, formatWeekRange, mondayOf, nyTodayIso } from '../../lib/format.js'
+import { addDays, formatDate, formatHours, formatWeekRange, mondayOfIso, nyTodayIso } from '../../lib/format.js'
 import { can } from '../../lib/permissions.js'
+import { BANNER_PROPS } from './pendingBanner.js'
 
 const sum = (rows, key) => rows.reduce((total, r) => total + r[key], 0)
 const LOGGED_INFO = 'Logged means pending + approved. Rejected hours excluded.'
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
 
-/** Monday of the week containing an ISO day. */
-function mondayOfIso(iso) {
-  const [y, m, d] = iso.split('-').map(Number)
-  return mondayOf(new Date(y, m - 1, d))
+/** Hours awaiting approval: in the warning colour (and `data-tone="warning"`) when there are any. */
+function PendingHours({ hours }) {
+  if (!(hours > 0)) return formatHours(hours)
+  return <Box component="span" data-tone="warning" sx={{ color: 'warning.main', fontWeight: 600 }}>{formatHours(hours)}</Box>
 }
 
 /** The week in the URL (`?week=`), defaulting to this week on the New York calendar. Other params are kept. */
@@ -86,7 +87,7 @@ function TeamHours({ project, week }) {
     }))
   const pending = sum(rows, 'pending')
   const columns = [
-    { key: 'person', header: 'Person', render: (r) => (
+    { key: 'person', header: 'Person', rowHeader: true, render: (r) => (
       <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, minWidth: 0 }}>
         <UserAvatar userId={r.person.id} name={r.person.name} size={AVATAR_SIZE.row} />
         <Box sx={{ minWidth: 0 }}>
@@ -100,7 +101,7 @@ function TeamHours({ project, week }) {
     { key: 'planned', header: 'Planned / week', align: 'right', render: (r) => formatHours(r.planned) },
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => formatHours(r.logged) },
     { key: 'approved', header: 'Approved', align: 'right', render: (r) => formatHours(r.approved) },
-    { key: 'pending', header: 'Pending', align: 'right', render: (r) => formatHours(r.pending) },
+    { key: 'pending', header: 'Pending', align: 'right', render: (r) => <PendingHours hours={r.pending} /> },
     { key: 'review', header: 'Review', align: 'right', render: (r) => (r.pending > 0
       ? <Link component={RouterLink} to={`/timesheets?project=${project.id}&user=${r.person.id}`} underline="hover">View entries</Link>
       : '—') },
@@ -120,7 +121,7 @@ function TeamHours({ project, week }) {
         <>
           <KpiStrip ariaLabel="Hours this week" items={items} loading={allocations.isLoading} />
           {pending > 0 ? (
-            <Alert severity="info" variant="outlined"
+            <Alert severity="info" variant="outlined" {...BANNER_PROPS}
               action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review this week's entries →</Link>}>
               {`${formatHours(pending)} awaiting approval this week · Pending hours do not contribute to approved project spend.`}
             </Alert>
@@ -162,10 +163,10 @@ function YourHours({ project, user, week }) {
     { key: 'pending', label: 'Pending', value: formatHours(sum(rows, 'pending')), tone: sum(rows, 'pending') > 0 ? 'warning' : undefined },
   ]
   const columns = [
-    { key: 'name', header: 'Milestone', render: (r) => r.name },
+    { key: 'name', header: 'Milestone', rowHeader: true, render: (r) => r.name },
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => formatHours(r.logged) },
     { key: 'approved', header: 'Approved', align: 'right', render: (r) => formatHours(r.approved) },
-    { key: 'pending', header: 'Pending', align: 'right', render: (r) => formatHours(r.pending) },
+    { key: 'pending', header: 'Pending', align: 'right', render: (r) => <PendingHours hours={r.pending} /> },
     { key: 'rejected', header: 'Needs revision', align: 'right', render: (r) => formatHours(r.rejected) },
   ]
   const totalRow = { name: 'Total', logged: formatHours(sum(rows, 'logged')), approved: formatHours(sum(rows, 'approved')),

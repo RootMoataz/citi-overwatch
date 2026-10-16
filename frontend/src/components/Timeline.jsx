@@ -9,7 +9,7 @@ import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
 import { chartPalette } from '../app/chartColors.js'
 import { STATUS, statusColor } from '../app/theme.js'
-import { formatDate, formatHours, todayIso } from '../lib/format.js'
+import { formatDate, formatHours, plural, todayIso } from '../lib/format.js'
 import { PRIORITY } from '../lib/labels.js'
 import { STRIPED, stripes } from './stateStripes.js'
 import StatusChip from './StatusChip.jsx'
@@ -23,7 +23,6 @@ const toTime = (iso) => Date.UTC(...String(iso).slice(0, 10).split('-').map((n, 
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi)
 /** "2026-08-15" → "Aug 15" */
 const shortDate = (iso) => formatDate(iso).replace(/, \d{4}$/, '')
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 const stateKey = (item) => [item.display_status, item.status].find((s) => STATUS[s]) ?? 'not_started'
 // The compact layout names the state under each milestone, with an icon so colour is never the only signal.
 const STATE_ICON = { completed: CheckCircle, in_progress: PlayCircle, ready_for_review: RateReview, waiting: HourglassEmpty,

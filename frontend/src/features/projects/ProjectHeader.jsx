@@ -7,6 +7,7 @@ import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import RiskText from '../../components/RiskText.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatDate, formatDateRange, nyTodayIso } from '../../lib/format.js'
 import { can } from '../../lib/permissions.js'
 
@@ -48,7 +49,10 @@ export default function ProjectHeader({ project: p, user, view, onEdit, onArchiv
   const admin = can(user, 'project.archive')
   const healthy = !p.is_archived && p.status !== 'completed'
   const parts = [
-    <PersonLink key="m" person={p.manager} context={{ project: p }}>{p.manager.name}</PersonLink>,
+    <Stack key="m" component="span" direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
+      <UserAvatar userId={p.manager.id} name={p.manager.name} size={20} />
+      <PersonLink person={p.manager} context={{ project: p }}>{p.manager.name}</PersonLink>
+    </Stack>,
     p.department?.name ? <span key="d">{p.department.name}</span> : null,
     <span key="r">{formatDateRange(p.start_date, p.predicted_end_date)}</span>,
   ].filter(Boolean)

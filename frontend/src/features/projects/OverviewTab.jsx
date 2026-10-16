@@ -9,11 +9,12 @@ import StatusChip from '../../components/StatusChip.jsx'
 import Timeline from '../../components/Timeline.jsx'
 import { can } from '../../lib/permissions.js'
 import { projectEffort } from '../../lib/estimates.js'
-import { daysBetween, formatDate, formatDateRange, formatHours, formatMoney, formatPct, mondayOf, nyTodayIso } from '../../lib/format.js'
+import { daysBetween, formatDate, formatDateRange, formatHours, formatMoney, formatPct, mondayOfIso, nyTodayIso, plural } from '../../lib/format.js'
+import { pendingHoursOf } from '../../lib/personWeeks.js'
 import { WORK_MODE } from '../../lib/labels.js'
 import { orderedRisks, riskSentence } from '../../lib/risk.js'
+import { isOverdue } from '../milestones/milestoneOrder.js'
 
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 const COUNTED = new Set(['pending', 'approved'])
 // Two risk reasons are sentences of their own; the milestone ones appear as counts below them.
 const SENTENCE_RISKS = new Set(['PAST_DUE', 'BUDGET_BURN'])
@@ -93,7 +94,7 @@ function NextMilestones({ milestones }) {
   const next = milestones.filter((m) => m.status !== 'completed').sort(byStart).slice(0, 3)
   if (!next.length) return null
   const columns = [
-    { key: 'name', header: 'Milestone', render: (m) => (
+    { key: 'name', header: 'Milestone', rowHeader: true, render: (m) => (
       <Stack sx={{ gap: 0.5, alignItems: 'flex-start' }}>
         <Link component={RouterLink} to={panelPath(m.id)} underline="hover" sx={{ fontWeight: 600 }}>{m.name}</Link>
         <StatusChip status={m.display_status ?? m.status} />
@@ -115,9 +116,9 @@ function Row({ children }) {
 function NeedsAttention({ project, view, milestones, today }) {
   const approvals = useApprovals({ project: project.id }, view.decides)
   const pending = approvals.data ?? []
-  const pendingHours = pending.reduce((sum, item) => sum + Number(item.entry?.hours ?? 0), 0)
+  const pendingHours = pendingHoursOf(pending)
   const risks = orderedRisks(project.at_risk_reasons).filter((code) => SENTENCE_RISKS.has(code))
-  const overdue = milestones.filter((m) => m.status !== 'completed' && String(m.end_date).slice(0, 10) < today).length
+  const overdue = milestones.filter((m) => isOverdue(m, today)).length
   const kickedBack = milestones.filter((m) => m.status === 'blocked').length
   if (!pending.length && !risks.length && !overdue && !kickedBack) return null
   return (
@@ -144,7 +145,7 @@ function TeamThisWeek({ project, week }) {
     .filter((p) => String(p.id) === String(project.id))
     .map((p) => ({ id: person.user.id, name: person.user.name, planned: Number(p.planned), logged: Number(p.logged) })))
   const columns = [
-    { key: 'name', header: 'Name', render: (r) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{r.name}</Typography> },
+    { key: 'name', header: 'Name', rowHeader: true, render: (r) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{r.name}</Typography> },
     { key: 'planned', header: 'Planned', align: 'right', render: (r) => formatHours(r.planned) },
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => (
       <Stack direction="row" sx={{ gap: 0.75, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -234,8 +235,7 @@ export default function OverviewTab({ project, user, view }) {
   const milestones = useMilestones(project.id)
   const members = useMembers(project.id)
   const today = nyTodayIso()
-  const [y, m, d] = today.split('-').map(Number)
-  const week = mondayOf(new Date(y, m - 1, d))
+  const week = mondayOfIso(today)
   const live = (milestones.data ?? []).filter((x) => !x.is_archived)
   const planning = project.status === 'planned' && !project.plan_finalized_at
   const teamWeek = view.lead && !view.executive

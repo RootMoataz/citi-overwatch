@@ -12,8 +12,8 @@ import { useApprovals, useApproveWeek, useBreakdowns, useRejectEntry } from '../
 import { useToast } from '../../../app/toast.js'
 import EmptyState from '../../../components/EmptyState.jsx'
 import ErrorAlert from '../../../components/ErrorAlert.jsx'
-import { formatDate, formatHours, formatMoney } from '../../../lib/format.js'
-import { groupByPersonWeek } from '../../../lib/personWeeks.js'
+import { formatDate, formatHours, formatMoney, plural } from '../../../lib/format.js'
+import { groupByPersonWeek, pendingHoursOf as hoursOf } from '../../../lib/personWeeks.js'
 import { DESKTOP_QUERY } from '../../../lib/responsive.js'
 import BreakdownPanel from '../../approvals/BreakdownPanel.jsx'
 import EntryCueChips from '../../approvals/EntryCueChips.jsx'
@@ -26,8 +26,6 @@ const IMPACT_MAX = 20     // "up to 20 at a time": one breakdown request per sel
 const REASON_MAX = 1000   // the server's limit on a rejection reason
 
 const idOf = (item) => String(item.entry.id)
-const hoursOf = (items) => items.reduce((sum, i) => sum + Number(i.entry.hours ?? 0), 0)
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 const exact = (value) => formatMoney(value, { exact: true })
 const titleOf = (group) => `${group.user.name} · Week of ${formatDate(group.week)} · `
   + `${plural(group.items.length, 'entry', 'entries')} · ${formatHours(hoursOf(group.items))}`

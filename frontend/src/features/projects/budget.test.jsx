@@ -85,7 +85,12 @@ describe('Budget tab', () => {
   test('manager sees the pending banner linking to the timesheets', async () => {
     open()
     expect(await screen.findByText('62h awaiting approval · Not yet included in spend.')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Review pending hours →' })).toHaveAttribute('href', '/timesheets?project=p1')
+    const link = screen.getByRole('link', { name: 'Review pending hours →' })
+    expect(link).toHaveAttribute('href', '/timesheets?project=p1')
+    // The link sits on the message's line: the banner centres its parts and the action slot drops its top padding.
+    const banner = screen.getByRole('alert')
+    expect(getComputedStyle(banner).alignItems).toBe('center')
+    expect(getComputedStyle(link.parentElement).paddingTop).toBe('0px')
   })
 
   test('no banner when nothing is pending', async () => {
@@ -99,7 +104,7 @@ describe('Budget tab', () => {
     const table = await screen.findByRole('table', { name: /cost by milestone/i })
     for (const c of ['Milestone', 'Approved hours', 'Pending hours', 'Approved cost', 'Share of project budget'])
       expect(within(table).getByRole('columnheader', { name: c })).toBeInTheDocument()
-    const row = within(table).getByText(/schema mapping/i).closest('tr')
+    const row = within(table).getByRole('rowheader', { name: /schema mapping/i }).closest('tr')
     expect(within(row).getByText('600h')).toBeInTheDocument()
     expect(within(row).getByText('$30,000')).toBeInTheDocument()
     const total = within(table).getByRole('rowheader', { name: /total/i }).closest('tr')
@@ -125,7 +130,7 @@ describe('Budget tab', () => {
 
     test('the bar sits in the Approved cost cell and the Share cell reads the percent', async () => {
       const t = await table()
-      const row = within(t).getByText(/cutover/i).closest('tr')
+      const row = within(t).getByRole('rowheader', { name: /cutover/i }).closest('tr')
       const cells = within(row).getAllByRole('cell')
       const cost = cells.find((c) => within(c).queryByText('$20,000'))
       expect(within(cost).getByRole('meter', { name: /cutover share of budget/i })).toHaveAttribute('aria-valuetext', '8%')

@@ -1,9 +1,8 @@
 // Expected time frame as people read it: "Est. 120h · 30 days (22 working days)" and "86h logged · 72% of estimate".
 // Pure, so it's unit tested. The numbers come from the server (estimated_hours, duration_days, working_days,
 // logged_hours, estimate_used_pct on milestones; total_estimated_hours and friends on projects).
-import { formatHours, formatPct } from './format.js'
+import { formatHours, formatPct, plural } from './format.js'
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** ok up to 90% of the estimate, warning (amber) above 90%, alert (red) above 100%. */
 export function estimateTone(pct) {

@@ -80,7 +80,7 @@ describe('command palette', () => {
     await user.keyboard('{ArrowUp}')
     expect(input).toHaveAttribute('aria-activedescendant', screen.getAllByRole('option').at(-1).id)
     await user.keyboard('{ArrowDown}{Enter}')
-    await waitFor(() => expect(location()).toBe('/projects/p-apollo?tab=milestones'))
+    await waitFor(() => expect(location()).toBe('/projects/p-apollo?tab=milestones&milestone=m1'))
   })
 
   test('"/" opens it unless the focus is in a field', async () => {

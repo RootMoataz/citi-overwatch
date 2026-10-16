@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
@@ -197,11 +198,15 @@ describe('Overview for the manager', () => {
   })
 
   test('Needs attention is hidden when there is nothing to show', async () => {
-    server.use(...handlers({ list: milestones.slice(0, 4).concat(ms('m7', 'Go-live', { status: 'not_started', display_status: 'not_started',
-      start_date: '2026-10-24', end_date: '2026-12-12' })) }))
+    let answered = false
+    server.use(http.get(`${API}/approvals`, () => { answered = true; return HttpResponse.json([]) }),
+      ...handlers({ list: milestones.slice(0, 4).concat(ms('m7', 'Go-live', { status: 'not_started', display_status: 'not_started',
+        start_date: '2026-10-24', end_date: '2026-12-12' })) }))
     open()
     await screen.findByText('4 of 5 milestones complete')
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument())
+    await waitFor(() => expect(answered).toBe(true))   // the pending entries are known (none), not still loading
+    await new Promise((resolve) => setTimeout(resolve, 20))   // and that answer has reached the page
+    expect(screen.queryByRole('heading', { name: 'Needs attention' })).not.toBeInTheDocument()
   })
 
   test('Team this week shows the week, planned and logged, and a +Nh chip above plan', async () => {
@@ -279,6 +284,18 @@ describe('Overview for an employee', () => {
     expect(within(card).getByRole('link', { name: 'Open my timesheet' })).toHaveAttribute('href', '/timesheet')
   })
 
+  test('Your milestones counts a milestone they only support, and leaves archived ones out of both numbers', async () => {
+    const list = [...milestones,
+      ms('m8', 'Support', { status: 'in_progress', display_status: 'in_progress', start_date: '2026-10-01', end_date: '2026-11-30',
+        is_assignee: true, assignees: [ada, eli], supporting_ids: [eli.id] }),
+      ms('m9', 'Old work', { is_assignee: true, assignees: [eli], is_archived: true })]
+    server.use(...handlers({ list }))
+    open(users.employee)
+    const card = (await screen.findByRole('heading', { name: 'Your part' })).closest('section')
+    expect(await within(card).findByText('Your milestones: 3 of 8')).toBeInTheDocument()   // Design, Go-live, Support
+    expect(within(card).getByRole('link', { name: 'Support' })).toHaveAttribute('href', expect.stringContaining('milestone=m8'))
+  })
+
   test("someone who isn't on the team is told so", async () => {
     server.use(http.get(`${API}/projects/p1/members`, () => HttpResponse.json([])), ...handlers())
     open(users.employee)
@@ -313,6 +330,13 @@ describe('Overview for an executive', () => {
 })
 
 describe('Overview on a phone', () => {
+  // The KPI strip comes before every card.
+  const expectStripFirst = () => {
+    const strip = screen.getByRole('group', { name: 'Project figures' })
+    const first = screen.getByRole('heading', { level: 2, name: 'Milestone schedule' })
+    expect(strip.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  }
+
   test('stacks the cards in reading order', async () => {
     setViewport(375)
     server.use(...handlers())
@@ -322,5 +346,37 @@ describe('Overview on a phone', () => {
     const heads = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(heads.filter((t) => ['Milestone schedule', 'Next milestones', 'Needs attention', 'Team this week', 'Project details'].includes(t)))
       .toEqual(['Milestone schedule', 'Next milestones', 'Needs attention', 'Team this week', 'Project details'])
+    expectStripFirst()
+  })
+
+  test("tapping a Next milestones card's link opens the panel once: Back returns to the Overview", async () => {
+    setViewport(375)
+    function Back() {
+      const navigate = useNavigate()
+      return <button type="button" onClick={() => navigate(-1)}>Back</button>
+    }
+    server.use(...handlers())
+    renderAsUser(<><ProjectDetailPage /><Back /></>, { user: users.manager, path: '/projects/:id',
+      entries: ['/projects', '/projects/p1'] })
+    const cards = await screen.findByRole('list', { name: 'Next milestones' })
+    const user = userEvent.setup()
+    await user.click(within(cards).getByRole('link', { name: 'Go-live' }))
+    expect(location()).toHaveTextContent('/projects/p1?tab=milestones&milestone=m7')
+    // The panel opens as a full-screen sheet, which hides the rest of the page from the accessibility tree.
+    await user.click(screen.getByRole('button', { name: 'Back', hidden: true }))
+    expect(location()).toHaveTextContent(/^\/projects\/p1$/)
+  })
+
+  test("an employee's stack has Your part in Team this week's slot, after the KPI strip", async () => {
+    setViewport(375)
+    server.use(...handlers())
+    open(users.employee)
+    await screen.findByRole('heading', { name: 'Needs attention' })
+    await screen.findByRole('heading', { name: 'Your part' })
+    const heads = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+    expect(heads.filter((t) => ['Milestone schedule', 'Next milestones', 'Needs attention', 'Team this week', 'Your part',
+      'Project details'].includes(t)))
+      .toEqual(['Milestone schedule', 'Next milestones', 'Needs attention', 'Your part', 'Project details'])
+    expectStripFirst()
   })
 })

@@ -9,7 +9,7 @@ import ProjectsPage from './ProjectsPage.jsx'
 const project = {
   id: 'p1', name: 'Apollo Data Migration', description: 'Move records', status: 'active',
   start_date: '2026-07-15', predicted_end_date: '2026-12-27', budget: 250000, consumed: 21745,
-  budget_pct: 8.7, progress_pct: 33.3, at_risk_reasons: ['budget_burn'], is_archived: false, completed_at: null,
+  budget_pct: 8.7, progress_pct: 33.3, at_risk_reasons: ['BUDGET_BURN'], is_archived: false, completed_at: null,
   manager: { id: users.manager.id, name: 'Morgan Manager' },
 }
 const ada = { id: 'u-ada', first_name: 'Ada', last_name: 'Lovelace', job_title: 'Analyst', username: 'ada' }
@@ -50,6 +50,7 @@ describe('dark mode', () => {
     renderAsUser(<ProjectsPage />, { user: users.manager, route: '/projects' })
     expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument()
     expect(await screen.findByText('Apollo Data Migration')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Risk: Budget ahead of progress' })).toBeInTheDocument()   // a real reason code
     expect(errors).not.toHaveBeenCalled()
   })
 

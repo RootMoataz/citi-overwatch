@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { daysBetween, formatDateRange, formatLongDate, formatWeekRange, nyTodayIso } from './format.js'
+import { daysBetween, formatDateRange, formatLongDate, formatWeekRange, mondayOfIso, nyTodayIso, plural } from './format.js'
 
 describe('New York dates', () => {
   test('nyTodayIso reads the New York calendar, not UTC', () => {
@@ -22,5 +22,22 @@ describe('New York dates', () => {
   test('formatDateRange omits the first year only within a year', () => {
     expect(formatDateRange('2026-07-15', '2026-12-27')).toBe('Jul 15 – Dec 27, 2026')
     expect(formatDateRange('2025-12-01', '2026-03-03')).toBe('Dec 1, 2025 – Mar 3, 2026')
+  })
+})
+
+describe('shared wording and weeks', () => {
+  test('plural counts with the word, one or many (an "s" unless a plural is given)', () => {
+    expect(plural(1, 'day')).toBe('1 day')
+    expect(plural(3, 'day')).toBe('3 days')
+    expect(plural(0, 'entry', 'entries')).toBe('0 entries')
+    expect(plural(1, 'person', 'people')).toBe('1 person')
+    expect(plural(-2, 'point')).toBe('-2 points')
+  })
+
+  test('mondayOfIso gives the Monday of an ISO day without timezone shifts', () => {
+    expect(mondayOfIso('2026-10-14')).toBe('2026-10-12')
+    expect(mondayOfIso('2026-10-12')).toBe('2026-10-12')
+    expect(mondayOfIso('2026-10-18')).toBe('2026-10-12')   // Sunday ends the week
+    expect(mondayOfIso('2026-11-02')).toBe('2026-11-02')   // the Monday after the clocks change
   })
 })

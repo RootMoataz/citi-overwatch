@@ -1,6 +1,7 @@
 import { Box, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { useEffect, useId, useState } from 'react'
 import { STATUS, statusColor } from '../app/theme.js'
+import { plural } from '../lib/format.js'
 import { STRIPED, stripes } from './stateStripes.js'
 
 // The order the states read in, left to right.
@@ -23,8 +24,6 @@ function useWidth() {
   }, [node])
   return [setNode, width]
 }
-
-const plural = (n) => `${n} milestone${n === 1 ? '' : 's'}`
 
 /** One bar for the whole project: its milestones by state, with the counts. Archived milestones are left out.
  * `title` replaces the heading's words, `headingComponent` its level (h3 by default), and `aside` sits on the right
@@ -56,7 +55,7 @@ export default function MilestoneStatusBar({ items, title, headingComponent = 'h
         <Stack ref={barRef} direction="row" sx={{ gap: `${GAP}px`, height: 28 }}>
           {states.map((key) => {
             const n = counts[key]
-            const text = `${STATUS[key].label}: ${plural(n)}`
+            const text = `${STATUS[key].label}: ${plural(n, 'milestone')}`
             return (
               <Tooltip key={key} title={text} describeChild>
                 <Box role="img" aria-label={text} data-count={n}

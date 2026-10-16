@@ -27,7 +27,7 @@ describe('LiveActivityCard', () => {
     const [first, second] = within(list).getAllByRole('listitem')
     expect(first).toHaveTextContent('Morgan Manager approved 9h for Eli Employee on Schema Mapping')
     expect(first).toHaveTextContent('Apollo · 2 min ago')
-    expect(within(first).getByRole('link', { name: 'Schema Mapping' })).toHaveAttribute('href', '/projects/p1?tab=milestones')
+    expect(within(first).getByRole('link', { name: 'Schema Mapping' })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m1')
     expect(within(first).getByRole('link', { name: 'Morgan Manager' })).toHaveAttribute('href', '/people/u-mgr/profile')
     expect(second).toHaveTextContent('System moved Cutover to In progress')
     expect(second).toHaveTextContent('2 h ago')

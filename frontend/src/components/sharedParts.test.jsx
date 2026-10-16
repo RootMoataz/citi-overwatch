@@ -195,6 +195,19 @@ describe('DataTable', () => {
     expect(screen.getByText('Alpha').closest('tr')).toHaveAttribute('aria-current', 'true')
   })
 
+  test("rowHeader makes that column's cells the rows' headers (th scope=row); other columns stay plain cells", () => {
+    const headed = columns.map((c) => (c.key === 'name' ? { ...c, rowHeader: true } : c))
+    const first = renderWithProviders(<DataTable {...base} columns={headed} />)
+    const alpha = screen.getByRole('rowheader', { name: 'Alpha' })
+    expect(alpha.tagName).toBe('TH')
+    expect(alpha).toHaveAttribute('scope', 'row')
+    expect(screen.getAllByRole('rowheader').map((h) => h.textContent)).toEqual(['Beta', 'Alpha', 'Gamma'])
+    expect(within(alpha.closest('tr')).getAllByRole('cell').map((c) => c.textContent)).toEqual(['1', 'x'])
+    first.unmount()
+    renderWithProviders(<DataTable {...base} />)   // opt-in: without the flag every body cell is a cell
+    expect(screen.queryAllByRole('rowheader')).toEqual([])
+  })
+
   test('empty shows when there are no rows', () => {
     renderWithProviders(<DataTable {...base} rows={[]} empty={<p>Nothing here</p>} />)
     expect(screen.getByText('Nothing here')).toBeInTheDocument()
@@ -225,6 +238,22 @@ describe('DataTable', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Open Alpha' }))
     expect(onInner).toHaveBeenCalledWith(2)
     expect(onRowOpen).not.toHaveBeenCalled()
+  })
+
+  test('375 px: a tap on a link or button inside a card runs its own handler, not onRowOpen; elsewhere opens the row', async () => {
+    setViewport(375)
+    const onRowOpen = vi.fn()
+    const onInner = vi.fn()
+    const cols = [
+      { key: 'name', header: 'Name', render: (r) => <a href={`#${r.id}`} onClick={(e) => { e.preventDefault(); onInner(r.id) }}>{r.name}</a> },
+      { key: 'n', header: 'Count', render: (r) => r.n },
+    ]
+    renderWithProviders(<DataTable {...base} columns={cols} onRowOpen={onRowOpen} />)
+    await userEvent.click(screen.getByRole('link', { name: 'Alpha' }))
+    expect(onInner).toHaveBeenCalledWith(2)
+    expect(onRowOpen).not.toHaveBeenCalled()
+    await userEvent.click(within(screen.getByRole('link', { name: 'Alpha' }).closest('li')).getByText('Count:'))
+    expect(onRowOpen).toHaveBeenCalledWith(rows[1])
   })
 
   test('a click in a menu opened from a cell does not open the row', async () => {

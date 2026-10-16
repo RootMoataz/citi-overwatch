@@ -50,7 +50,7 @@ function useResults(query) {
       priority: m.priority, open: m.status !== 'completed', end: String(m.end_date),
       detail: [projectName.get(String(m.project_id)) ?? '', `due ${formatDate(m.end_date)}`,
         ['critical', 'high'].includes(m.priority) ? `${PRIORITY[m.priority]} priority` : null].filter(Boolean).join(' · '),
-      to: `/projects/${m.project_id}?tab=milestones`,
+      to: `/projects/${m.project_id}?tab=milestones&milestone=${m.id}`,
     }))
     if (intent?.milestones === 'overdue') {
       return { intent, items: [intentItem, ...milestones.filter((m) => m.overdue).slice(0, 8)] }

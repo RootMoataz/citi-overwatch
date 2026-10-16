@@ -12,9 +12,9 @@ import { alpha } from '@mui/material/styles'
 import { useMediaQuery } from 'react-responsive'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { CardList } from './ResponsiveTable.jsx'
+import { onInnerControl } from './rowClick.js'
 
 const TOTAL_ID = '__total__'
-const INTERACTIVE = 'a,button,input,select,textarea,label,[role="button"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="link"]'
 
 const tintFor = (theme, tone) => (tone === 'warning' ? { bgcolor: alpha(theme.palette.warning.main, 0.1) } : null)
 
@@ -53,6 +53,8 @@ function CardLine({ label, value, main = false }) {
  * A table on MUI `Table`; stacked cards (via `CardList`) below 900 px. Sorts on the client unless `serverSort`
  * (then the caller owns the order). `pagination.page` is zero-based, as in `TablePagination`. On phones,
  * `renderCardActions(row)` puts a row's actions (a "⋯") beside its card's tap area; the Total card gets none.
+ * A column with `rowHeader: true` (the record's name) renders its body cells as `<th scope="row">`, so screen readers
+ * announce each row by it.
  */
 export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => r.id, sort, defaultSort, onSortChange,
   serverSort = false, visibleKeys, onRowOpen, selectedId, rowTone, totalRow, renderCard, renderCardActions, loading = false,
@@ -149,15 +151,16 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
                 const selected = selectedId != null && selectedId === id
                 return (
                   <TableRow key={id} hover={Boolean(onRowOpen)} onClick={onRowOpen ? (e) => {
-                    const inner = e.target.closest?.(INTERACTIVE)
                     // A portalled menu or backdrop opened from a cell bubbles here through React but is not inside the row.
                     if (!e.currentTarget.contains(e.target)) return
-                    if (inner && e.currentTarget.contains(inner)) return
+                    if (onInnerControl(e)) return
                     onRowOpen(row)
                   } : undefined}
                     aria-current={selected ? 'true' : undefined} selected={selected} data-tone={tone || undefined}
                     sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default', ...tintFor(theme, tone) })}>
-                    {shown.map((c) => <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>)}
+                    {shown.map((c) => (c.rowHeader
+                      ? <TableCell key={c.key} align={c.align} component="th" scope="row">{c.render(row)}</TableCell>
+                      : <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>))}
                   </TableRow>
                 )
               })}

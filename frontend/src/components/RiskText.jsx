@@ -7,9 +7,10 @@ import { orderedRisks, riskSentence } from '../lib/risk.js'
 /**
  * A project's risk in words. `cell`: a warning icon and the first reason ("—", named "No risk", when there is none).
  * `chip`: a warning chip with the first reason, or a success "On track" chip. Both share one tooltip with a sentence
- * per reason and the name "Risk: <word>, <word>". `today` is the New York date.
+ * per reason and the name "Risk: <word>, <word>". `today` is the New York date. `focusable={false}` drops the tab stop
+ * for a place that is itself one control, such as a phone card: the reasons are still in its name and on hover.
  */
-export default function RiskText({ project, today, variant = 'cell' }) {
+export default function RiskText({ project, today, variant = 'cell', focusable = true }) {
   const codes = orderedRisks(project.at_risk_reasons)
   if (!codes.length) {
     if (variant === 'chip') return <Chip size="small" icon={<CheckCircleOutlined />} label="On track" color="success" variant="outlined" />
@@ -17,6 +18,7 @@ export default function RiskText({ project, today, variant = 'cell' }) {
   }
   // tabIndex 0 on at-risk cells is deliberate: it makes the reasons' tooltip reachable by keyboard (WCAG 1.4.13).
   // It is the only extra tab stop, and only on at-risk rows.
+  const tabIndex = focusable ? 0 : undefined
   const words = codes.map((code) => RISK_SHORT[code] ?? code)
   const name = `Risk: ${words.join(', ')}`
   const tip = (
@@ -27,9 +29,9 @@ export default function RiskText({ project, today, variant = 'cell' }) {
   return (
     <Tooltip title={tip}>
       {variant === 'chip'
-        ? <Chip size="small" icon={<WarningAmber />} label={words[0]} color="warning" variant="outlined" tabIndex={0} role="img" aria-label={name} />
+        ? <Chip size="small" icon={<WarningAmber />} label={words[0]} color="warning" variant="outlined" tabIndex={tabIndex} role="img" aria-label={name} />
         : (
-          <Box component="span" tabIndex={0} role="img" aria-label={name}
+          <Box component="span" tabIndex={tabIndex} role="img" aria-label={name}
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'warning.main', minWidth: 0 }}>
             <WarningAmber fontSize="small" aria-hidden />
             <Typography variant="body2" component="span" sx={{ color: 'text.primary' }}>{words[0]}</Typography>

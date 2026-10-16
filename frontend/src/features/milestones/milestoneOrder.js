@@ -3,6 +3,9 @@
 /** Part C's state order: the status bar left to right, and the list's Status sort. */
 export const STATUS_ORDER = ['completed', 'ready_for_review', 'in_progress', 'not_started', 'waiting', 'blocked']
 
+/** Unfinished past its end date; `today` is the New York date (YYYY-MM-DD), so the day itself isn't overdue yet. */
+export const isOverdue = (m, today) => m.status !== 'completed' && String(m.end_date).slice(0, 10) < today
+
 /** The state a milestone shows: its display status (waiting is computed by the server), else its stored status. */
 export const stateOf = (m) => [m.display_status, m.status].find((s) => STATUS_ORDER.includes(s)) ?? 'not_started'
 

@@ -57,7 +57,7 @@ export default function MilestoneCostTable({ project }) {
     { key: 'approved_hours', header: 'Approved hours', align: 'right', render: (r) => formatHours(r.approved_hours) },
     { key: 'pending_hours', header: 'Pending hours', align: 'right', render: (r) => formatHours(r.pending_hours) }] : []
   const columns = [
-    { key: 'milestone', header: 'Milestone', render: (r) => <>{r.milestone.name} <StatusChip status={r.milestone.status} size="small" /></> },
+    { key: 'milestone', header: 'Milestone', rowHeader: true, render: (r) => <>{r.milestone.name} <StatusChip status={r.milestone.status} size="small" /></> },
     ...hoursCols,
     { key: 'approved_cost', header: 'Approved cost', align: 'right', render: costCell },
     { key: 'share', header: 'Share of project budget', align: 'right', render: (r) => pctText(r.budget_pct) },

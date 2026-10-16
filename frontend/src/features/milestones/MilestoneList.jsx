@@ -5,15 +5,15 @@ import { Box, Chip, Link, Stack, Tooltip, Typography } from '@mui/material'
 import AvatarStack from '../../components/AvatarStack.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
+import YouTag from '../../components/YouTag.jsx'
 import { effortText } from '../../lib/estimates.js'
 import { formatDate, formatHours, nyTodayIso } from '../../lib/format.js'
-import { STATUS_ORDER, assigneePeople, predecessorNames, stateOf } from './milestoneOrder.js'
+import { STATUS_ORDER, assigneePeople, isOverdue, predecessorNames, stateOf } from './milestoneOrder.js'
 
 const NARROW = ['index', 'name', 'status']
 const EFFORT_INFO = 'Logged counts pending and approved hours of everyone on the milestone.'
 
 const firstName = (name) => String(name ?? '').split(' ')[0]
-const youTag = <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 20, fontSize: '0.6875rem' }} />
 
 /** Up to three avatars, then "+N" for the rest, then everyone's first name. */
 function Assignees({ milestone: m }) {
@@ -64,7 +64,7 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
     const hours = Number(myHoursByMilestone?.[String(m.id)])
     return hours ? formatHours(hours) : '—'
   }
-  const overdue = (m) => m.status !== 'completed' && String(m.end_date).slice(0, 10) < today
+  const overdue = (m) => isOverdue(m, today)
   const dates = (m) => (
     <Box>
       <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap', color: overdue(m) ? 'error.main' : undefined }}>
@@ -93,12 +93,12 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
   const columns = [
     { key: 'index', header: '#', render: (m) => (
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>{position[String(m.id)]}</Typography>) },
-    { key: 'name', header: 'Milestone', sortable: true, sortValue: (m) => m.name, render: (m) => (
+    { key: 'name', header: 'Milestone', sortable: true, rowHeader: true, sortValue: (m) => m.name, render: (m) => (
       <Box sx={{ minWidth: 0 }}>
         <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
           <Link component="button" type="button" data-milestone-name={m.id} onClick={() => onOpen(m)} underline="hover"
             sx={{ fontWeight: 600, textAlign: 'left', color: 'text.primary', fontSize: '0.9375rem' }}>{m.name}</Link>
-          {m.is_assignee ? youTag : null}
+          {m.is_assignee ? <YouTag /> : null}
         </Stack>
         <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{dependency(m)}</Typography>
       </Box>) },
@@ -124,7 +124,7 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
       <Box>
         <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
           <Typography variant="subtitle1" component="div" sx={{ fontWeight: 600 }}>{`${position[String(m.id)]}. ${m.name}`}</Typography>
-          {m.is_assignee ? youTag : null}
+          {m.is_assignee ? <YouTag /> : null}
         </Stack>
         <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{dependency(m)}</Typography>
       </Box>

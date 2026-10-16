@@ -1,7 +1,7 @@
 import PersonAdd from '@mui/icons-material/PersonAddAlt'
 import MoreHoriz from '@mui/icons-material/MoreHoriz'
 import {
-  Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, TextField,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, TextField,
   Typography,
 } from '@mui/material'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -17,6 +17,7 @@ import FootNote from '../../components/FootNote.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
+import YouTag from '../../components/YouTag.jsx'
 import { formatDate, formatHours, fullName, nyTodayIso } from '../../lib/format.js'
 import { memberSchema } from '../../lib/schemas.js'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
@@ -80,7 +81,6 @@ function MemberDialog({ projectId, member, people, onClose }) {
 
 const nameOf = (m) => fullName(m.user)
 const skillNames = (m) => (m.user.skills ?? []).map((s) => s.name)
-const youTag = <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 20, fontSize: '0.6875rem' }} />
 
 /** A member's "⋯" (managers only): Edit planned hours, and Remove from project, which `onRemove` confirms. */
 function MemberMenu({ member, onEdit, onRemove }) {
@@ -96,7 +96,7 @@ function MemberMenu({ member, onEdit, onRemove }) {
       <Menu id={menuId} anchorEl={anchor} open={Boolean(anchor)} onClose={close}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
         <MenuItem onClick={() => { close(); onEdit(member) }}>Edit planned hours</MenuItem>
-        <MenuItem onClick={() => { close(); onRemove(member) }}>Remove from project</MenuItem>
+        <MenuItem onClick={() => { close(); onRemove(member) }} sx={{ color: 'error.main' }}>Remove from project</MenuItem>
       </Menu>
     </>
   )
@@ -139,7 +139,7 @@ export default function TeamTab({ project, user, view }) {
           <Typography variant="body2" component="span" sx={{ fontWeight: 600 }}>
             <PersonLink person={person(m)} context={{ project }} />
           </Typography>
-          {isMe(m) ? youTag : null}
+          {isMe(m) ? <YouTag /> : null}
         </Stack>
         <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{m.user.job_title || 'No title'}</Typography>
       </Box>
@@ -149,7 +149,7 @@ export default function TeamTab({ project, user, view }) {
   const message = (m) => <MessageButton person={person(m)} size="small" />
 
   const columns = [
-    { key: 'person', header: 'Person', sortable: true, render: who,
+    { key: 'person', header: 'Person', sortable: true, rowHeader: true, render: who,
       sortValue: (m) => `${m.user.last_name ?? ''} ${m.user.first_name ?? ''}`.trim() },
     { key: 'skills', header: 'Skills', render: skills },
     { key: 'planned', header: 'Planned / week', sortable: true, sortValue: (m) => Number(m.planned_hours_per_week),

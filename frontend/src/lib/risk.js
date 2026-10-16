@@ -1,11 +1,9 @@
 // Why a project is at risk, in order of severity. The order is the backend's (`RISK_ORDER`), so the Risk column,
 // the health chip and `sort=risk` all agree on "the first reason".
-import { daysBetween, formatDate } from './format.js'
+import { daysBetween, formatDate, plural } from './format.js'
 import { RISK_LABELS } from './labels.js'
 
 export const RISK_ORDER = ['PAST_DUE', 'BUDGET_BURN', 'OVERDUE_MILESTONE', 'BLOCKED_MILESTONE']
-
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** The reasons, most severe first; codes this app doesn't know come last, in their given order. */
 export function orderedRisks(reasons) {

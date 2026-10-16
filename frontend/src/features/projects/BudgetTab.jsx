@@ -6,8 +6,10 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import { budgetRows, compactMoney, niceMax, ticksTo } from '../../lib/chartData.js'
 import { formatHours, formatMoney, formatPct } from '../../lib/format.js'
+import { pendingHoursOf } from '../../lib/personWeeks.js'
 import MilestoneCostTable from './MilestoneCostTable.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
+import { BANNER_PROPS } from './pendingBanner.js'
 
 /** A round dollar step giving about five ticks up to `max`. */
 function moneyStep(max) {
@@ -41,7 +43,7 @@ export default function BudgetTab({ project, view }) {
   const summary = useProjectSummary(project.id)
   const approvals = useApprovals({ project: project.id }, Boolean(view?.decides))
   const pending = approvals.data ?? []
-  const pendingHours = pending.reduce((sum, item) => sum + Number(item.entry?.hours ?? 0), 0)
+  const pendingHours = pendingHoursOf(pending)
   const s = summary.data ?? { budget: project.budget, consumed: project.consumed, remaining: project.budget - project.consumed,
     budget_pct: project.budget_pct }
   const budget = Number(s.budget)
@@ -64,7 +66,8 @@ export default function BudgetTab({ project, view }) {
       <KpiStrip ariaLabel="Budget figures" items={items} loading={summary.isLoading} error={summary.error}
         onRetry={() => summary.refetch()} />
       {pending.length ? (
-        <Alert severity="info" variant="outlined" data-print="hide"
+        // The link sits on the message's line (Alert puts its action higher than the text by default).
+        <Alert severity="info" variant="outlined" data-print="hide" {...BANNER_PROPS}
           action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review pending hours →</Link>}>
           {`${formatHours(pendingHours)} awaiting approval · Not yet included in spend.`}
         </Alert>

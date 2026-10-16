@@ -16,13 +16,14 @@ import FilterBar from '../../components/FilterBar.jsx'
 import FootNote from '../../components/FootNote.jsx'
 import MilestoneStatusBar from '../../components/MilestoneStatusBar.jsx'
 import Timeline from '../../components/Timeline.jsx'
-import { formatDateRange, formatHours } from '../../lib/format.js'
+import { formatDateRange, formatHours, plural } from '../../lib/format.js'
 import { DESKTOP_QUERY, WIDE_QUERY } from '../../lib/responsive.js'
 import MilestoneDialog from './MilestoneDialog.jsx'
 import MilestoneList from './MilestoneList.jsx'
 import MilestoneMenu from './MilestoneMenu.jsx'
 import MilestonePanel from './MilestonePanel.jsx'
 import { stateOf } from './milestoneOrder.js'
+import { pendingHoursOf } from '../../lib/personWeeks.js'
 import { useMilestonePanelUrl } from './useMilestonePanelUrl.js'
 
 // List or Timeline is kept per browser; the URL's ?view= wins. Blocked storage just means List every time.
@@ -36,7 +37,6 @@ const storeView = (view) => {
 
 const STATUS_FILTERS = [['', 'All'], ['not_started', 'Not started'], ['in_progress', 'In progress'],
   ['ready_for_review', 'Ready for review'], ['completed', 'Completed'], ['waiting', 'Waiting'], ['blocked', 'Blocked']]
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
 
 /**
  * The Milestones tab: a summary card (milestones complete and the status bar, with the pending entries for people
@@ -70,15 +70,14 @@ export default function MilestonesTab({ project, user, view }) {
 
   // Pending entries per milestone, and in all, for people who decide hours (the server lists only what they may decide).
   const pendingByMilestone = {}
-  let pendingHours = 0
   const pending = view.decides ? approvals.data ?? [] : []
   for (const item of pending) {
     const key = String(item.milestone?.id)
     pendingByMilestone[key] ??= { count: 0, hours: 0 }
     pendingByMilestone[key].count += 1
-    pendingByMilestone[key].hours += Number(item.entry?.hours ?? 0)
-    pendingHours += Number(item.entry?.hours ?? 0)
+    pendingByMilestone[key].hours += pendingHoursOf([item])
   }
+  const pendingHours = pendingHoursOf(pending)
   // Your hours: the viewer's own logged hours per milestone and on the project, from their profile.
   const mine = view.mine ? profile.data : undefined
   const myHoursByMilestone = Object.fromEntries((mine?.milestones ?? []).map((x) => [String(x.id), Number(x.logged_hours)]))

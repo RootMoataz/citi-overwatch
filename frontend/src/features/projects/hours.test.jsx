@@ -76,18 +76,19 @@ describe('HoursTab week bar', () => {
 describe('HoursTab team table', () => {
   test('shows the figures, review links, overage, total and banner', async () => {
     renderTab(users.manager)
-    const row = (await screen.findByText('Ada Lovelace')).closest('tr')
+    const row = (await screen.findByRole('rowheader', { name: /Ada Lovelace/ })).closest('tr')
     expect(within(row).getByText('20h')).toBeInTheDocument()
     expect(within(row).getByText('24h')).toBeInTheDocument()
     expect(within(row).getByText('10h')).toBeInTheDocument()
-    expect(within(row).getByText('14h')).toBeInTheDocument()
+    expect(within(row).getByText('14h')).toHaveAttribute('data-tone', 'warning')   // pending above 0: the warning colour
     expect(within(row).getByText('4h above project plan')).toBeInTheDocument()
     expect(within(row).getByText('Analyst')).toBeInTheDocument()
     expect(within(row).getByText('AL')).toBeInTheDocument()
     expect(row).toHaveAttribute('data-tone', 'warning')
-    expect(within(screen.getByText('Cy Doe').closest('tr')).queryByText(/above project plan/)).not.toBeInTheDocument()
+    expect(within(screen.getByRole('rowheader', { name: /Cy Doe/ }).closest('tr')).queryByText(/above project plan/)).not.toBeInTheDocument()
     expect(within(row).getByRole('link', { name: 'View entries' })).toHaveAttribute('href', '/timesheets?project=p1&user=u1')
-    const cy = screen.getByText('Cy Doe').closest('tr')
+    const cy = screen.getByRole('rowheader', { name: /Cy Doe/ }).closest('tr')
+    expect(within(cy).getByText('0h')).not.toHaveAttribute('data-tone')   // nothing pending: plain
     expect(within(cy).getByText('—')).toBeInTheDocument()
     expect(within(cy).queryByRole('link', { name: 'View entries' })).not.toBeInTheDocument()
     const total = screen.getByRole('rowheader', { name: 'Total' }).closest('tr')
@@ -140,11 +141,11 @@ describe('HoursTab for an employee', () => {
       entry('e1', 'm1', 6, 'approved'), entry('e2', 'm1', 3, 'pending'), entry('e3', 'm2', 2, 'rejected'), entry('e4', 'm2', 4, 'pending'),
       { ...entry('e5', 'm9', 5, 'approved'), project_id: 'p2' }] })
     expect(await screen.findByRole('heading', { name: 'Your hours' })).toBeInTheDocument()
-    const build = (await screen.findByText('Build')).closest('tr')
+    const build = (await screen.findByRole('rowheader', { name: 'Build' })).closest('tr')
     // Logged leaves out the rejected hours; they show as needing revision.
-    expect(within(build).getAllByRole('cell').map((c) => c.textContent).slice(1)).toEqual(['4h', '0h', '4h', '2h'])
-    const disc = screen.getByText('Discovery').closest('tr')
-    expect(within(disc).getAllByRole('cell').map((c) => c.textContent).slice(1)).toEqual(['9h', '6h', '3h', '0h'])
+    expect(within(build).getAllByRole('cell').map((c) => c.textContent)).toEqual(['4h', '0h', '4h', '2h'])
+    const disc = screen.getByRole('rowheader', { name: 'Discovery' }).closest('tr')
+    expect(within(disc).getAllByRole('cell').map((c) => c.textContent)).toEqual(['9h', '6h', '3h', '0h'])
     for (const h of ['Milestone', 'Logged', 'Approved', 'Pending', 'Needs revision']) expect(screen.getByRole('columnheader', { name: h })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Open my timesheet' })).toHaveAttribute('href', '/timesheet?week=2026-10-12')
     expect(requests.some((r) => r.includes('/time-entries') && r.includes('week=2026-10-12'))).toBe(true)

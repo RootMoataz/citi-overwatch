@@ -85,7 +85,9 @@ describe('DashboardPage', () => {
     expect(within(deliverables).getByText('Build')).toBeInTheDocument()
     expect(within(deliverables).getByLabelText('Priority: Critical')).toBeInTheDocument()
     expect(within(deliverables).getByLabelText('Priority: High')).toBeInTheDocument()
-    expect(within(screen.getByRole('region', { name: /dependency chain/i })).getAllByRole('link', { name: /timeline/i })).toHaveLength(2)
+    const timelines = within(screen.getByRole('region', { name: /dependency chain/i })).getAllByRole('link', { name: /timeline/i })
+    expect(timelines).toHaveLength(2)
+    timelines.forEach((link) => expect(link).toHaveAttribute('href', expect.stringMatching(/^\/projects\/[^?]+\?tab=milestones&view=timeline$/)))
     expect(screen.getByText('6 waiting for your approval')).toBeInTheDocument()
   })
 

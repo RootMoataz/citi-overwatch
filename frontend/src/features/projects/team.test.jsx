@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import { setViewport } from '../../test/setup.js'
+import { buildTheme } from '../../app/theme.js'
 import TeamTab from './TeamTab.jsx'
 import { projectView } from './viewer.js'
 
@@ -85,7 +86,7 @@ describe('TeamTab', () => {
     const table = await screen.findByRole('table', { name: /team members/i })
     await screen.findByText('Ada Lovelace')
     const rows = within(table).getAllByRole('row').slice(1)
-    expect(rows.map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual([
+    expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual([
       expect.stringContaining('Dee Adams'), expect.stringContaining('Eli Employee'), expect.stringContaining('Ada Lovelace'),
       expect.stringContaining('Bo Peep'), expect.stringContaining('Cy Young')])
     const ada = rows[2]
@@ -116,7 +117,10 @@ describe('TeamTab', () => {
     await user.click(within(edit).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'More actions for Ada Lovelace' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Remove from project' }))
+    const remove = screen.getByRole('menuitem', { name: 'Remove from project' })
+    expect(remove).toHaveStyle({ color: buildTheme('light').palette.error.main })   // a destructive item, in the error colour
+    expect(screen.getByRole('menuitem', { name: 'Edit planned hours' })).not.toHaveStyle({ color: buildTheme('light').palette.error.main })
+    await user.click(remove)
     const confirm = await screen.findByRole('dialog', { name: 'Remove Ada Lovelace from Apollo Data Migration?' })
     expect(within(confirm).getByText("They're also taken off its milestones.")).toBeInTheDocument()
     await user.click(within(confirm).getByRole('button', { name: 'Remove' }))
@@ -129,7 +133,7 @@ describe('TeamTab', () => {
     await within(table).findByText('Ada Lovelace')
     expect(screen.queryByRole('button', { name: 'Add member' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /more actions for/i })).not.toBeInTheDocument()
-    const mine = within(table).getByText('Eli Employee').closest('tr')
+    const mine = within(table).getByRole('rowheader', { name: /Eli Employee/ }).closest('tr')
     expect(within(mine).getByText('You')).toBeInTheDocument()
     expect(within(table).getAllByText('You')).toHaveLength(1)
     expect(within(table).queryByRole('link', { name: 'Ada Lovelace' })).not.toBeInTheDocument()   // a teammate: plain text

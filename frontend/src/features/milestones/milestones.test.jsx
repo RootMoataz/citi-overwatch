@@ -100,9 +100,14 @@ async function table() {
   return t
 }
 const row = (name) => screen.getByRole('button', { name }).closest('tr')
-const cells = (name) => within(row(name)).getAllByRole('cell')
+// Every cell of the row in column order; the Milestone column is the row's header (th scope=row).
+const cells = (name) => {
+  const r = row(name)
+  return [...within(r).getAllByRole('cell'), ...within(r).queryAllByRole('rowheader')]
+    .sort((x, y) => (x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+}
 const bodyRows = (t) => within(t).getAllByRole('row').slice(1)
-const names = (t) => bodyRows(t).map((r) => within(r).getAllByRole('cell')[1].querySelector('button').textContent)
+const names = (t) => bodyRows(t).map((r) => within(within(r).getByRole('rowheader')).getAllByRole('button')[0].textContent)
 const headers = (t) => within(t).getAllByRole('columnheader').map((h) => h.textContent.replace('ⓘ', '').trim())
 const location = () => screen.getByTestId('location')
 const panel = (name) => screen.findByRole('complementary', { name })
@@ -158,6 +163,7 @@ describe('Milestones tab: columns', () => {
       'Approvals', 'More'])
     expect(bodyRows(t).map((r) => within(r).getAllByRole('cell')[0].textContent)).toEqual(['1', '2', '3', '4', '5', '6', '7'])
     expect(names(t)).toEqual(apollo.map((m) => m.name))
+    expect(cells('Discovery')[1]).toBe(within(row('Discovery')).getByRole('rowheader'))   // the name heads its row
     expect(cells('Discovery')[1]).toHaveTextContent('Dependency: None')
     expect(cells('Build: frontend')[1]).toHaveTextContent('Dependency: after Discovery')
     expect(cells('QA & user acceptance testing')[1]).toHaveTextContent('Dependency: after Build: frontend, Schema Mapping')

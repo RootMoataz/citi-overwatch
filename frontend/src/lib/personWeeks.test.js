@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { groupByPersonWeek } from './personWeeks.js'
+import { groupByPersonWeek, pendingHoursOf } from './personWeeks.js'
 
 const gia = { id: 'u-gia', name: 'Gia Rossi' }
 const ben = { id: 'u-ben', name: 'Ben Osei' }
@@ -20,5 +20,13 @@ describe('groupByPersonWeek', () => {
 
   test('nothing in, nothing out', () => {
     expect(groupByPersonWeek([])).toEqual([])
+  })
+})
+
+describe('pendingHoursOf', () => {
+  test('adds the hours of approval items, reading text hours and treating missing ones as 0', () => {
+    expect(pendingHoursOf([{ entry: { hours: 8 } }, { entry: { hours: '4.5' } }, { entry: {} }, {}])).toBe(12.5)
+    expect(pendingHoursOf([])).toBe(0)
+    expect(pendingHoursOf(undefined)).toBe(0)
   })
 })

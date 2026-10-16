@@ -262,6 +262,7 @@ describe('ProjectsPage', () => {
       go(users.admin)
       const link = await screen.findByRole('link', { name: 'Apollo Data Migration' })
       expect(link).toHaveAttribute('href', '/projects/p1')
+      expect(within(rowsOf()[0]).getByRole('rowheader')).toContainElement(link)   // the project heads its row
       expect(rowsOf()[0]).toHaveTextContent('Technology')
       expect(within(rowsOf()[0]).getByText('Archived')).toBeInTheDocument()
       await userEvent.setup().click(within(rowsOf()[0]).getByText('Technology'))
@@ -480,6 +481,11 @@ describe('ProjectsPage', () => {
       expect(card).toHaveTextContent('Technology')
       expect(within(card).getByText('Active')).toBeInTheDocument()
       expect(within(card).getByRole('img', { name: 'Risk: Past due' })).toBeInTheDocument()
+      // The card is one control: nothing inside it takes focus of its own (the risk's reasons are in its name).
+      const action = within(card).getAllByRole('button')[0]
+      const focusable = [...action.querySelectorAll('a[href],button,input,select,textarea,[tabindex]')]
+        .filter((el) => el.getAttribute('tabindex') !== '-1')
+      expect(focusable).toEqual([])
       expect(within(card).getByRole('meter', { name: 'Apollo Data Migration progress' })).toHaveAttribute('aria-valuetext', '33.3%')
       expect(within(card).getByRole('meter', { name: 'Apollo Data Migration budget used' })).toHaveAttribute('aria-valuetext', '20%')
       expect(within(card).getByText('3 days overdue')).toBeInTheDocument()
@@ -585,6 +591,13 @@ describe('ProjectDetailPage', () => {
       expect(screen.getByText('Technology')).toBeInTheDocument()
       expect(screen.getByText('Jul 15 – Dec 27, 2026')).toBeInTheDocument()
       expect(screen.queryByRole('link', { name: /^projects$/i })).not.toBeInTheDocument()
+    })
+
+    test("the meta line shows the manager's avatar before the name", async () => {
+      open(full())
+      await screen.findByRole('heading', { level: 1, name: 'Apollo Data Migration' })
+      const name = screen.getAllByText('Morgan Manager')[0]   // the header's, the first on the page
+      expect(name.parentElement).toHaveTextContent(/^MMorgan Manager$/)   // the avatar (one initial at this size), then the name
     })
 
     test('a missing department drops its segment, and a past-due project says so', async () => {

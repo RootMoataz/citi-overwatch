@@ -90,7 +90,7 @@ function Header({ conversation, me, onBack }) {
       </Box>
       {milestone ? (
         <Chip size="small" variant="outlined" color="primary" icon={<Flag />} clickable component={RouterLink}
-          to={`/projects/${milestone.project.id}?tab=milestones`} label={milestone.name}
+          to={`/projects/${milestone.project.id}?tab=milestones&milestone=${milestone.id}&panel=discussion`} label={milestone.name}
           aria-label={`Milestone ${milestone.name} in ${milestone.project.name}`} sx={{ maxWidth: { xs: 120, sm: 240 } }} />
       ) : null}
     </Stack>

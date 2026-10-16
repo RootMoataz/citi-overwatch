@@ -34,7 +34,7 @@ function objectPath(item, viewer) {
   const obj = item.object
   if (!obj?.id) return null
   if (obj.type === 'project') return `/projects/${obj.id}`
-  if (obj.type === 'milestone' && item.project) return `/projects/${item.project.id}?tab=milestones`
+  if (obj.type === 'milestone' && item.project) return `/projects/${item.project.id}?tab=milestones&milestone=${obj.id}`
   if (obj.type === 'user' && canViewProfile(viewer, obj.id)) return `/people/${obj.id}/profile`
   return null
 }
