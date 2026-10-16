@@ -25,6 +25,7 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import EstimateLine from '../../components/EstimateLine.jsx'
+import MilestoneStatusBar from '../../components/MilestoneStatusBar.jsx'
 import MilestoneTimeline from '../../components/Timeline.jsx'
 import { formatDate } from '../../lib/format.js'
 import { statusActions } from '../../lib/milestoneActions.js'
@@ -208,6 +209,7 @@ export default function MilestonesTab({ project, manage, extra }) {
         <EmptyState title="No milestones yet"
           description={manage ? 'Break the project into milestones with dates, owners and dependencies.' : 'The project manager adds milestones here.'} />
       ) : null}
+      <MilestoneStatusBar items={items} />
       {items.length ? (
         <MilestoneTimeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }}
           onOpen={(m) => setParams((p) => { p.set('milestone', m.id); return p })} />

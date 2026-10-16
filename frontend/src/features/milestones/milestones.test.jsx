@@ -134,6 +134,14 @@ describe('MilestonesTab', () => {
     expect(bars[1]).toHaveAttribute('tabindex', '0')
   })
 
+  test('the Milestones tab shows the state bar above the timeline', async () => {
+    server.use(...handlers())
+    renderTab(users.employee, false)
+    const bar = await screen.findByRole('region', { name: '0 of 3 milestones done' })
+    const timeline = screen.getByRole('list', { name: /milestone timeline/i })
+    expect(bar.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   test('clicking a timeline row sets ?milestone and scrolls that card into view', async () => {
     const scroll = vi.fn()
     HTMLElement.prototype.scrollIntoView = scroll // jsdom has no layout, so no scrollIntoView
