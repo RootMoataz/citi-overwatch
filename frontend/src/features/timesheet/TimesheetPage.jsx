@@ -11,6 +11,8 @@ import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import { NOTE_MAX, NOTE_MIN } from '../timer/timerClock.js'
 import DayView from './DayView.jsx'
 import { RequestChangeDialog } from './LockedCell.jsx'
+import MonthView from './MonthView.jsx'
+import { monthOf } from './monthLayout.js'
 import WeekGrid from './WeekGrid.jsx'
 import WeekStrip from './WeekStrip.jsx'
 import { DAY_CAP, MIN_HOURS, key, useTimesheetWeek } from './useTimesheetWeek.js'
@@ -18,15 +20,23 @@ import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
-import { addDays, formatDate, formatDayLabel, formatHours, mondayOf, todayIso } from '../../lib/format.js'
+import { addDays, formatDate, formatDayLabel, formatDayShort, formatHours, mondayOf, todayIso } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
 const CAP = 40
 const VIEW_KEY = 'overwatch.timesheet.view'
 
-// The Day or Week choice is kept per browser; blocked storage just means Day every time.
+// The Day, Week or Month choice is kept per browser; blocked storage just means Day every time.
 const readView = () => {
-  try { return window.localStorage.getItem(VIEW_KEY) === 'week' ? 'week' : 'day' } catch { return 'day' }
+  try {
+    const v = window.localStorage.getItem(VIEW_KEY)
+    return v === 'week' || v === 'month' ? v : 'day'
+  } catch { return 'day' }
+}
+// Monday of the week holding an ISO day, by local calendar parts so a daylight-saving change can't shift it.
+const mondayOfIso = (iso) => {
+  const [y, m, d] = iso.split('-').map(Number)
+  return mondayOf(new Date(y, m - 1, d))
 }
 const storeView = (view) => {
   try { window.localStorage.setItem(VIEW_KEY, view) } catch { /* blocked: the choice lasts until the page closes */ }
@@ -42,9 +52,10 @@ export default function TimesheetPage() {
   const [params, setParams] = useSearchParams()
   const week = params.get('week') ?? mondayOf(new Date())
   const [view, setView] = useState(readView)
+  const [sheetView, setSheetView] = useState(() => (readView() === 'week' ? 'week' : 'day')) // where "Back to that week" returns
   const [showWeekend, setShowWeekend] = useState(false)
   const [asking, setAsking] = useState(null)
-  const [leaving, setLeaving] = useState({ open: false, week: null, count: 0 }) // the "discard your changes?" question
+  const [leaving, setLeaving] = useState({ open: false, week: null, day: undefined, count: 0 }) // the "discard your changes?" question
   const state = useTimesheetWeek(week)
   const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, onSave, dayTotal, nameOf } = state
 
@@ -56,6 +67,10 @@ export default function TimesheetPage() {
   const asked = params.get('day')
   const day = allDays.includes(asked) ? asked : thisWeek ? todayIso() : week
   const inDayView = view === 'day'
+  const inMonth = view === 'month'
+  // The month comes from ?month=; without it, from the selected day (today for the current week, else the Monday).
+  const askedMonth = params.get('month')
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(askedMonth ?? '') ? askedMonth : monthOf(day)
   const n = changed.length
 
   // Closing or reloading the tab with unsaved changes asks the browser to confirm.
@@ -67,17 +82,63 @@ export default function TimesheetPage() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
-  const toWeek = (target) => { state.discard(); setParams({ week: target }, { replace: true }) }
-  const goTo = (target) => (n ? setLeaving({ open: true, week: target, count: n }) : toWeek(target))
+  // The month is written into the URL as soon as the Month view opens, so a reload or a shared link keeps it.
+  useEffect(() => {
+    if (inMonth && askedMonth !== month) setParams((p) => { const next = new URLSearchParams(p); next.set('month', month); return next }, { replace: true })
+  }, [inMonth, askedMonth, month, setParams])
+
+  // With a day, the week opens in the Day view on that day (a day picked in the Month view).
+  const toWeek = (target, pick) => {
+    state.discard()
+    if (pick) { chooseView('day'); setParams({ week: target, day: pick }, { replace: true }) } else setParams({ week: target }, { replace: true })
+  }
+  const goTo = (target, pick) => (n ? setLeaving({ open: true, week: target, day: pick, count: n }) : toWeek(target, pick))
+  const openDay = (iso) => {
+    const target = mondayOfIso(iso)
+    if (target === week) { chooseView('day'); setParams({ week, day: iso }, { replace: true }) } else goTo(target, iso)
+  }
   // Already on this week there is nothing to leave: just open today.
   const goThisWeek = () => (thisWeek ? setParams({ week, day: todayIso() }, { replace: true }) : goTo(mondayOf(new Date())))
   const overDate = failure?.code === 'DAY_OVER_24H' && inDayView && allDays.includes(failure.details?.work_date) ? failure.details.work_date : null
   const stay = () => setLeaving((l) => ({ ...l, open: false }))
-  const chooseView = (next) => { setView(next); storeView(next) }
+  const chooseView = (next) => {
+    if (next !== 'month') setSheetView(next)
+    setView(next)
+    storeView(next)
+  }
   // A cell named in an error; in the day view it links to its day.
   const cellRef = (milestoneId, date) => {
     const text = `${nameOf(milestoneId)}, ${formatDayLabel(date)}`
     return inDayView ? <DayLink week={week} date={date}>{text}</DayLink> : text
+  }
+
+  const toggle = (
+    <ToggleButtonGroup exclusive size="small" value={view} aria-label="Timesheet view"
+      onChange={(_, next) => { if (next) chooseView(next) }}>
+      <ToggleButton value="day">Day</ToggleButton>
+      <ToggleButton value="week">Week</ToggleButton>
+      <ToggleButton value="month">Month</ToggleButton>
+    </ToggleButtonGroup>
+  )
+
+  // The month calendar never edits; unsaved edits stay in memory (and the leave warning stays on) until you go back to the week.
+  if (inMonth) {
+    return (
+      <>
+        <PageHeader title="My timesheet" subtitle="Log hours per day on the milestones you're assigned to. Every entry goes to the project manager for approval." />
+        <Stack direction="row" sx={{ justifyContent: 'flex-end', mb: 2 }}>{toggle}</Stack>
+        {n ? (
+          <Alert severity="info" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => chooseView(sheetView)}>Back to that week</Button>}>
+            You have {n} unsaved change{n === 1 ? '' : 's'} in the week of {formatDayShort(week)}.
+          </Alert>
+        ) : null}
+        <MonthView month={month} onOpenDay={openDay}
+          onMonthChange={(next) => setParams((p) => { const q = new URLSearchParams(p); q.set('month', next); return q }, { replace: true })} />
+        <ConfirmDialog open={leaving.open} title={`Discard ${leaving.count} unsaved change${leaving.count === 1 ? '' : 's'}?`}
+          body="The hours and notes you typed haven't been submitted and will be lost." confirmLabel="Discard"
+          onConfirm={() => { toWeek(leaving.week, leaving.day); stay() }} onClose={stay} />
+      </>
+    )
   }
 
   return (
@@ -93,11 +154,7 @@ export default function TimesheetPage() {
           <Button size="small" onClick={goThisWeek}>This week</Button>
         </Stack>
         <Box sx={{ flexGrow: 1 }} />
-        <ToggleButtonGroup exclusive size="small" value={view} aria-label="Timesheet view"
-          onChange={(_, next) => { if (next) chooseView(next) }}>
-          <ToggleButton value="day">Day</ToggleButton>
-          <ToggleButton value="week">Week</ToggleButton>
-        </ToggleButtonGroup>
+        {toggle}
         <Typography data-testid="week-total" data-over={total > CAP} variant="h3" component="p"
           sx={{ color: total > CAP ? 'warning.main' : 'text.primary' }}>
           {formatHours(total)} / {CAP}h
@@ -181,7 +238,7 @@ export default function TimesheetPage() {
       {asking ? <RequestChangeDialog cell={asking} onClose={() => setAsking(null)} /> : null}
       <ConfirmDialog open={leaving.open} title={`Discard ${leaving.count} unsaved change${leaving.count === 1 ? '' : 's'}?`}
         body="The hours and notes you typed haven't been submitted and will be lost." confirmLabel="Discard"
-        onConfirm={() => { toWeek(leaving.week); stay() }} onClose={stay} />
+        onConfirm={() => { toWeek(leaving.week, leaving.day); stay() }} onClose={stay} />
     </>
   )
 }
