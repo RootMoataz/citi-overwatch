@@ -1,8 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { setViewport } from '../../test/setup.js'
 import ProjectDetailPage from './ProjectDetailPage.jsx'
 import ProjectsPage from './ProjectsPage.jsx'
 
@@ -127,56 +128,271 @@ describe('ProjectsPage', () => {
     await waitFor(() => expect(posted).toMatchObject({ name: 'Orion', department_id: 'd2', template: true }))
   }, 15000)
 
-  test('projects filters sync to URL and refetch', async () => {
-    const seen = []
-    server.use(listHandler([project()], seen), managersHandler())
-    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects?status=active', path: '/projects' })
-    expect(await screen.findByText('Apollo Data Migration')).toBeInTheDocument()
-    expect(seen.at(-1)).toMatchObject({ status: 'active' })
-    const user = userEvent.setup()
-    await user.type(screen.getByRole('searchbox', { name: /search projects/i }), 'apo')
-    await waitFor(() => expect(seen.at(-1)).toMatchObject({ q: 'apo', status: 'active' }))
-    expect(screen.getByTestId('location')).toHaveTextContent('q=apo')
-    await user.click(screen.getByRole('checkbox', { name: /at risk only/i }))
-    await waitFor(() => expect(seen.at(-1)).toMatchObject({ at_risk: 'true' }))
-    expect(screen.getByTestId('location')).toHaveTextContent('at_risk=true')
+  describe('the list', () => {
+    const rowsOf = () => within(screen.getByRole('table', { name: 'Projects' })).getAllByRole('row').slice(1)
+    const counts = { total: 6, active: 3, at_risk: 2 }
+
+    function serve(items = [project()], { seen = [], total = items.length, countsBody = counts, respond } = {}) {
+      server.use(managersHandler(), http.get(`${API}/projects`, ({ request }) => {
+        const query = Object.fromEntries(new URL(request.url).searchParams)
+        seen.push(query)
+        if (respond) return respond(query)
+        return HttpResponse.json({ items, total, counts: countsBody })
+      }))
+      return seen
+    }
+    const go = (user, route = '/projects') => renderAsUser(<ProjectsPage />, { user, route, path: '/projects' })
+
+    afterEach(() => { vi.useRealTimers() })
+
+    test('header: title, subtitle, and the actions for each role', async () => {
+      serve()
+      go(users.admin)
+      expect(await screen.findByRole('heading', { level: 1, name: 'Projects' })).toBeInTheDocument()
+      expect(screen.getByText('Keep delivery, budget and risk in view.')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'New project' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Export CSV' })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Request a project' })).not.toBeInTheDocument()
+    })
+
+    test('a manager gets Request a project, linking to the request dialog, and no New project', async () => {
+      serve()
+      go(users.manager)
+      const link = await screen.findByRole('link', { name: 'Request a project' })
+      expect(link).toHaveAttribute('href', '/requests?new=1')
+      expect(screen.queryByRole('button', { name: 'New project' })).not.toBeInTheDocument()
+    })
+
+    test('the KPI strip shows the counts and At risk turns the filter on', async () => {
+      const seen = serve()
+      go(users.admin)
+      const strip = await screen.findByRole('group', { name: 'Projects summary' })
+      await waitFor(() => expect(strip).toHaveTextContent('6projects'))
+      expect(strip).toHaveTextContent('3active')
+      expect(strip).toHaveTextContent('2at risk')
+      await userEvent.setup().click(within(strip).getByRole('button', { name: '2 at risk' }))
+      expect(screen.getByTestId('location')).toHaveTextContent('at_risk=true')
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ at_risk: 'true' }))
+    })
+
+    test('filters set and clear URL params, and every refetch sends them', async () => {
+      const seen = serve([project()])
+      server.use(departmentsHandler())
+      go(users.admin, '/projects?department=d1')
+      expect(await screen.findByRole('link', { name: 'Apollo Data Migration' })).toBeInTheDocument()
+      expect(seen.at(-1)).toMatchObject({ department: 'd1', sort: 'name', dir: 'asc', page_size: '25' })
+      const user = userEvent.setup()
+
+      await user.type(screen.getByRole('textbox', { name: 'Search projects' }), 'apo')
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ q: 'apo', department: 'd1' }))
+      expect(screen.getByTestId('location')).toHaveTextContent('q=apo')
+
+      await user.click(screen.getByRole('combobox', { name: 'Status' }))
+      await user.click(await screen.findByRole('option', { name: 'Active' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ status: 'active' }))
+      expect(screen.getByTestId('location')).toHaveTextContent('status=active')
+
+      await user.click(screen.getByRole('switch', { name: 'At risk only' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ at_risk: 'true' }))
+      await user.click(screen.getByRole('switch', { name: 'At risk only' }))
+      expect(screen.getByTestId('location')).not.toHaveTextContent('at_risk')
+
+      await user.click(screen.getByRole('switch', { name: 'Archived' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ archived: 'true' }))
+
+      await user.click(screen.getByRole('combobox', { name: 'Manager' }))
+      await user.click(await screen.findByRole('option', { name: 'Morgan Manager' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ manager: users.manager.id }))
+
+      const chip = await screen.findByRole('button', { name: 'Department: Technology' })
+      chip.focus()
+      await user.keyboard('{Delete}')
+      await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('department'))
+      expect(screen.getByTestId('location')).not.toHaveTextContent('department')
+    })
+
+    test('sorting is on the server: the header sets sort and dir, and rows keep the server order', async () => {
+      const a = project({ id: 'p1', name: 'Zulu' })
+      const b = project({ id: 'p2', name: 'Alpha' })
+      const seen = serve([a, b])
+      go(users.admin)
+      await screen.findByRole('link', { name: 'Zulu' })
+      expect(screen.getByRole('columnheader', { name: 'Project' })).toHaveAttribute('aria-sort', 'ascending')
+      expect(rowsOf()[0]).toHaveTextContent('Zulu')    // not re-sorted on the client
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: 'Budget used' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ sort: 'budget_used', dir: 'asc' }))
+      expect(screen.getByRole('columnheader', { name: 'Budget used' })).toHaveAttribute('aria-sort', 'ascending')
+      await user.click(screen.getByRole('button', { name: 'Budget used' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ sort: 'budget_used', dir: 'desc' }))
+      expect(screen.getByTestId('location')).toHaveTextContent('sort=budget_used&dir=desc')
+      expect(rowsOf()[0]).toHaveTextContent('Zulu')
+    })
+
+    test('paging: 25 per page, the next page is page=2, and a filter change returns to page 1', async () => {
+      const seen = serve([project()], { total: 30 })
+      go(users.admin, '/projects?status=planned')
+      await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      expect(seen.at(-1)).toMatchObject({ page_size: '25' })
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: /next page/i }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ page: '2', page_size: '25' }))
+      expect(screen.getByTestId('location')).toHaveTextContent('page=2')
+
+      await user.click(screen.getByRole('combobox', { name: 'Status' }))
+      await user.click(await screen.findByRole('option', { name: 'Active' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ status: 'active' }))
+      expect(seen.at(-1).page).not.toBe('2')
+      expect(screen.getByTestId('location')).not.toHaveTextContent('page=')
+    })
+
+    test('changing the sort on a later page drops the page too', async () => {
+      const seen = serve([project()], { total: 30 })
+      go(users.admin, '/projects?page=2')
+      await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      expect(seen.at(-1)).toMatchObject({ page: '2' })
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Progress' }))
+      await waitFor(() => expect(seen.at(-1)).toMatchObject({ sort: 'progress' }))
+      expect(seen.at(-1).page).not.toBe('2')
+      expect(screen.getByTestId('location')).not.toHaveTextContent('page=')
+    })
+
+    test('rows: name link with the department under it, the archived chip, and a click on the row opens it', async () => {
+      serve([project({ department: { id: 'd1', name: 'Technology' }, is_archived: true })])
+      go(users.admin)
+      const link = await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      expect(link).toHaveAttribute('href', '/projects/p1')
+      expect(rowsOf()[0]).toHaveTextContent('Technology')
+      expect(within(rowsOf()[0]).getByText('Archived')).toBeInTheDocument()
+      await userEvent.setup().click(within(rowsOf()[0]).getByText('Technology'))
+      expect(await screen.findByText('project page p1')).toBeInTheDocument()
+    })
+
+    test('rows: risk in words with its reasons, a healthy row reads No risk, and the due line', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+      serve([
+        project({ id: 'p1', name: 'Late One', predicted_end_date: '2026-10-12', budget_pct: 81.2, progress_pct: 61.9,
+          at_risk_reasons: ['BUDGET_BURN', 'PAST_DUE'] }),
+        project({ id: 'p2', name: 'Fine One', predicted_end_date: '2026-10-23' }),
+      ])
+      go(users.admin)
+      await screen.findByRole('link', { name: 'Late One' })
+      const [late, fine] = rowsOf()
+      const risk = within(late).getByRole('img', { name: 'Risk: Past due, Budget ahead of progress' })
+      expect(risk).toHaveTextContent('Past due')
+      expect(within(late).getByText('3 days overdue')).toBeInTheDocument()
+      expect(within(fine).getByRole('img', { name: 'No risk' })).toHaveTextContent('—')
+      expect(within(fine).getByText('8 days left')).toBeInTheDocument()
+      await userEvent.setup({ advanceTimers: () => {} }).hover(risk)
+      expect(await screen.findByText("Ended Oct 12, 2026, 3 days ago, and isn't completed.")).toBeInTheDocument()
+      expect(screen.getByText('81% of the budget used against 62% progress: 19 points ahead.')).toBeInTheDocument()
+    })
+
+    test('rows: manager, status, and the progress and budget bars', async () => {
+      serve([project({ progress_pct: 33.3, budget_pct: 95 })])
+      go(users.admin)
+      await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      expect(screen.getByRole('link', { name: 'Morgan Manager' })).toBeInTheDocument()
+      expect(screen.getByRole('meter', { name: 'Apollo Data Migration progress' })).toHaveAttribute('aria-valuetext', '33.3%')
+      expect(screen.getByRole('meter', { name: 'Apollo Data Migration budget used' })).toHaveAttribute('aria-valuetext', '95%')
+      for (const name of ['Project', 'Status', 'Manager', 'Progress', 'Budget used', 'Due date', 'Risk']) {
+        expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
+      }
+    })
+
+    test('footer: the New York date and the explanation', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+      serve()
+      go(users.admin)
+      expect(await screen.findByText('Today is October 15, 2026')).toBeInTheDocument()
+      expect(screen.getByText(/Progress is milestone completion weighted by difficulty\. Budget used is approved spend against the budget\./))
+        .toBeInTheDocument()
+    })
+
+    test('late evening in New York: the footer reads the New York date and a project ending today is Due today', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-16T02:00:00Z'))
+      serve([project({ predicted_end_date: '2026-10-15' })])
+      go(users.admin)
+      expect(await screen.findByText('Today is October 15, 2026')).toBeInTheDocument()
+      expect(await screen.findByText('Due today')).toBeInTheDocument()
+    })
+
+    test('an employee gets the table but no New project, Request a project, All managers or Archived', async () => {
+      serve()
+      go(users.employee)
+      await screen.findByRole('link', { name: 'Apollo Data Migration' })
+      expect(screen.queryByRole('button', { name: 'New project' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: 'Request a project' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('combobox', { name: 'Manager' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('switch', { name: 'Archived' })).not.toBeInTheDocument()
+    })
+
+    test('loading shows skeleton rows', async () => {
+      serve([project()], { respond: async () => { await new Promise((r) => setTimeout(r, 300)); return HttpResponse.json({ items: [], total: 0, counts }) } })
+      const { container } = go(users.admin)
+      const table = await screen.findByRole('table', { name: 'Projects' })
+      expect(table.closest('[aria-busy="true"]')).not.toBeNull()
+      expect(container.querySelectorAll('.MuiSkeleton-root').length).toBeGreaterThan(0)
+    })
+
+    test('an error shows the alert with Retry, and Retry loads the list', async () => {
+      let fail = true
+      serve([project()], { respond: () => (fail
+        ? HttpResponse.json({ error: { code: 'INTERNAL', message: 'Boom' } }, { status: 500 })
+        : HttpResponse.json({ items: [project()], total: 1, counts })) })
+      go(users.admin)
+      const alert = await screen.findByRole('alert')
+      fail = false
+      await userEvent.setup().click(within(alert).getByRole('button', { name: /try again|retry/i }))
+      expect(await screen.findByRole('link', { name: 'Apollo Data Migration' })).toBeInTheDocument()
+    })
+
+    test('filtered with no rows says No projects match and Clear filters clears them', async () => {
+      const seen = serve([], { respond: (q) => HttpResponse.json({ items: q.status ? [] : [project()], total: q.status ? 0 : 1, counts }) })
+      go(users.admin, '/projects?status=on_hold')
+      expect(await screen.findByText('No projects match')).toBeInTheDocument()
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Clear filters' }))
+      expect(await screen.findByRole('link', { name: 'Apollo Data Migration' })).toBeInTheDocument()
+      expect(seen.at(-1)).not.toHaveProperty('status')
+    })
+
+    test('no projects at all shows the empty state for the role', async () => {
+      serve([], { countsBody: { total: 0, active: 0, at_risk: 0 } })
+      go(users.admin)
+      expect(await screen.findByText('No projects yet')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /create the first project/i })).toBeInTheDocument()
+      serve([], { countsBody: { total: 0, active: 0, at_risk: 0 } })
+      go(users.employee)
+      expect(await screen.findByText(/aren't on any projects yet/i)).toBeInTheDocument()
+    })
+
+    test('phones: cards instead of a table, with name, status, risk, both bars and the due line; the KPI strip keeps 3 values', async () => {
+      setViewport(375)
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+      serve([project({ predicted_end_date: '2026-10-12', at_risk_reasons: ['PAST_DUE'], department: { id: 'd1', name: 'Technology' } })])
+      go(users.admin)
+      const list = await screen.findByRole('list', { name: 'Projects' })
+      expect(screen.queryByRole('table')).not.toBeInTheDocument()
+      const card = within(list).getByRole('listitem')
+      expect(card).toHaveTextContent('Apollo Data Migration')
+      expect(card).toHaveTextContent('Technology')
+      expect(within(card).getByText('Active')).toBeInTheDocument()
+      expect(within(card).getByRole('img', { name: 'Risk: Past due' })).toBeInTheDocument()
+      expect(within(card).getByRole('meter', { name: 'Apollo Data Migration progress' })).toHaveAttribute('aria-valuetext', '33.3%')
+      expect(within(card).getByRole('meter', { name: 'Apollo Data Migration budget used' })).toHaveAttribute('aria-valuetext', '20%')
+      expect(within(card).getByText('3 days overdue')).toBeInTheDocument()
+      const strip = screen.getByRole('group', { name: 'Projects summary' })
+      await waitFor(() => expect(strip).toHaveTextContent('6projects'))
+      expect(strip).toHaveTextContent('3active')
+      expect(strip).toHaveTextContent('2at risk')
+    })
   })
 
-  test('rows show the manager with an avatar and the team as a compact avatar group', async () => {
-    const team = ['Ann Ames', 'Ben Bell', 'Cy Cole', 'Di Dunn', 'Ed Eve'].map((name, i) => ({ id: `t${i}`, name }))
-    server.use(listHandler([project({ team })]), managersHandler())
-    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
-    const group = await screen.findByRole('group', { name: 'Apollo Data Migration team' })
-    expect(within(group).getByRole('img', { name: 'Ann Ames' })).toHaveTextContent('AA')
-    expect(within(group).getByRole('img', { name: '2 more: Di Dunn, Ed Eve' })).toHaveTextContent('+2')
-    const manager = screen.getByRole('link', { name: 'Morgan Manager' })      // admins open anyone's profile
-    expect(manager.closest('[title]').parentElement).toHaveTextContent('MMMorgan Manager')
-  })
-
-  test('rows show progress, budget use and risk', async () => {
-    server.use(listHandler([project({ at_risk_reasons: ['PAST_DUE'] })]), managersHandler())
-    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
-    expect(await screen.findByText('Past due date')).toBeInTheDocument()
-    expect(screen.getByText('33.3%')).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Budget' })).toBeInTheDocument()
-    expect(screen.getByText('20%')).toBeInTheDocument()
-    expect(screen.getByText(/progress \(weighted by milestone difficulty\)/i)).toBeInTheDocument()
-  })
-
-  test('empty projects list shows EmptyState with action for admin', async () => {
-    server.use(listHandler([]), managersHandler())
-    renderAsUser(<ProjectsPage />, { user: users.admin, route: '/projects', path: '/projects' })
-    expect(await screen.findByText('No projects yet')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /create the first project/i })).toBeInTheDocument()
-  })
-
-  test('employee does not see New project or archive actions', async () => {
-    server.use(listHandler([]))
-    renderAsUser(<ProjectsPage />, { user: users.employee, route: '/projects', path: '/projects' })
-    expect(await screen.findByText(/aren't on any projects yet/i)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /new project/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: /manager/i })).not.toBeInTheDocument()
-
+  test('an employee sees no archive or edit actions on a project page', async () => {
     server.use(...detailHandlers())
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1', path: '/projects/:id' })
     expect(await screen.findByRole('heading', { name: 'Apollo Data Migration' })).toBeInTheDocument()

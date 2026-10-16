@@ -16,6 +16,14 @@ export const RISK_LABELS = {
   BLOCKED_MILESTONE: 'Kicked back – needs review',
 }
 
+/** The one- or two-word reason shown in the Risk column and the health chip. */
+export const RISK_SHORT = {
+  PAST_DUE: 'Past due',
+  BUDGET_BURN: 'Budget ahead of progress',
+  OVERDUE_MILESTONE: 'Overdue milestone',
+  BLOCKED_MILESTONE: 'Kicked back',
+}
+
 /** Why an assignee kicked a milestone back. */
 export const KICKBACK_CATEGORY = {
   blocker: 'Blocker', technical_issue: 'Technical issue', unclear_requirement: 'Unclear requirement', other: 'Other',

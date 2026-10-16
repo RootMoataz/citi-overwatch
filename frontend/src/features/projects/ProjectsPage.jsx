@@ -1,32 +1,35 @@
 import Add from '@mui/icons-material/Add'
-import Search from '@mui/icons-material/Search'
-import {
-  Box, Button, Checkbox, Chip, FormControlLabel, InputAdornment, LinearProgress, Link, MenuItem, Paper, Stack, TextField,
-  Typography,
-} from '@mui/material'
+import WarningAmber from '@mui/icons-material/WarningAmber'
+import { Button, Chip, FormControlLabel, Link, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { useCreateProject, useDepartments, useManagers, useProjects } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
+import DataBar from '../../components/DataBar.jsx'
+import DataTable from '../../components/DataTable.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
-import AvatarStack from '../../components/AvatarStack.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import ExportCsvButton from '../../components/ExportCsvButton.jsx'
+import FilterBar from '../../components/FilterBar.jsx'
+import FootNote from '../../components/FootNote.jsx'
+import KpiStrip from '../../components/KpiStrip.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonWithAvatar from '../../components/PersonWithAvatar.jsx'
-import ResponsiveTable from '../../components/ResponsiveTable.jsx'
-import RiskBadges from '../../components/RiskBadges.jsx'
+import RiskText from '../../components/RiskText.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
-import { num } from '../../lib/csv.js'
-import { formatDate, formatPct } from '../../lib/format.js'
 import { budgetTone } from '../../lib/chartData.js'
-import DataBar from '../../components/DataBar.jsx'
-import { PROGRESS_WEIGHTING, RISK_LABELS } from '../../lib/labels.js'
+import { num } from '../../lib/csv.js'
+import { formatDate, formatLongDate, nyTodayIso } from '../../lib/format.js'
+import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
+import { dueLine } from '../../lib/risk.js'
 import ProjectForm from './ProjectForm.jsx'
 
-const FILTERS = ['q', 'status', 'manager', 'at_risk', 'department']
+const FILTERS = ['q', 'status', 'manager', 'at_risk', 'department', 'archived']
+const PAGE_SIZE = 25
+const DEFAULT_SORT = { key: 'name', dir: 'asc' }
+const SORT_KEYS = ['name', 'status', 'manager', 'progress', 'budget_used', 'due', 'risk']
 
 const CSV_COLUMNS = [
   { header: 'Project', value: (p) => p.name },
@@ -43,41 +46,68 @@ const CSV_COLUMNS = [
   { header: 'At risk', value: (p) => (p.at_risk_reasons ?? []).map((r) => RISK_LABELS[r] ?? r).join('; ') },
 ]
 
-function Progress({ value, compact = false }) {
+const FOOT_NOTE = "Progress is milestone completion weighted by difficulty. Budget used is approved spend against the budget. "
+  + "The due date is the project's planned end."
+
+function DueLine({ project, today }) {
+  const line = dueLine(project, today)
+  if (!line) return null
   return (
-    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, width: '100%' }}>
-      <LinearProgress variant="determinate" value={Math.min(value, 100)}
-        sx={{ flexGrow: 1, minWidth: compact ? 32 : 64, height: 6, borderRadius: 3 }}
-        aria-label="Progress, weighted by milestone difficulty" />
-      <Typography variant="body2" sx={{ minWidth: 44, textAlign: 'right' }}>{formatPct(value)}</Typography>
-    </Stack>
+    <Typography variant="caption" component="div" sx={{ color: line.overdue ? 'error.main' : 'text.secondary' }}>
+      {line.text}
+    </Typography>
   )
 }
 
-function TeamAvatars({ project }) {
-  return <AvatarStack people={project.team ?? []} max={4} label={`${project.name} team`} />
+function ProgressBar({ project }) {
+  return <DataBar value={project.progress_pct} label={`${project.name} progress`} minWidth={0} />
+}
+
+function BudgetBar({ project }) {
+  return <DataBar value={project.budget_pct} tone={budgetTone(project.budget_pct)} label={`${project.name} budget used`} minWidth={0} />
+}
+
+function StatusCell({ project }) {
+  return (
+    <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
+      <StatusChip status={project.status} />
+      {project.is_archived ? <Chip size="small" variant="outlined" label="Archived" /> : null}
+    </Stack>
+  )
 }
 
 export default function ProjectsPage() {
   const { user } = useSession()
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
+  const today = nyTodayIso(new Date())
   const filters = useMemo(() => Object.fromEntries(FILTERS.map((k) => [k, params.get(k) ?? '']).filter(([, v]) => v)), [params])
+  const sort = useMemo(() => {
+    const key = params.get('sort')
+    return SORT_KEYS.includes(key) ? { key, dir: params.get('dir') === 'desc' ? 'desc' : 'asc' } : DEFAULT_SORT
+  }, [params])
+  const page = Math.max(1, Number.parseInt(params.get('page') ?? '', 10) || 1)
   const [search, setSearch] = useState(params.get('q') ?? '')
   const [creating, setCreating] = useState(false)
-  const projects = useProjects(filters)
+  const projects = useProjects({ ...filters, sort: sort.key, dir: sort.dir, page, page_size: PAGE_SIZE })
   const showManagerFilter = can(user, 'projects.filterByManager')  // admins and executives see every manager's projects
+  const showArchived = can(user, 'archive.everything')
   const managers = useManagers(showManagerFilter)
   const create = useCreateProject()
   const departments = useDepartments({ enabled: Boolean(filters.department) })
   const department = (departments.data?.items ?? []).find((d) => String(d.id) === filters.department)
 
-  const setFilter = (key, value) => setParams((prev) => {
+  // Every change to the view goes through here; a filter or sort change always returns to page 1 (no `page`).
+  const change = (changes, { keepPage = false } = {}) => setParams((prev) => {
     const next = new URLSearchParams(prev)
-    if (value) next.set(key, value)
-    else next.delete(key)
+    for (const [key, value] of Object.entries(changes)) {
+      if (value) next.set(key, value)
+      else next.delete(key)
+    }
+    if (!keepPage) next.delete('page')
     return next
   }, { replace: true })
+  const setFilter = (key, value) => change({ [key]: value })
 
   // Debounce typing so we don't refetch on every key press.
   useEffect(() => {
@@ -87,89 +117,133 @@ export default function ProjectsPage() {
     return () => clearTimeout(timer)
   }, [search]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const clearFilters = () => {
+    setSearch('')
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      for (const key of [...FILTERS, 'page']) next.delete(key)
+      return next
+    }, { replace: true })
+  }
+
   const rows = projects.data?.items ?? []
-  // Sized to fit a 1366px laptop without sideways scrolling: names wrap, people stay on one line.
+  const total = projects.data?.total ?? 0
+  const counts = projects.data?.counts
+  const open = (row) => navigate(`/projects/${row.id}`)
+
   const columns = [
-    { field: 'name', headerName: 'Project', flex: 1.2, minWidth: 132,
-      renderCell: ({ row }) => (
-        <Link component={RouterLink} to={`/projects/${row.id}`} underline="hover"
-          sx={{ whiteSpace: 'normal', lineHeight: 1.35, py: 0.5 }}>{row.name}</Link>
+    { key: 'name', header: 'Project', sortable: true,
+      render: (p) => (
+        <div>
+          <Link component={RouterLink} to={`/projects/${p.id}`} underline="hover" sx={{ fontWeight: 600 }}>{p.name}</Link>
+          {p.department?.name ? <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{p.department.name}</Typography> : null}
+        </div>
       ) },
-    { field: 'status', headerName: 'Status', width: 112, renderCell: ({ value }) => <StatusChip status={value} /> },
-    { field: 'manager', headerName: 'Manager', flex: 1, minWidth: 172, valueGetter: (value) => value?.name,
-      renderCell: ({ row }) => <PersonWithAvatar person={row.manager} /> },
-    { field: 'team', headerName: 'Team', width: 136, sortable: false,
-      renderCell: ({ row }) => <TeamAvatars project={row} /> },
-    { field: 'progress_pct', headerName: 'Progress', description: `Milestones done, weighted by difficulty. ${PROGRESS_WEIGHTING}`,
-      width: 104, renderCell: ({ value }) => <Progress value={value} compact /> },
-    { field: 'budget_pct', headerName: 'Budget', description: 'Share of the budget used so far', width: 132,
-      align: 'right', headerAlign: 'right',
-      renderCell: ({ row, value }) => <DataBar value={value} tone={budgetTone(value)} label={`${row.name} budget used`} minWidth={0} /> },
-    { field: 'predicted_end_date', headerName: 'Due', width: 120, valueFormatter: (value) => formatDate(value) },
-    { field: 'at_risk_reasons', headerName: 'Risk', flex: 1.2, minWidth: 172, sortable: false,
-      renderCell: ({ value }) => <Box sx={{ py: 0.5 }}><RiskBadges reasons={value} /></Box> },
+    { key: 'status', header: 'Status', sortable: true, render: (p) => <StatusCell project={p} /> },
+    { key: 'manager', header: 'Manager', sortable: true, render: (p) => <PersonWithAvatar person={p.manager} /> },
+    { key: 'progress', header: 'Progress', sortable: true, render: (p) => <ProgressBar project={p} /> },
+    { key: 'budget_used', header: 'Budget used', sortable: true, render: (p) => <BudgetBar project={p} /> },
+    { key: 'due', header: 'Due date', sortable: true,
+      render: (p) => (
+        <div>
+          <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap' }}>{formatDate(p.predicted_end_date)}</Typography>
+          <DueLine project={p} today={today} />
+        </div>
+      ) },
+    { key: 'risk', header: 'Risk', sortable: true, render: (p) => <RiskText project={p} today={today} /> },
   ]
+
+  const renderCard = (p) => (
+    <Stack sx={{ gap: 1 }}>
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
+        <div>
+          <Typography variant="subtitle1" component="div">{p.name}</Typography>
+          {p.department?.name ? <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{p.department.name}</Typography> : null}
+        </div>
+        <StatusCell project={p} />
+      </Stack>
+      <RiskText project={p} today={today} />
+      <Stack sx={{ gap: 0.5 }}>
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Progress</Typography>
+        <ProgressBar project={p} />
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Budget used</Typography>
+        <BudgetBar project={p} />
+      </Stack>
+      <div>
+        <Typography variant="body2" component="div">Due {formatDate(p.predicted_end_date)}</Typography>
+        <DueLine project={p} today={today} />
+      </div>
+    </Stack>
+  )
 
   const canCreate = can(user, 'project.create')
   // ?new=1 (the command palette's "new project") opens the create form straight away.
   const createFromUrl = canCreate && params.get('new') === '1'
   const closeCreate = () => { setCreating(false); if (createFromUrl) setFilter('new', '') }
-  const empty = Object.keys(filters).length
-    ? <EmptyState title="No projects match these filters" description="Try clearing a filter or searching for something else."
-        action={<Button onClick={() => { setSearch(''); setParams({}, { replace: true }) }}>Clear filters</Button>} />
+  const filtered = Object.keys(filters).length > 0
+  const empty = filtered
+    ? <EmptyState title="No projects match" description="Try clearing a filter or searching for something else."
+        action={<Button onClick={clearFilters}>Clear filters</Button>} />
     : <EmptyState title="No projects yet"
         description={canCreate ? 'Create a project, or approve a request from a manager.' : "You aren't on any projects yet. A manager adds you when you're needed."}
         action={canCreate ? <Button variant="contained" onClick={() => setCreating(true)}>Create the first project</Button> : null} />
 
+  const atRisk = counts?.at_risk ?? 0
+  const figure = (n) => (counts ? n : '—')
+  const kpis = [
+    { key: 'total', label: counts?.total === 1 ? 'project' : 'projects', value: figure(counts?.total) },
+    { key: 'active', label: 'active', value: figure(counts?.active) },
+    { key: 'at_risk', label: 'at risk', value: figure(counts?.at_risk), tone: atRisk > 0 ? 'warning' : undefined,
+      icon: atRisk > 0 ? <WarningAmber /> : undefined, onClick: () => setFilter('at_risk', 'true') },
+  ]
+
   return (
     <>
-      <PageHeader title="Projects" subtitle="Status, progress (weighted by milestone difficulty), budget and risk for every project you can see."
+      <PageHeader title="Projects" subtitle="Keep delivery, budget and risk in view."
         actions={<>
           <ExportCsvButton name="projects" columns={CSV_COLUMNS} rows={rows} />
           {canCreate ? <Button variant="contained" startIcon={<Add />} onClick={() => setCreating(true)}>New project</Button> : null}
+          {can(user, 'request.submit')
+            ? <Button variant="contained" component={RouterLink} to="/requests?new=1">Request a project</Button> : null}
         </>} />
-      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-        <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>
-          <TextField type="search" label="Search projects" value={search} onChange={(e) => setSearch(e.target.value)}
-            slotProps={{ input: { startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> } }}
-            sx={{ flex: 2 }} />
-          <TextField select label="Status" value={filters.status ?? ''} onChange={(e) => setFilter('status', e.target.value)} sx={{ flex: 1 }}>
+      <Stack sx={{ gap: 2 }}>
+        <KpiStrip ariaLabel="Projects summary" items={kpis} layout="value-first" phoneColumns={3} loading={projects.isLoading} />
+        <FilterBar search={{ label: 'Search projects', placeholder: 'Search projects…', value: search, onChange: setSearch }}>
+          <TextField select size="small" value={filters.status ?? ''} onChange={(e) => setFilter('status', e.target.value)}
+            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Status' } }} sx={{ minWidth: 150 }}>
             <MenuItem value="">All statuses</MenuItem>
             {['planned', 'active', 'on_hold', 'completed'].map((s) => <MenuItem key={s} value={s}>{STATUS[s].label}</MenuItem>)}
           </TextField>
           {showManagerFilter ? (
-            <TextField select label="Manager" value={filters.manager ?? ''} onChange={(e) => setFilter('manager', e.target.value)} sx={{ flex: 1 }}>
+            <TextField select size="small" value={filters.manager ?? ''} onChange={(e) => setFilter('manager', e.target.value)}
+              slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Manager' } }} sx={{ minWidth: 170 }}>
               <MenuItem value="">All managers</MenuItem>
               {(managers.data ?? []).map((m) => <MenuItem key={m.id} value={String(m.id)}>{`${m.first_name} ${m.last_name}`}</MenuItem>)}
             </TextField>
           ) : null}
-          <FormControlLabel label="At risk only" sx={{ flexShrink: 0 }}
-            control={<Checkbox checked={filters.at_risk === 'true'} onChange={(e) => setFilter('at_risk', e.target.checked ? 'true' : '')} />} />
-          {filters.department ? (
-            <Chip label={`Department: ${department?.name ?? '…'}`} onDelete={() => setFilter('department', '')} sx={{ flexShrink: 0 }} />
+          <FormControlLabel label="At risk only"
+            control={<Switch checked={filters.at_risk === 'true'} onChange={(e) => setFilter('at_risk', e.target.checked ? 'true' : '')} />} />
+          {showArchived ? (
+            <FormControlLabel label="Archived"
+              control={<Switch checked={filters.archived === 'true'} onChange={(e) => setFilter('archived', e.target.checked ? 'true' : '')} />} />
           ) : null}
-        </Stack>
-      </Paper>
-      <ErrorAlert error={projects.error} onRetry={() => projects.refetch()} sx={{ mb: 2 }} />
-      <ResponsiveTable ariaLabel="Projects" rows={rows} columns={columns} loading={projects.isLoading}
-        onRowClick={(row) => navigate(`/projects/${row.id}`)} emptyState={projects.isError ? null : empty}
-        renderCard={(row) => (
-          <Stack sx={{ gap: 1 }}>
-            <Stack direction="row" sx={{ justifyContent: 'space-between', gap: 1 }}>
-              <Typography variant="subtitle1">{row.name}</Typography>
-              <StatusChip status={row.status} />
-            </Stack>
-            <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
-              <PersonWithAvatar person={row.manager} link={false} sx={{ flex: 1 }} />
-              <TeamAvatars project={row} />
-            </Stack>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              due {formatDate(row.predicted_end_date)} · {formatPct(row.budget_pct)} used
-            </Typography>
-            <Progress value={row.progress_pct} />
-            <RiskBadges reasons={row.at_risk_reasons} />
-          </Stack>
-        )} />
+          {filters.department ? (
+            <Chip label={`Department: ${department?.name ?? '…'}`} onDelete={() => setFilter('department', '')} />
+          ) : null}
+        </FilterBar>
+        <ErrorAlert error={projects.error} onRetry={() => projects.refetch()} />
+        {projects.isError && !projects.data ? null : (
+          <div>
+            <DataTable ariaLabel="Projects" columns={columns} rows={rows} sort={sort} serverSort
+              onSortChange={(next) => change({ sort: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.key,
+                dir: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.dir })}
+              onRowOpen={open} renderCard={renderCard} loading={projects.isLoading} empty={empty}
+              pagination={total > PAGE_SIZE ? { page: page - 1, pageSize: PAGE_SIZE, total,
+                onPageChange: (zeroBased) => change({ page: zeroBased > 0 ? String(zeroBased + 1) : '' }, { keepPage: true }) } : undefined} />
+            <FootNote note={FOOT_NOTE} end={`Today is ${formatLongDate(today)}`} />
+          </div>
+        )}
+      </Stack>
       {creating || createFromUrl ? (
         <ProjectForm open onClose={closeCreate} onSave={async (body) => {
           const created = await create.mutateAsync(body)
