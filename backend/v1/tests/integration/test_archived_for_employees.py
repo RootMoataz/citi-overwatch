@@ -153,13 +153,16 @@ def test_discussion_routes_are_404_for_an_employee_on_a_milestone_of_an_archived
 
 # ---------- employees don't see archived work in conversations, timers or change requests ----------
 
-def archive_milestone(client, conn, mgr, project, ms):
-    assert client.request("DELETE", f"/milestones/{ms['id']}", token=token_for(conn, mgr))[0] == 204
-
-
-def archive_project(client, conn, mgr, project, ms):
+def archive_milestone(client, conn, ms):
+    """Archives the milestone (as an admin, who may archive any milestone)."""
     admin = make_user(conn, role="admin")
-    assert client.request("DELETE", f"/projects/{project['id']}", token=token_for(conn, admin))[0] == 204
+    assert client.request("DELETE", f"/milestones/{ms['id']}", token=token_for(conn, admin))[0] == 204
+
+
+def archive_project(client, conn, ms):
+    """Archives the milestone's project (only an admin archives a project)."""
+    admin = make_user(conn, role="admin")
+    assert client.request("DELETE", f"/projects/{ms['project_id']}", token=token_for(conn, admin))[0] == 204
 
 
 ARCHIVERS = [pytest.param(archive_milestone, id="milestone"), pytest.param(archive_project, id="project")]
@@ -186,11 +189,11 @@ def test_employee_reads_the_discussion_conversation_before_archiving(client, con
 
 @pytest.mark.parametrize("archive", ARCHIVERS)
 def test_employee_conversations_leave_out_archived_milestones(client, conn, archive):
-    mgr, emp, project, ms = world(conn)
+    mgr, emp, _, ms = world(conn)
     cid = discussion_with_a_message(client, conn, mgr, ms)
     plain = client.request("POST", "/conversations", token=token_for(conn, mgr),
                            json={"participant_ids": [str(emp["id"])], "body": "Hi Eli"})[1]["id"]
-    archive(client, conn, mgr, project, ms)
+    archive(client, conn, ms)
     token = token_for(conn, emp)
     assert [i["id"] for i in client.request("GET", "/conversations", token=token)[1]["items"]] == [plain]
     for method, path, body in (("GET", f"/conversations/{cid}/messages", None),
@@ -203,13 +206,18 @@ def test_employee_conversations_leave_out_archived_milestones(client, conn, arch
 
 
 @pytest.mark.parametrize("archive", ARCHIVERS)
-def test_a_manager_still_sees_the_archived_milestones_conversation(client, conn, archive):
-    mgr, _, project, ms = world(conn)
+def test_managers_admins_and_executives_still_see_the_archived_milestones_conversation(client, conn, archive):
+    """The rule is for employees only: everyone else in the conversation keeps it, archived or not."""
+    mgr, _, _, ms = world(conn)
     cid = discussion_with_a_message(client, conn, mgr, ms)
-    archive(client, conn, mgr, project, ms)
-    token = token_for(conn, mgr)
-    assert [i["id"] for i in client.request("GET", "/conversations", token=token)[1]["items"]] == [cid]
-    assert client.request("GET", f"/conversations/{cid}/messages", token=token)[0] == 200
+    admin, executive = make_user(conn, role="admin"), make_user(conn, role="executive")
+    for person in (admin, executive):
+        conn.run("INSERT INTO conversation_participants (conversation_id, user_id) VALUES (:c, :u)", c=cid, u=person["id"])
+    archive(client, conn, ms)
+    for person in (mgr, admin, executive):
+        token = token_for(conn, person)
+        assert [i["id"] for i in client.request("GET", "/conversations", token=token)[1]["items"]] == [cid], person["role"]
+        assert client.request("GET", f"/conversations/{cid}/messages", token=token)[0] == 200, person["role"]
 
 
 def stopped_draft(conn, emp, ms, day, hours="2"):
@@ -221,12 +229,12 @@ def stopped_draft(conn, emp, ms, day, hours="2"):
 
 @pytest.mark.parametrize("archive", ARCHIVERS)
 def test_finished_timers_on_archived_work_stay_out_of_an_employees_reads(client, conn, archive):
-    mgr, emp, project, ms = world(conn)
+    _, emp, _, ms = world(conn)
     stopped_draft(conn, emp, ms, date(2026, 10, 8))
     token = token_for(conn, emp)
     before = client.request("GET", "/timers/current", token=token)[1]
     assert [u["milestone"]["name"] for u in before["unsubmitted"]] == ["Work"]
-    archive(client, conn, mgr, project, ms)
+    archive(client, conn, ms)
     after = client.request("GET", "/timers/current", token=token)[1]
     assert after["unsubmitted"] == [] and after["timer"] is None
 
@@ -235,10 +243,10 @@ def test_finished_timers_on_archived_work_stay_out_of_an_employees_reads(client,
 def test_a_running_timer_stays_visible_and_stoppable_when_its_milestone_is_archived(client, conn, archive):
     """The safe choice: hiding a running clock would leave it ticking out of sight and block starting any other
     timer (409 TIMER_RUNNING). The employee sees it and stops it; nothing is kept (the milestone is gone)."""
-    mgr, emp, project, ms = world(conn)
+    _, emp, _, ms = world(conn)
     token = token_for(conn, emp)
     assert client.request("POST", "/timers", {"milestone_id": str(ms["id"])}, token=token)[0] == 201
-    archive(client, conn, mgr, project, ms)
+    archive(client, conn, ms)
     current = client.request("GET", "/timers/current", token=token)[1]
     assert current["timer"]["milestone"]["name"] == "Work"
     status, out, _, _ = client.request("POST", "/timers/stop", {}, token=token)
@@ -268,7 +276,7 @@ def test_employee_lists_their_change_request_before_archiving(client, conn):
 
 @pytest.mark.parametrize("archive", ARCHIVERS)
 def test_employee_change_requests_leave_out_archived_milestones(client, conn, archive):
-    mgr, emp, project, ms = world(conn)
+    _, emp, _, ms = world(conn)
     pending_request(client, conn, emp, ms)
-    archive(client, conn, mgr, project, ms)
+    archive(client, conn, ms)
     assert client.request("GET", "/time-edit-requests?status=all", token=token_for(conn, emp))[1] == []

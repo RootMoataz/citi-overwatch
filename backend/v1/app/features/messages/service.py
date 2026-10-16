@@ -269,11 +269,12 @@ def list_conversations(conn, ctx: Ctx) -> dict:
 
 
 def unread_count(conn, ctx: Ctx) -> dict:
+    # `msg` for the messages: inside the subquery `m` is the milestone, as _archived_hidden expects.
     row = query_one(conn, """
-        SELECT count(*) AS unread, count(DISTINCT m.conversation_id) AS conversations
-        FROM conversation_participants cp JOIN messages m ON m.conversation_id = cp.conversation_id
-        WHERE cp.user_id = CAST(:me AS uuid) AND m.sender_id <> CAST(:me AS uuid)
-          AND m.created_at > coalesce(cp.last_read_at, '-infinity'::timestamptz)
+        SELECT count(*) AS unread, count(DISTINCT msg.conversation_id) AS conversations
+        FROM conversation_participants cp JOIN messages msg ON msg.conversation_id = cp.conversation_id
+        WHERE cp.user_id = CAST(:me AS uuid) AND msg.sender_id <> CAST(:me AS uuid)
+          AND msg.created_at > coalesce(cp.last_read_at, '-infinity'::timestamptz)
           AND cp.conversation_id IN (SELECT c.id FROM conversations c
                                      LEFT JOIN milestones m ON m.id = c.milestone_id
                                      LEFT JOIN projects p ON p.id = m.project_id
