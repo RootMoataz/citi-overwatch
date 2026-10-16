@@ -4,11 +4,13 @@ import { SessionContext } from '../auth/sessionContext.js'
 import { AppProviders } from '../app/providers.jsx'
 import { makeQueryClient } from '../app/queryClient.js'
 
-export function renderWithProviders(ui, { route = '/', queryClient } = {}) {
+/** `entries` (optional) is the history to start with, ending on the current page; else just `route`. */
+export function renderWithProviders(ui, { route = '/', entries, queryClient } = {}) {
   const client = queryClient ?? makeQueryClient({ test: true })
+  const history = entries ?? [route]
   return render(
     <AppProviders queryClient={client}>
-      <MemoryRouter initialEntries={[route]}>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={history} initialIndex={history.length - 1}>{ui}</MemoryRouter>
     </AppProviders>,
   )
 }
@@ -25,7 +27,7 @@ export const users = {
 }
 
 /** Render a page as a signed-in user, with a probe that prints the current URL. */
-export function renderAsUser(ui, { user, route = '/', path = '*' } = {}) {
+export function renderAsUser(ui, { user, route = '/', entries, path = '*' } = {}) {
   const session = { user, status: 'ready', login: async () => user, logout: async () => {},
     changePassword: async () => user, setUser: () => {} }
   return renderWithProviders(
@@ -36,7 +38,7 @@ export function renderAsUser(ui, { user, route = '/', path = '*' } = {}) {
       </Routes>
       <LocationProbe />
     </SessionContext.Provider>,
-    { route },
+    { route, entries },
   )
 }
 

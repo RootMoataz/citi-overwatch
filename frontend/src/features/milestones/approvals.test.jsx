@@ -210,10 +210,11 @@ describe('Approvals tab: rows', () => {
     const c = await panel()
     const table = await within(c).findByRole('table', { name: `Entries of ${OCT5}` })
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
-      .toEqual(['', 'Date', 'Hours', 'Source', 'Work note', 'Flags'])
+      .toEqual(['', 'Date and Hours', 'Source', 'Work note', 'Flags'])
     const row = within(table).getByRole('row', { name: /Oct 6, 2026/ })
-    expect(within(row).getByText('Oct 6, 2026')).toBeInTheDocument()
-    expect(within(row).getByText('8.5h')).toBeInTheDocument()
+    const when = within(row).getAllByRole('cell')[1]   // one column: the date with the hours under it
+    expect(within(when).getByText('Oct 6, 2026')).toBeInTheDocument()
+    expect(within(when).getByText('8.5h')).toBeInTheDocument()
     expect(within(row).getByText('Manual')).toBeInTheDocument()
     expect(within(row).getByText('Fixed layout issues from the design review')).toBeInTheDocument()
     expect(within(row).getByText('⚠ Repeated hours')).toBeInTheDocument()
@@ -222,6 +223,44 @@ describe('Approvals tab: rows', () => {
     expect(within(update).getByText('Update: Built the account settings screens')).toBeInTheDocument()
     await userEvent.hover(within(row).getByText('⚠ Repeated hours'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent(SAME.message)
+  })
+
+  test("overtime, edited and changed-after-HR entries carry the same cues as the Timesheets queue", async () => {
+    const OVERTIME = 'Pending (Overtime requested from Gia Rossi)'
+    api({ list: [
+      item('e1', '2026-10-06', 8.5, { over_40: true }, { label: OVERTIME, week_logged_total: 44 }),
+      item('e2', '2026-10-07', 8.5, { edited_after_decision: true }, { week_logged_total: 44 }),
+      item('e3', '2026-10-08', 8.5, { changed_after_hr_submission: true }, { week_logged_total: 44, flags: [] }),
+    ] })
+    renderPanel()
+    await panel()
+    const title = 'Gia Rossi · Week of Oct 5, 2026 · 3 entries · 25.5h'
+    const group = await screen.findByRole('region', { name: title })
+    expect(within(group).getByText('44h this week')).toBeInTheDocument()   // the person's whole week, in the header
+    const table = within(group).getByRole('table', { name: `Entries of ${title}` })
+    const over = within(table).getByRole('row', { name: /Oct 6, 2026/ })
+    const chip = within(over).getByText('Overtime')
+    expect(chip.closest('[data-tone]')).toHaveAttribute('data-tone', 'warning')
+    await userEvent.hover(chip)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(OVERTIME)
+    expect(within(over).queryByText('Edited')).not.toBeInTheDocument()
+    expect(within(within(table).getByRole('row', { name: /Oct 7, 2026/ })).getByText('Edited')).toBeInTheDocument()
+    const hr = within(table).getByRole('row', { name: /Oct 8, 2026/ })
+    expect(within(hr).getByText('Changed after HR submission — re-send')).toBeInTheDocument()
+    expect(within(hr).queryByText('Overtime')).not.toBeInTheDocument()
+  })
+
+  test('on a phone the cards carry the same cues', async () => {
+    setViewport(375)
+    api({ list: [item('e1', '2026-10-06', 8.5, { over_40: true, edited_after_decision: true },
+      { label: 'Pending (Overtime requested from Gia Rossi)' })] })
+    renderPanel()
+    const sheet = await screen.findByRole('dialog', { name: 'Build: frontend' })
+    const cards = await within(sheet).findByRole('list', { name: /^Entries of Gia Rossi/ })
+    const card = within(cards).getByRole('listitem')
+    expect(within(card).getByText('Overtime')).toBeInTheDocument()
+    expect(within(card).getByText('Edited')).toBeInTheDocument()
+    expect(within(sheet).getByText('34h this week')).toBeInTheDocument()
   })
 
   test('warn flags show in the warning colour, info flags neutral', async () => {

@@ -421,6 +421,17 @@ describe('Milestones tab: opening a milestone', () => {
     expect(await panel('Discovery')).toBeInTheDocument()
   })
 
+  test('landing on ?milestone=m2 from a link, the title takes focus without drawing a focus box', async () => {
+    server.use(...handlers())
+    renderTab(users.manager, { route: '/m?milestone=m2' })
+    const title = within(await panel('Build: frontend')).getByRole('heading', { level: 2, name: 'Build: frontend' })
+    expect(title).toHaveFocus()
+    // Nothing showed a ring before, so neither does the title, even where the browser counts this focus as
+    // :focus-visible (SidePanel's tests cover a keyboard opener).
+    expect(title).toHaveAttribute('data-quiet-focus')
+    expect(getComputedStyle(title).outlineStyle).toBe('none')
+  })
+
   test('the deep link ?milestone=m2 opens the panel on load', async () => {
     server.use(...handlers())
     renderTab(users.manager, { route: '/m?milestone=m2' })
@@ -440,7 +451,8 @@ describe('Milestones tab: opening a milestone', () => {
     expect(screen.getByRole('button', { name: 'Build: frontend' })).toHaveFocus()
   })
 
-  test('Back closes the panel: opening pushes one history entry, closing replaces it', async () => {
+  // History: the page before the tab ('/before'), then the tab ('/m'). Back is the browser's Back button.
+  function renderWithBack(entries = ['/before', '/m']) {
     function Back() {
       const navigate = useNavigate()
       return <button type="button" onClick={() => navigate(-1)}>Back</button>
@@ -448,22 +460,80 @@ describe('Milestones tab: opening a milestone', () => {
     server.use(...handlers())
     const view = projectView(users.manager, project)
     renderAsUser(<><MilestonesTab project={project} manage={view.manage} user={users.manager} view={view} /><Back /></>,
-      { user: users.manager, route: '/m' })
+      { user: users.manager, entries })
+  }
+  const gone = () => waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+
+  test('Back closes the panel: opening pushes one history entry, and the open row again adds none', async () => {
+    renderWithBack()
     await table()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Build: frontend' }))
     await panel('Build: frontend')
     await user.click(screen.getByRole('button', { name: 'Build: frontend' }))   // the open row again adds no entry
     await user.click(screen.getByRole('button', { name: 'Back' }))
-    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+    await gone()
     expect(location()).toHaveTextContent(/^\/m$/)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
+  })
+
+  test('open, Close, then Back leaves the tab: closing undoes the open instead of leaving a second tab entry', async () => {
+    renderWithBack()
+    await table()
+    const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Discovery' }))
     await panel('Discovery')
     await user.click(screen.getByRole('button', { name: 'Close' }))
-    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Back' }))   // closing replaced the entry: Back doesn't reopen it
+    await gone()
     expect(location()).toHaveTextContent(/^\/m$/)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
+  })
+
+  test('open A, switch to B, Close, then Back: A does not reopen', async () => {
+    renderWithBack()
+    await table()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Discovery' }))
+    await panel('Discovery')
+    await user.click(screen.getByRole('button', { name: 'Build: frontend' }))   // switching replaces the entry
+    await panel('Build: frontend')
+    expect(location()).toHaveTextContent('/m?milestone=m2')
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await gone()
+    expect(location()).toHaveTextContent(/^\/m$/)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+  })
+
+  test('landing on ?milestone=m2 from a link, Close stays on the tab rather than going back past the landing', async () => {
+    renderWithBack(['/before', '/m?milestone=m2'])
+    await panel('Build: frontend')
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await gone()
+    expect(location()).toHaveTextContent(/^\/m$/)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
+  })
+
+  test('the history does not grow with each open and close (Close, Esc or Back)', async () => {
+    renderWithBack()
+    await table()
+    const user = userEvent.setup()
+    for (const [name, how] of [['Discovery', 'close'], ['Build: frontend', 'esc'], ['Cutover', 'back'], ['Discovery', 'close']]) {
+      await user.click(screen.getByRole('button', { name }))
+      await panel(name)
+      if (how === 'close') await user.click(screen.getByRole('button', { name: 'Close' }))
+      else if (how === 'esc') await user.keyboard('{Escape}')
+      else await user.click(screen.getByRole('button', { name: 'Back' }))
+      await gone()
+      expect(location()).toHaveTextContent(/^\/m$/)
+    }
+    await user.click(screen.getByRole('button', { name: 'Back' }))   // one step back is the page before the tab
+    expect(location()).toHaveTextContent(/^\/before$/)
   })
 
   test('closing a panel whose row is filtered out puts focus on the search field', async () => {

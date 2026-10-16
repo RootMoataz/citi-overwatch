@@ -69,6 +69,9 @@ function Facts({ milestone: m, items, project, myHours }) {
   )
 }
 
+// Compact tabs: all six fit the panel from its narrowest desktop width; below that they scroll (phones).
+const TAB_SX = { minHeight: 44, minWidth: 0, px: 1.25 }
+
 /** "Approvals" with its count in a badge, as drawn; the tab's accessible name reads "Approvals (7)". */
 function CountLabel({ label, count }) {
   return (
@@ -136,7 +139,7 @@ export default function MilestonePanel({ project, milestone, items, members, vie
                       return (
                         <Tab key={t.value} value={t.value} label={count ? <CountLabel label={t.label} count={count} /> : t.label}
                           aria-label={count ? `${t.label} (${count})` : undefined} id={`milestone-tab-${t.value}`}
-                          aria-controls={`milestone-panel-${t.value}`} sx={{ minHeight: 44 }} />
+                          aria-controls={`milestone-panel-${t.value}`} sx={TAB_SX} />
                       )
                     })}
                   </Tabs>

@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useNavigate } from 'react-router-dom'
 import { describe, expect, test } from 'vitest'
 import { BreadcrumbProvider, useBreadcrumb, useCrumbLabel } from '../../app/breadcrumbs.js'
 import { API, HttpResponse, http, server } from '../../test/server.js'
@@ -57,6 +58,16 @@ function renderTab(user, route) {
   return renderAsUser(<MilestonesTab project={project} manage={view.manage} user={user} view={view} />,
     { user, route: `/m${route}` })
 }
+/** The tab after another page ('/before'), with the browser's Back button. */
+function renderWithBack(user) {
+  function Back() {
+    const navigate = useNavigate()
+    return <button type="button" onClick={() => navigate(-1)}>Back</button>
+  }
+  const view = projectView(user, project)
+  return renderAsUser(<><MilestonesTab project={project} manage={view.manage} user={user} view={view} /><Back /></>,
+    { user, entries: ['/before', '/m'] })
+}
 const card = (name) => screen.findByRole('complementary', { name })
 const location = () => screen.getByTestId('location')
 const tabNames = (c) => within(c).getAllByRole('tab').map((t) => t.textContent)
@@ -73,6 +84,12 @@ describe('panel tabs', () => {
     })
     expect(within(c).getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true')
     expect(within(c).getByRole('tabpanel')).toHaveAttribute('id', within(c).getByRole('tab', { name: 'Details' }).getAttribute('aria-controls'))
+    // Compact, so all six fit the panel at its desktop width (it still scrolls where they can't), at 44 px tall.
+    within(c).getAllByRole('tab').forEach((t) => {
+      expect(getComputedStyle(t).minWidth).toBe('0px')
+      expect(getComputedStyle(t).paddingLeft).toBe('10px')
+      expect(getComputedStyle(t).minHeight).toBe('44px')
+    })
   })
 
   test.each([['employee', users.employee], ['executive', users.executive]])('an %s has no Approvals tab', async (_, user) => {
@@ -95,14 +112,51 @@ describe('panel tabs', () => {
 
   test.each([
     ['an employee opening ?panel=approvals', users.employee, 'approvals'],
-    ['anyone opening a typo', users.manager, 'nonsense'],
-  ])('%s sees Details and no approvals request', async (_, user, value) => {
+    ['an executive opening ?panel=approvals', users.executive, 'approvals'],
+    ['an employee opening a typo', users.employee, 'nonsense'],
+    ['a manager opening a typo', users.manager, 'nonsense'],
+  ])('%s sees Details, and only someone who decides hours asks for approvals', async (_, user, value) => {
     server.use(...handlers([discovery, mapping]))
     renderTab(user, `?milestone=m1&panel=${value}`)
     const c = await card('Schema Mapping')
     expect(within(c).getByRole('tab', { name: 'Details' })).toHaveAttribute('aria-selected', 'true')
     expect(await within(c).findByText('Map every legacy field')).toBeInTheDocument()
-    if (user === users.employee) expect(approvalRequests).toBe(0)
+    if (user === users.manager) {
+      await waitFor(() => expect(approvalRequests).toBeGreaterThan(0))   // control: a manager's requests do go out
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 50))   // time for a request to arrive, were one sent
+      expect(approvalRequests).toBe(0)
+    }
+  })
+
+  test('after switching panel tabs, Back still closes the panel, and once more leaves the tab', async () => {
+    server.use(...handlers([discovery, mapping]))
+    renderWithBack(users.manager)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Schema Mapping' }))
+    const c = await card('Schema Mapping')
+    await user.click(within(c).getByRole('tab', { name: 'Notes' }))
+    await user.click(within(c).getByRole('tab', { name: 'History' }))
+    expect(location()).toHaveTextContent('/m?milestone=m1&panel=history')
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+    expect(location()).toHaveTextContent(/^\/m$/)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
+  })
+
+  test('after switching panel tabs, Close then Back leaves the tab', async () => {
+    server.use(...handlers([discovery, mapping]))
+    renderWithBack(users.manager)
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Schema Mapping' }))
+    const c = await card('Schema Mapping')
+    await user.click(within(c).getByRole('tab', { name: 'Work log' }))
+    await user.click(within(c).getByRole('button', { name: 'Close' }))
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
+    expect(location()).toHaveTextContent(/^\/m$/)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
   })
 
   test('the employee variant has no Edit and no ⋯ in the panel header', async () => {
@@ -131,7 +185,8 @@ describe('Details tab', () => {
     expect(deps).toHaveTextContent('Completed')
     // The assignees sit in the facts above the tabs, with who only supports marked.
     expect(within(c).getByRole('group', { name: 'People on Schema Mapping' })).toBeInTheDocument()
-    expect(within(c).getByText(/supporting/i)).toBeInTheDocument()
+    expect(within(c).getByLabelText('Ada Lovelace is supporting')).toBeInTheDocument()
+    expect(within(c).queryByLabelText('Eli Employee is supporting')).not.toBeInTheDocument()
   })
 
   test('the open kickback and its review actions go to the reviewer only', async () => {

@@ -1,7 +1,7 @@
 import { Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, DialogTitle, Stack, TextField, Typography } from '@mui/material'
 import { useId, useState } from 'react'
 import { useApproveEntry, useRejectEntry } from '../../api/queries.js'
-import { STATUS, statusColor } from '../../app/theme.js'
+import { statusColor } from '../../app/theme.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -10,6 +10,7 @@ import { HR_CHANGED } from '../../lib/labels.js'
 import FlagChips from '../timer/FlagChips.jsx'
 import SourceChip from '../timer/SourceChip.jsx'
 import BreakdownPanel from './BreakdownPanel.jsx'
+import { EDITED, isEdited, isHrChanged, labelTone, weekTotalText } from './entryCues.js'
 
 function RejectDialog({ item, onClose }) {
   const titleId = useId()
@@ -58,7 +59,7 @@ export default function ApprovalRow({ item, showContext = true }) {
   const [open, setOpen] = useState(false)
   const [rejecting, setRejecting] = useState(false)
   const [failure, setFailure] = useState(null)
-  const tone = item.entry.over_40 ? STATUS.on_hold : STATUS.pending
+  const tone = labelTone(item)
   return (
     <Box sx={{ py: 1.5, borderTop: 1, borderColor: 'divider' }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' } }}>
@@ -70,9 +71,9 @@ export default function ApprovalRow({ item, showContext = true }) {
             {showContext ? <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}> · {item.project.name} › {item.milestone.name}</Typography> : null}
           </Typography>
           <Typography variant="caption" sx={{ color: (t) => statusColor(tone, t) }}>{item.label}</Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary', ml: 1 }}>{formatHours(item.week_logged_total)} this week</Typography>
-          {item.entry.edited_after_decision ? <Typography variant="caption" sx={{ ml: 1 }}>· Edited</Typography> : null}
-          {item.entry.changed_after_hr_submission ? (
+          <Typography variant="caption" sx={{ color: 'text.secondary', ml: 1 }}>{weekTotalText(item)}</Typography>
+          {isEdited(item) ? <Typography variant="caption" sx={{ ml: 1 }}>· {EDITED}</Typography> : null}
+          {isHrChanged(item) ? (
             <Chip size="small" variant="outlined" color="warning" label={HR_CHANGED} sx={{ ml: 1, height: 20 }} />
           ) : null}
           {item.delegated_from ? (

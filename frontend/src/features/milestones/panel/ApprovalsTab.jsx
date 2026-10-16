@@ -16,6 +16,8 @@ import { formatDate, formatHours, formatMoney } from '../../../lib/format.js'
 import { groupByPersonWeek } from '../../../lib/personWeeks.js'
 import { DESKTOP_QUERY } from '../../../lib/responsive.js'
 import BreakdownPanel from '../../approvals/BreakdownPanel.jsx'
+import EntryCueChips from '../../approvals/EntryCueChips.jsx'
+import { weekTotalText } from '../../approvals/entryCues.js'
 import FlagChips from '../../timer/FlagChips.jsx'
 import SourceChip from '../../timer/SourceChip.jsx'
 import { SOURCE_LABEL, shareText, weekSource } from '../../timer/timerClock.js'
@@ -32,6 +34,18 @@ const titleOf = (group) => `${group.user.name} · Week of ${formatDate(group.wee
 const entryName = (item) => `${item.user.name}, ${formatDate(item.entry.work_date)}, ${formatHours(item.entry.hours)}`
 // 44 px touch targets (24 px box + 10 px each side).
 const BOX_SX = { p: 1.25 }
+// Narrow cells so the table fits the panel at its desktop width: the note and the chips wrap instead of scrolling.
+const TABLE_SX = { '& .MuiTableCell-root': { px: 1, verticalAlign: 'top' }, '& .MuiTableCell-paddingCheckbox': { px: 0 } }
+
+/** The flags, then the entry's cues (overtime, edited, changed after HR), wrapping inside their cell. */
+function Flags({ item, sx }) {
+  return (
+    <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap', alignItems: 'center', ...sx }}>
+      <FlagChips flags={item.flags} />
+      <EntryCueChips item={item} />
+    </Stack>
+  )
+}
 
 /** The work note, else the day's progress update after "Update: ", else null. */
 function workNote(item) {
@@ -42,7 +56,8 @@ function workNote(item) {
 }
 
 /**
- * One person's week: a collapsible header (with the week's Tracked, Manual or Mixed share) over its entries.
+ * One person's week: a collapsible header (with the person's hours that week and the week's Tracked, Manual or Mixed
+ * share) over its entries.
  * `isChosen(item)` says whether an entry is selected at the hours it shows now.
  */
 function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
@@ -55,6 +70,7 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
   const entries = group.items.map((i) => i.entry)
   const source = weekSource(entries)
   const delegatedFrom = group.items.find((i) => i.delegated_from)?.delegated_from
+  const weekTotal = group.items.find((i) => i.week_logged_total != null)
   const selectAll = (
     <Checkbox checked={all} indeterminate={chosen > 0 && !all} onChange={() => onToggleAll(group.items, !all)} sx={BOX_SX}
       slotProps={{ input: { 'aria-label': `Select all: ${title}` } }} />
@@ -73,11 +89,13 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
       return (
         <TableRow key={id} selected={checked}>
           <TableCell padding="checkbox">{box}</TableCell>
-          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(item.entry.work_date)}</TableCell>
-          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatHours(item.entry.hours)}</TableCell>
+          <TableCell sx={{ whiteSpace: 'nowrap' }}>
+            <Typography variant="body2">{formatDate(item.entry.work_date)}</Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>{formatHours(item.entry.hours)}</Typography>
+          </TableCell>
           <TableCell>{sourceChip}</TableCell>
-          <TableCell sx={{ overflowWrap: 'anywhere', minWidth: 140, color: note ? 'text.primary' : 'text.secondary' }}>{note ?? '—'}</TableCell>
-          <TableCell><FlagChips flags={item.flags} /></TableCell>
+          <TableCell sx={{ overflowWrap: 'anywhere', color: note ? 'text.primary' : 'text.secondary' }}>{note ?? '—'}</TableCell>
+          <TableCell sx={{ width: '30%' }}><Flags item={item} /></TableCell>
         </TableRow>
       )
     }
@@ -92,7 +110,7 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
             {sourceChip}
           </Stack>
           {note ? <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, overflowWrap: 'anywhere' }}>{note}</Typography> : null}
-          <FlagChips flags={item.flags} sx={{ mt: 0.5 }} />
+          <Flags item={item} sx={{ mt: 0.5 }} />
         </Box>
       </Box>
     )
@@ -109,6 +127,7 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
             {title}
           </Button>
         </Typography>
+        {weekTotal ? <Typography variant="body2" sx={{ color: 'text.secondary' }}>{weekTotalText(weekTotal)}</Typography> : null}
         {delegatedFrom ? <Chip size="small" variant="outlined" color="info" label={`Delegated from ${delegatedFrom.name}`} /> : null}
         {source ? (
           // Focusable, so keyboard users can read the share in the tooltip too.
@@ -120,11 +139,11 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
       </Stack>
       {open && desktop ? (
         <Box sx={{ overflowX: 'auto' }}>
-          <Table size="small" id={bodyId} aria-label={`Entries of ${title}`}>
+          <Table size="small" id={bodyId} aria-label={`Entries of ${title}`} sx={TABLE_SX}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'action.hover' }}>
                 <TableCell padding="checkbox">{selectAll}</TableCell>
-                {['Date', 'Hours', 'Source', 'Work note', 'Flags'].map((h) => <TableCell key={h}>{h}</TableCell>)}
+                {['Date and Hours', 'Source', 'Work note', 'Flags'].map((h) => <TableCell key={h}>{h}</TableCell>)}
               </TableRow>
             </TableHead>
             <TableBody>{rows}</TableBody>

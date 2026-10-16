@@ -311,6 +311,40 @@ describe('DataTable', () => {
 })
 
 describe('SidePanel focus, more', () => {
+  // The title is focused by script. Its ring follows the opener's: jsdom's :focus-visible depends on the event being
+  // handled, so the opener's state is stubbed here; a real browser keeps it for as long as the opener is focused.
+  const opened = async (opener, ring) => {
+    const matches = opener.matches.bind(opener)
+    vi.spyOn(opener, 'matches').mockImplementation((sel) => (sel === ':focus-visible' ? ring : matches(sel)))
+    opener.focus()
+    await userEvent.click(opener)
+    return screen.getByRole('heading', { level: 2, name: 'Kickoff' })
+  }
+
+  test("a keyboard user's ring carries over to the title", async () => {
+    renderWithProviders(<PanelHarness />)
+    const title = await opened(screen.getByRole('button', { name: 'Open it' }), true)
+    expect(title).toHaveFocus()
+    expect(title).not.toHaveAttribute('data-quiet-focus')
+  })
+
+  test('after a click (no ring on the opener) the focused title draws no focus box', async () => {
+    renderWithProviders(<PanelHarness />)
+    const title = await opened(screen.getByRole('button', { name: 'Open it' }), false)
+    expect(title).toHaveFocus()
+    expect(title).toHaveAttribute('data-quiet-focus')
+    expect(getComputedStyle(title).outlineStyle).toBe('none')
+  })
+
+  test('opening with nothing focused (a link to the panel) is quiet too, on phones as well', async () => {
+    const first = renderWithProviders(<SidePanel open title="Kickoff" onClose={() => {}} list={<p>list</p>}>x</SidePanel>)
+    expect(screen.getByRole('heading', { level: 2, name: 'Kickoff' })).toHaveAttribute('data-quiet-focus')
+    first.unmount()
+    setViewport(375)
+    renderWithProviders(<SidePanel open title="Kickoff" onClose={() => {}} list={<p>list</p>}>x</SidePanel>)
+    expect(await screen.findByRole('heading', { level: 2, name: 'Kickoff' })).toHaveAttribute('data-quiet-focus')
+  })
+
   test('375 px: the title has focus after opening', async () => {
     setViewport(375)
     renderWithProviders(<PanelHarness />)
