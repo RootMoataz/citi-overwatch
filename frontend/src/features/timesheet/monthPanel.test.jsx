@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
 import { server } from '../../test/server.js'
@@ -68,7 +68,7 @@ describe('Month view selection and panel', () => {
     expect(within(card).getByText('Needs revision')).toBeInTheDocument()
     expect(within(card).getByText('Reason: Split this across two milestones')).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /^Request a change/ })).not.toBeInTheDocument()
-    await user.click(within(card).getByRole('button', { name: 'Edit Schema Mapping in Day view' }))
+    await user.click(within(card).getByRole('button', { name: 'Edit in Day view, Schema Mapping' }))
     expect(calls.onOpenDay).toHaveBeenCalledWith('2026-10-14')
   })
 
@@ -92,6 +92,26 @@ describe('Month view selection and panel', () => {
     const card = within(region).getAllByRole('listitem').find((li) => li.textContent.includes('Pending approval'))
     expect(card).toHaveTextContent(/Source\s*Manual/)
     expect(within(card).getByText("Locked with this cell's timer hours")).toBeInTheDocument()
+  })
+
+  test("a saved manual line sharing a cell with timer hours says its request covers the whole cell", async () => {
+    // The cell holds 2h typed and saved plus 1.5h from a stopped timer: a change request is for the cell's 3.5h.
+    server.use(calendar({ entries: [entry({ hours: 2, tracked_hours: 0 })], drafts: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 1.5 }],
+      locks: [lock({ hours: 3.5, draft_hours: 1.5, tracked_hours: 0 })] }))
+    const user = userEvent.setup()
+    render()
+    const region = await panel('Wednesday 14 October 2026')
+    const card = within(region).getAllByRole('listitem').find((li) => li.textContent.includes('Pending approval'))
+    expect(within(card).getByText("This request covers the cell's 3.5h, including 1.5h from your timer")).toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Request a change, Schema Mapping' }))
+    expect(calls.onRequest).toHaveBeenCalledWith({ milestoneId: 'm1', date: '2026-10-14', hours: 3.5, label: 'Schema Mapping' })
+  })
+
+  test('a plain timer line does not explain the cell total (its hours are the cell)', async () => {
+    server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
+    render()
+    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    expect(within(card).queryByText(/This request covers/)).not.toBeInTheDocument()
   })
 
   test('a plain timer line has no cell-sharing note', async () => {
@@ -135,13 +155,13 @@ describe('Month view selection and panel', () => {
     expect(within(past).getByRole('heading', { name: 'Milestone dates' })).toBeInTheDocument()
     const late = within(past).getByText('Discovery · Due Oct 9').closest('li')
     expect(late).toHaveTextContent('Overdue')
-    expect(within(late).getByRole('link', { name: 'View Discovery' })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m5')
+    expect(within(late).getByRole('link', { name: 'View milestones, Discovery' })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m5')
 
     await user.click(screen.getByRole('button', { name: /^Fri 23 Oct/ }))
     const ahead = await panel('Friday 23 October 2026')
     const due = within(ahead).getByText('Build: frontend · Due Oct 23').closest('li')
     expect(due).not.toHaveTextContent('Overdue')
-    expect(within(due).getByRole('link', { name: 'View Build: frontend' })).toHaveAttribute('href', '/projects/p2?tab=milestones&milestone=m6')
+    expect(within(due).getByRole('link', { name: 'View milestones, Build: frontend' })).toHaveAttribute('href', '/projects/p2?tab=milestones&milestone=m6')
     expect(within(ahead).queryByText(/Discovery/)).not.toBeInTheDocument()
   })
 
@@ -178,7 +198,7 @@ describe('Month view selection and panel', () => {
     expect(within(card).getByText('Not submitted yet — submit it in the Day view')).toBeInTheDocument()
     expect(within(card).queryByText('Timer hours are locked; your manager approves any change')).not.toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /^Request a change/ })).not.toBeInTheDocument()
-    await user.click(within(card).getByRole('button', { name: 'Edit Schema Mapping in Day view' }))
+    await user.click(within(card).getByRole('button', { name: 'Edit in Day view, Schema Mapping' }))
     expect(calls.onOpenDay).toHaveBeenCalledWith('2026-10-14')
     expect(within(region).getByText('Submit timer hours or log other hours')).toBeInTheDocument()
     expect(within(region).queryByText('Other hours')).not.toBeInTheDocument()
@@ -221,6 +241,16 @@ describe('Month view selection and panel', () => {
     expect(within(region).getByText('Over 40h this week')).toBeInTheDocument()
   })
 
+  test('a keyboard selection on a day of another month focuses that day\'s panel heading once the month has loaded', async () => {
+    const user = userEvent.setup()
+    render('2026-10', undefined, { follow: true })
+    await panel('Wednesday 14 October 2026')
+    screen.getByRole('button', { name: /^Mon 28 Sep/ }).focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monday 28 September 2026' })).toHaveFocus())
+  })
+
   test('after selecting a day with the keyboard focus moves to the panel heading; a click leaves it', async () => {
     const user = userEvent.setup()
     render()
@@ -234,5 +264,88 @@ describe('Month view selection and panel', () => {
     screen.getByRole('button', { name: /^Wed 21 Oct/ }).focus()
     await user.keyboard(' ')
     expect(screen.getByRole('heading', { name: 'Wednesday 21 October 2026' })).toHaveFocus()
+  })
+})
+
+describe('Month view keyboard: one tab stop, arrow keys between days', () => {
+  const day = (name) => screen.getByRole('button', { name: new RegExp(`^${name}`) })
+  const tabbable = () => screen.getAllByRole('button', { name: /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d+ \w+/ })
+    .filter((b) => b.tabIndex === 0)
+
+  test('the grid is a single tab stop on the selected day; Tab moves on past the grid', async () => {
+    const user = userEvent.setup()
+    render()
+    await panel('Wednesday 14 October 2026')
+    expect(tabbable()).toEqual([day('Wed 14 Oct')])
+    screen.getByRole('button', { name: 'Next month' }).focus()
+    await user.tab()
+    expect(day('Wed 14 Oct')).toHaveFocus()
+    await user.tab()
+    expect(document.activeElement.closest('table')).toBeNull()
+  })
+
+  test('arrows move between days, Home and End to the week ends; the tab stop follows and nothing is selected', async () => {
+    const user = userEvent.setup()
+    render()
+    await panel('Wednesday 14 October 2026')
+    day('Wed 14 Oct').focus()
+    for (const [key, name] of [['{ArrowRight}', 'Thu 15 Oct'], ['{ArrowDown}', 'Thu 22 Oct'], ['{ArrowLeft}', 'Wed 21 Oct'],
+      ['{ArrowUp}', 'Wed 14 Oct'], ['{Home}', 'Mon 12 Oct'], ['{End}', 'Sun 18 Oct']]) {
+      await user.keyboard(key)
+      expect(day(name)).toHaveFocus()
+      expect(tabbable()).toEqual([day(name)])
+    }
+    expect(calls.onSelectDay).not.toHaveBeenCalled()
+    expect(day('Wed 14 Oct')).toHaveAttribute('aria-pressed', 'true')
+    // Browser shortcuts are left alone (Alt+Left is Back).
+    await user.keyboard('{Alt>}{ArrowLeft}{/Alt}')
+    expect(day('Sun 18 Oct')).toHaveFocus()
+  })
+
+  test('Enter or Space selects the focused day and moves focus to its panel heading', async () => {
+    const user = userEvent.setup()
+    render()
+    await panel('Wednesday 14 October 2026')
+    day('Wed 14 Oct').focus()
+    await user.keyboard('{ArrowRight}{Enter}')
+    expect(calls.onSelectDay).toHaveBeenLastCalledWith('2026-10-15')
+    expect(screen.getByRole('heading', { name: 'Thursday 15 October 2026' })).toHaveFocus()
+    day('Thu 15 Oct').focus()
+    await user.keyboard('{ArrowRight} ')
+    expect(calls.onSelectDay).toHaveBeenLastCalledWith('2026-10-16')
+  })
+
+  test('PageDown and PageUp open the next and previous month with focus on the same date', async () => {
+    const user = userEvent.setup()
+    render('2026-10', undefined, { follow: true })
+    await panel('Wednesday 14 October 2026')
+    day('Wed 14 Oct').focus()
+    await user.keyboard('{PageDown}')
+    expect(calls.onMonthChange).toHaveBeenLastCalledWith('2026-11')
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(day('Sat 14 Nov')).toHaveFocus())
+    expect(tabbable()).toEqual([day('Sat 14 Nov')])
+    await user.keyboard('{PageUp}')
+    expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(day('Wed 14 Oct')).toHaveFocus())
+  })
+
+  test('an arrow past the edge of the grid opens the next month there', async () => {
+    const user = userEvent.setup()
+    render('2026-10', undefined, { follow: true })
+    await panel('Wednesday 14 October 2026')
+    day('Sun 1 Nov').focus()
+    await user.keyboard('{ArrowRight}')
+    expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
+    await waitFor(() => expect(day('Mon 2 Nov')).toHaveFocus())
+  })
+
+  test('the grid keeps its table semantics and the days keep their names', async () => {
+    render()
+    await panel('Wednesday 14 October 2026')
+    const table = screen.getByRole('table', { name: 'October 2026' })
+    expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
+    expect(within(table).getAllByRole('cell')).toHaveLength(35)
+    expect(table).toHaveAccessibleDescription(/arrow keys/i)
   })
 })

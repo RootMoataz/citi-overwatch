@@ -49,7 +49,7 @@ test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager
   const panel = page.getByRole('region', { name: /^Friday \d+ \w+ \d{4}$/ })
   await expect(panel).toContainText('9h pending')
   await expect(panel.getByRole('heading', { name: 'Schema Mapping' })).toBeVisible()
-  await panel.getByRole('button', { name: /^Edit .*in Day view$/ }).first().click()
+  await panel.getByRole('button', { name: /^Edit in Day view/ }).first().click()
   await expect(page.getByRole('button', { name: 'Day', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.getByLabel(/^Schema Mapping, Fri/)).toHaveValue('9')
 

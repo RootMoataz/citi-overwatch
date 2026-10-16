@@ -27,7 +27,7 @@ const calendar = ({ entries = [], locks = [] } = {}) => http.get(`${API}/time-en
 const renderSheet = (route = `/timesheet?week=${WEEK}`) => renderAsUser(<TimesheetPage />, { user: users.employee, route, path: '/timesheet' })
 const dayBox = (name) => screen.findByRole('button', { name })
 const panel = (name) => screen.findByRole('region', { name })
-const editInDayView = async (user, name) => user.click(within(await panel(name)).getByRole('button', { name: /^Edit .*in Day view$/ }))
+const editInDayView = async (user, name) => user.click(within(await panel(name)).getByRole('button', { name: /^Edit in Day view/ }))
 const viewToggle = (name) => screen.getByRole('button', { name })
 
 // "Today" is Wednesday 14 Oct 2026; only Date is faked, so requests run normally.

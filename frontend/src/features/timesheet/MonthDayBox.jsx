@@ -49,8 +49,10 @@ export function StatusShape({ kind, legend }) {
   )
 }
 
-/** One day of the grid, as a button that selects it. Its name lists the date, total, marks, every line and any deadlines. */
-export function DayBox({ date, info, names, deadlines, overtime, inMonth, weekend, isToday, selected, phone, onPick }) {
+/** One day of the grid, as a button that selects it. Its name lists the date, total, marks, every line and any deadlines.
+ * The grid is one tab stop: only the `tabStop` day is reached with Tab; the arrow keys (`onKeyDown`) move between days. */
+export function DayBox({ date, info, names, deadlines, overtime, inMonth, weekend, isToday, selected, phone, tabStop, buttonRef,
+  onFocus, onKeyDown, onPick }) {
   const lines = info?.lines ?? []
   const total = num(info?.total)
   const over = total > DAY_CAP
@@ -71,7 +73,8 @@ export function DayBox({ date, info, names, deadlines, overtime, inMonth, weeken
     </Box>
   ) : null
   return (
-    <ButtonBase component="button" aria-label={name} aria-pressed={selected} onClick={(e) => onPick(date, e.detail === 0)}
+    <ButtonBase component="button" ref={buttonRef} tabIndex={tabStop ? 0 : -1} aria-label={name} aria-pressed={selected}
+      onFocus={onFocus} onKeyDown={onKeyDown} onClick={(e) => onPick(date, e.detail === 0)}
       sx={(t) => ({ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 0.5,
         width: '100%', height: '100%', minWidth: 0, minHeight: phone ? 64 : 112, p: phone ? 0.5 : 1, overflow: 'hidden', textAlign: 'left',
         bgcolor: selected ? alpha(t.palette.primary.main, 0.08) : weekend ? alpha(t.palette.text.primary, 0.035) : 'transparent',

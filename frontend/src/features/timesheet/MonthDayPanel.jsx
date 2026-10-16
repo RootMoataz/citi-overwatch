@@ -8,7 +8,7 @@ import { Link as RouterLink } from 'react-router-dom'
 import { STATUS, statusColor } from '../../app/theme.js'
 import { formatDayFull, formatHours } from '../../lib/format.js'
 import { closedLabel } from './useTimesheetWeek.js'
-import { KIND, KIND_ICON, chipSx, daySummary, isOverdue, kindColor, kindText, milestoneHref, shortDate, sourceOf } from './monthText.js'
+import { KIND, KIND_ICON, chipSx, daySummary, isOverdue, kindColor, kindText, milestoneHref, num, shortDate, sourceOf } from './monthText.js'
 
 const LOCK_NOTE = 'Timer hours are locked; your manager approves any change'
 const term = { typography: 'body2', color: 'text.secondary' }
@@ -37,7 +37,7 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
   const unassigned = Boolean(milestone) && milestone.role == null
   const draft = line.kind === 'draft'
   const editInDay = (
-    <Button variant="outlined" size="small" sx={{ mt: 1.5 }} aria-label={`Edit ${name} in Day view`} onClick={() => onOpenDay(date)}>Edit in Day view</Button>
+    <Button variant="outlined" size="small" sx={{ mt: 1.5 }} aria-label={`Edit in Day view, ${name}`} onClick={() => onOpenDay(date)}>Edit in Day view</Button>
   )
   return (
     <Paper component="li" variant="outlined" sx={{ p: 2, listStyle: 'none' }}>
@@ -83,10 +83,18 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
               <Button variant="outlined" size="small" disabled sx={{ mt: 1 }}>Change requested</Button>
             </>
           ) : closed ? <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>{closed}</Typography> : (
-            <Button variant="outlined" size="small" sx={{ mt: 1 }} aria-label={`Request a change, ${name}`}
-              onClick={() => onRequest({ milestoneId: line.milestone_id, date, hours: lock.hours, label: name })}>
-              Request a change
-            </Button>
+            <>
+              {/* The request is for the whole cell, so its dialog starts from the cell's hours, not this line's. */}
+              {shared ? (
+                <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
+                  {`This request covers the cell's ${formatHours(lock.hours)}, including ${formatHours(num(lock.draft_hours) + num(lock.tracked_hours))} from your timer`}
+                </Typography>
+              ) : null}
+              <Button variant="outlined" size="small" sx={{ mt: 1 }} aria-label={`Request a change, ${name}`}
+                onClick={() => onRequest({ milestoneId: line.milestone_id, date, hours: lock.hours, label: name })}>
+                Request a change
+              </Button>
+            </>
           )}
         </>
       ) : editInDay}
@@ -111,7 +119,7 @@ function MilestoneDates({ deadlines, today }) {
                 </Typography>
               ) : null}
             </Stack>
-            <Link component={RouterLink} to={milestoneHref(m)} variant="body2" aria-label={`View ${m.name}`} underline="hover" sx={{ display: 'inline-block', ml: 3.25, mt: 0.25 }}>
+            <Link component={RouterLink} to={milestoneHref(m)} variant="body2" aria-label={`View milestones, ${m.name}`} underline="hover" sx={{ display: 'inline-block', ml: 3.25, mt: 0.25 }}>
               View milestones
             </Link>
           </Box>

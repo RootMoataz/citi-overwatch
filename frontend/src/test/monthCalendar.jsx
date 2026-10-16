@@ -43,14 +43,18 @@ export function calendar({ milestones = [m1, m2, m3], entries = [], drafts = [],
 
 export const calls = { onMonthChange: vi.fn(), onSelectDay: vi.fn(), onOpenDay: vi.fn(), onRequest: vi.fn() }
 
-// The page keeps ?day=; this harness keeps it in state the same way.
-function Harness({ month, day: first }) {
+// The page keeps ?day= (and ?month=); this harness keeps them in state the same way. With `follow` the month follows
+// too, as on the page: a day of another month brings its month along, and a new month drops the day.
+function Harness({ month: firstMonth, day: first, follow }) {
   const [day, setDay] = useState(first)
-  return <MonthView month={month} day={day} onMonthChange={calls.onMonthChange} onOpenDay={calls.onOpenDay} onRequest={calls.onRequest}
-    onSelectDay={(iso) => { calls.onSelectDay(iso); setDay(iso) }} />
+  const [shown, setShown] = useState(firstMonth)
+  const month = follow ? shown : firstMonth
+  return <MonthView month={month} day={day} onOpenDay={calls.onOpenDay} onRequest={calls.onRequest}
+    onMonthChange={(next) => { calls.onMonthChange(next); if (follow) { setShown(next); setDay(undefined) } }}
+    onSelectDay={(iso) => { calls.onSelectDay(iso); setDay(iso); if (follow) setShown(iso.slice(0, 7)) }} />
 }
-export const renderMonth = (month = '2026-10', day = undefined) =>
-  renderAsUser(<Harness month={month} day={day} />, { user: users.employee, route: '/timesheet' })
+export const renderMonth = (month = '2026-10', day = undefined, { follow = false } = {}) =>
+  renderAsUser(<Harness month={month} day={day} follow={follow} />, { user: users.employee, route: '/timesheet' })
 
 export const dayBox = (name) => screen.findByRole('button', { name })
 export const panel = (name) => screen.findByRole('region', { name })
