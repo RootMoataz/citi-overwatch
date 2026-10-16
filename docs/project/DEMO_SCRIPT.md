@@ -67,20 +67,24 @@ that each one signs in to a public demo account with sample data.
 
 Click **Employee**.
 
-1. **My week (READ).** Point at "31.75h of 40h" with the logged and planned bars, then Eli's milestones, overdue
-   first:
-   - *Build* (Atlas): **Overdue**, In progress, **Critical Priority**, **Hard Difficulty**.
-   - *Schema Mapping* (Apollo): Ready for review, **High Priority**, **Medium Difficulty**.
-   - *Hypercare* (Apollo): Not started, **Easy Difficulty** (the default Medium priority chip is hidden).
+1. **My week (READ).** Start with **Your focus**: the **Now** card is *Build* (Atlas), overdue, with **Critical
+   priority**, **Hard difficulty**, its progress and **View milestone**; **Next** is the first upcoming milestone.
+   Then open the groups below it (each button says its count, for example "In progress, 1 milestone", and
+   remembers whether you closed it):
+   - **In progress**: *Build* (Atlas).
+   - **With your manager**: *Schema Mapping* (Apollo), "Submitted for review. Your manager completes the milestone.", **High priority**.
+   - **Upcoming**: *Hypercare* (Apollo), "Ready to start", **Easy difficulty** (the default Medium priority chip is hidden).
 
-   Say: "Priority is how urgent. Difficulty is how much the milestone weighs in progress. They're separate, and
-   each is written in words."
+   Then the **This week's hours** card: "31.75h logged" of the 40h weekly reference, with the planned and logged bars.
+   Press **Previous week** in its week picker to show an earlier week's hours, then **This week**. Say: "Priority is
+   how urgent. Difficulty is how much the milestone weighs in progress. They're separate, and each is written in
+   words."
 2. **Estimates (READ).** Open **Projects → Apollo Data Migration → Milestones**. Each row shows **Effort (logged /
    estimate)** (*Schema Mapping* reads about "355h / 441h"), a **You** tag on the milestones that are yours, and your
    own hours in **Your hours**. Select the *Schema Mapping* row: the panel's **Details** reads "Est. 441h · …" with
    how much of the estimate is logged. The line turns amber above 90% and red above 100%. Close the panel with
    **Close** or Esc.
-3. **Your manager (READ).** Under **This week**, the **Your manager** card shows Morgan's photo, title and
+3. **Your manager (READ).** At the foot of My week (above the hours on a phone), the **Your manager** card shows Morgan's photo, title and
    department and a **Message Morgan** button. Say: "One press to message your manager." (Same card on your own
    profile.)
 4. **Timer: start → stop → pre-filled, locked row → Submit (WRITE, repeatable).** The timer started in the other
@@ -88,13 +92,20 @@ Click **Employee**.
    this timer". Press the chip; the **Stop your timer?** dialog says "Stopping now adds 0.25h to Thursday's cell on
    your timesheet. It isn't submitted until you press Submit there." Add a note (**What did you work on?**) and press
    **Stop timer**. The toast: "Added 0.25h to Thursday's cell — open your timesheet to submit." Open **My
-   timesheet**; it opens on today in the **Day view**, with the week strip above one row per milestone. The *Schema
+   timesheet**; it opens on today in the **Day view**, with the **Week totals** card on top and the week strip above
+   one row per milestone. The *Schema
    Mapping* row shows saved + timer hours with a timer mark, "from timer, not submitted yet", and the banner "You have
    0.25h of timer time not submitted yet — press Submit to send it." Hover the hours: "Timer hours can't be edited —
    request a change". Press **Submit**. Say: "Stopping a timer never submits hours. The employee still submits them,
    with proof of work, and can't type over them. To fix them they press **Request a change**, which goes to the
    manager." (Stopped under 7.5 minutes, nothing is added and the toast says so.) Then press
-   **Start** again in the other window so Morgan has a live timer to watch.
+   **Start** again in the other window so Morgan has a live timer to watch. Optional: switch to **Week** to show the
+   grid (weekday and date columns, **Today**, **Counted**, and each cell's status in words: Approved, Pending, Needs
+   revision, Overtime), and press a cell's status to open **Entry details** (hours, work note, manager feedback,
+   Source, **Request a change**, **Save & resubmit**, **Done**). Say: "Typing is kept in this tab if you reload,
+   but only **Submit** or **Save & resubmit** sends hours."
+   Last, open **My history** in the menu: Eli's profile with **Employment details** (closed), this week's and all-time
+   hours, and the **Projects** and **Milestones** tabs of everything he has worked on.
 5. **Proof of work (WRITE attempt, refused, repeatable).** Open **My timesheet** and press **Wed** in the week strip.
    Change the *Schema Mapping* hours from 8 to 7 and press **Submit 1 change**. The page shows **Add a work note
    before saving** and lists the row, with a link to the day. Say: "New or changed hours need a 10 to 500 character

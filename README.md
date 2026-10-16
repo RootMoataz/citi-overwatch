@@ -57,15 +57,17 @@ Screenshots of the running app on its demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![My week: the This week card (45h of 40h, a 5h over 40h chip and an Open my timesheet button), the Your manager card, and My milestones with status, priority and difficulty chips and a Start button for the timer](docs/images/my-week.png) | ![Kick back dialog on the Hypercare milestone, opened from its side panel on the Milestones tab: a What's wrong? category and an Explain box, with Cancel and Kick back buttons](docs/images/kickback.png) |
-| **My week**: hours so far, your manager, assigned milestones, a start/stop timer | **Kick back** a blocked milestone to the manager with a reason, from the milestone's side panel |
-| ![My timesheet, Day view, on Saturday 10 Oct: the week strip with each day's hours (42h / 40h), and the Schema Mapping row holding 2h of timer hours behind a padlock, with a Tracked label, a Change requested: 1.5h chip and the work note](docs/images/timer-locked-cell.png) | ![The This week card (45h of 40h, 5h over 40h) above the Your manager card: Morgan Manager, Delivery Manager in Technology, with a Message Morgan button](docs/images/your-manager.png) |
-| **My timesheet, one day at a time**: a week strip, a row per milestone, and timer hours in a locked cell; **Request a change** asks the manager (here one for 1.5h is already waiting) | **Your manager**: who they are, and one press to message them |
-| ![My timesheet, Month view, October 2026: each day's hours as status chips, Over 40h marks, milestone-deadline markers, and the selected day's panel beside the grid with its hours, Timer-linked entry, Source and an Edit in Day view button](docs/images/timesheet-month.png) | |
-| **My timesheet, Month**: each day's hours by approval status (icon and word, never colour alone), milestone deadlines as small markers, and a panel for the selected day with **Edit in Day view** | |
+| ![My week: the header with its week picker (Oct 12 – 18, 2026), a Your focus card with the overdue Build milestone as Now, Hypercare as Next and a heads-up that Cutover may come your way, an In progress group, and on the right the This week's hours card (45h logged of a 40h weekly reference, 5h over 40h, an Open my timesheet button) above the Your manager card](docs/images/my-week.png) | ![Kick back dialog on the Hypercare milestone, opened from its side panel on the Milestones tab: a What's wrong? category and an Explain box, with Cancel and Kick back buttons](docs/images/kickback.png) |
+| **My week**: **Your focus** (Now, Next and a heads-up), collapsible groups (In progress, Upcoming, With your manager, Might come your way, Completed), milestones to claim, this week's hours (any past week through the week picker) and your manager | **Kick back** a blocked milestone to the manager with a reason, from the milestone's side panel |
+| ![My timesheet, Week view: a Week totals card (45h counted of 40h, 0h Approved, 45h Pending, 0h Needs revision), the overtime notice, the Week grid with weekday and date columns and a Pending status under each 9h cell, and the Entry details panel for Schema Mapping on Fri, Oct 16 with its Pending approval and Overtime chips, Hours, Work note, Source and a Done button](docs/images/my-timesheet.png) | ![The This week's hours card (45h logged of a 40h weekly reference, 5h over 40h) above the Your manager card: Morgan Manager, Delivery Manager in Technology, with a Message Morgan button](docs/images/your-manager.png) |
+| **My timesheet**: a **Week totals** card, then the Day, Week or Month view; the Week grid shows each cell's status in words (Approved, Pending, Needs revision, Overtime) and opens **Entry details** with **Save & resubmit** for one cell. Typing you haven't submitted survives a reload | **Your manager**: who they are, and one press to message them |
+| ![My timesheet, Month view, October 2026: each day's hours as status chips, Over 40h marks, milestone-deadline markers, and today's panel beside the grid with its 9h pending, Timer-linked entry, Source and an Edit in Day view button](docs/images/timesheet-month.png) | ![My history: the profile card (Eli Employee, Software Engineer, Skills, Your manager with a Message Morgan button, and a closed Employment details), the Week of Oct 12 figures (45h logged, 40h planned, 5h overtime), the All time summary, and the Projects and Milestones tabs with the milestone table](docs/images/my-history.png) |
+| **My timesheet, Month**: each day's hours by approval status (icon and word, never colour alone), milestone deadlines as small markers, and a panel for the selected day with **Edit in Day view** | **My history**: your profile, this week and all-time hours, and every project and milestone you've worked on, read-only; the salary stays behind **Employment details** |
+| ![My timesheet, Day view, on Saturday 10 Oct: the week strip with each day's hours (42h / 40h), and the Schema Mapping row holding 2h of timer hours behind a padlock, with a Tracked label, a Change requested: 1.5h chip and the work note](docs/images/timer-locked-cell.png) | |
+| **My timesheet, one day at a time**: a week strip, a row per milestone, and timer hours in a locked cell; **Request a change** asks the manager (here one for 1.5h is already waiting) | |
 
 <p>
-  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone, Day view: the top bar with the menu, the Scout glyph, search, Puppy, the bell and your avatar, the Day, Week and Month toggle, the week strip with Friday selected at 9h, the notice that the week is 45h, 5h over 40h, and the Schema Mapping row with a Start button for the timer and its pending hours" width="30%">
+  <img src="docs/images/timesheet-mobile.png" alt="My timesheet on a phone, Day view: the top bar with the menu, the Scout glyph, search, Puppy, the bell and your avatar, the Submit button, the Week totals card (45h counted of 40h, 0h Approved, 45h Pending, 0h Needs revision), the notice that the week is 45h, 5h over 40h, and the week card with the Day, Week and Month toggle and the week strip with Friday selected at 9h" width="30%">
 </p>
 
 ### Manager
@@ -174,8 +176,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,227 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 1,016 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,258 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 1,513 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit), plus 17 layout checks
 cd frontend && npm run lint

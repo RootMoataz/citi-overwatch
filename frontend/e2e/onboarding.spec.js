@@ -48,4 +48,5 @@ test('admin creates user → user logs in with emailed temp password → forced 
   // An employee's dashboard is "My week", with the manager chosen in the wizard.
   await expect(page.getByRole('heading', { name: 'My week', level: 1 })).toBeVisible()
   await expect(page.getByRole('region', { name: 'Your manager' })).toContainText('Morgan Manager')
+  await expect(page.getByRole('region', { name: 'Your focus' })).toContainText('Nothing assigned to you right now')
 })

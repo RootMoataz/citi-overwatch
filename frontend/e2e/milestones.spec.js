@@ -37,6 +37,25 @@ test('manager adds a dependent milestone; assignee moves it to ready for review 
 
   await signOut(page)
   await signIn(page, 'employee.demo')
+  // My week: Your focus, and the Completed group collapses (its rows go), stays collapsed after a reload, and expands again.
+  await expect(page.getByRole('region', { name: 'Your focus' })).toBeVisible()
+  const completed = page.getByRole('button', { name: /^Completed, \d+ milestones?$/ })
+  // The group's body is the element the button controls (its id changes on each load).
+  const bodyOf = async () => page.locator(`[id="${await completed.getAttribute('aria-controls')}"]`)
+  let body = await bodyOf()
+  await expect(completed).toHaveAttribute('aria-expanded', 'true')
+  await expect(body.getByRole('heading', { level: 3 }).first()).toBeVisible()
+  await completed.click()
+  await expect(completed).toHaveAttribute('aria-expanded', 'false')
+  await expect(body.getByRole('heading', { level: 3 })).toHaveCount(0)
+  await page.reload()
+  await expect(page.getByRole('region', { name: 'Your focus' })).toBeVisible()
+  await expect(completed).toHaveAttribute('aria-expanded', 'false')
+  body = await bodyOf()
+  await completed.click()
+  await expect(completed).toHaveAttribute('aria-expanded', 'true')
+  await expect(body.getByRole('heading', { level: 3 }).first()).toBeVisible()
+
   await openProject(page, 'Apollo Data Migration', 'milestones')
   await expect(rowOf(page, name)).toContainText('You')
   await openRow(page, name)

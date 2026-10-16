@@ -268,26 +268,29 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - **Loading:** a skeleton. **Submit** shows "Saving…".
 - **Success:**
   - The **Day view** is the default, one day at a time:
-    - A week bar has previous/next week buttons, **This week**, the week total ("22h / 40h") and a strip of seven day buttons (Mon to Sun), each showing that day's hours. A day over 24h turns red.
-    - The page opens on today in the current week, otherwise on Monday. The open day is kept in the address (`?week=…&day=…`).
+    - A **Week totals** card at the top reads "19.75h counted of 40h" with a bar and a percentage, then "15.75h Approved", "4h Pending" and "8h Needs revision" ("Rejected hours are excluded from counted totals."). The week card under it has previous/next week buttons, the range ("Oct 12 – 18, 2026"), **This week** and a strip of seven day buttons (Mon to Sun), each showing that day's hours. A day over 24h turns red.
+    - The page opens on today (New York's date) in the current week, otherwise on Monday. The open day is kept in the address (`?week=…&day=…`).
     - The open day has one row per assigned milestone, grouped by project when there is more than one, each with an hours field and a work note that is always visible (10-500 characters, with a counter, marked "needed" when the hours are new or changed and there's no note or same-day progress update).
     - A **Start** button appears on today's rows only.
     - Switching day keeps what I typed. **Submit N changes** in the page header sends every changed cell of the week, on any day, in one save.
     - Completed milestones, and milestones of a closed or on-hold project, sit behind **Show N closed milestones**. A completed milestone stays editable while its project is open; a closed or on-hold project's rows are read-only.
-  - The **Day | Week | Month** toggle swaps in the **Week grid** (one row per assigned milestone, grouped by project, with daily and weekly totals) or the **Month** calendar. The choice is remembered in this browser. Weekends are hidden behind a switch on phones.
+  - The **Day | Week | Month** toggle swaps in the **Week grid** or the **Month** calendar. The choice is remembered in this browser. Weekends are hidden behind a switch on phones.
+  - The **Week grid** has the **Milestone** column, a column per weekday over its date ("Mon" over "Oct 12"), a "Today" mark under today's date, and **Counted**. Each saved cell shows its status in words (**Approved**, **Pending**, **Needs revision**, and **Overtime** beside it for an entry past 40h) with a legend; the last row is "Daily total (counted)". "ⓘ 27.75h entered · 8h excluded until resubmitted." sits under the card. On a phone the grid scrolls inside its card while the Milestone column stays in place and the page itself never scrolls sideways.
+  - **Entry details** opens from a cell's status words (or **Details** on a Day view row; `?entry=milestone:date` in the address) as a side panel beside the grid, or a full-screen sheet on a phone. It shows the date, **Hours**, **Work note**, the manager's feedback on a rejected entry, **Source** (Manual, Tracked or Mixed, "4h from a timer") and the buttons **Request a change** (timer hours), **Save & resubmit** and **Done**. "Changing approved hours sends them back for approval." **Save & resubmit** sends this one cell alone in one save, leaving other typing unsent; **Done** closes the panel and keeps the edits. A link naming a cell that isn't a saved entry of the shown week closes quietly.
+  - **Typing survives a reload.** Unsent hours and notes are kept in this browser tab (`sessionStorage`) and come back after a reload with "Unsaved changes restored. Submit to send them."; only cells still listed and open come back. **Submit** and signing out clear them.
   - The **Month** calendar (`?month=YYYY-MM&day=YYYY-MM-DD`, with previous/next month buttons) is about hours, not milestones:
     - Each day shows its total (pending and approved only) and a chip per line with an icon and a word: approved, "Pending", "Needs revision" (hours struck through) or "Not submitted" (a timer draft). On a phone the lines are small shapes instead.
     - "⚠ Over 40h" marks an overtime day, and "📅 N milestone deadlines" a day when one of my unfinished milestones ends.
     - The header reads "<total>h logged in <Month>" with "Pending + approved · Rejected hours excluded."; a legend explains the statuses.
     - Clicking a day selects it. A panel (beside the grid, or under it on a phone) lists that day's hours, one card per line with status, project, hours, whether it is timer-linked and its source (Manual, Tracked or Mixed), and the manager's reason on a rejected line. Timer hours are locked, with **Request a change** (a timer draft instead says to submit it in the Day view; hours on a milestone I am no longer assigned to have no action); other lines have **Edit in Day view**. The day's milestone dates follow, with **View milestones**.
     - From the keyboard the grid is one Tab stop: the arrow keys move between days, Home and End to the ends of the week, Page Up and Page Down to the month before and after the one shown, and Enter or Space selects the day and moves focus to its panel.
-  - Each saved entry shows its status:
-    - "Pending approval"
-    - "Pending (Overtime requested from *First Last*)" for the entry that takes my week past 40 hours, and any after it
+  - Each saved entry shows its status in words:
+    - "Pending" ("Pending approval" in the Entry details chip)
+    - "Pending" with "Overtime" beside it for the entry that takes my week past 40 hours, and any after it
     - "Approved"
-    - "Rejected", with the reason (shown under the field in the Day view, in a tooltip in the Week grid)
+    - "Needs revision" for a rejected entry, with the manager's reason in Entry details
   - Editing an entry that was already decided sends it back for approval and tags it "Edited".
-  - A rejected entry has a **Resubmit** button, so the same hours can go back for approval after a conversation with the manager.
+  - A rejected entry can go back for approval with **Save & resubmit** in Entry details (or **Resubmit** on its row), after a conversation with the manager.
   - When hours are rejected, my bell shows "Your 8h on *Milestone* (Mon 12 Oct) was rejected: *reason*", and opening it takes me to that week.
   - A milestone I was auto-routed to support shows a "Supporting" chip on its row.
 - **Failure:**
@@ -416,9 +419,11 @@ Each panel is titled with the question it answers, and the panels are labelled r
 **As** an employee, **I want to** see everything I've worked on; **as** a manager or admin, **I want to** see the same for my people.
 
 - **Success:**
-  - The profile shows name, job title, role and manager. Admins also see the salary; so does the person themselves.
-  - This week: hours logged, overtime (hours past 40) and planned hours. All time: hours logged and hours approved.
-  - History tables list every project they've been on (including completed ones) and every milestone they've worked on, with their role (primary or supporting), status, dates and hours.
+  - **My history** (`/people/<me>/profile`) reads "Your work record, including completed milestones." The profile card shows name, job title, department, **Skills**, **Your manager** with **Message Morgan**, and **Employment details** (collapsed; "Annual salary and other employment details"). The salary appears only after opening it, and only for the person themselves and admins.
+  - "Week of Oct 12, 2026": **Logged this week** (pending and approved), **Planned this week** and **Overtime this week** (above 40h). "All time summary": **Total hours logged** and **Total hours approved**. The strips use two columns on a phone.
+  - Two tabs, **Projects** and **Milestones** (`?tab=projects`, else Milestones), list every project they've been on (including completed ones, "Left the team" when no longer on it) and every milestone they've worked on, with role (primary or supporting), status, planned dates and hours logged and approved. Milestones can be searched and filtered by project. On a phone the tables become stacked cards.
+  - **Archived work is per role**: employees never see it. Managers and admins get **Include archived**, with "Archived", "Project archived" and "Project completed" chips.
+  - The footer reads "Read-only history. Edit eligible hours in My timesheet."
   - Employees reach it from **My history** in the menu; managers and admins click a name on the Allocation page.
 - **Failure:** anyone outside the rules above gets "Profile not available" (the server returns `404`, so it doesn't reveal who exists).
 
@@ -508,7 +513,13 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### E1. See my week at a glance (U) — Done
 **As** an employee, **I want** a home page with my hours this week and the milestones on my plate **so that** I know what to do next.
-- **Success:** "31.75h of 40h" with logged and planned bars, my milestones ordered overdue first then by priority and due date (status, priority and difficulty chips), and milestones I can claim on pull-mode projects.
+- **Success:** **My week** (the employee's home, `/`) reads "Hello, Eli. Your work and hours in one place." and holds:
+  - **Your focus**: a **Now** card (the most urgent milestone in progress, with "Due Oct 5, 2026 · 10 days overdue", priority, difficulty, "40% done", **View milestone**, **Discuss** once the milestone has a discussion, and today's **Start timer**) and a **Next** card (the first upcoming milestone: "Ready to start", "Starts Oct 21, 2026" or "Waiting on Discovery"). Nothing in progress reads "Nothing in progress" with a "Start <name> next" link. A one-line heads-up, "Heads-up: <name> (High priority) may come your way", links down to **Might come your way**.
+  - **Collapsible groups** (each button says "<Group>, N milestones", opens and closes with `aria-expanded`, and is remembered in this browser): **In progress**, **Upcoming**, **With your manager** (handed in: "Your manager completes the milestone."), **Might come your way** (milestones auto-routing may give me, with "Needs <skill>, which you have", "Ready now" or "After <names>", and "New" when it appeared since my last visit; "It's a likely pick, not a promise.") and **Completed**. An empty group isn't shown.
+  - **Available to claim** on pull-mode projects (an empty list says "No unassigned milestones available right now.").
+  - **This week's hours**: "Pending + approved", the hours logged against the 40h weekly reference, a planned-against-logged bar, "5h over 40h (sent to your manager as overtime)", and **Open my timesheet**. A **week picker** (Previous week, "Oct 12 – 18, 2026", Next week, **This week**; the address keeps `?week=`) turns the card into "Hours · week of Oct 5" for any past week. A future or malformed `?week=` shows this week. "This week" is New York's.
+  - **Your manager** (see E9). On a phone the order is Your focus, the groups, hours, then Your manager.
+- **Empty:** "Nothing assigned to you right now. Milestones your manager gives you, or that you claim, show up here."
 
 #### E2. Time my work with a start/stop timer (U) — Done
 **As** an employee, **I want** to start a timer on a milestone and stop it when I'm done **so that** my hours are logged for me.
@@ -523,7 +534,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### E9. Message my manager in one press (U) — Done
 **As** an employee, **I want** to see who my manager is and message them straight away **so that** I know who to ask.
-- **Success:** a **Your manager** card under **This week** on My week (and on my own profile) with their photo, job title and department, **View profile** and **Message Morgan**, which opens Messages with that conversation.
+- **Success:** a **Your manager** card on My week (and on my own profile) with their photo, job title and department, **View profile** and **Message Morgan**, which opens Messages with that conversation.
 - **Empty:** no card when I have no manager or they were archived.
 
 #### E3. Explain my hours (U) — Done

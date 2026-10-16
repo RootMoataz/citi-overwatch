@@ -15,7 +15,7 @@ async function consumed(page) {
   return dollars(await value.innerText())
 }
 
-test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager gets one notification → opens the breakdown → approves → budget consumed rises', async ({ page }, testInfo) => {
+test('employee logs 9h Mon–Fri → Friday shows Overtime → manager gets one notification → opens the breakdown → approves → budget consumed rises', async ({ page }, testInfo) => {
   test.slow() // two sign-ins, five days of hours and notes, and two budget reads
   const person = PERSON[testInfo.project.name]
 
@@ -30,15 +30,17 @@ test('employee logs 9h Mon–Fri → Friday shows the overtime label → manager
     await page.getByRole('textbox', { name: 'Work note, Schema Mapping' }).fill(`Mapped source tables to the new schema (${day}).`)
   }
   await expect(page.getByRole('alert').filter({ hasText: /This week is 45h — 5h over 40h/ })).toBeVisible()
+  // Every day was typed and nothing is sent yet, so all 45h count as pending and none as approved.
+  const totals = page.getByRole('group', { name: 'Week totals' })
+  await expect(totals).toContainText('45h counted of 40h')
+  await expect(totals.getByRole('listitem').filter({ hasText: 'Pending' })).toContainText('45h')
   await page.getByRole('button', { name: /^Submit \d+ changes?$/ }).click()
-  await expect(page.getByTestId('week-total')).toHaveText('45h / 40h')
-  // Only the entry that crosses 40h (Friday: 36h → 45h) is overtime. The Day view shows one day's status at a time.
-  await expect(page.getByText(/^Pending \(Overtime requested from .+\)$/)).toHaveCount(1)
-  await expect(page.getByText('Pending approval')).toHaveCount(0)
+  await expect(page.getByTestId('week-total')).toHaveText('45h counted of 40h')
+  // Only the entry that crosses 40h (Friday: 36h → 45h) is overtime. The Day view shows one day's status at a time (Friday is open).
+  await expect(page.getByText('Overtime', { exact: true })).toHaveCount(1)
   for (const day of ['Mon', 'Tue', 'Wed', 'Thu']) {
     await page.getByRole('button', { name: new RegExp(`^${day} \\d`) }).click()
-    await expect(page.getByText('Pending approval')).toHaveCount(1)
-    await expect(page.getByText(/Overtime requested from/)).toHaveCount(0)
+    await expect(page.getByText('Overtime', { exact: true })).toHaveCount(0)
   }
 
   // The Month view shows the same hours (Friday is the overtime day). Picking a day selects it and its panel (beside the grid, or under it

@@ -68,6 +68,14 @@ async function expectTopBarFits(page, width, label) {
 
 const sideways = (page) => page.evaluate(() => document.documentElement.scrollWidth)
 
+// The Monday before this week's, by New York's calendar (the app's "today" is New York's).
+function lastMonday() {
+  const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date()).split('-').map(Number)
+  const day = new Date(Date.UTC(y, m - 1, d))
+  day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7) - 7)
+  return day.toISOString().slice(0, 10)
+}
+
 async function closeDemoWelcome(page) {
   const gotIt = page.getByRole('button', { name: 'Got it' })
   await gotIt.click()
@@ -256,6 +264,50 @@ test.describe('no sideways page scroll at 375 px', { tag: '@phone' }, () => {
         for (const path of paths) {
           await page.goto(path)
           await check(path)
+        }
+        // The employee screens' other states: My week's previous week, My timesheet's three views and its Entry details sheet,
+        // and My history's Projects tab. In the Week view the grid scrolls inside its card, not the page, and its Milestone column stays put.
+        if (username === 'employee.demo') {
+          await page.goto(`/?week=${lastMonday()}`)
+          await expect(page.getByRole('group', { name: "Week shown in This week's hours" })).toBeVisible()
+          await check('My week, previous week')
+        }
+        if (paths.includes('/timesheet')) {
+          await page.goto('/timesheet')
+          await page.getByRole('button', { name: 'Day', exact: true }).click()
+          await check('My timesheet, Day view')
+          await page.getByRole('button', { name: 'Week', exact: true }).click()
+          const grid = page.getByRole('table', { name: /^Timesheet for the week of/ })
+          await expect(grid).toBeVisible()
+          await check('My timesheet, Week view')
+          const card = await grid.evaluateHandle((el) => el.closest('.MuiTableContainer-root'))
+          const milestone = grid.getByRole('columnheader', { name: 'Milestone' })
+          const [before, firstDay] = [await milestone.boundingBox(), await grid.getByRole('columnheader').nth(1).boundingBox()]
+          expect(await card.evaluate((el) => el.scrollWidth > el.clientWidth), 'the grid scrolls inside its card').toBe(true)
+          expect(await sideways(page), 'the page itself does not scroll sideways').toBeLessThanOrEqual(375)
+          await card.evaluate((el) => { el.scrollLeft = 200 })
+          await expect.poll(() => card.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
+          expect((await grid.getByRole('columnheader').nth(1).boundingBox()).x, 'the day columns moved').toBeLessThan(firstDay.x)
+          expect((await milestone.boundingBox()).x, 'the Milestone column stayed in place').toBeCloseTo(before.x, 0)
+          await card.evaluate((el) => { el.scrollLeft = 0 })
+          const entry = page.locator('[data-entry]').first()
+          if (await entry.count()) {
+            // A DOM click: with the stretched names the fixed Milestone column fills the card and covers the day cells.
+            await entry.evaluate((el) => el.click())
+            await expect(page.getByRole('dialog', { name: 'Entry details' })).toBeVisible()
+            if ((await sideways(page)) > 375) wide.push(`Entry details open (${await sideways(page)}px)`)
+            await page.keyboard.press('Escape')
+          }
+          await page.getByRole('button', { name: 'Month', exact: true }).click()
+          await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible()
+          await check('My timesheet, Month view')
+          await page.getByRole('button', { name: 'Day', exact: true }).click() // leave the view as found
+        }
+        const history = paths.find((path) => /^\/people\/[^/]+\/profile$/.test(path))
+        if (history) {
+          await page.goto(`${history}?tab=projects`)
+          await expect(page.getByRole('tab', { name: /^Projects/ })).toHaveAttribute('aria-selected', 'true')
+          await check('My history, Projects tab')
         }
         await page.goto('/projects')
         await page.getByText(/^Apollo Data Migration/).first().click()
