@@ -117,6 +117,20 @@ describe('Layout', () => {
     expect(screen.getByRole('img', { name: /acme scout/i })).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/overwatch/i)
   })
+
+  test('the sidebar logo is a link home named "ACME Scout"', () => {
+    renderLayout(users.manager)
+    const logo = within(screen.getByTestId('sidebar')).getByRole('link', { name: 'ACME Scout' })
+    expect(logo).toHaveAttribute('href', '/')
+  })
+
+  test('on a phone the top bar shows the glyph alone, as a link home named "ACME Scout"', () => {
+    setViewport(390)
+    renderLayout(users.manager)
+    const logo = within(screen.getByRole('banner')).getByRole('link', { name: 'ACME Scout' })
+    expect(logo).toHaveAttribute('href', '/')
+    expect(logo).not.toHaveTextContent('Scout')
+  })
 })
 
 describe('collapsible sidebar', () => {
@@ -208,6 +222,10 @@ const NAV_BY_ROLE = [
     Work: ['Control centre', 'Messages', 'Projects', 'Timesheets', 'Allocation'],
     Admin: ['People', 'Departments', 'Skills', 'Project requests', 'Archive', 'Audit log'],
   }],
+  ['admin who tracks their own hours', { ...users.admin, tracks_own_hours: true }, {
+    Work: ['Control centre', 'Messages', 'Projects', 'My timesheet', 'Timesheets', 'Allocation'],
+    Admin: ['People', 'Departments', 'Skills', 'Project requests', 'Archive', 'Audit log'],
+  }],
 ]
 
 describe('sidebar navigation per role', () => {
@@ -260,6 +278,33 @@ describe('account menu and user chip', () => {
     await userEvent.click(screen.getByRole('button', { name: chipName }))
     await userEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }))
     expect(onLogout).toHaveBeenCalled()
+  })
+
+  // `hidden`: while the menu is open the page behind it is hidden from the accessibility tree.
+  test.each([
+    ['the header avatar', () => within(screen.getByRole('banner', { hidden: true })).getByRole('button', { name: 'Account menu', hidden: true })],
+    ['the sidebar chip', () => within(screen.getByTestId('sidebar')).getByRole('button', { name: chipName, hidden: true })],
+  ])('%s says whether the menu is open, and the menu opens on My profile', async (_name, opener) => {
+    const user = userEvent.setup()
+    renderLayout(users.manager)
+    expect(opener()).toHaveAttribute('aria-expanded', 'false')
+    await user.click(opener())
+    const menu = await screen.findByRole('menu')
+    expect(opener()).toHaveAttribute('aria-expanded', 'true')
+    expect(opener()).toHaveAttribute('aria-controls', menu.id)
+    // Not the selected theme item: the first item, as a menu opened from a button should.
+    await vi.waitFor(() => expect(screen.getByRole('menuitem', { name: /my profile/i })).toHaveFocus())
+    await user.keyboard('{Escape}')
+    await vi.waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    expect(opener()).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  test('only the opener that opened the menu is marked expanded', async () => {
+    renderLayout(users.manager)
+    await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Account menu' }))
+    await screen.findByRole('menu')
+    expect(within(screen.getByTestId('sidebar')).getByRole('button', { name: chipName, hidden: true }))
+      .toHaveAttribute('aria-expanded', 'false')
   })
 
   test('the phone drawer shows the chip at the bottom and no Collapse', async () => {

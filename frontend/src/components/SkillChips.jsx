@@ -12,7 +12,8 @@ export default function SkillChips({ skills = [], highlight = [], empty = null, 
     <Stack direction="row" useFlexGap component="ul" aria-label={label ?? 'Skills'}
       sx={{ flexWrap: 'wrap', gap: 0.5, listStyle: 'none', p: 0, m: 0, ...sx }}>
       {skills.map((s) => (
-        <li key={s.id}>
+        // A long skill name ends in an ellipsis inside the row instead of widening it.
+        <li key={s.id} style={{ maxWidth: '100%', minWidth: 0 }}>
           <Chip size="small" icon={<Psychology />} label={s.name} color="secondary"
             variant={strong.has(String(s.id)) ? 'filled' : 'outlined'} />
         </li>

@@ -24,7 +24,8 @@ export default function MissingTimesheets({ department }) {
       <ErrorAlert error={missing.error} onRetry={() => missing.refetch()} />
       {d && d.people.length ? (
         <List dense disablePadding aria-label={`Missing timesheets for the week of ${week}`}
-          sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)' }, columnGap: 2 }}>
+          sx={{ display: 'grid', columnGap: 2, // minmax(0, …): a long name ends in an ellipsis instead of widening the page
+            gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' } }}>
           {d.people.map((p) => (
             <ListItem key={p.id} disableGutters>
               <ListItemText primary={<PersonWithAvatar person={p} context={MANAGED} />}

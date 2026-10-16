@@ -9,7 +9,8 @@ export default function PageHeader({ title, subtitle, actions, breadcrumb, avata
         {avatar}
         <Box sx={{ minWidth: 0 }}>
           {breadcrumb}
-          <Typography variant="h1" component="h1">{title}</Typography>
+          {/* A name can be one long word: it breaks rather than push the page sideways. */}
+          <Typography variant="h1" component="h1" sx={{ overflowWrap: 'anywhere' }}>{title}</Typography>
           {subtitle ? <Typography variant="body2" component="div" sx={{ color: 'text.secondary', mt: 0.5 }}>{subtitle}</Typography> : null}
         </Box>
       </Stack>

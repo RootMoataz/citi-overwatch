@@ -3,7 +3,7 @@ import DarkMode from '@mui/icons-material/DarkModeOutlined'
 import LightMode from '@mui/icons-material/LightModeOutlined'
 import SettingsBrightness from '@mui/icons-material/SettingsBrightnessOutlined'
 import { Box, Divider, ListItemIcon, ListItemText, ListSubheader, Menu, MenuItem, Stack, Typography } from '@mui/material'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar.jsx'
 import AvatarDialog from '../features/avatar/AvatarDialog.jsx'
@@ -21,23 +21,35 @@ const THEMES = [
 const ABOVE = { anchorOrigin: { vertical: 'top', horizontal: 'left' }, transformOrigin: { vertical: 'bottom', horizontal: 'left' } }
 
 /**
- * The account menu (the header avatar and the sidebar user chip both open it). Returns `openMenu(event, placement)`
- * for the openers and `menu` to render once: the menu itself plus the profile photo dialog it can open.
+ * The account menu (the header avatar and the sidebar user chip both open it). Returns `openMenu(event, placement,
+ * opener)` for the openers, `openedFrom` (the opener whose menu is open, or null) and `menuId` for their
+ * aria-expanded / aria-controls, and `menu` to render once: the menu itself plus the profile photo dialog it can open.
  * `placement` is 'above' for an opener at the bottom of the screen; `onClosed` runs whenever the menu closes.
  */
 export function useAccountMenu({ user, onLogout, onClosed }) {
   const [anchor, setAnchor] = useState(null)
   const [placement, setPlacement] = useState('below')
+  const [openedFrom, setOpenedFrom] = useState(null)
   const [photoOpen, setPhotoOpen] = useState(false)
   const colorMode = useColorMode()
+  const menuId = useId()
   const photoLocked = demoBlocks(user, 'avatar.own')
 
-  const close = () => { setAnchor(null); onClosed?.() }
-  const openMenu = (event, where = 'below') => { setPlacement(where); setAnchor(event.currentTarget) }
+  // On a phone the menu opens from the drawer's user chip. Every way out of the menu (an item, Esc, a click outside)
+  // also shuts the drawer, which would otherwise stay open behind the page the person just picked; Layout passes
+  // that as `onClosed`.
+  const close = () => { setAnchor(null); setOpenedFrom(null); onClosed?.() }
+  const openMenu = (event, where = 'below', opener = 'header') => {
+    setPlacement(where)
+    setOpenedFrom(opener)
+    setAnchor(event.currentTarget)
+  }
 
   const menu = (
     <>
-      <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close} {...(placement === 'above' ? ABOVE : {})}>
+      {/* variant "menu": opening puts focus on the first item (My profile), not on the selected theme. */}
+      <Menu variant="menu" anchorEl={anchor} open={Boolean(anchor)} onClose={close} slotProps={{ list: { id: menuId } }}
+        {...(placement === 'above' ? ABOVE : {})}>
         <Stack direction="row" sx={{ px: 2, py: 1, gap: 1.5, alignItems: 'center' }}>
           <UserAvatar userId={user?.id} name={fullName(user)} size={40} />
           <Box>
@@ -74,5 +86,5 @@ export function useAccountMenu({ user, onLogout, onClosed }) {
       {photoOpen ? <AvatarDialog open user={user} onClose={() => setPhotoOpen(false)} /> : null}
     </>
   )
-  return { openMenu, menu }
+  return { openMenu, openedFrom, menuId, menu }
 }

@@ -36,6 +36,7 @@ export default function TimerChip() {
   if (!timer) return null
   const clock = formatElapsed(elapsed)
   const warn = level !== 'ok'
+  // Phones: the clock alone, never squeezed. Desktop: the milestone name gives way first (an ellipsis).
   return (
     <>
       <Tooltip title={`Timer on ${timer.milestone.name} (${timer.project.name})${warn ? ` — ${reached[0]?.message}` : ''}. Click to stop it.`}>
@@ -43,7 +44,8 @@ export default function TimerChip() {
           onClick={() => setStopping(true)}
           aria-label={`Timer running on ${timer.milestone.name}: ${clock}${warn ? ', limit reached' : ''}. Stop timer`}
           label={desktop ? `${clock} · ${timer.milestone.name}` : clock}
-          sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, maxWidth: { xs: 120, md: 280 } }} />
+          sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, maxWidth: { xs: 120, md: 280 }, flexShrink: { xs: 0, md: 1 },
+            minWidth: { md: 96 } }} />
       </Tooltip>
       {stopping ? <StopTimerDialog timer={timer} elapsed={elapsed} onClose={() => setStopping(false)} /> : null}
     </>

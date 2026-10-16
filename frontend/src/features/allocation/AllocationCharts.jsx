@@ -41,7 +41,8 @@ function PeopleChart({ people }) {
 function SliceList({ data, colors, total }) {
   return (
     <Box component="ul" aria-label="Hours per project"
-      sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gap: 0.75, minWidth: 0, flex: 1, alignSelf: 'stretch' }}>
+      sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 0.75, minWidth: 0, flex: 1,
+        alignSelf: 'stretch' }}>
       {data.map((d, i) => (
         <Stack component="li" key={d.id} direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}
           title={d.label}>

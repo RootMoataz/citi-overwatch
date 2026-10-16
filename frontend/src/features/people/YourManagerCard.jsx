@@ -27,7 +27,7 @@ export default function YourManagerCard({ manager, sx }) {
         <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center', minWidth: 0, flexGrow: 1 }}>
           <UserAvatar userId={manager.id} name={manager.name} size={48} />
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle1" component="p" sx={{ fontWeight: 700, lineHeight: 1.3 }}>{manager.name}</Typography>
+            <Typography variant="subtitle1" component="p" sx={{ fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{manager.name}</Typography>
             {details ? <Typography variant="body2" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>{details}</Typography> : null}
             {canViewProfile(user, manager.id) ? (
               <Link component={RouterLink} to={`/people/${manager.id}/profile`} variant="body2" underline="hover">View profile</Link>

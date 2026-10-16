@@ -51,7 +51,8 @@ export default function NotificationBell() {
 
   return (
     <>
-      <IconButton aria-label={`Notifications, ${items.length} unread`} onClick={(e) => setAnchor(e.currentTarget)}>
+      <IconButton aria-label={`Notifications, ${items.length} unread`} onClick={(e) => setAnchor(e.currentTarget)}
+        sx={{ flexShrink: 0 }}>
         <Badge badgeContent={items.length} color="warning"><Notifications /></Badge>
       </IconButton>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={() => setAnchor(null)}

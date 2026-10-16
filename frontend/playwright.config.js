@@ -11,9 +11,10 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],
   use: { baseURL: 'http://localhost:3000', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  // Journeys run in both projects; layout checks tagged @phone or @desktop run once, in their own project.
   projects: [
-    { name: 'desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
-    { name: 'mobile', use: { ...devices['iPhone 13'] } },
+    { name: 'desktop', grepInvert: /@phone/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
+    { name: 'mobile', grepInvert: /@desktop/, use: { ...devices['iPhone 13'] } },
   ],
   webServer: [
     {

@@ -39,7 +39,7 @@ export default function Puppy() {
       <Tooltip title="Puppy assistant">
         <IconButton aria-label="Puppy assistant" aria-haspopup="dialog" aria-expanded={Boolean(anchor)}
           data-perked={String(perked)} onClick={(e) => setAnchor(e.currentTarget)}
-          sx={{ p: 0.5, bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' } }}>
+          sx={{ p: 0.5, flexShrink: 0, bgcolor: 'action.hover', '&:hover': { bgcolor: 'action.selected' } }}>
           <Badge variant="dot" color="warning" overlap="circular" invisible={!perked}
             slotProps={{ badge: { 'data-testid': perked ? 'puppy-badge' : undefined } }}>
             <PuppyFace size={30} perked={perked} excitedAt={excitedAt} />

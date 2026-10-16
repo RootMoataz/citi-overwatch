@@ -9,7 +9,7 @@ import {
 import { motion } from 'framer-motion'
 import { useId, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
-import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { Link as RouterLink, NavLink, Outlet, useLocation } from 'react-router-dom'
 import BrandLogo from '../components/BrandLogo.jsx'
 import ErrorBoundary from '../components/ErrorBoundary.jsx'
 import UserAvatar from '../components/UserAvatar.jsx'
@@ -95,11 +95,22 @@ function NavList({ user, onNavigate, badges = {}, collapsed = false }) {
   )
 }
 
+/** The logo, as a link home (spec §3.1). Its name, "ACME Scout", comes from the logo's image. */
+function BrandLink({ variant, size, animated, onClick }) {
+  return (
+    <ButtonBase component={RouterLink} to="/" onClick={onClick} disableRipple
+      sx={{ flexShrink: 0, borderRadius: 1.5, justifyContent: 'flex-start' }}>
+      <BrandLogo variant={variant} size={size} animated={animated} />
+    </ButtonBase>
+  )
+}
+
 /** The signed-in person at the bottom of the sidebar; it opens the account menu. Collapsed: the avatar alone. */
-function UserChip({ user, collapsed, onOpen }) {
+function UserChip({ user, collapsed, onOpen, expanded, menuId }) {
   const name = fullName(user)
   const button = (
-    <ButtonBase aria-label={`${name}, account menu`} aria-haspopup="menu" onClick={(e) => onOpen(e, 'above')}
+    <ButtonBase aria-label={`${name}, account menu`} aria-haspopup="menu" aria-expanded={expanded}
+      aria-controls={expanded ? menuId : undefined} onClick={onOpen}
       sx={{ width: '100%', gap: 1.5, p: 1, borderRadius: 1.5, justifyContent: 'flex-start', textAlign: 'left', overflow: 'hidden',
         color: 'text.primary', '&:hover': { bgcolor: 'action.hover' },
         '&:focus-visible': { outline: 2, outlineStyle: 'solid', outlineColor: 'primary.main' } }}>
@@ -149,11 +160,11 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
   const collapsed = desktop && collapsedChoice
   const sidebarWidth = collapsed ? COLLAPSED_WIDTH : DRAWER_WIDTH
   const demo = useDemoNotice(user)
-  const { openMenu, menu } = useAccountMenu({ user, onLogout, onClosed: () => setMobileOpen(false) })
+  const { openMenu, openedFrom, menuId, menu } = useAccountMenu({ user, onLogout, onClosed: () => setMobileOpen(false) })
 
-  const brand = (compact) => (
+  const brand = (compact, onClick) => (
     <Toolbar disableGutters sx={{ px: '18px', overflow: 'hidden' }}>
-      <BrandLogo variant={compact ? 'glyph' : 'full'} size={36} animated />
+      <BrandLink variant={compact ? 'glyph' : 'full'} size={36} animated onClick={onClick} />
     </Toolbar>
   )
 
@@ -163,19 +174,23 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
       <AppBar position="fixed" color="inherit" elevation={0}
         sx={{ borderBottom: 1, borderColor: 'divider', width: desktop ? `calc(100% - ${sidebarWidth}px)` : '100%',
           ml: desktop ? `${sidebarWidth}px` : 0, transition: `width ${SLIDE}, margin ${SLIDE}` }}>
-        <Toolbar sx={{ gap: 1 }}>
+        {/* Every control keeps its size (flexShrink 0); only the crumbs give way, with an ellipsis. Phones get tighter
+            gutters and gaps and the logo's glyph alone, so the bar fits at 375 px with a timer or the demo pill. */}
+        <Toolbar sx={{ gap: { xs: 0.5, sm: 1 }, px: { xs: 1, sm: 3 } }}>
           {!desktop ? (
-            <IconButton edge="start" aria-label="Open navigation" onClick={() => setMobileOpen(true)}>
+            <IconButton aria-label="Open navigation" onClick={() => setMobileOpen(true)} sx={{ flexShrink: 0, ml: { xs: 0, sm: -1 } }}>
               <MenuIcon />
             </IconButton>
           ) : null}
-          {!desktop ? <BrandLogo size={30} /> : null}
+          {!desktop ? <BrandLink variant="glyph" size={30} /> : null}
           <Breadcrumbs user={user} desktop={desktop} />
           <Box sx={{ flexGrow: 1 }} />
-          <Box sx={{ mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
+          <Box sx={{ flexShrink: 0, mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
           {topBarExtras}
           <DemoPill notice={demo} />
-          <IconButton aria-label="Account menu" aria-haspopup="menu" onClick={(e) => openMenu(e)} sx={{ p: 0.5 }}>
+          <IconButton aria-label="Account menu" aria-haspopup="menu" aria-expanded={openedFrom === 'header'}
+            aria-controls={openedFrom === 'header' ? menuId : undefined} onClick={(e) => openMenu(e, 'below', 'header')}
+            sx={{ p: 0.5, flexShrink: 0 }}>
             <UserAvatar userId={user?.id} name={fullName(user)} size={AVATAR_SIZE.header} />
           </IconButton>
         </Toolbar>
@@ -191,16 +206,18 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           {brand(collapsed)}
           <Divider />
           <NavList user={user} badges={badges} collapsed={collapsed} />
-          <UserChip user={user} collapsed={collapsed} onOpen={openMenu} />
+          <UserChip user={user} collapsed={collapsed} onOpen={(e) => openMenu(e, 'above', 'chip')}
+            expanded={openedFrom === 'chip'} menuId={menuId} />
           <CollapseToggle collapsed={collapsed} onToggle={toggleCollapsed} />
         </Drawer>
       ) : (
         <Drawer variant="temporary" open={mobileOpen} onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: false }} sx={{ '& .MuiDrawer-paper': { width: DRAWER_WIDTH } }}>
-          {brand(false)}
+          {brand(false, () => setMobileOpen(false))}
           <Divider />
           <NavList user={user} badges={badges} onNavigate={() => setMobileOpen(false)} />
-          <UserChip user={user} collapsed={false} onOpen={openMenu} />
+          <UserChip user={user} collapsed={false} onOpen={(e) => openMenu(e, 'above', 'chip')}
+            expanded={openedFrom === 'chip'} menuId={menuId} />
         </Drawer>
       )}
 

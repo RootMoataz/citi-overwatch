@@ -47,11 +47,14 @@ export default function BulletChart({ rows, max, ticks, tickFormat, axisLabel, r
           {legend.map((item) => <Key key={item.label} {...item} color={legendColor(item)} palette={palette} />)}
         </Stack>
       ) : null}
-      <Box component="ul" aria-label={ariaLabel} sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gap: 1.25 }}>
+      {/* One column that may shrink below its rows' text (minmax(0, 1fr)), so a long name ends in an ellipsis instead of
+          widening the page. */}
+      <Box component="ul" aria-label={ariaLabel}
+        sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 1.25 }}>
         {rows.map((row, index) => (
           <Tooltip key={row.id} title={<Box sx={{ whiteSpace: 'pre-line' }}>{row.summary}</Box>} placement="top" followCursor>
             <Box component="li" tabIndex={0} aria-label={row.summary.replace(/\n/g, '. ')}
-              sx={{ outline: 'none', borderRadius: 1, px: 0.5, mx: -0.5, py: 0.25,
+              sx={{ outline: 'none', borderRadius: 1, px: 0.5, mx: -0.5, py: 0.25, minWidth: 0,
                 '&:hover, &:focus-visible': { bgcolor: 'action.hover' },
                 '&:focus-visible': { boxShadow: (t) => `0 0 0 2px ${t.palette.primary.main}` } }}>
               <Stack direction="row" sx={{ alignItems: 'baseline', gap: 1, minWidth: 0 }}>
