@@ -249,6 +249,8 @@ def get_month(conn, ctx: Ctx, params: dict) -> dict:
         "entries": [_entry_view(e, name, show_rate=False) for e in entries],
         "drafts": [{"milestone_id": mid, "work_date": d, "hours": v["hours"]}
                    for (mid, d), v in sorted(drafts.items(), key=lambda kv: (kv[0][1], kv[0][0]))],
+        # Cells holding timer hours (draft or submitted), as the week returns them: the day panel shows their lock.
+        "locks": _locks(conn, user_id, entries, drafts),
     }
 
 
