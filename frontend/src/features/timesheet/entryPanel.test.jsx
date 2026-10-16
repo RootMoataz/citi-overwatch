@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
@@ -385,5 +385,179 @@ describe('Entry details: retargeted from the grid', () => {
     await user.click(screen.getByRole('button', { name: 'Pending, details for Schema Mapping, Mon Oct 12' }))
     expect(await within(region).findByText('Mon, Oct 12, 2026')).toBeInTheDocument()
     expect(within(region).getByLabelText('Source')).toHaveValue('Manual')
+  })
+})
+
+describe('Entry details: final review fixes', () => {
+  const failing = (cells) => ({ error: { code: 'PROOF_REQUIRED', message: 'Add a work note', request_id: 'r1',
+    details: { cells } } })
+
+  test("a successful Save & resubmit takes its cell out of Submit's failure, and the alert goes once nothing is left", async () => {
+    const puts = []
+    server.use(sheet(), http.put(`${API}/time-entries`, async ({ request }) => {
+      const sent = await request.json()
+      puts.push(sent)
+      if (sent.entries.length > 1) {
+        return HttpResponse.json(failing(sent.entries.map((c) => ({ milestone_id: c.milestone_id, work_date: c.work_date,
+          reason: 'missing' }))), { status: 400 })
+      }
+      return HttpResponse.json(sheetBody())
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Mon Oct 12'), '2')
+    const wed = screen.getByLabelText('Schema Mapping, Wed Oct 14')
+    await user.clear(wed)
+    await user.type(wed, '6')
+    await user.click(screen.getByRole('button', { name: 'Submit 2 changes' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Add a work note before saving')
+    expect(alert).toHaveTextContent('Schema Mapping, Wed Oct 14')
+    expect(alert).toHaveTextContent('Build, Mon Oct 12')
+    await user.click(await statusLine(WED_LINE))
+    await user.click(within(await panel()).getByRole('button', { name: 'Save & resubmit' }))
+    await gone()
+    expect(puts.at(-1)).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WED, hours: 6 }] })
+    const left = screen.getByText('Add a work note before saving').closest('[role="alert"]')
+    expect(left).not.toHaveTextContent('Schema Mapping, Wed Oct 14')
+    expect(left).toHaveTextContent('Build, Mon Oct 12')
+  })
+
+  test('the alert closes when the resubmitted cell was the only one it named', async () => {
+    server.use(sheet(), http.put(`${API}/time-entries`, async ({ request }) => {
+      const sent = await request.json()
+      // Submit sends Wed and Mon; the server names Wed alone.
+      if (sent.entries.length > 1) {
+        return HttpResponse.json(failing([{ milestone_id: 'm1', work_date: WED, reason: 'missing' }]), { status: 400 })
+      }
+      return HttpResponse.json(sheetBody())
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Mon Oct 12'), '2')
+    const wed = screen.getByLabelText('Schema Mapping, Wed Oct 14')
+    await user.clear(wed)
+    await user.type(wed, '6')
+    await user.click(screen.getByRole('button', { name: 'Submit 2 changes' }))
+    expect(await screen.findByText('Add a work note before saving')).toBeInTheDocument()
+    await user.click(await statusLine(WED_LINE))
+    await user.click(within(await panel()).getByRole('button', { name: 'Save & resubmit' }))
+    await gone()
+    await waitFor(() => expect(screen.queryByText('Add a work note before saving')).not.toBeInTheDocument())
+  })
+
+  test("the panel's Hours follow the server's day rule: other cells' unsaved typing doesn't count, saved hours do", async () => {
+    const cutover = { milestone: { id: 'm3', name: 'Cutover', status: 'in_progress' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true }
+    // Wed: Build has 10h saved; Schema Mapping's 8h were rejected.
+    server.use(sheet({ sheetRows: [...rows, cutover], locks: [], entries: [
+      entry({ id: 'c', work_date: WED, hours: 8, status: 'rejected', rejection_reason: REASON, note: NOTE }),
+      entry({ id: 'g', milestone_id: 'm2', work_date: WED, hours: 10, status: 'pending', note: NOTE })] }))
+    renderSheet()
+    const user = userEvent.setup()
+    // 10h typed (not saved) on Cutover: with the 8h back the day reads 28h, but Save & resubmit sends Schema Mapping
+    // alone, and the server adds it to the 10h saved on Build: 18h.
+    await user.type(await screen.findByLabelText('Cutover, Wed Oct 14'), '10')
+    await user.click(await statusLine(WED_LINE))
+    const region = await panel()
+    const hours = within(region).getByLabelText('Hours')
+    await user.clear(hours)
+    await user.type(hours, '8')
+    expect(screen.getByText('More than 24h on Wed Oct 14')).toBeInTheDocument()
+    expect(hours).toHaveAttribute('aria-invalid', 'false')
+    expect(within(region).getByRole('button', { name: 'Save & resubmit' })).toBeEnabled()
+    // 15h would make the day 25h with Build's saved 10h: refused by the server, so red and disabled here.
+    await user.clear(hours)
+    await user.type(hours, '15')
+    expect(hours).toHaveAttribute('aria-invalid', 'true')
+    expect(within(region).getByRole('button', { name: 'Save & resubmit' })).toBeDisabled()
+  })
+
+  test('Save & resubmit is disabled while Submit is saving', async () => {
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    server.use(sheet(), http.put(`${API}/time-entries`, async () => {
+      await gate
+      return HttpResponse.json(sheetBody())
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Mon Oct 12'), '2')
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled()
+    await user.click(await statusLine(WED_LINE))
+    expect(within(await panel()).getByRole('button', { name: 'Save & resubmit' })).toBeDisabled()
+    release()
+    await waitFor(() => expect(within(screen.getByRole('complementary', { name: 'Entry details' }))
+      .getByRole('button', { name: 'Save & resubmit' })).toBeEnabled())
+  })
+
+  test('switching views closes a panel opened from the grid as Close does: Back then leaves the page', async () => {
+    server.use(sheet())
+    renderWithBack()
+    const user = userEvent.setup()
+    await user.click(await statusLine(WED_LINE))
+    await panel()
+    await user.click(screen.getByRole('button', { name: 'Day' }))
+    await gone()
+    expect(search().has('entry')).toBe(false)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toBe('/before')
+  })
+
+  test('a pushed entry that stops being one (its row unassigned) closes as Close does: Back then leaves the page', async () => {
+    let listed = rows
+    server.use(http.get(`${API}/time-entries`, () => HttpResponse.json(sheetBody({ sheetRows: listed }))), recordPuts([]))
+    renderWithBack()
+    const user = userEvent.setup()
+    await user.click(await statusLine('Approved, details for Schema Mapping, Tue Oct 13'))
+    await panel()
+    // Schema Mapping is unassigned; a save elsewhere refetches the week.
+    listed = [rows[0]]
+    await user.type(screen.getByLabelText('Build, Mon Oct 12'), '2')
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    await gone()
+    await waitFor(() => expect(search().has('entry')).toBe(false))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toBe('/before')
+  })
+
+  test("a locked rejected cell's Save & resubmit sends the lock's hours", async () => {
+    const puts = []
+    const wedLock = { milestone_id: 'm1', work_date: WED, hours: 6.5, draft_hours: 0.5, tracked_hours: 6.5, request: null }
+    server.use(sheet({ locks: [wedLock], entries: [
+      entry({ id: 'c', work_date: WED, hours: 6, status: 'rejected', rejection_reason: REASON, note: NOTE, source: 'tracked', tracked_hours: 6 })] }),
+    recordPuts(puts))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.click(await statusLine(WED_LINE))
+    const region = await panel()
+    expect(within(region).getByLabelText('Hours')).toHaveValue('6.5')
+    await user.click(within(region).getByRole('button', { name: 'Save & resubmit' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: WED, hours: 6.5 }] })
+  })
+
+  test("a Save & resubmit still pending when another entry is opened doesn't close that entry's panel", async () => {
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    const puts = []
+    server.use(sheet(), http.put(`${API}/time-entries`, async ({ request }) => {
+      puts.push(await request.json())
+      await gate
+      return HttpResponse.json(sheetBody())
+    }))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.click(await statusLine(WED_LINE))
+    await user.click(within(await panel()).getByRole('button', { name: 'Save & resubmit' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    await user.click(screen.getByRole('button', { name: 'Approved, details for Schema Mapping, Tue Oct 13' }))
+    expect(within(await panel()).getByText('Tue, Oct 13, 2026')).toBeInTheDocument()
+    release()
+    expect(await screen.findByText('Hours saved and sent for approval')).toBeInTheDocument()
+    // The resubmit's own ending (it would close its panel) runs a turn after the toast: let it run.
+    await act(() => new Promise((resolve) => { setTimeout(resolve, 0) }))
+    expect(screen.getByRole('complementary', { name: 'Entry details' })).toHaveTextContent('Tue, Oct 13, 2026')
+    expect(search().get('entry')).toBe('m1:2026-10-13')
   })
 })

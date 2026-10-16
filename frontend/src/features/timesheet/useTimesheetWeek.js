@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ApiError } from '../../api/client.js'
 import { useSaveWeek, useWeek } from '../../api/queries.js'
 import { isProofNote } from '../timer/timerClock.js'
 import { addDays } from '../../lib/format.js'
 import { readUnsaved, writeUnsaved } from './unsavedStore.js'
+import { weekFigures } from './weekFigures.js'
 
 export const DAY_CAP = 24
 export const MIN_HOURS = 0.25
@@ -11,6 +13,19 @@ export const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) 
 export const tooLow = (v) => num(v) > 0 && num(v) < MIN_HOURS
 const without = (obj, drop) => Object.fromEntries(Object.entries(obj).filter(([k]) => !drop(k)))
 const only = (obj, keep) => without(obj, (k) => !keep(k))
+const COUNTED = ['pending', 'approved']   // the statuses the server counts toward a day and a week
+
+/** A save failure with one cell taken out of the cells it names (that cell was saved since); null once none is left.
+ * A failure that names no cells is kept as it is. */
+function withoutCell(failure, cellKey) {
+  const cells = failure?.details?.cells
+  if (!Array.isArray(cells)) return failure
+  const left = cells.filter((c) => key(c.milestone_id, c.work_date) !== cellKey)
+  if (left.length === cells.length) return failure
+  if (!left.length) return null
+  return new ApiError({ status: failure.status, code: failure.code, message: failure.message,
+    details: { ...failure.details, cells: left }, requestId: failure.requestId })
+}
 
 // On hold pauses logging; completed closes it. The server refuses changes on both (409 PROJECT_NOT_OPEN).
 const CLOSED = { on_hold: 'Project on hold — logging paused', completed: 'Project completed — logging closed' }
@@ -41,9 +56,11 @@ export function useTimesheetWeek(week, { userId } = {}) {
   const valueOf = (k) => (locks[k] ? String(locks[k].hours) : k in drafts ? drafts[k] : entries[k] ? String(entries[k].hours) : '')
   const hasDraft = (k) => Number(locks[k]?.draft_hours ?? 0) > 0
   const isDraft = (k) => k in drafts
-  const countsToward = (k) => (hasDraft(k) || k in drafts ? true : entries[k] && entries[k].status !== 'rejected')
 
   const rows = sheet.data?.rows ?? []
+  // While the previous week's sheet is on show (placeholder data, this week's still loading), its rows aren't this
+  // week's: nothing typed on them counts or can be sent until this week's own rows are in.
+  const loading = !sheet.data || sheet.isPlaceholderData
 
   // Restore runs once per week, when the sheet holds that week's own data (never the previous week's, shown while this one
   // loads) and nothing is typed in it yet. Only cells of rows still listed and open come back; their values are taken as
@@ -74,15 +91,28 @@ export function useTimesheetWeek(week, { userId } = {}) {
 
   const closedKeys = new Set(rows.filter((r) => closedLabel(r)).flatMap((r) => allDays.map((d) => key(r.milestone.id, d))))
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
-  const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
-  // A day counts the same hours as the server: pending and approved entries plus whatever is being typed.
-  const dayTotal = (d) => rows.reduce((s, r) => s + (countsToward(key(r.milestone.id, d)) ? num(valueOf(key(r.milestone.id, d))) : 0), 0)
-  // A row counts the same way: rejected hours are left out unless re-typed.
-  const rowTotal = (milestoneId) => allDays.reduce((s, d) => s + (countsToward(key(milestoneId, d)) ? num(valueOf(key(milestoneId, d))) : 0), 0)
+  // The cells Submit may send: this week's, on rows the sheet lists as open, and none while the week loads. Typing on
+  // a row unassigned or put on hold since (a refetch, or a restore from cached data) stays in memory, but it neither
+  // counts nor goes out.
+  const openKeys = new Set(loading ? [] : cellKeys.filter((k) => !closedKeys.has(k)))
+  const typed = (k) => k in drafts && openKeys.has(k)
+  // What a cell adds to the totals, as the server counts it: its pending or approved hours, a timer draft, or the hours
+  // typed into it; rejected hours are left out unless re-typed.
+  const countsToward = (k) => hasDraft(k) || typed(k) || Boolean(entries[k] && entries[k].status !== 'rejected')
+  const cellHours = (k) => (!countsToward(k) ? 0 : locks[k] ? num(locks[k].hours) : typed(k) ? num(drafts[k]) : num(entries[k]?.hours))
+  const total = cellKeys.reduce((s, k) => s + cellHours(k), 0)
+  // A day, and a row, count the same way.
+  const dayTotal = (d) => rows.reduce((s, r) => s + cellHours(key(r.milestone.id, d)), 0)
+  const rowTotal = (milestoneId) => allDays.reduce((s, d) => s + cellHours(key(milestoneId, d)), 0)
   const overDays = allDays.filter((d) => dayTotal(d) > DAY_CAP)
-  const tooMany = cellKeys.some((k) => num(valueOf(k)) > DAY_CAP) || overDays.length > 0
-  const tooFewKeys = cellKeys.filter((k) => k in drafts && tooLow(drafts[k]))
+  const tooMany = cellKeys.some((k) => cellHours(k) > DAY_CAP) || overDays.length > 0
+  const tooFewKeys = cellKeys.filter((k) => typed(k) && tooLow(drafts[k]))
   const tooFew = tooFewKeys.length > 0
+  // The server's day rule for one cell saved on its own (Save & resubmit): this week's saved pending and approved hours
+  // that day on every other cell, unlisted rows included, plus the hours sent.
+  const savedOthers = (date, except) => Object.entries(entries)
+    .filter(([k, e]) => k !== except && e.work_date === date && COUNTED.includes(e.status))
+    .reduce((s, [, e]) => s + num(e.hours), 0)
   // A stop's note pre-fills a cell that has none.
   const noteOf = (k) => (k in notes ? notes[k] : entries[k]?.note || (hasDraft(k) ? timerNotes[k] ?? '' : ''))
   // A locked cell changes only by its timer draft, or by resubmitting it unchanged after a rejection.
@@ -92,12 +122,15 @@ export function useTimesheetWeek(week, { userId } = {}) {
   const noteChanged = (k) => k in notes && notes[k] !== (entries[k]?.note ?? '')
   // A note alone on an empty cell has nothing to save; it goes with the hours once they're typed.
   // Only this week's cells count: edits made in another week stay in memory until the person is back in that week.
-  // And only cells of rows the sheet lists as open: typing on a row unassigned or put on hold since (a refetch, or a
-  // restore from cached data) stays in memory, but Submit never sends a cell the sheet doesn't list.
-  const openKeys = new Set(cellKeys.filter((k) => !closedKeys.has(k)))
+  // And only the cells Submit may send (openKeys): Submit never sends a cell the sheet doesn't list as open.
+  const wouldChange = (k) => (hoursChanged(k) || noteChanged(k)) && (entries[k] || num(valueOf(k)) > 0)
   const changed = [...new Set([...Object.keys(drafts), ...Object.keys(notes), ...Object.keys(locks).filter(hasDraft)])]
     .filter((k) => openKeys.has(k))
-    .filter((k) => (hoursChanged(k) || noteChanged(k)) && (entries[k] || num(valueOf(k)) > 0))
+    .filter(wouldChange)
+  // Typing this week that Submit won't send: its row was closed or unassigned after it was typed.
+  const heldBack = loading ? [] : [...new Set([...Object.keys(drafts), ...Object.keys(notes)])]
+    .filter((k) => inWeek(k) && !openKeys.has(k))
+    .filter(wouldChange)
   // Cells the server said need proof of work (PROOF_REQUIRED), until a note is added to them.
   const proofCells = new Set(failure?.code === 'PROOF_REQUIRED'
     ? (failure.details?.cells ?? []).map((c) => key(c.milestone_id, c.work_date)) : [])
@@ -143,14 +176,23 @@ export function useTimesheetWeek(week, { userId } = {}) {
   }
   // Entry details' Save & resubmit: one PUT with this cell alone. Every other cell's typing stays unsaved. A failure
   // rejects with the API error for the panel to show; the week's `failure` (Submit's) is left as it is.
+  // Once it's saved, a Submit failure that named that cell no longer applies to it.
   const saveCell = async (k) => {
     await saveOne.mutateAsync({ week, entries: [cellBody(k)] })
     clearSent(new Set([k]))
+    setFailure((f) => withoutCell(f, k))
   }
   // The restore notice: a restore of this week brought back cells that are still unsaved changes.
   const restored = kept.id === storeId && kept.cells.some((k) => changed.includes(k))
   const dismissRestored = () => setKept((s) => ({ ...s, cells: [] }))
   const nameOf = (milestoneId) => rows.find((r) => String(r.milestone.id) === String(milestoneId))?.milestone.name ?? 'A milestone'
+
+  // The Week totals card: the grid's cells, plus saved hours this week on rows the sheet no longer lists.
+  const edited = new Set(changed)
+  const listed = new Set(cellKeys)
+  const figures = weekFigures(
+    cellKeys.map((k) => ({ hours: cellHours(k), counts: countsToward(k), entry: entries[k], edited: edited.has(k) })),
+    Object.entries(entries).filter(([k]) => inWeek(k) && !listed.has(k)).map(([, e]) => e))
 
   const groups = rows.reduce((acc, r) => {
     const g = acc.find((x) => x.project.id === r.project.id)
@@ -160,9 +202,9 @@ export function useTimesheetWeek(week, { userId } = {}) {
   }, [])
 
   return {
-    week, sheet, rows, groups, allDays, entries, locks,
-    valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal,
-    total, overDays, tooMany, tooFew, tooFewKeys, changed,
+    week, sheet, loading, rows, groups, allDays, entries, locks,
+    valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal, savedOthers,
+    total, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, saveCell, savingCell: saveOne.isPending, discard,
     restored, dismissRestored, nameOf, closedLabel,
   }

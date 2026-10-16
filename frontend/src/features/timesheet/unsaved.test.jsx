@@ -363,3 +363,67 @@ describe('restoring after the week changed underneath (Review Focus 3)', () => {
     expect(screen.getByRole('button', { name: 'Submit 1 change' })).toBeEnabled()
   })
 })
+
+describe('nothing is sent while a week loads, and typing on a row closed since is held back', () => {
+  test("typing on the previous week's rows while the next week loads sends nothing; valid typing counts once its rows are in", async () => {
+    const puts = []
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    // Oct 5 lists Schema Mapping and Build; Oct 12's own sheet lists Build only (Schema Mapping was unassigned).
+    server.use(http.get(`${API}/time-entries`, async ({ request }) => {
+      const week = new URL(request.url).searchParams.get('week')
+      if (week === WEEK) {
+        await gate
+        return HttpResponse.json(body({ rows: [build], entries: [] }))
+      }
+      return HttpResponse.json(body({ week, entries: [] }))
+    }), recordPuts(puts))
+    renderSheet(`/timesheet?week=${PREV}`)
+    const user = userEvent.setup({ pointerEventsCheck: 0 })
+    await screen.findByLabelText('Schema Mapping, Tue Oct 6')
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toBeInTheDocument()
+    // The rows on screen are still Oct 5's: typing goes in, but nothing can be sent yet.
+    await user.type(screen.getByLabelText('Schema Mapping, Tue Oct 13'), '9')
+    await user.type(screen.getByLabelText('Build, Wed Oct 14'), '3')
+    const submit = screen.getByRole('button', { name: /^Submit/ })
+    expect(submit).toHaveTextContent(/^Submit$/)
+    expect(submit).toBeDisabled()
+    await user.click(submit)
+    expect(puts).toEqual([])
+    release()
+    await waitFor(() => expect(screen.queryByLabelText('Schema Mapping, Tue Oct 13')).not.toBeInTheDocument())
+    // Build is listed on Oct 12, so its typing counts now; Schema Mapping's is held back and said so.
+    expect(screen.getByLabelText('Build, Wed Oct 14')).toHaveValue('3')
+    expect(screen.getByTestId('week-total')).toHaveTextContent('3h counted of 40h')
+    expect(screen.getByText("1 typed cell is on a milestone that is no longer open and won't be sent.")).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Submit 1 change' }))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WED, hours: 3 }] })
+  })
+
+  test('typing on a row put on hold since leaves the totals and Submit, and a line says it is held back', async () => {
+    const puts = []
+    let listed = [build, mapping]
+    const rejected = entry({ id: 'c', work_date: WED, status: 'rejected', label: 'Rejected', rejection_reason: REASON })
+    server.use(http.get(`${API}/time-entries`, () => HttpResponse.json(body({ rows: listed, entries: [entry(), rejected] }))),
+      recordPuts(puts))
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Tue Oct 13'), '3')
+    await user.type(screen.getByLabelText('Build, Thu Oct 15'), '2')
+    expect(screen.getByTestId('week-total')).toHaveTextContent('13h counted of 40h')
+    expect(screen.getByTestId(`day-total-${TUE}`)).toHaveTextContent('3h')
+    expect(screen.queryByText(/won't be sent/)).not.toBeInTheDocument()
+    // Build's project goes on hold; Save & resubmit on another cell refetches the week.
+    listed = [{ ...build, project: { ...build.project, status: 'on_hold' }, open: false }, mapping]
+    await user.click(screen.getByRole('button', { name: 'Needs revision, details for Schema Mapping, Wed Oct 14' }))
+    await user.click(within(await screen.findByRole('complementary', { name: 'Entry details' })).getByRole('button', { name: 'Save & resubmit' }))
+    await waitFor(() => expect(screen.getByLabelText('Build, Tue Oct 13')).toBeDisabled())
+    expect(screen.getByTestId('week-total')).toHaveTextContent('8h counted of 40h')
+    expect(screen.getByTestId(`day-total-${TUE}`)).toHaveTextContent('0h')
+    expect(screen.getByText("2 typed cells are on milestones that are no longer open and won't be sent.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
+    expect(puts).toHaveLength(1)
+  })
+})

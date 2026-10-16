@@ -1,4 +1,4 @@
-import { Box, Paper, Stack, Typography } from '@mui/material'
+import { Box, Paper, Skeleton, Stack, Typography } from '@mui/material'
 import FootNote from '../../components/FootNote.jsx'
 import { formatHours } from '../../lib/format.js'
 import { useCalmMotion } from '../../lib/motion.js'
@@ -7,9 +7,19 @@ import { KIND, kindColor } from './monthText.js'
 const FIGURES = [['approved', 'approved'], ['pending', 'pending'], ['rejected', 'needsRevision']]
 
 /** The week's totals: the counted hours against the 40h reference with a bar, then approved, pending and needs revision.
- * figures: the weekFigures result. */
-export default function WeekTotals({ figures, cap = 40 }) {
+ * figures: the weekFigures result. loading: the shown week's own data isn't in yet (the previous week's may still be
+ * on show), so the card is a skeleton rather than figures from two weeks mixed. */
+export default function WeekTotals({ figures, cap = 40, loading = false }) {
   const calm = useCalmMotion()
+  if (loading) {
+    return (
+      <Paper variant="outlined" role="group" aria-label="Week totals" aria-busy="true" sx={{ p: 2, mb: 2 }}>
+        <Skeleton width="40%" height={36} />
+        <Skeleton variant="rounded" height={8} sx={{ my: 1 }} />
+        <Skeleton width="60%" />
+      </Paper>
+    )
+  }
   const { counted } = figures
   const over = counted > cap
   return (
@@ -40,6 +50,9 @@ export default function WeekTotals({ figures, cap = 40 }) {
         ))}
       </Stack>
       <FootNote note="Rejected hours are excluded from counted totals." />
+      {figures.unlisted > 0 ? (
+        <FootNote note={`Includes ${formatHours(figures.unlisted)} on milestones you're no longer assigned to.`} />
+      ) : null}
     </Paper>
   )
 }

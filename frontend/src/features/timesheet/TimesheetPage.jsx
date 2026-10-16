@@ -18,7 +18,6 @@ import WeekGrid from './WeekGrid.jsx'
 import WeekStrip from './WeekStrip.jsx'
 import WeekTotals from './WeekTotals.jsx'
 import { useEntryPanelUrl } from './useEntryPanelUrl.js'
-import { weekFigures } from './weekFigures.js'
 import { DAY_CAP, MIN_HOURS, key, useTimesheetWeek } from './useTimesheetWeek.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
@@ -72,7 +71,8 @@ export default function TimesheetPage() {
   // Unsaved typing is kept in this tab per person (sessionStorage), so a reload brings it back.
   const { user } = useSession()
   const state = useTimesheetWeek(week, { userId: user?.id })
-  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, savingCell, onSave, dayTotal, nameOf, entries, isDraft, restored, dismissRestored } = state
+  const { sheet, loading, rows, allDays, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack, failure, saving, savingCell,
+    onSave, dayTotal, nameOf, entries, restored, dismissRestored } = state
 
   const days = desktop || showWeekend ? allDays : allDays.slice(0, 5)
   const waitingDraft = Number(sheet.data?.totals?.draft ?? 0)
@@ -87,7 +87,7 @@ export default function TimesheetPage() {
   const askedMonth = params.get('month')
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(askedMonth ?? '') ? askedMonth : monthOf(day)
   const n = changed.length
-  const figures = weekFigures({ entries, changed, isDraft, total })
+  const held = heldBack.length
 
   // Entry details (?entry=<milestone>:<date>) opens on a saved entry of a listed row in the shown week, in the Day or
   // Week view; anything else is dropped once this week's own data is in (not the previous week's placeholder).
@@ -134,15 +134,11 @@ export default function TimesheetPage() {
     if (next !== 'month') setSheetView(next)
     setView(next)
     storeView(next)
-    // Leaving Month drops ?month=, or a reload would open Month again. Any view change closes Entry details.
-    const dropMonth = next !== 'month' && params.has('month')
-    if (dropMonth || params.has('entry')) {
-      setParams((p) => {
-        const q = new URLSearchParams(p)
-        if (dropMonth) q.delete('month')
-        q.delete('entry')
-        return q
-      }, { replace: true })
+    // Any view change closes Entry details as Close does (an open from the grid is undone, so Back has no dead step).
+    // Leaving Month drops ?month=, or a reload would open Month again; Entry details is never open in Month.
+    if (params.has('entry')) panel.close()
+    else if (next !== 'month' && params.has('month')) {
+      setParams((p) => { const q = new URLSearchParams(p); q.delete('month'); return q }, { replace: true })
     }
   }
   // A cell named in an error; in the day view it links to its day.
@@ -188,13 +184,19 @@ export default function TimesheetPage() {
       <PageHeader title="My timesheet" subtitle="Review your week. Submit with confidence."
         actions={<Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
           {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>} />
-      <WeekTotals figures={figures} cap={CAP} />
+      <WeekTotals figures={figures} cap={CAP} loading={loading} />
       {restored && n > 0 ? (
         <Alert severity="info" role="status" onClose={dismissRestored} sx={{ mb: 2 }}>Unsaved changes restored. Submit to send them.</Alert>
       ) : null}
-      {total > CAP ? (
+      {held > 0 ? (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {held === 1 ? "1 typed cell is on a milestone that is no longer open and won't be sent."
+            : `${held} typed cells are on milestones that are no longer open and won't be sent.`}
+        </Alert>
+      ) : null}
+      {!loading && figures.counted > CAP ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          This week is {formatHours(total)} — {formatHours(total - CAP)} over {CAP}h. Hours above {CAP} are sent to your manager as an overtime request.
+          This week is {formatHours(figures.counted)} — {formatHours(figures.counted - CAP)} over {CAP}h. Hours above {CAP} are sent to your manager as an overtime request.
         </Alert>
       ) : null}
       {overDays.map((d) => (
@@ -287,7 +289,7 @@ export default function TimesheetPage() {
                 <WeekGrid state={state} days={days} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} onOpenEntry={panel.open} />
               ) : null}
             </Paper>
-            {figures.needsRevision > 0 ? (
+            {!loading && figures.needsRevision > 0 ? (
               <FootNote note={`${formatHours(figures.entered)} entered · ${formatHours(figures.needsRevision)} excluded until resubmitted.`} />
             ) : null}
           </>

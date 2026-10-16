@@ -1,7 +1,7 @@
 import Lock from '@mui/icons-material/LockOutlined'
 import { Alert, Box, Button, Chip, InputAdornment, Stack, TextField, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDayLabel, formatDayLong, formatHours } from '../../lib/format.js'
@@ -43,9 +43,17 @@ function LockedHours({ lock, closed, onRequest }) {
  * state: the useTimesheetWeek result. cellKey: "<milestoneId>|<date>". onRequest(cell): a locked cell asks for a change.
  */
 export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
-  const { entries, locks, rows, valueOf, noteOf, setHours, setNote, changed, overDays, isDraft, closedLabel, saveCell, savingCell } = state
+  const { entries, locks, rows, valueOf, noteOf, setHours, setNote, changed, overDays, isDraft, closedLabel, saveCell, savingCell,
+    saving, savedOthers } = state
   const feedbackId = useId()
   const [error, setError] = useState(null)
+  // The panel shows one cell (the page keys it by cell): a resubmit that ends after another entry was opened is
+  // done for a panel no longer on screen, and must not close the one that is.
+  const shown = useRef(true)
+  useEffect(() => {
+    shown.current = true
+    return () => { shown.current = false }
+  }, [])
   const [milestoneId, date] = cellKey.split('|')
   const entry = entries[cellKey]
   const row = rows.find((r) => String(r.milestone.id) === milestoneId)
@@ -60,14 +68,18 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
   const shortNote = note.trim().length > 0 && !isProofNote(note)
   const tracked = num(entry.tracked_hours)
   const resubmittable = entry.status === 'rejected' && !closed
-  const invalid = num(value) <= 0 || num(value) > DAY_CAP || tooLow(value) || shortNote
+  // The server's day rule for this cell saved alone: the day's saved hours on other cells plus these. Unsaved typing
+  // elsewhere doesn't count for Save & resubmit; it does for Submit, which sends it (the week's overDays).
+  const dayOver = num(value) > 0 && savedOthers(date, cellKey) + num(value) > DAY_CAP
+  const over = num(value) > DAY_CAP || dayOver || (!resubmittable && num(value) > 0 && overDays.includes(date))
+  const invalid = num(value) <= 0 || num(value) > DAY_CAP || dayOver || tooLow(value) || shortNote
 
   const resubmit = async () => {
     setError(null)
     try {
       await saveCell(cellKey)
-      onClose()
-    } catch (err) { setError(err) }
+      if (shown.current) onClose()
+    } catch (err) { if (shown.current) setError(err) }
   }
 
   return (
@@ -87,7 +99,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
             onRequest={() => onRequest({ milestoneId, date, hours: lock.hours, label: `${name}, ${formatDayLabel(date)}` })} />
         ) : (
           <HoursField value={value} label="Hours" caption="Hours" onChange={(v) => setHours(cellKey, v)} disabled={Boolean(closed)}
-            error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(date)) || (isDraft(cellKey) && tooLow(value))} />
+            error={over || (isDraft(cellKey) && tooLow(value))} />
         )}
       </Box>
 
@@ -118,7 +130,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
       <ErrorAlert error={error} sx={SECTION} />
 
       {resubmittable ? (
-        <Button variant="contained" fullWidth onClick={resubmit} disabled={savingCell || invalid} sx={{ ...SECTION, minHeight: 44 }}>
+        <Button variant="contained" fullWidth onClick={resubmit} disabled={savingCell || saving || invalid} sx={{ ...SECTION, minHeight: 44 }}>
           Save &amp; resubmit
         </Button>
       ) : (

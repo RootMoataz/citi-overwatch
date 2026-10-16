@@ -18,10 +18,11 @@ const paramOf = (cellKey) => cellKey.replace('|', ':')
  *   the week isn't `ready` (its own data, not the previous week's placeholder) or when `has(key)` refuses it.
  * - `open(milestoneId, date)` from a closed panel pushes an entry marked `state.panelPushed`, so Back closes it; while one
  *   is open it replaces the entry instead, keeping the mark. It does nothing when that cell is already showing.
- * - `close()` (Close, Esc, Done, a successful Save & resubmit) goes back when the entry is marked, which undoes the open.
- *   A panel the page landed on (a link, a reload) has no mark, so `entry` is removed with replace.
- * - A bad value (another week, a typo, an empty cell, a row no longer listed) is removed with replace once the week is
- *   ready, silently: no panel ever opens for it.
+ * - `close()` (Close, Esc, Done, a successful Save & resubmit, a view change) goes back when the entry is marked, which
+ *   undoes the open. A panel the page landed on (a link, a reload) has no mark, so `entry` is removed with replace.
+ * - A bad value (another week, a typo, an empty cell, a row no longer listed) is dropped once the week is ready,
+ *   silently, as `close()` does: no panel ever opens for it, and an entry pushed by an open leaves no dead Back step.
+ *   Only one Back is taken for an entry, however many closes ask for it before it lands.
  * - `returnFocus()` gives the element to focus after the panel closes: the cell's status line (`[data-entry]`) or the Day
  *   view's Details for it (`[data-entry-details]`), else the week range heading. Focus the person already put on a
  *   control outside the panel (the view toggle or a week arrow that closed it) stays where it is.
@@ -31,6 +32,7 @@ export function useEntryPanelUrl({ ready, has }) {
   const location = useLocation()
   const navigate = useNavigate()
   const lastOpen = useRef(null)
+  const leaving = useRef(null)   // the history entry a Back is already leaving
   const raw = params.get('entry')
   const asked = keyOf(raw)
   const known = asked !== null && has(asked)
@@ -45,8 +47,13 @@ export function useEntryPanelUrl({ ready, has }) {
     if (entryKey) setParams(write, { replace: true, state: kept })
     else setParams(write, { state: { ...kept, panelPushed: true } })
   }
+  const back = () => {
+    if (leaving.current === location.key) return
+    leaving.current = location.key
+    navigate(-1)
+  }
   const close = () => {
-    if (pushed) navigate(-1)
+    if (pushed) back()
     else setParams((p) => { p.delete('entry'); return p }, { replace: true, state: kept })
   }
 
@@ -54,8 +61,11 @@ export function useEntryPanelUrl({ ready, has }) {
 
   const bad = raw !== null && ready && !known
   useEffect(() => {
-    if (bad) setParams((p) => { p.delete('entry'); return p }, { replace: true, state: kept })
-  }, [bad, setParams, kept])
+    if (!bad) return
+    if (pushed) {
+      if (leaving.current !== location.key) { leaving.current = location.key; navigate(-1) }
+    } else setParams((p) => { p.delete('entry'); return p }, { replace: true, state: kept })
+  }, [bad, pushed, location.key, navigate, setParams, kept])
 
   const returnFocus = () => {
     const active = document.activeElement
