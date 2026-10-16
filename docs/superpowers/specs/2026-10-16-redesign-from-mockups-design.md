@@ -5,7 +5,7 @@ Date: 2026-10-16. Status: draft for the owner's review.
 - **Replaces** Part B (projects area) of `2026-10-15-timesheet-and-projects-redesign-design.md`. Its Parts A (Day view) and C (readable charts) shipped and stay.
 - **Merges** the My week screen of `2026-10-15-employee-now-and-next-design.md`. That spec's backend stays exactly as written.
 - **Keeps** the Month view of `2026-10-15-timesheet-month-calendar-design.md`, including its Revision 2 (hours-first, 16 Oct).
-- **Mockups:** `.superpowers/redesign/*.png` (21 files). Their layouts are the target; their numbers are sample data.
+- **Mockups:** `.superpowers/redesign/*.png` (22 files: the first 21 on 15 Oct, plus `My timesheet - Month (v2).png` on 16 Oct). Their layouts are the target; their numbers are sample data.
 
 ## 1. Why, success, scope
 
@@ -34,7 +34,7 @@ Part B of the 15 Oct spec (project cards, a tabless employee page) was never bui
 |---|---|---|
 | **1 Shell** | logo, sidebar, top bar, breadcrumbs, demo pill, the demo-disabled pattern | the frame of every mockup; `Departments.png` and `Skills.png` for the pill |
 | **2 Project page** | Projects list; project header; Overview, Milestones (list, timeline, side panel), Team, Budget, Hours | `Projects list (file was named People tab).png`, `Project - Overview.png`, `Projects - Milestones.png`, `Projects - Milestones2.png`, `Projects - Milestone3.png`, `Projects - Team.png`, `Projects - Budget.png`, `Projects - Hours.png` |
-| **3 Employee screens** | My week, My timesheet, My history | `My Week (Employee).png`, `My Timesheet.png`, `My History.png` |
+| **3 Employee screens** | My week, My timesheet, My history (the Month view ships earlier, see 5.2) | `My Week (Employee).png`, `My Timesheet.png`, `My timesheet - Month (v2).png`, `My History.png` |
 | **4 Manager and admin screens** | Timesheets, Dashboard, Control centre, People, Departments, Skills, Archive, Audit log, Puppy | `Timesheet - Approval (Manager).png`, `Dashboard.png`, `Control Centre.png`, `People.png`, `Departments.png`, `Skills.png`, `Archive.png`, `Archive (Admin demo version).png`, `Audit log.png`, `Puppy.png` |
 
 The three Milestones mockups are three states of one tab: list, timeline, and list with a milestone open in the side panel.
@@ -643,7 +643,13 @@ Mockup: `My Timesheet.png`, with Part A and the Month spec.
   - cells with timer hours show today's lock (`LockedCell`); closed rows are greyed out, as today;
   - a "Daily total (counted)" row and the legend (Approved, Pending, Needs revision).
 - **Day view:** as shipped, using the same status words.
-- **Month view:** the hours-first Month view of the calendar spec's Revision 2 (selected-day panel, approval chips, deadline markers), built before this phase.
+- **Month view:** the owner's hours-first Month view (mockup `My timesheet - Month (v2).png`). It is specified in the calendar spec's Revision 2 and built before this phase. The owner's notes on it:
+  - remove the repeated milestone ribbons;
+  - make daily totals and approval states easier to scan (one chip per line with an icon and a status word: Approved, Pending, Needs revision, Not submitted);
+  - keep rejected hours visible but excluded from totals;
+  - put locked-entry actions in a side panel (selected-day panel: each entry's project, hours, timer-linked, source and status; **Request a change** for timer-locked hours, **Edit in Day view** for typed hours);
+  - show milestone deadlines as small date markers ("📅 2 milestone deadlines"), listed in the panel under "Milestone dates";
+  - colours mean approval status only. Milestone state stays on the project timeline.
 - **Under the card,** when any hours were rejected: "27.75 h entered · 8 h excluded until resubmitted."
 
 **Entry details panel** (`SidePanel`, `?entry=<milestone>:<date>`):
