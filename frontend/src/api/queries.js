@@ -155,6 +155,11 @@ export const useWeek = (week, userId, enabled = true) => useQuery({
   queryKey: ['time', week, userId ?? 'me'], enabled, queryFn: () => api.get('/time-entries', { week, user: userId }),
   placeholderData: keepPreviousData,
 })
+// The Month calendar: milestones, entries and timer drafts for a month's grid. No keepPreviousData: a new month
+// shows a skeleton, never the old month's hours.
+export const useCalendarMonth = (month, enabled = true) => useQuery({
+  queryKey: ['time', 'month', month], enabled, queryFn: () => api.get('/time-entries/calendar', { month }),
+})
 export const useSaveWeek = () => useApiMutation((body) => api.put('/time-entries', body),
   { invalidate: [...timeKeys, ['timer']], success: 'Hours saved and sent for approval' })
 export const useApprovals = (filters = {}, enabled = true) =>
