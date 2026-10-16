@@ -1,6 +1,7 @@
 import { Box, Paper, Stack, Tooltip, Typography } from '@mui/material'
 import { useEffect, useId, useState } from 'react'
 import { STATUS, statusColor } from '../app/theme.js'
+import { STRIPED, stripes } from './stateStripes.js'
 
 // The order the states read in, left to right.
 const ORDER = ['completed', 'ready_for_review', 'in_progress', 'not_started', 'waiting', 'blocked']
@@ -45,7 +46,7 @@ export default function MilestoneStatusBar({ items }) {
   return (
     <Paper component="section" variant="outlined" aria-labelledby={headingId} sx={{ p: 2 }}>
       <Typography id={headingId} variant="subtitle1" component="h3" sx={{ mb: 1 }}>
-        {`${counts.completed} of ${total} milestones done`}
+        {`${counts.completed} of ${total} ${total === 1 ? 'milestone' : 'milestones'} done`}
       </Typography>
       <Stack ref={barRef} direction="row" sx={{ gap: `${GAP}px`, height: 28 }}>
         {states.map((key) => {
@@ -56,7 +57,7 @@ export default function MilestoneStatusBar({ items }) {
               <Box role="img" aria-label={text} data-count={n}
                 sx={{ width: `${(n / total) * 100}%`, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
                   bgcolor: (t) => statusColor(STATUS[key], t), color: (t) => t.palette.getContrastText(statusColor(STATUS[key], t)),
-                  fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden' }}>
+                  fontSize: '0.8125rem', fontWeight: 600, overflow: 'hidden', backgroundImage: STRIPED.has(key) ? stripes(6) : 'none' }}>
                 {(n / total) * room >= MIN_LABEL ? n : null}
               </Box>
             </Tooltip>
@@ -67,7 +68,8 @@ export default function MilestoneStatusBar({ items }) {
         sx={{ listStyle: 'none', p: 0, m: 0, mt: 1.5, gap: 2, flexWrap: 'wrap' }}>
         {states.map((key) => (
           <Stack component="li" key={key} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
-            <Box aria-hidden sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: (t) => statusColor(STATUS[key], t) }} />
+            <Box aria-hidden sx={{ width: 12, height: 12, borderRadius: 0.5, bgcolor: (t) => statusColor(STATUS[key], t),
+              backgroundImage: STRIPED.has(key) ? stripes(3) : 'none' }} />
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>{`${STATUS[key].label} ${counts[key]}`}</Typography>
           </Stack>
         ))}

@@ -206,7 +206,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
 
 - **Success:**
   - A bar above the timeline shows the milestones by state, headed "<done> of <total> milestones done".
-  - Horizontal date bars appear in dependency order on a month axis, with a "Today" marker. Every bar reads "<Mon D> – <Mon D> · <state>", shows its progress, marks an overdue milestone and tags your own with "You"; clicking one opens it.
+  - Horizontal date bars appear in dependency order on a month axis, with a "Today" marker. Every bar reads "<Mon D> – <Mon D> · <state>", shows its progress, marks an overdue milestone and tags your own with "You"; clicking one (or pressing Enter or Space on it) scrolls to that milestone's card below and highlights it, opening its details.
   - Each milestone lists what it waits on, with a "Waiting on: …" tooltip on its disabled Start button.
 - **Empty:** "No milestones yet", with **Add milestone** for managers.
 

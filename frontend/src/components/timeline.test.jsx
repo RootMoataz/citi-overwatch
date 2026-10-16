@@ -63,7 +63,12 @@ describe('Timeline', () => {
     ]} />)
     // Exactly one: the finished milestone and the one ending today are not late.
     expect(screen.getAllByText('⚠ Overdue')).toHaveLength(1)
-    expect(screen.getByText(/Aug 1 – Sep 30 · 40% done/)).toHaveTextContent('Aug 1 – Sep 30 · 40% done · ⚠ Overdue')
+    // The mark sits in its own element, outside the text that ellipsis can cut, and never shrinks.
+    const mark = screen.getByText('⚠ Overdue')
+    const dates = screen.getByText('Aug 1 – Sep 30 · 40% done')
+    expect(dates).not.toContainElement(mark)
+    expect(mark.parentElement).toBe(dates.parentElement)
+    expect(mark).toHaveStyle({ flexShrink: '0' })
     expect(row('Build')).toHaveAccessibleName('Build, Aug 1, 2026 to Sep 30, 2026, In progress, 40% done, overdue, High priority')
     expect(row('Plan')).not.toHaveAccessibleName(/overdue/)
     expect(row('Ship')).not.toHaveAccessibleName(/overdue/)
@@ -94,6 +99,43 @@ describe('Timeline', () => {
     expect(screen.getByText('Sep 1 – Oct 19 · Waiting on Discovery')).toBeInTheDocument()
     expect(within(row('Cutover')).getByText('after Discovery, Mapping')).toBeInTheDocument()
     expect(row('Cutover')).toHaveAccessibleName(/Waiting on dependencies/)
+  })
+
+  test('a milestone waiting on several others says "+1" on its bar, and keeps the full list in its name and tooltip', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<Timeline range={range} items={[
+      ms({ id: 'm1', name: 'Discovery', status: 'in_progress', display_status: 'in_progress' }),
+      ms({ id: 'm2', name: 'Mapping', status: 'in_progress', display_status: 'in_progress' }),
+      ms({ id: 'm3', name: 'Cutover', start_date: '2026-09-01', end_date: '2026-10-19', display_status: 'waiting', predecessors: ['m1', 'm2'] }),
+    ]} />)
+    expect(screen.getByText('Sep 1 – Oct 19 · Waiting on Discovery +1')).toBeInTheDocument()
+    expect(row('Cutover')).toHaveAccessibleName(/Waiting on dependencies, waiting on Discovery, Mapping/)
+    await user.hover(row('Cutover'))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Waiting on Discovery, Mapping')
+  })
+
+  test('waiting and blocked bars and legend swatches are striped, the others plain', () => {
+    const { container } = renderWithProviders(<Timeline range={range} items={[
+      ms({ id: 'm1', name: 'Wait', display_status: 'waiting' }),
+      ms({ id: 'm2', name: 'Stuck', status: 'blocked', display_status: 'blocked' }),
+      ms({ id: 'm3', name: 'Plain' }),
+    ]} />)
+    const bars = container.querySelectorAll('.bar')
+    expect(bars[0].style.backgroundImage || getComputedStyle(bars[0]).backgroundImage).toContain('repeating-linear-gradient')
+    expect(getComputedStyle(bars[1]).backgroundImage).toContain('repeating-linear-gradient')
+    expect(getComputedStyle(bars[2]).backgroundImage).not.toContain('repeating-linear-gradient')
+  })
+
+  test('your own milestone is "yours" in its row name', () => {
+    renderWithProviders(<Timeline range={range} items={[ms({ id: 'm1', name: 'Build', is_assignee: true }), ms({ id: 'm2', name: 'Plan' })]} />)
+    expect(row('Build')).toHaveAccessibleName(/, Medium priority, yours$/)
+    expect(row('Plan')).not.toHaveAccessibleName(/yours/)
+  })
+
+  test('January keeps its label, and so the year, when a long range thins the month labels', () => {
+    renderWithProviders(<Timeline range={{ start: '2025-11-10', end: '2027-03-01' }} items={[ms({ id: 'm1', name: 'Build' })]} />)
+    expect(screen.getByText('Jan 2026', { exact: true })).toBeInTheDocument()
+    expect(screen.getByText('Jan 2027', { exact: true })).toBeInTheDocument()
   })
 
   test('focus shows the tooltip with people and hours against the estimate', async () => {
@@ -142,6 +184,16 @@ describe('Timeline', () => {
     await user.click(row('Plan'))
     expect(onOpen).toHaveBeenLastCalledWith(plan)
     expect(onOpen).toHaveBeenCalledTimes(2)
+  })
+
+  test('Space opens like Enter', async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    const build = ms({ id: 'm1', name: 'Build' })
+    renderWithProviders(<Timeline range={range} items={[build]} onOpen={onOpen} />)
+    await user.tab()
+    await user.keyboard(' ')
+    expect(onOpen).toHaveBeenCalledWith(build)
   })
 
   test('click and Enter do nothing without onOpen', async () => {

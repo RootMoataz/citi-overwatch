@@ -153,6 +153,9 @@ describe('MilestonesTab', () => {
       expect(screen.getByTestId('location')).toHaveTextContent('?milestone=m3')
       await waitFor(() => expect(scroll).toHaveBeenCalledTimes(1))
       expect(scroll.mock.contexts[0]).toBe(await card('Cutover'))
+      // The same row again scrolls again, e.g. after the reader has scrolled away.
+      await userEvent.click(within(timeline).getByRole('listitem', { name: /^Cutover,/ }))
+      await waitFor(() => expect(scroll).toHaveBeenCalledTimes(2))
     } finally {
       delete HTMLElement.prototype.scrollIntoView
     }

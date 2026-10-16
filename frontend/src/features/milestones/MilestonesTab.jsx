@@ -10,7 +10,7 @@ import {
   Alert, Box, Button, Card, CardContent, Chip, Collapse, IconButton, LinearProgress, Skeleton, Stack, Tooltip, Typography,
 } from '@mui/material'
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useSearchParams } from 'react-router-dom'
 import {
   useArchiveMilestone, useClaimMilestone, useMembers, useMilestones, useMilestoneStatus,
 } from '../../api/queries.js'
@@ -46,7 +46,7 @@ const PANELS = [
   { value: 'notes', label: 'Notes', Icon: ChatBubble },
 ]
 
-function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, conversations, focused }) {
+function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, conversations, focused, navKey }) {
   const status = useMilestoneStatus(m.project_id)
   const claim = useClaimMilestone(m.project_id)
   // A link straight to this milestone (from the bell) opens its details and scrolls it into view.
@@ -56,7 +56,7 @@ function MilestoneCard({ m, project, names, manage, onEdit, onArchive, extra, co
   const ref = useRef(null)
   useEffect(() => {
     if (focused) ref.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-  }, [focused])
+  }, [focused, navKey]) // a repeat click on the same row is a new navigation, so it scrolls again
   const waitingOn = m.predecessors.map((id) => names[String(id)]).filter(Boolean)
   const supporting = new Set((m.supporting_ids ?? []).map(String))
   const actions = statusActions(m, { manager: manage, assignee: m.is_assignee })
@@ -182,6 +182,7 @@ export default function MilestonesTab({ project, manage, extra }) {
   const archive = useArchiveMilestone(project.id)
   const conversations = useConversations()  // which milestones already have a discussion the viewer is in
   const [params, setParams] = useSearchParams()
+  const navKey = useLocation().key
   const focus = params.get('milestone')
   const [editing, setEditing] = useState(null)
   const [archiving, setArchiving] = useState(null)
@@ -212,11 +213,11 @@ export default function MilestonesTab({ project, manage, extra }) {
       <MilestoneStatusBar items={items} />
       {items.length ? (
         <MilestoneTimeline items={items} range={{ start: project.start_date, end: project.predicted_end_date }}
-          onOpen={(m) => setParams((p) => { p.set('milestone', m.id); return p })} />
+          onOpen={(m) => setParams((p) => { p.set('milestone', m.id); return p }, { replace: true })} />
       ) : null}
       {items.map((m) => (
         <MilestoneCard key={m.id} m={m} project={project} names={names} manage={manage} extra={extra}
-          conversations={conversations.data?.items} focused={focus === String(m.id)}
+          conversations={conversations.data?.items} focused={focus === String(m.id)} navKey={navKey}
           onEdit={(milestone) => setEditing({ milestone })} onArchive={setArchiving} />
       ))}
       {editing ? (

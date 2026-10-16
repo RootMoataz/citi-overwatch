@@ -33,9 +33,28 @@ describe('MilestoneStatusBar', () => {
     ])
   })
 
+  test('the heading is singular for one milestone', () => {
+    const { unmount } = renderWithProviders(<MilestoneStatusBar items={[ms(1, 'completed')]} />)
+    expect(screen.getByRole('heading', { name: '1 of 1 milestone done' })).toBeInTheDocument()
+    unmount()
+    renderWithProviders(<MilestoneStatusBar items={[ms(1, 'in_progress')]} />)
+    expect(screen.getByRole('heading', { name: '0 of 1 milestone done' })).toBeInTheDocument()
+  })
+
+  test('waiting and blocked segments and swatches are striped so they differ from not started', () => {
+    const { container } = renderWithProviders(<MilestoneStatusBar items={[ms(1, 'not_started'), ms(2, 'waiting'), ms(3, 'blocked')]} />)
+    const [plain, waiting, blocked] = screen.getAllByRole('img')
+    const striped = (el) => getComputedStyle(el).backgroundImage.includes('repeating-linear-gradient')
+    expect(striped(plain)).toBe(false)
+    expect(striped(waiting)).toBe(true)
+    expect(striped(blocked)).toBe(true)
+    const swatches = [...container.querySelectorAll('ul [aria-hidden]')]
+    expect(swatches.map(striped)).toEqual([false, true, true])
+  })
+
   test('archived milestones are left out', () => {
     renderWithProviders(<MilestoneStatusBar items={[ms(1, 'completed'), ms(2, 'in_progress', { is_archived: true })]} />)
-    expect(screen.getByRole('heading', { name: '1 of 1 milestones done' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '1 of 1 milestone done' })).toBeInTheDocument()
     expect(screen.getAllByRole('img')).toHaveLength(1)
     expect(screen.queryByText(/In progress/)).not.toBeInTheDocument()
   })

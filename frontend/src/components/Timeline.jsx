@@ -5,13 +5,11 @@ import { chartPalette } from '../app/chartColors.js'
 import { STATUS, statusColor } from '../app/theme.js'
 import { formatDate, formatHours, todayIso } from '../lib/format.js'
 import { PRIORITY } from '../lib/labels.js'
+import { STRIPED, stripes } from './stateStripes.js'
 
 const DAY = 86400000
-// Striped bars: waiting on a predecessor, or kicked back and waiting for the manager.
-const STRIPED = new Set(['waiting', 'blocked'])
 // A name column beside the chart; under `sm` the name sits above its bar.
 const COLUMNS = { xs: 'minmax(0, 1fr)', sm: '200px minmax(0, 1fr)' }
-const stripes = (size) => `repeating-linear-gradient(45deg, rgba(255,255,255,.35) 0 ${size}px, transparent ${size}px ${size * 2}px)`
 const toTime = (iso) => Date.UTC(...String(iso).slice(0, 10).split('-').map((n, i) => (i === 1 ? Number(n) - 1 : Number(n))))
 const clamp = (n, lo, hi) => Math.min(Math.max(n, lo), hi)
 /** "2026-08-15" → "Aug 15" */
@@ -33,7 +31,7 @@ function monthMarks(start, span) {
   for (let t = Date.UTC(year, month, 1); t < start + span; t = Date.UTC(year, ++month, 1)) {
     const d = new Date(t)
     const name = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' })
-    marks.push({ pct: ((t - start) / span) * 100, label: d.getUTCMonth() === 0 ? `${name} ${d.getUTCFullYear()}` : name })
+    marks.push({ pct: ((t - start) / span) * 100, january: d.getUTCMonth() === 0, label: d.getUTCMonth() === 0 ? `${name} ${d.getUTCFullYear()}` : name })
   }
   return marks
 }
@@ -67,17 +65,23 @@ function TimelineRow({ view, months, todayPct, onOpen }) {
   const filled = key === 'in_progress' && percent != null
   const clickable = Boolean(onOpen)
   // Beside the bar on `sm` and up; under it on a phone, or when the bar leaves no room on either side.
+  // On `sm` and up it sits on a paper-coloured halo, so the Today line and month lines never cross the text.
   const labelSx = placement === 'below' ? { mt: 0.25 } : {
     mt: { xs: 0.25, sm: 0 }, position: { xs: 'static', sm: 'absolute' }, top: { sm: '50%' }, transform: { sm: 'translateY(-50%)' },
     ...(placement === 'left'
-      ? { left: { sm: 0 }, right: { sm: `calc(${100 - from}% + 8px)` }, textAlign: { sm: 'right' } }
-      : { left: { sm: `calc(${from + width}% + 8px)` }, right: { sm: 0 } }),
+      ? { right: { sm: `calc(${100 - from}% + 8px)` }, maxWidth: { sm: `calc(${from}% - 8px)` }, justifyContent: { sm: 'flex-end' } }
+      : { left: { sm: `calc(${from + width}% + 8px)` }, maxWidth: { sm: `calc(${100 - from - width}% - 8px)` } }),
   }
   return (
-    <Tooltip describeChild placement="bottom-start" title={<RowTip view={view} />}>
+    <Tooltip describeChild disableInteractive placement="bottom-start" title={<RowTip view={view} />}>
       <Box component="li" tabIndex={0} aria-label={label}
         onClick={clickable ? () => onOpen(item) : undefined}
-        onKeyDown={clickable ? (e) => { if (e.key === 'Enter') onOpen(item) } : undefined}
+        onKeyDown={clickable ? (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault() // Space must not scroll the page
+            onOpen(item)
+          }
+        } : undefined}
         sx={{ display: 'grid', gridTemplateColumns: COLUMNS, columnGap: 2, px: 1, borderRadius: 1, cursor: clickable ? 'pointer' : 'default',
           '&:nth-of-type(even)': { bgcolor: 'action.hover' }, '&:hover': { bgcolor: 'action.selected' } }}>
         <Box aria-hidden sx={{ minWidth: 0, alignSelf: 'center', pt: 0.75, pb: { xs: 0, sm: 0.75 } }}>
@@ -93,9 +97,16 @@ function TimelineRow({ view, months, todayPct, onOpen }) {
         </Box>
         <Box aria-hidden sx={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center',
           minHeight: 40, pt: { xs: 0.5, sm: 0.75 }, pb: 0.75 }}>
-          {months.map((m) => (
-            <Box key={m.pct} sx={{ position: 'absolute', top: 0, bottom: 0, left: `${m.pct}%`, width: '1px', bgcolor: 'divider' }} />
-          ))}
+          {/* The lines: the whole cell on `sm` and up; on a phone only the bar strip, since the label sits under it. */}
+          <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: { sm: 0 }, height: { xs: 26, sm: 'auto' }, pointerEvents: 'none' }}>
+            {months.map((m) => (
+              <Box key={m.pct} sx={{ position: 'absolute', top: 0, bottom: 0, left: `${m.pct}%`, width: '1px', bgcolor: 'divider' }} />
+            ))}
+            {todayPct != null ? (
+              <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `${todayPct}%`, width: 0, borderLeft: 2, borderLeftStyle: 'dashed',
+                borderColor: (t) => chartPalette(t).reference }} />
+            ) : null}
+          </Box>
           <Box sx={{ position: 'relative', height: 16 }}>
             <Box className="bar" sx={{ position: 'absolute', left: `${from}%`, width: `${width}%`, top: 0, bottom: 0, boxSizing: 'border-box',
               borderRadius: 8, overflow: 'hidden', border: 1, borderColor: (t) => statusColor(meta, t),
@@ -104,13 +115,12 @@ function TimelineRow({ view, months, todayPct, onOpen }) {
               {filled ? <Box sx={{ width: `${percent}%`, height: '100%', bgcolor: (t) => statusColor(meta, t) }} /> : null}
             </Box>
           </Box>
-          {todayPct != null ? (
-            <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `${todayPct}%`, width: 0, borderLeft: 2, borderLeftStyle: 'dashed',
-              borderColor: (t) => chartPalette(t).reference }} />
-          ) : null}
-          <Typography variant="caption" component="div" noWrap sx={{ color: 'text.primary', ...labelSx }}>
-            {text}
-            {overdue ? <>{' · '}<Box component="span" sx={{ color: 'error.main', fontWeight: 600 }}>⚠ Overdue</Box></> : null}
+          <Typography variant="caption" component="div"
+            sx={{ color: 'text.primary', display: { sm: 'flex' }, alignItems: 'baseline', whiteSpace: { xs: 'normal', sm: 'nowrap' },
+              position: 'relative', zIndex: 1, bgcolor: { sm: 'background.paper' }, borderRadius: 0.5, px: { sm: 0.5 }, ...labelSx }}>
+            {/* The overdue mark is its own element, so ellipsis can cut the dates but never the mark. */}
+            <Box component="span" sx={{ minWidth: 0, overflow: { sm: 'hidden' }, textOverflow: { sm: 'ellipsis' } }}>{text}</Box>
+            {overdue ? <Box component="span" sx={{ flexShrink: 0, ml: 0.75, color: 'error.main', fontWeight: 600 }}>⚠ Overdue</Box> : null}
           </Typography>
         </Box>
       </Box>
@@ -151,12 +161,13 @@ export default function Timeline({ items, range, onOpen }) {
       completed: 'Done',
       in_progress: percent == null ? 'In progress' : `${percent}% done`,
       ready_for_review: 'Ready for review',
-      waiting: waitingOn.length ? `Waiting on ${waitingOn.join(', ')}` : 'Waiting',
+      waiting: waitingOn.length ? `Waiting on ${waitingOn[0]}${waitingOn.length > 1 ? ` +${waitingOn.length - 1}` : ''}` : 'Waiting',
       blocked: 'Blocked',
     }[key] ?? 'Not started'
     const label = [item.name, `${formatDate(item.start_date)} to ${formatDate(item.end_date)}`, meta.label,
       key !== 'completed' && percent != null ? `${percent}% done` : '', overdue ? 'overdue' : '',
-      PRIORITY[item.priority] ? `${PRIORITY[item.priority]} priority` : ''].filter(Boolean).join(', ')
+      key === 'waiting' && waitingOn.length ? `waiting on ${waitingOn.join(', ')}` : '',
+      PRIORITY[item.priority] ? `${PRIORITY[item.priority]} priority` : '', item.is_assignee ? 'yours' : ''].filter(Boolean).join(', ')
     return { item, key, meta, percent, overdue, after: before.map((p) => p.name), waitingOn, from, width, placement,
       text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)} · ${state}`, label }
   })
@@ -174,7 +185,7 @@ export default function Timeline({ items, range, onOpen }) {
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatDate(range.end)}</Typography>
           </Stack>
           <Box sx={{ position: 'relative', height: 20 }}>
-            {months.map((m, i) => (i % labelEvery === 0 ? (
+            {months.map((m, i) => (i % labelEvery === 0 || m.january ? (
               <Typography key={m.pct} variant="caption" sx={{ position: 'absolute', top: 0, bottom: 0, left: `${m.pct}%`, pl: 0.5,
                 borderLeft: 1, borderColor: 'divider', color: 'text.secondary', whiteSpace: 'nowrap' }}>{m.label}</Typography>
             ) : null))}
