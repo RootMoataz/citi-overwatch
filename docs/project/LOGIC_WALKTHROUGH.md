@@ -327,6 +327,10 @@ flowchart TD
 - **Demo:** completing *Schema Mapping* (Eli, Ana, Ben) unblocks *Cutover*, which needs Backend Development or DevOps. Ben has both, so he gets it.
 - **UI:** the toast after **Complete** names who went where; the bell links straight to the milestone (`?tab=milestones&milestone=<id>`), where the manager can reassign it.
 
+### 9a-i. "Might come your way"
+
+Your own profile (My week) also carries `coming_up`: a prediction, never an assignment, of the milestones routing could give you. It uses the same rule as 9a (`predictable()` in [`app/rules/routing.py`](../../backend/v1/app/rules/routing.py) is `ready_for_routing()` without "predecessors done", plus `person_fits()`), and only counts milestones that list at least one required skill you have; ones with no required skills could go to anyone, and pull projects use claiming instead. A milestone still waiting on a predecessor is listed with `ready: false` and the predecessors it's `after`. Order: overdue first, then priority, then how close it is to your skills (the share of its required skills you have, then how many), then the planned workflow order; at most 5. `is_new` marks milestones created in the last 7 days. Someone else's profile always gets `[]`.
+
 ## 9b. Kickbacks and escalation
 
 ```mermaid

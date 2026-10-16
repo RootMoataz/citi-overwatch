@@ -12,6 +12,7 @@ by the caller and passed in, so this module never touches the database.
 """
 
 from datetime import date
+from fractions import Fraction
 
 from app.rules.priority import priority_rank
 
@@ -111,3 +112,35 @@ def plan_completion_routing(people: list[dict], milestones: list[dict], *, today
         assignments.append({"milestone": m, "person": person,
                             "matched": matched_skills(person["skills"], m.get("required_skills"))})
     return assignments, unfilled
+
+
+# ---------- "Might come your way": a prediction of the milestones routing could give someone ----------
+
+def predictable(m: dict, person: dict) -> bool:
+    """A milestone that could come to the person: what ready_for_routing() accepts except that its predecessors may
+    still be open, that the person fits it (person_fits()), and that it lists required skills they have. A milestone
+    with no required skills could go to anyone on the team, so it isn't "coming to" this person."""
+    return (m["status"] == "not_started" and not m["is_archived"]
+            and m["project_status"] == "active" and not m["project_archived"]
+            and m.get("work_mode", "push") == "push" and not m["has_primary"]
+            and bool(m.get("required_skills")) and person_fits(person, m))
+
+
+def coming_up_key(m: dict, person_skills, today: date) -> tuple:
+    """Overdue first, then priority (critical, high, medium, low), then closeness to the person's skills (the share
+    of the required skills they have, then how many), then the planned workflow order."""
+    required = m.get("required_skills") or ()
+    have = len(matched_skills(person_skills, required))
+    return (m["end_date"] >= today, priority_rank(m.get("priority")), -Fraction(have, len(required)), -have,
+            next_milestone_order_key(m))
+
+
+def predict_coming_up(person: dict, milestones: list[dict], *, today: date, limit: int = 5) -> list[dict]:
+    """The milestones that might come to the person, best first and cut to `limit`: [{milestone, matched (skill ids)}].
+
+    person: {skills (ids), fits_projects, assigned_ids}, as in plan_completion_routing().
+    milestones: the same shape as plan_completion_routing()'s (dependencies_done isn't needed)."""
+    ranked = sorted((m for m in milestones if predictable(m, person)),
+                    key=lambda m: coming_up_key(m, person["skills"], today))
+    return [{"milestone": m, "matched": matched_skills(person["skills"], m.get("required_skills"))}
+            for m in ranked[:limit]]

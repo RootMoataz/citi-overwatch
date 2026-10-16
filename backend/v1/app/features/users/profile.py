@@ -13,6 +13,7 @@ from app.db import query, query_one
 from app.features.milestones.service import _latest_percent, display_status, open_predecessors
 from app.features.projects.service import visible_projects
 from app.features.skills.lookup import skills_of
+from app.features.users.coming_up import coming_up_for
 from app.features.time.service import _today, _week_logged, week_start
 from app.http import ApiError
 from app.rules.overtime import WEEKLY_CAP
@@ -163,4 +164,5 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
                                     "status": m["project_status"], "is_archived": m["project_archived"]},
                         "logged_hours": m["logged"], "approved_hours": m["approved"],
                         "can_open": can_open(m["project_id"])} for m in milestones],
+        "coming_up": coming_up_for(conn, uid, _today()) if uid == ctx.user_id else [],
     }
