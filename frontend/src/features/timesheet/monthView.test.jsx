@@ -58,18 +58,18 @@ describe('Month view day boxes', () => {
   test("a day box names its date, total and each milestone's hours with status", async () => {
     server.use(calendar(mixedDay))
     render()
-    expect(await day('Wed 14 Oct, 8 hours, Schema Mapping 6 hours approved, Build 2 hours pending, Cutover 3 hours rejected, Schema Mapping 1.5 hours from timer'))
+    expect(await day('Wed 14 Oct, today, 8 hours, Schema Mapping 6 hours approved, Schema Mapping 1.5 hours from timer, Build 2 hours pending, Cutover 3 hours rejected'))
       .toBeInTheDocument()
   })
 
   test('a day with only a timer draft counts zero hours', async () => {
     server.use(calendar({ drafts: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 1.5 }] }))
     render()
-    expect(await day('Wed 14 Oct, 0 hours, Schema Mapping 1.5 hours from timer')).toBeInTheDocument()
+    expect(await day('Wed 14 Oct, today, 0 hours, Schema Mapping 1.5 hours from timer')).toBeInTheDocument()
   })
 
   test('rejected hours are shown struck through and not counted', async () => {
-    server.use(calendar(mixedDay))
+    server.use(calendar({ entries: mixedDay.entries }))
     render()
     const box = await day(/^Wed 14 Oct/)
     expect(within(box).getByText('Cutover 3h')).toHaveStyle('text-decoration: line-through')
@@ -88,21 +88,39 @@ describe('Month view day boxes', () => {
   test('a day over 24 hours says so', async () => {
     server.use(calendar({ entries: [entry({ hours: 20 }), entry({ id: 'e2', milestone_id: 'm2', hours: 6 })] }))
     render()
-    const box = await day('Wed 14 Oct, 26 hours, over 24 hours, Schema Mapping 20 hours pending, Build 6 hours pending')
+    const box = await day('Wed 14 Oct, today, 26 hours, over 24 hours, Schema Mapping 20 hours pending, Build 6 hours pending')
     expect(within(box).getByText('26h')).toHaveStyle('color: rgb(179, 38, 30)')
   })
 
   test('an overtime day says so', async () => {
     server.use(calendar({ entries: [entry({ over_40: true, label: 'Pending (Overtime requested from Eli Employee)' })] }))
     render()
-    const box = await day('Wed 14 Oct, 8 hours, overtime, Schema Mapping 8 hours pending')
+    const box = await day('Wed 14 Oct, today, 8 hours, overtime, Schema Mapping 8 hours pending')
     expect(within(box).getByText('Overtime')).toBeInTheDocument()
+  })
+
+  test("only today's box says today", async () => {
+    render()
+    expect(await day('Wed 14 Oct, today, 0 hours')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Mon 19 Oct, 0 hours' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /, today,/ })).toHaveLength(1)
+  })
+
+  test("a day's lines follow the bars' order, with a timer draft right after its milestone's saved hours", async () => {
+    server.use(calendar({
+      milestones: [m2, m1, m3],
+      entries: [entry({ id: 'a', milestone_id: 'm3', hours: 1 }), entry({ id: 'b', milestone_id: 'm1', hours: 2 }), entry({ id: 'c', milestone_id: 'm2', hours: 3 })],
+      drafts: [{ milestone_id: 'm2', work_date: '2026-10-14', hours: 0.5 }],
+    }))
+    render()
+    expect(await day('Wed 14 Oct, today, 6 hours, Build 3 hours pending, Build 0.5 hours from timer, Schema Mapping 2 hours pending, Cutover 1 hour pending'))
+      .toBeInTheDocument()
   })
 
   test('1 hour is singular', async () => {
     server.use(calendar({ entries: [entry({ hours: 1 })] }))
     render()
-    expect(await day('Wed 14 Oct, 1 hour, Schema Mapping 1 hour pending')).toBeInTheDocument()
+    expect(await day('Wed 14 Oct, today, 1 hour, Schema Mapping 1 hour pending')).toBeInTheDocument()
   })
 
   test('a past weekday with no hours says No hours; weekends and future days say nothing', async () => {
@@ -118,7 +136,7 @@ describe('Month view day boxes', () => {
     const four = [m1, m2, m3, m4]
     server.use(calendar({ milestones: four, entries: four.map((m, i) => entry({ id: `x${i}`, milestone_id: m.id, hours: 1 })) }))
     render()
-    const box = await day(/^Wed 14 Oct, 4 hours/)
+    const box = await day(/^Wed 14 Oct, today, 4 hours/)
     expect(box).toHaveAccessibleName(/Hypercare 1 hour pending/)
     expect(within(box).getByText('Cutover 1h')).toBeInTheDocument()
     expect(within(box).queryByText('Hypercare 1h')).not.toBeInTheDocument()
@@ -250,6 +268,18 @@ describe('Month view header, loading and states', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
   })
 
+  test('the legend draws Due and Overdue as the grid does', async () => {
+    server.use(calendar({ milestones: [m2, milestone('m5', 'Discovery', { start_date: '2026-09-28', end_date: '2026-10-02' })] }))
+    render()
+    await screen.findByRole('table')
+    const legend = screen.getByRole('list', { name: 'Legend' })
+    const bar = screen.getByRole('link', { name: 'Build, Oct 13 to Oct 16, In progress' })
+    expect(within(legend).getByText('Due')).toHaveStyle({ fontWeight: '700' })
+    expect(within(bar).getByText('Due')).toHaveStyle({ fontWeight: '700' })
+    expect(within(legend).getByText('Overdue').closest('li')).toHaveTextContent('⚠ Overdue')
+    expect(within(legend).queryByText(/Milestone with hours that day/)).not.toBeInTheDocument() // phones only
+  })
+
   test('the legend names every style', async () => {
     render()
     await screen.findByRole('table')
@@ -281,6 +311,17 @@ describe('Month view on a phone', () => {
     await user.click(within(friday).getByRole('button', { name: 'Open this day' }))
     expect(onOpenDay).toHaveBeenCalledWith('2026-10-16')
     await waitFor(() => expect(onMonthChange).not.toHaveBeenCalled())
+  })
+
+  test('the legend explains the dots and a day shows only the overtime mark', async () => {
+    setViewport(390)
+    server.use(calendar({ entries: [entry({ over_40: true })] }))
+    render()
+    await screen.findByRole('table')
+    expect(within(screen.getByRole('list', { name: 'Legend' })).getByText('Milestone with hours that day (coloured by state)')).toBeInTheDocument()
+    const box = await day('Wed 14 Oct, today, 8 hours, overtime, Schema Mapping 8 hours pending')
+    expect(within(box).queryByText('Overtime')).not.toBeInTheDocument()
+    expect(box).toHaveTextContent('⚠')
   })
 
   test('with today outside the month the 1st is selected', async () => {

@@ -112,6 +112,31 @@ def test_milestone_overlapping_the_range_edge_is_included_and_one_outside_is_not
     assert names == {"Build", "Ends on the first grid day", "Starts on the last grid day"}
 
 
+def test_milestone_that_ended_before_the_grid_is_listed_when_it_holds_a_timer_draft_in_it(client, conn):
+    _, emp, project, _ = world(conn)
+    old = make_milestone(conn, project, name="Ended in August", start=date(2026, 8, 1), end=date(2026, 8, 31))
+    assign(conn, old, emp)
+    stopped = datetime(2026, 10, 8, 15, tzinfo=timezone.utc)
+    conn.run("""INSERT INTO time_timers (user_id, milestone_id, work_date, started_at, stopped_at, tracked_hours)
+                VALUES (:u, :m, :d, :s, :e, :h)""", u=emp["id"], m=old["id"], d=date(2026, 10, 8),
+             s=stopped - timedelta(hours=1), e=stopped, h=Decimal("1"))
+    body = calendar(client, conn, emp)[1]
+    assert {m["name"] for m in body["milestones"]} == {"Build", "Ended in August"}
+    assert body["drafts"] == [{"milestone_id": str(old["id"]), "work_date": "2026-10-08", "hours": 1.0}]
+
+
+def test_a_submitted_or_running_timer_does_not_list_an_old_milestone(client, conn):
+    _, emp, project, _ = world(conn)
+    old = make_milestone(conn, project, name="Ended in August", start=date(2026, 8, 1), end=date(2026, 8, 31))
+    assign(conn, old, emp)
+    stopped = datetime(2026, 10, 8, 15, tzinfo=timezone.utc)
+    conn.run("""INSERT INTO time_timers (user_id, milestone_id, work_date, started_at, stopped_at, tracked_hours,
+                                         submitted_at)
+                VALUES (:u, :m, :d, :s, :e, :h, :e)""", u=emp["id"], m=old["id"], d=date(2026, 10, 8),
+             s=stopped - timedelta(hours=1), e=stopped, h=Decimal("1"))
+    assert {m["name"] for m in calendar(client, conn, emp)[1]["milestones"]} == {"Build"}
+
+
 def test_milestones_are_ordered_by_start_date_then_name_ignoring_case(client, conn):
     _, emp, project, _ = world(conn)
     for name, start in (("zeta", date(2026, 10, 1)), ("Alpha", date(2026, 10, 1)), ("beta", date(2026, 10, 1)),

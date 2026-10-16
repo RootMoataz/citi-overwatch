@@ -16,7 +16,7 @@ export function DayBox({ date, info, names, due, overtime, inMonth, weekend, pas
   const lines = info?.lines ?? []
   const total = num(info?.total)
   const noHours = inMonth && !weekend && past && !lines.length
-  const name = [formatDayShort(date), noHours ? 'no hours' : hoursWords(total), total > DAY_CAP ? `over ${DAY_CAP} hours` : '',
+  const name = [formatDayShort(date), isToday ? 'today' : '', noHours ? 'no hours' : hoursWords(total), total > DAY_CAP ? `over ${DAY_CAP} hours` : '',
     overtime ? 'overtime' : '', ...lines.map((l) => `${nameOf(names, l.milestone_id)} ${hoursWords(l.hours)} ${LINE_WORD[l.kind]}`),
     ...due.map((m) => `due: ${m.name}`)].filter(Boolean).join(', ')
   const dots = [...new Set(lines.map((l) => l.milestone_id))].slice(0, MAX_LINES)
@@ -40,7 +40,7 @@ export function DayBox({ date, info, names, due, overtime, inMonth, weekend, pas
       </Box>
       {overtime ? (
         <Typography component="span" variant="caption" sx={{ display: 'flex', gap: 0.5, lineHeight: 1.2, color: (t) => statusColor(STATUS.on_hold, t) }}>
-          <Box component="span" aria-hidden>⚠</Box><Box component="span">Overtime</Box>
+          <Box component="span" aria-hidden>⚠</Box>{phone ? null : <Box component="span">Overtime</Box>}
         </Typography>
       ) : null}
       {phone ? (

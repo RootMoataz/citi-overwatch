@@ -25,6 +25,11 @@ def test_month_starting_on_a_sunday():
     assert service.calendar_range("2026-02") == ("2026-02", date(2026, 1, 26), date(2026, 3, 1))
 
 
+def test_a_four_week_month_is_exactly_28_days():
+    month, start, end = service.calendar_range("2027-02")
+    assert (start, end) == (date(2027, 2, 1), date(2027, 2, 28)) and (end - start).days + 1 == 28
+
+
 def test_december_rolls_into_the_next_year():
     assert service.calendar_range("2026-12") == ("2026-12", date(2026, 11, 30), date(2027, 1, 3))
 

@@ -25,21 +25,38 @@ function Swatch({ sx }) {
   return <Box aria-hidden sx={[{ width: 16, height: 10, borderRadius: 0.5, boxSizing: 'border-box' }, sx]} />
 }
 
-function Legend() {
+// Due and Overdue are drawn as the bars draw them: the same tag text, on a bar-coloured chip.
+const markSx = { fontWeight: 700, fontSize: '0.6875rem', px: 0.5, borderRadius: 0.5, bgcolor: (t) => statusColor(STATUS.in_progress, t),
+  color: (t) => t.palette.getContrastText(statusColor(STATUS.in_progress, t)) }
+
+function Legend({ phone }) {
   const items = [
     ['Approved', (t) => lineSx('approved', t)], ['Pending', (t) => lineSx('pending', t)], ['Rejected', (t) => lineSx('rejected', t)],
     ['From timer', (t) => lineSx('draft', t)],
-    ['Due', { bgcolor: (t) => statusColor(STATUS.in_progress, t), width: 10, height: 10, borderRadius: '50%' }],
-    ['Overdue', { bgcolor: (t) => statusColor(STATUS.rejected, t), backgroundImage: stripes(3) }],
   ]
+  const text = { color: 'text.secondary' }
   return (
     <Stack component="ul" direction="row" useFlexGap aria-label="Legend" sx={{ listStyle: 'none', p: 0, m: 0, mt: 2, gap: 2, flexWrap: 'wrap' }}>
       {items.map(([label, sx]) => (
         <Stack component="li" key={label} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
           <Swatch sx={sx} />
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>{label}</Typography>
+          <Typography variant="caption" sx={text}>{label}</Typography>
         </Stack>
       ))}
+      <Stack component="li" direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+        <Box component="span" sx={markSx}>Due</Box>
+        <Typography variant="caption" sx={text}>the milestone ends that day</Typography>
+      </Stack>
+      <Stack component="li" direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+        <Typography component="span" variant="caption" sx={{ fontWeight: 700 }}><Box component="span" aria-hidden>⚠ </Box>Overdue</Typography>
+        <Typography variant="caption" sx={text}>unfinished past its end</Typography>
+      </Stack>
+      {phone ? (
+        <Stack component="li" direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+          <Swatch sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: (t) => statusColor(STATUS.in_progress, t) }} />
+          <Typography variant="caption" sx={text}>Milestone with hours that day (coloured by state)</Typography>
+        </Stack>
+      ) : null}
     </Stack>
   )
 }
@@ -99,9 +116,7 @@ export default function MonthView({ month, onMonthChange, onOpenDay }) {
 
   const view = useMemo(() => {
     if (!data) return null
-    const lines = dayLines(data.entries, data.drafts)
-    // Saved hours first, timer drafts after them (a stable sort keeps dayLines' order within each group).
-    for (const day of lines.values()) day.lines.sort((a, b) => (a.kind === 'draft') - (b.kind === 'draft'))
+    const lines = dayLines(data.entries, data.drafts, data.milestones)
     const overtime = new Set(data.entries.filter((e) => e.over_40 && e.status !== 'rejected').map((e) => e.work_date))
     const due = new Map()
     for (const m of data.milestones) due.set(m.end_date, [...(due.get(m.end_date) ?? []), m])
@@ -151,7 +166,7 @@ export default function MonthView({ month, onMonthChange, onOpenDay }) {
           </Box>
           {phone ? <DayPanel date={selected} info={view.lines.get(selected)} names={view.names} today={today}
             milestones={data.milestones} onOpen={() => onOpenDay(selected)} /> : null}
-          <Legend />
+          <Legend phone={phone} />
           <StateKey />
           <MorePopover more={more} today={today} onClose={() => setMore(null)} />
         </>

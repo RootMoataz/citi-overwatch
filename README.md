@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,117 backend (376 unit · 741 integration, 97% coverage) · 912 frontend component (71 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,120 backend (377 unit · 743 integration, 97% coverage) · 923 frontend component (71 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -59,7 +59,7 @@ Screenshots from the live site with the demo data (light mode unless noted).
 | **My week**: hours so far, your manager, assigned milestones, a start/stop timer | **Kick back** a blocked milestone to the manager with a reason |
 | ![My timesheet, Day view, on Thursday 15 Oct: the week strip with each day's hours, a Submit 1 change button, and the Schema Mapping row holding 2h of timer hours, locked, with "from timer, not submitted yet", a Request a change button and the work note](docs/images/timer-locked-cell.png) | ![The This week card above the Your manager card: Morgan Manager, Delivery Manager in Technology, with a Message Morgan button](docs/images/your-manager.png) |
 | **My timesheet, one day at a time**: a week strip, a row per milestone, and timer hours pre-filling a locked row; **Request a change** asks the manager | **Your manager**: who they are, and one press to message them |
-| ![My timesheet, Month view, October 2026: milestone bars across the calendar, each day's hours by milestone and status, and a legend for line styles and milestone states](docs/images/timesheet-month.png) | |
+| ![My timesheet, Month view, October 2026: milestone bars across the calendar, each day's hours by milestone and status](docs/images/timesheet-month.png) | |
 | **My timesheet, Month**: bars for your milestones and each day's hours by status (approved solid, pending outlined, rejected struck through, timer dashed); click a day to open it | |
 
 <p>
@@ -168,8 +168,8 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,117 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 912 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,120 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 923 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

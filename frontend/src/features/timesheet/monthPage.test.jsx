@@ -46,17 +46,17 @@ describe('Timesheet Month view', () => {
     expect(screen.queryByRole('button', { name: /next week/i })).not.toBeInTheDocument()
     expect(localStorage.getItem(VIEW_KEY)).toBe('month')
     first.unmount()
-    renderSheet()
+    renderSheet('/timesheet')
     expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
     expect(viewToggle('Month')).toHaveAttribute('aria-pressed', 'true')
   })
 
   test("Month opens on the selected day's month and keeps it in the URL", async () => {
-    localStorage.setItem(VIEW_KEY, 'month')
     renderSheet('/timesheet?week=2026-09-28&day=2026-10-01')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Month' }))
     expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('month=2026-10'))
-    const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Previous month' }))
     expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent('month=2026-09')
@@ -68,9 +68,35 @@ describe('Timesheet Month view', () => {
     expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
   })
 
+  test('a shared ?month= link opens the Month view whatever view is stored', async () => {
+    localStorage.setItem(VIEW_KEY, 'week')
+    renderSheet('/timesheet?month=2026-09')
+    expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
+    expect(viewToggle('Month')).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test.each([
+    ['?week=2026-10-12', 'Wed Oct 14'],
+    ['?week=2026-10-12&day=2026-10-13', 'Tue Oct 13'],
+    ['?day=2026-10-13', 'Tue Oct 13'],
+  ])('a link with week or day (%s) opens Day when Month is the stored view', async (query, label) => {
+    localStorage.setItem(VIEW_KEY, 'month')
+    renderSheet(`/timesheet${query}`)
+    expect(await screen.findByLabelText(`Schema Mapping, ${label}`)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^submit/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'October 2026' })).not.toBeInTheDocument()
+  })
+
+  test('a link with week keeps a stored Week view', async () => {
+    localStorage.setItem(VIEW_KEY, 'week')
+    renderSheet(`/timesheet?week=${WEEK}`)
+    expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toBeInTheDocument()
+    expect(viewToggle('Week')).toHaveAttribute('aria-pressed', 'true')
+  })
+
   test('clicking a day in the month opens it in the Day view', async () => {
     localStorage.setItem(VIEW_KEY, 'month')
-    renderSheet()
+    renderSheet('/timesheet?month=2026-10')
     const user = userEvent.setup()
     await user.click(await dayBox(/^Tue 13 Oct/))
     expect(await screen.findByLabelText('Schema Mapping, Tue Oct 13')).toBeInTheDocument()

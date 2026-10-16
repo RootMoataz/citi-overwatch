@@ -49,9 +49,12 @@ export function weekBars(week, milestones, maxLanes = 3) {
   return { lanes, hidden }
 }
 
-// Per day: the hour lines (entries first, then timer drafts) and the counted
-// total. Only pending and approved hours count.
-export function dayLines(entries = [], drafts = []) {
+// Per day: the hour lines and the counted total. Only pending and approved
+// hours count. Lines follow the milestones' list order (the bars'), a milestone
+// unknown to the list after those; a milestone's saved hours come before its
+// timer draft.
+export function dayLines(entries = [], drafts = [], milestones = []) {
+  const listed = new Map(milestones.map((m, i) => [m.id, i]))
   const days = new Map()
   const add = (date, line) => {
     if (!days.has(date)) days.set(date, { total: 0, lines: [] })
@@ -63,8 +66,8 @@ export function dayLines(entries = [], drafts = []) {
   for (const d of drafts) add(d.work_date, { milestone_id: d.milestone_id, hours: Number(d.hours), kind: 'draft' })
   for (const day of days.values()) {
     const order = new Map()
-    day.lines.forEach((l) => order.has(l.milestone_id) || order.set(l.milestone_id, order.size))
-    day.lines.sort((a, b) => order.get(a.milestone_id) - order.get(b.milestone_id))
+    day.lines.forEach((l) => order.has(l.milestone_id) || order.set(l.milestone_id, listed.get(l.milestone_id) ?? listed.size + order.size))
+    day.lines.sort((a, b) => order.get(a.milestone_id) - order.get(b.milestone_id) || (a.kind === 'draft') - (b.kind === 'draft'))
   }
   return days
 }

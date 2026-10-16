@@ -14,6 +14,14 @@ describe('gridWeeks', () => {
     expect(weeks.every((w) => w.length === 7)).toBe(true)
   })
 
+  it('gives 4 weeks for February 2027, which starts on a Monday and ends on a Sunday', () => {
+    const weeks = gridWeeks({ start: '2027-02-01', end: '2027-02-28' })
+    expect(weeks).toHaveLength(4)
+    expect(weeks[0][0]).toBe('2027-02-01')
+    expect(weeks[3][6]).toBe('2027-02-28')
+    expect(consecutive(flat(weeks))).toBe(true)
+  })
+
   it('gives 6 weeks for August 2026', () => {
     const weeks = gridWeeks({ start: '2026-07-27', end: '2026-09-06' })
     expect(weeks).toHaveLength(6)
@@ -92,5 +100,20 @@ describe('dayLines', () => {
     expect(total).toBe(8)
     expect(lines.map((l) => l.kind)).toEqual(['approved', 'pending', 'rejected', 'draft'])
     expect(lines.map((l) => l.milestone_id)).toEqual([1, 2, 3, 4])
+  })
+
+  it('orders a day by the milestones list, saved before a timer draft for the same milestone', () => {
+    const day = '2026-10-14'
+    const milestones = [{ id: 'b' }, { id: 'a' }, { id: 'c' }]
+    const { lines } = dayLines(
+      [
+        { milestone_id: 'a', work_date: day, hours: 1, status: 'pending' },
+        { milestone_id: 'b', work_date: day, hours: 2, status: 'approved' },
+        { milestone_id: 'x', work_date: day, hours: 4, status: 'pending' },
+      ],
+      [{ milestone_id: 'b', work_date: day, hours: 3 }, { milestone_id: 'c', work_date: day, hours: 5 }],
+      milestones,
+    ).get(day)
+    expect(lines.map((l) => `${l.milestone_id}:${l.kind}`)).toEqual(['b:approved', 'b:draft', 'a:pending', 'c:draft', 'x:pending'])
   })
 })

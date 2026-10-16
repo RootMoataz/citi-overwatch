@@ -208,7 +208,7 @@ def get_month(conn, ctx: Ctx, params: dict) -> dict:
     as_uuid(user_id, "user")
     month, start, end = calendar_range(params.get("month"))
     user, project_filter, args = _reader_scope(conn, ctx, user_id)
-    # Milestones the person is assigned to that touch the grid, plus any other one they logged hours on in it.
+    # Milestones the person is assigned to that touch the grid, plus any other one they logged hours or hold an unsubmitted timer draft on in it.
     rows = query(conn, f"""
         SELECT m.id, m.name, m.start_date, m.end_date, m.status, p.id AS project_id, p.name AS project_name,
                p.status AS project_status, a.role
@@ -217,7 +217,10 @@ def get_month(conn, ctx: Ctx, params: dict) -> dict:
         WHERE NOT m.is_archived AND NOT p.is_archived{project_filter}
           AND ((a.user_id IS NOT NULL AND m.start_date <= :b AND m.end_date >= :a)
                OR EXISTS (SELECT 1 FROM time_entries t WHERE t.milestone_id = m.id
-                          AND t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b))
+                          AND t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b)
+               OR EXISTS (SELECT 1 FROM time_timers k WHERE k.milestone_id = m.id AND k.user_id = CAST(:u AS uuid)
+                          AND k.submitted_at IS NULL AND k.tracked_hours > 0 AND k.stopped_at IS NOT NULL
+                          AND k.work_date BETWEEN :a AND :b))
         ORDER BY m.start_date, lower(m.name), m.id""", u=user_id, a=start, b=end, **args)
     entries = query(conn, f"""
         SELECT t.* FROM time_entries t JOIN projects p ON p.id = t.project_id AND NOT p.is_archived

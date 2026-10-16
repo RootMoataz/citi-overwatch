@@ -9,13 +9,13 @@ The tests are built for **debugging**, not only for a green tick:
 
 | Layer | Tool | Count | What a failure here means |
 |---|---|---|---|
-| Rules (unit) | pytest | part of 376 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
-| Core (unit) | pytest | part of 376 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
+| Rules (unit) | pytest | part of 377 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
+| Core (unit) | pytest | part of 377 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
 | API (integration) | pytest + real PostgreSQL 17 | 741 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 912 (71 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Frontend (component) | Vitest + React Testing Library + MSW | 923 (71 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
-Counts as of 2026-10-15: **1,117 backend** (376 unit, 741 integration, 97% coverage) and **912 frontend** in 71 files, plus **6 end-to-end**, all passing. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-15); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-15: **1,120 backend** (377 unit, 743 integration, 97% coverage) and **923 frontend** in 71 files, plus **6 end-to-end**, all passing. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-15); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -77,7 +77,7 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 
 ## Current results (2026-10-15)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,117 tests (376 unit, 741 integration), 27 more than before the Month view. The timed runs below come from `59d29fe` (the timer workflow) and `323ea89`, which had 1,087 tests; `f6c27bd` (no timer on a completed milestone) then added 3. The plain run was repeated at `3e61cd3` after 8 pm New York time, so it shows the known issue below. Frontend and end-to-end figures from the timesheet Month view (15 October), after the Day view rewrite of the end-to-end overtime journey.
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,120 tests (377 unit, 743 integration), 30 more than before the Month view. The timed runs below come from `59d29fe` (the timer workflow) and `323ea89`, which had 1,087 tests; `f6c27bd` (no timer on a completed milestone) then added 3. The plain run was repeated at `3e61cd3` after 8 pm New York time, so it shows the known issue below. Frontend and end-to-end figures from the timesheet Month view (15 October), after the Day view rewrite of the end-to-end overtime journey.
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
@@ -91,12 +91,12 @@ TOTAL                                     6456    175    97%
 1087 passed in 276.86s (0:04:36)
 
 # collected per layer
-tests/unit:        376 tests
-tests/integration: 741 tests
+tests/unit:        377 tests
+tests/integration: 743 tests
 
 # frontend: npx vitest run
  Test Files  71 passed (71)
-      Tests  912 passed (912)
+      Tests  923 passed (923)
 
 # frontend: npm run lint && npm run build
 no problems; built in 9.68s

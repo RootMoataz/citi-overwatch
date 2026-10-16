@@ -38,6 +38,12 @@ const mondayOfIso = (iso) => {
   const [y, m, d] = iso.split('-').map(Number)
   return mondayOf(new Date(y, m - 1, d))
 }
+// The view a page opens in: ?month= means Month; a link to a week or day (no month) is for logging hours, so never Month.
+const openingView = (params) => {
+  if (params.has('month')) return 'month'
+  const stored = readView()
+  return stored === 'month' && (params.has('week') || params.has('day')) ? 'day' : stored
+}
 const storeView = (view) => {
   try { window.localStorage.setItem(VIEW_KEY, view) } catch { /* blocked: the choice lasts until the page closes */ }
 }
@@ -51,7 +57,7 @@ export default function TimesheetPage() {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const [params, setParams] = useSearchParams()
   const week = params.get('week') ?? mondayOf(new Date())
-  const [view, setView] = useState(readView)
+  const [view, setView] = useState(() => openingView(params))
   const [sheetView, setSheetView] = useState(() => (readView() === 'week' ? 'week' : 'day')) // where "Back to that week" returns
   const [showWeekend, setShowWeekend] = useState(false)
   const [asking, setAsking] = useState(null)
