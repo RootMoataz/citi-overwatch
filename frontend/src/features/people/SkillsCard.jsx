@@ -53,14 +53,16 @@ function SkillsDialog({ person, skills, onClose }) {
   )
 }
 
-/** A person's skills on their profile; admins, and managers for the employees they manage, can change them. */
-export default function SkillsCard({ person, skills = [], canEdit }) {
+/** A person's skills on their profile; admins, and managers for the employees they manage, can change them.
+ * `embedded` drops the outline (the card sits inside another) and makes the title an H3. */
+export default function SkillsCard({ person, skills = [], canEdit, embedded = false }) {
   const { user } = useSession()
   const [editing, setEditing] = useState(false)
   return (
-    <Paper variant="outlined" component="section" aria-label="Skills" sx={{ p: 2, mb: 2 }}>
+    <Paper variant={embedded ? 'elevation' : 'outlined'} elevation={0} component="section" aria-label="Skills"
+      sx={embedded ? { p: 0, bgcolor: 'transparent', backgroundImage: 'none' } : { p: 2, mb: 2 }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
-        <Typography variant="subtitle1" component="h2">Skills</Typography>
+        <Typography variant="subtitle1" component={embedded ? 'h3' : 'h2'}>Skills</Typography>
         {canEdit ? (
           <DemoLock user={user} action="skills.edit">
             <Button size="small" startIcon={<EditIcon />} onClick={() => setEditing(true)}>Edit skills</Button>

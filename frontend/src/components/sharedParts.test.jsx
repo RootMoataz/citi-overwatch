@@ -94,6 +94,11 @@ describe('KpiStrip', () => {
     expect(screen.getByRole('group', { name: 'Summary' }).firstElementChild)
       .toHaveStyle({ gridTemplateColumns: 'repeat(2, 1fr)' })
   })
+  test('a title is an H2 inside the card, and names the group', () => {
+    renderWithProviders(<KpiStrip title="All time summary" items={items} />)
+    const group = screen.getByRole('group', { name: 'All time summary' })
+    expect(within(group).getByRole('heading', { name: 'All time summary', level: 2 })).toBeInTheDocument()
+  })
   test('a bar carries aria-valuetext; an error shows Retry', async () => {
     const onRetry = vi.fn()
     renderWithProviders(<KpiStrip ariaLabel="Money" items={[{ key: 'p', label: 'Progress', value: '40%',
@@ -126,6 +131,14 @@ describe('FootNote', () => {
     expect(screen.getByText('Progress is weighted.')).toBeInTheDocument()
     expect(screen.getByText('Today is October 15, 2026')).toBeInTheDocument()
     expect(screen.getByText('ⓘ')).toHaveAttribute('aria-hidden', 'true')
+  })
+})
+
+describe('FootNote icon', () => {
+  test('an icon replaces the info mark and stays hidden from readers', () => {
+    renderWithProviders(<FootNote note="Read-only." icon={<svg data-testid="lock" />} />)
+    expect(screen.queryByText('ⓘ')).not.toBeInTheDocument()
+    expect(screen.getByTestId('lock').closest('[aria-hidden="true"]')).not.toBeNull()
   })
 })
 

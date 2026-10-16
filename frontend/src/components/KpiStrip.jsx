@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Box, ButtonBase, LinearProgress, Paper, Skeleton, Tooltip, Typography } from '@mui/material'
 import { useMediaQuery } from 'react-responsive'
 import { formatPct } from '../lib/format.js'
@@ -55,15 +56,22 @@ function Item({ item, layout, divider }) {
 
 /**
  * One outlined card of figures with dividers between them. An item with `onClick` is a button named "<value> <label>";
- * `bar` adds a determinate bar; `error` replaces the figures with an alert and Retry.
+ * `bar` adds a determinate bar; `error` replaces the figures with an alert and Retry. `title` puts an H2 inside the card
+ * above the figures and names the group by it (in place of `ariaLabel`).
  */
-export default function KpiStrip({ ariaLabel, items, layout = 'label-first', phoneColumns = 2, loading = false, error, onRetry }) {
+export default function KpiStrip({ ariaLabel, title, items, layout = 'label-first', phoneColumns = 2, loading = false, error, onRetry }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
+  const titleId = useId()
+  const frame = title ? { 'aria-labelledby': titleId } : { 'aria-label': ariaLabel }
+  const heading = title ? (
+    <Typography id={titleId} variant="h3" component="h2" sx={{ px: 2, pt: 2, pb: 0.5, bgcolor: 'background.paper' }}>{title}</Typography>
+  ) : null
   if (error) {
     // Items marked `keepOnError` still show beside the alert (the Overview's Progress, which the project itself carries).
     const kept = items.filter((item) => item.keepOnError)
     return (
-      <Paper variant="outlined" role="group" aria-label={ariaLabel} sx={{ overflow: 'hidden' }}>
+      <Paper variant="outlined" role="group" {...frame} sx={{ overflow: 'hidden' }}>
+        {heading}
         <Box sx={{ display: 'grid', gridTemplateColumns: kept.length && desktop ? `repeat(${kept.length}, 1fr) 3fr` : '1fr' }}>
           {kept.map((item, i) => <Item key={item.key ?? item.label} item={item} layout={layout}
             divider={!desktop && i ? { borderTop: 1, borderColor: 'divider' } : null} />)}
@@ -79,7 +87,8 @@ export default function KpiStrip({ ariaLabel, items, layout = 'label-first', pho
   const dividerFor = (i) => ({ ...(i % columns ? { borderLeft: 1, borderColor: 'divider' } : null),
     ...(i >= columns ? { borderTop: 1, borderColor: 'divider' } : null) })
   return (
-    <Paper variant="outlined" role="group" aria-label={ariaLabel} aria-busy={loading || undefined} sx={{ overflow: 'hidden' }}>
+    <Paper variant="outlined" role="group" {...frame} aria-busy={loading || undefined} sx={{ overflow: 'hidden' }}>
+      {heading}
       <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
         {loading
           ? Array.from({ length: Math.max(items.length, columns) }, (_, i) => (

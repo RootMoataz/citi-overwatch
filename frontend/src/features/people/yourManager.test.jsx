@@ -46,14 +46,15 @@ describe('where the card shows', () => {
     expect(await within(card).findByRole('link', { name: 'Message Morgan' })).toHaveAttribute('href', '/messages?to=u-mgr')
   })
 
-  test('on your own profile only', async () => {
-    server.use(http.get(`${API}/users/:id/profile`, () => HttpResponse.json(profile(manager))))
+  test('on your own profile it is titled Your manager, and on another page Reports to', async () => {
+    server.use(http.get(`${API}/users/:id/profile`, () => HttpResponse.json(profile(manager))),
+      http.get(`${API}/messages/contacts`, () => HttpResponse.json({ items: [{ id: 'u-mgr', name: 'Morgan Manager' }], can_group: false })))
     const { unmount } = renderAsUser(<PersonProfilePage />, { user: users.employee, route: '/people/u-emp/profile', path: '/people/:id/profile' })
-    expect(await screen.findByRole('region', { name: 'Your manager' })).toBeInTheDocument()
-    expect(screen.getByText('Reports to')).toBeInTheDocument() // the small row stays
+    expect(await screen.findByRole('heading', { name: 'Your manager', level: 3 })).toBeInTheDocument()
+    expect(screen.queryByText('Reports to')).not.toBeInTheDocument()
     unmount()
     renderAsUser(<PersonProfilePage />, { user: users.manager, route: '/people/u-emp/profile', path: '/people/:id/profile' })
-    expect(await screen.findByText('Reports to')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Your manager' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Reports to', level: 3 })).toBeInTheDocument()
+    expect(screen.queryByText('Your manager')).not.toBeInTheDocument()
   })
 })
