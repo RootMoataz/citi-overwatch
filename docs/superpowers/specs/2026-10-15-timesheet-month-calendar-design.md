@@ -231,3 +231,60 @@ So a screen-reader user hears everything a sighted user sees.
 - `docs/project/USER_STORIES.md`;
 - test counts in README, TESTING and DEMO_SCRIPT;
 - a new screenshot, `docs/images/timesheet-month.png`, at 1440×900.
+
+## Revision 2 (16 Oct 2026): hours-first Month view
+
+The owner's mockup (`My timesheet - Month (v2).png`, kept in the git-ignored `.superpowers/redesign/`) and notes asked to:
+- remove the repeated milestone ribbons;
+- make daily totals and approval states easier to scan;
+- keep rejected hours visible but excluded from totals;
+- put locked-entry actions in a side panel;
+- show milestone deadlines as small date markers.
+
+Approved in chat on 16 Oct. This revision replaces the bars, the "+N more milestones" button and the click-to-open behaviour above. Everything else above still holds, including the route, the URL, the toggle and the totals rule.
+
+### Grid
+- **Milestone bars are gone.** The Month view no longer shows milestone state. Colours mean approval status only. Milestone state stays on the project's timeline.
+- **Day box:**
+  - the date and the day's total, formatted as hours: pending and approved count, rejected and timer drafts don't;
+  - an en dash "–" when the day has nothing.
+- **One chip per line**, each with an icon and a status word:
+  - **approved:** ✓ icon, green, "<name> <h>";
+  - **pending:** clock icon, amber, a second line "Pending";
+  - **rejected:** ! icon, red, a second line "Needs revision", hours struck through;
+  - **timer draft:** timer icon, neutral and dashed, a second line "Not submitted".
+- **More than 3 lines** become "+N more".
+- **Markers:**
+  - "⚠ Over 40h" on a day holding an `over_40` entry;
+  - "📅 1 milestone deadline" / "📅 N milestone deadlines" on a day where an assigned, not-completed milestone ends.
+- **Today:** the date sits in a filled circle and the box has a ring. Days outside the month are faded. Weekends are lightly shaded.
+- **Clicking a day selects it.** It no longer jumps to the Day view. The selected day has a highlighted border and background, and it is kept in the URL as `?month=YYYY-MM&day=YYYY-MM-DD`. The default selection is today if it's in the month, otherwise the 1st.
+
+### Selected-day panel
+- **Placement:** on the right on desktop (`md` and up), under the grid on tablets and phones.
+- **Heading:** the full date, plus a "Today" chip when it applies.
+- **Summary line:** for example "4h pending", "8h · 6h approved, 2h pending", or "No hours".
+- **One card per line:**
+  - the milestone name and an approval chip ("Approved", "Pending approval", "Needs revision", "Not submitted");
+  - "Project: <name>";
+  - Hours, shown read-only;
+  - "Timer-linked entry: Yes/No";
+  - Source: Manual when `tracked_hours` is 0, Tracked when it is at least the hours, Mixed otherwise;
+  - for a rejected entry, the manager's reason.
+- **Actions on a card:**
+  - **Timer-linked (locked) cells:** a 🔒 on Hours, the line "Timer hours are locked; your manager approves any change", and **Request a change**, which opens the existing request dialog. While a request waits, the button reads "Change requested" and is disabled.
+  - **Any other line:** **Edit in Day view**, which opens the Day view on that date and goes through the existing discard question.
+- **"Milestone dates":** the deadlines that fall on that day ("<name> · Due Oct 23", plus "Overdue" when unfinished and past), and a **View milestones** link to the milestone.
+- **Rules unchanged:** only timer hours are locked; typed hours stay editable in the Day view.
+
+### Header and legend
+- **Header:** "<total>h logged in <Month>", with the sub-line "Pending + approved · Rejected hours excluded."
+- **Legend:** Approved, Pending, Needs revision, Not submitted, then "Milestone dates appear separately from time-entry status."
+
+### API (additive)
+`GET /time-entries/calendar` gains `locks`, with the week view's exact shape: `[{milestone_id, work_date, hours, draft_hours, tracked_hours, request}]`. These are the cells holding timer hours or drafts in the grid's range, with any pending change request. Entries already carry `tracked_hours` and `rejection_reason`.
+
+### Accessibility
+- The day button's accessible name keeps the earlier format, with the new status words and markers.
+- The panel is a region labelled by its date heading.
+- A status is never shown by colour alone: every chip has an icon and a word.
