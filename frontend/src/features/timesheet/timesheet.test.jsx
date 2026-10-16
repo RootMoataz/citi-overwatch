@@ -214,6 +214,8 @@ describe('TimesheetPage', () => {
     renderAsUser(<TimesheetPage />, { user: users.employee, route: '/timesheet', path: '/timesheet' })
     expect(await screen.findByRole('button', { name: 'Start timer on Schema Mapping' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start timer on Build' })).toBeInTheDocument()
+    // The compact button the grid has always had: My week's 44 px target doesn't change it here.
+    expect(screen.getByRole('button', { name: 'Start timer on Build' })).not.toHaveStyle({ minHeight: '44px' })
   })
 
   test('a completed milestone has no timer button', async () => {
@@ -338,8 +340,9 @@ describe('NotificationBell', () => {
     const bell = await screen.findByRole('button', { name: 'Notifications, 1 unread' })
     await userEvent.click(bell)
     await userEvent.click(await screen.findByRole('menuitem', { name: /eli employee passed 40h/i }))
-    await waitFor(() => expect(read).toBe('n1'))
-    expect(screen.getByTestId('location')).toHaveTextContent(`/timesheets?user=${users.employee.id}`)
+    // The bell navigates only once the read is answered: wait for the landing, not just for the server to see the read.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(`/timesheets?user=${users.employee.id}`))
+    expect(read).toBe('n1')
   })
 
   test('a rejection alert opens the timesheet for that week', async () => {

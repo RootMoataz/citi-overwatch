@@ -72,7 +72,7 @@ function NowCard({ m, today, loggable }) {
             Discuss
           </Button>
         ) : null}
-        {loggable.has(String(m.id)) ? <TimerButton milestone={m} size="medium" /> : null}
+        {loggable.has(String(m.id)) ? <TimerButton milestone={m} size="medium" touch /> : null}
       </Stack>
     </Box>
   )

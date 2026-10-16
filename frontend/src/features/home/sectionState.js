@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export const SECTION_KEYS = ['nowNext', 'inProgress', 'upNext', 'review', 'coming', 'done', 'claim', 'week', 'manager']
 
@@ -26,6 +26,12 @@ function write(collapsed) {
 /** Which My week sections are collapsed, remembered across visits. Everything starts open. */
 export function useCollapsedSections() {
   const [collapsed, setCollapsed] = useState(read)
+  // Stored after each change, not from inside the state updater (which React may run twice): the state as read is
+  // never written back, so nothing is stored until something changes.
+  const initial = useRef(collapsed)
+  useEffect(() => {
+    if (collapsed !== initial.current) write(collapsed)
+  }, [collapsed])
 
   const set = useCallback((key, isCollapsed) => {
     setCollapsed((prev) => {
@@ -33,7 +39,6 @@ export function useCollapsedSections() {
       const next = { ...prev }
       if (isCollapsed) next[key] = true
       else delete next[key]
-      write(next)
       return next
     })
   }, [])

@@ -100,6 +100,16 @@ describe('labels', () => {
   })
 })
 
+describe('a milestone with no start date', () => {
+  const undated = ms('Undated', { status: 'not_started', display_status: 'not_started', start_date: null })
+  test('is ready to start: labelled so, in the ready tier, and the one to start next', () => {
+    expect(upNextLabel(undated, TODAY)).toBe('Ready to start')
+    const g = groupMilestones([ms('Later', { status: 'not_started', display_status: 'not_started', start_date: '2026-10-21' }), undated], TODAY)
+    expect(names(g.upNext)).toEqual(['Undated', 'Later'])
+    expect(nowAndNext({ ...g, inProgress: [] }, [], TODAY).startNext.name).toBe('Undated')
+  })
+})
+
 describe('nowAndNext', () => {
   const g = groupMilestones(fixture, TODAY)
   const empty = { inProgress: [], upNext: [], review: [], done: [] }
@@ -137,10 +147,11 @@ describe('focusSummary', () => {
     expect(focusSummary({ ...base, inProgress: [late] }, TODAY)).toBe('1 overdue')
     expect(focusSummary(base, TODAY)).toBe('')
   })
-  test('counts overdue across the three open groups', () => {
+  test("counts overdue in progress and upcoming work; work with the manager isn't the person's to finish, so it isn't", () => {
     const late = (s) => ms('l', { status: s, end_date: '2026-10-01' })
     expect(focusSummary({
       inProgress: [late('in_progress')], upNext: [late('not_started')], review: [late('ready_for_review')], done: [],
-    }, TODAY)).toBe('3 overdue · 1 with your manager')
+    }, TODAY)).toBe('2 overdue · 1 with your manager')
+    expect(focusSummary({ ...base, review: [late('ready_for_review')] }, TODAY)).toBe('1 with your manager')
   })
 })

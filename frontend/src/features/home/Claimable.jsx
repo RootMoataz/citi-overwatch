@@ -44,7 +44,8 @@ function ClaimButton({ milestone }) {
   }
   return (
     <>
-      <Button size="small" variant="contained" aria-label={`Claim ${milestone.name}`} disabled={claim.isPending} onClick={take}>
+      <Button size="small" variant="contained" aria-label={`Claim ${milestone.name}`} disabled={claim.isPending} onClick={take}
+        sx={{ minHeight: 44 }}>
         Claim
       </Button>
       {failure ? <Box sx={{ flexBasis: '100%' }}><ErrorAlert error={failure} /></Box> : null}

@@ -313,6 +313,19 @@ def test_sections_bad_value_is_400(client, conn):
     assert "milestones" in body
 
 
+def test_sections_bad_value_on_someone_you_cannot_see_is_404_not_400(client, conn):
+    """Access is checked before the parameters: a bad `sections` on a profile the caller may not open answers 404, as
+    any other read of it does, so the error never tells them the person exists."""
+    _, emp, other, _ = _week_fixture(conn)
+    token = token_for(conn, emp)
+    for target in (other["id"], uuid.uuid4()):
+        status, body, _, _ = client.request("GET", f"/users/{target}/profile?sections=bogus", token=token)
+        assert status == 404
+        assert body["error"]["code"] == "NOT_FOUND"
+    # The same bad value on their own profile is the 400.
+    assert client.request("GET", f"/users/{emp['id']}/profile?sections=bogus", token=token)[0] == 400
+
+
 def test_sections_this_week_keeps_the_profile_permissions(client, conn):
     mgr, emp, other, _ = _week_fixture(conn)
     execu = make_user(conn, role="executive")

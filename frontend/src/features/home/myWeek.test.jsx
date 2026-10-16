@@ -256,6 +256,16 @@ describe('the groups', () => {
     expect(within(rows[2]).getByText('Waiting on Load testing')).toBeInTheDocument()
   })
 
+  test('an overdue Upcoming row says by how many days', async () => {
+    const lateStart = ms('m13', 'Late start', { start_date: '2026-10-01', end_date: '2026-10-10' })
+    serve({ milestones: [lateStart, hypercare] })
+    await openPage()
+    const rows = rowsOf(region(/^Upcoming/))
+    expect(names(rows)).toEqual(['Late start', 'Hypercare'])
+    expect(within(rows[0]).getByText('Due Oct 10, 2026 · 5 days overdue')).toBeInTheDocument()
+    expect(within(rows[1]).getByText('Due Dec 27, 2026')).toBeInTheDocument()
+  })
+
   test('With your manager says who completes it', async () => {
     serve()
     await openPage()
@@ -386,6 +396,15 @@ describe('Start timer', () => {
     expect(within(first).queryByLabelText(/^Difficulty/)).not.toBeInTheDocument()
   })
 
+  test('Start is a 44 px touch target on the Now card and the rows', async () => {
+    serve({ milestones: [design, hypercare], comingUp: [], rows: [row(design), row(hypercare)] })
+    const focus = await openPage()
+    const now = within(focus).getByRole('group', { name: 'Now' })
+    expect(await within(now).findByRole('button', { name: 'Start timer on Design' })).toHaveStyle({ minHeight: '44px' })
+    expect(within(region(/^In progress/)).getByRole('button', { name: 'Start timer on Design' })).toHaveStyle({ minHeight: '44px' })
+    expect(within(region(/^Upcoming/)).getByRole('button', { name: 'Start timer on Hypercare' })).toHaveStyle({ minHeight: '44px' })
+  })
+
   test('none on a completed milestone', async () => {
     const finished = doneMs('m12', 'Finished design', '2026-10-09')
     serve({ milestones: [design, finished], comingUp: [], rows: [row(design), row(finished)] })
@@ -407,6 +426,13 @@ describe('Available to claim', () => {
     expect(within(claim).queryByText('Taken already')).not.toBeInTheDocument()
     await userEvent.setup().click(within(claim).getByRole('button', { name: 'Claim Build pipeline' }))
     await waitFor(() => expect(claimed).toEqual(['m7']))
+  })
+
+  test('Claim is a 44 px touch target', async () => {
+    serve()
+    await openPage()
+    expect(await within(region(/^Available to claim/)).findByRole('button', { name: 'Claim Build pipeline' }))
+      .toHaveStyle({ minHeight: '44px' })
   })
 
   test('with nothing to claim it says so', async () => {

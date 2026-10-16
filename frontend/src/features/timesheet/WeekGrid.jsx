@@ -6,6 +6,8 @@ import {
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
+import ScrollHint from '../../components/ScrollHint.jsx'
+import { thinScrollbar } from '../../components/thinScrollbar.js'
 import TimerButton from '../timer/TimerButton.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import { StatusDot, StatusLine } from './EntryStatus.jsx'
@@ -56,9 +58,19 @@ function NoteButton({ cellLabel, note, onChange, attention, disabled }) {
   )
 }
 
-// The first column stays put when the grid scrolls inside its card on a phone.
+// The first column stays put when the grid scrolls inside its card on a phone. It is opaque, so the days slide under it;
+// a tinted row lays its tint over it as a background image, so the fixed cell matches the rest of the row.
 const STICKY = { position: 'sticky', left: 0, zIndex: 2, bgcolor: 'background.paper' }
-const PROJECT_TINT = { backgroundImage: (t) => `linear-gradient(${alpha(t.palette.primary.main, 0.06)}, ${alpha(t.palette.primary.main, 0.06)})` }
+const tint = (colour) => ({ backgroundImage: (t) => `linear-gradient(${colour(t)}, ${colour(t)})` })
+const PROJECT_TINT = tint((t) => alpha(t.palette.primary.main, 0.06))
+const CLOSED_TINT = tint((t) => t.palette.action.hover)
+// Its width is capped, a long name wrapping (breaking a long word if it must), so it never fills the card and covers
+// the day cells: 140 px on a phone (the cell's 16 px padding each side included, so 108 px of name), under half the
+// card. The name stays whole in the cell, and is the row header's name.
+const FIRST_COLUMN = 140
+const NAME_WIDTH = FIRST_COLUMN - 32
+const NAME = (t) => ({ display: 'block', maxWidth: NAME_WIDTH, overflowWrap: 'anywhere',
+  [t.breakpoints.up('sm')]: { maxWidth: 200 }, [t.breakpoints.up('md')]: { maxWidth: 280 } })
 const isWeekend = (iso) => [0, 6].includes(new Date(`${iso}T00:00:00Z`).getUTCDay())
 /** Today's column is tinted; weekend columns are dimmed. */
 const dayTint = (d, today) => (d === today ? { bgcolor: (t) => alpha(t.palette.primary.main, 0.08) }
@@ -73,11 +85,15 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
   const today = thisWeek ? nyTodayIso() : null
   return (
     <>
-      <TableContainer sx={{ overflowX: 'auto' }}>
+      {/* Beside an open Entry details panel (or on a phone) the days run past the card's edge: the edge fades and a thin
+          scrollbar stays drawn, so it's clear they continue. No fade on the left, where the Milestone column stays. */}
+      <ScrollHint left={false}>
+        {(ref, onScroll) => (
+      <TableContainer ref={ref} onScroll={onScroll} sx={[{ overflowX: 'auto' }, thinScrollbar]}>
         <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.week)}`}>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ ...STICKY, minWidth: 140 }}>Milestone</TableCell>
+              <TableCell sx={{ ...STICKY, minWidth: FIRST_COLUMN }}>Milestone</TableCell>
               {days.map((d) => {
                 const [weekday, ...date] = formatDayLabel(d).split(' ')
                 return (
@@ -114,6 +130,8 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
           </TableBody>
         </Table>
       </TableContainer>
+        )}
+      </ScrollHint>
       <Box component="ul" aria-label="Legend" sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, listStyle: 'none', m: 0, mt: 1.5, p: 0 }}>
         {KINDS.filter((k) => k !== 'draft').map((k) => (
           <Box component="li" key={k} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, typography: 'caption', color: 'text.secondary' }}>
@@ -130,9 +148,9 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
   return (
     <>
       <TableRow>
-        <TableCell component="th" scope="row" sx={{ ...STICKY, ...PROJECT_TINT, fontWeight: 700 }}>
-          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
-            <Folder aria-hidden="true" fontSize="small" />{group.project.name}
+        <TableCell component="th" scope="row" sx={[STICKY, PROJECT_TINT, { fontWeight: 700 }]}>
+          <Box component="span" sx={NAME}>
+            <Folder aria-hidden="true" fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.75 }} />{group.project.name}
           </Box>
         </TableCell>
         <TableCell colSpan={days.length + 1} sx={PROJECT_TINT} />
@@ -142,15 +160,17 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
         return (
           <TableRow key={r.milestone.id} aria-disabled={closed ? true : undefined}
             sx={closed ? { bgcolor: 'action.hover', '& th, & td': { color: 'text.disabled' } } : undefined}>
-            <TableCell component="th" scope="row" sx={STICKY}>
-              {r.milestone.name}
-              {r.role === 'supporting' ? <SupportingChip /> : null}
-              {closed ? (
-                <Tooltip title={`${closed}. Hours already logged stay visible but can't be changed.`}>
-                  <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{closed}</Typography>
-                </Tooltip>
-              ) : null}
-              {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><TimerButton milestone={r.milestone} /></Box> : null}
+            <TableCell component="th" scope="row" sx={[STICKY, closed ? CLOSED_TINT : null]}>
+              <Box sx={NAME}>
+                {r.milestone.name}
+                {r.role === 'supporting' ? <SupportingChip /> : null}
+                {closed ? (
+                  <Tooltip title={`${closed}. Hours already logged stay visible but can't be changed.`}>
+                    <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{closed}</Typography>
+                  </Tooltip>
+                ) : null}
+                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><TimerButton milestone={r.milestone} /></Box> : null}
+              </Box>
             </TableCell>
             {days.map((d) => {
               const k = key(r.milestone.id, d)

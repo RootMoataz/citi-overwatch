@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { SECTION_KEYS, useCollapsedSections } from './sectionState.js'
 
@@ -42,6 +43,14 @@ describe('useCollapsedSections', () => {
     expect(SECTION_KEYS.every((k) => result.current.isOpen(k))).toBe(true)
     localStorage.setItem(KEY, '[1,2]')
     expect(renderHook(() => useCollapsedSections()).result.current.isOpen('done')).toBe(true)
+  })
+
+  test('storage is written once per change, never from inside the state updater (Strict Mode runs updaters twice)', () => {
+    const writes = vi.spyOn(Storage.prototype, 'setItem')
+    const { result } = renderHook(() => useCollapsedSections(), { wrapper: StrictMode })
+    expect(writes).not.toHaveBeenCalled()
+    act(() => result.current.toggle('done'))
+    expect(writes.mock.calls.filter(([key]) => key === KEY)).toEqual([[KEY, '{"done":true}']])
   })
 
   test('a blocked store still toggles in memory', () => {

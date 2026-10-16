@@ -11,21 +11,23 @@ import { formatElapsed } from './timerClock.js'
 import { useTimer } from './useTimer.js'
 
 /** Start a timer on this milestone, or stop the one running on it (with its live clock).
- * Completed milestones get no Start. While a timer runs on another milestone this one can't start: one timer at a time. */
-export default function TimerButton({ milestone, size = 'small' }) {
+ * Completed milestones get no Start. While a timer runs on another milestone this one can't start: one timer at a time.
+ * `touch` makes it a 44 px target (My week's rows and Now card); elsewhere it keeps its compact size. */
+export default function TimerButton({ milestone, size = 'small', touch = false }) {
   const { user } = useSession()
   const { enabled, timer, elapsed } = useTimer()
   const start = useStartTimer()
   const toast = useToast()
   const [stopping, setStopping] = useState(false)
   if (!enabled) return null
+  const target = touch ? { minHeight: 44 } : null
   const mine = timer && String(timer.milestone.id) === String(milestone.id)
   if (mine) {
     return (
       <>
         <Button size={size} variant="contained" color="error" startIcon={<Stop />} onClick={() => setStopping(true)}
           aria-label={`Stop timer on ${milestone.name} (running ${formatElapsed(elapsed)})`}
-          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 104 }}>
+          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 104, ...target }}>
           {formatElapsed(elapsed)}
         </Button>
         {stopping ? <StopTimerDialog timer={timer} elapsed={elapsed} onClose={() => setStopping(false)} /> : null}
@@ -44,7 +46,7 @@ export default function TimerButton({ milestone, size = 'small' }) {
       <Box component="span" sx={{ display: 'inline-flex' }}>
         <Button size={size} variant="outlined" startIcon={<PlayArrow />} onClick={go}
           disabled={blocked || busy || start.isPending} aria-label={`Start timer on ${milestone.name}`}
-          sx={{ whiteSpace: 'nowrap' }}>
+          sx={{ whiteSpace: 'nowrap', ...target }}>
           Start
         </Button>
       </Box>

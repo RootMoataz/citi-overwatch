@@ -9,7 +9,9 @@ const byStart = (a, b) => String(a.start_date).localeCompare(String(b.start_date
 export const isOverdue = (m, today) => m.status !== 'completed' && Boolean(m.end_date) && m.end_date < today
 
 const isWaiting = (m) => (m.waiting_on ?? []).length > 0
-const isReady = (m, today) => !isWaiting(m) && m.start_date <= today
+// No start date means nothing to wait for: it can start now.
+const startsLater = (m, today) => Boolean(m.start_date) && m.start_date > today
+const isReady = (m, today) => !isWaiting(m) && !startsLater(m, today)
 
 /** Up next order: ready first, then future starts, then waiting. */
 const upNextTier = (m, today) => (isWaiting(m) ? 2 : isReady(m, today) ? 0 : 1)
@@ -36,7 +38,7 @@ const waitingNames = (m) => (m.waiting_on ?? []).map((w) => (typeof w === 'strin
 
 export function upNextLabel(m, today) {
   if (isWaiting(m)) return `Waiting on ${waitingNames(m).join(', ')}`
-  if (m.start_date > today) return `Starts ${formatDate(m.start_date)}`
+  if (startsLater(m, today)) return `Starts ${formatDate(m.start_date)}`
   return 'Ready to start'
 }
 
@@ -53,8 +55,10 @@ export function nowAndNext(groups, comingUp, today) {
   return { now, next, startNext, headsUp: urgent ? first : null }
 }
 
+/** "1 overdue · 1 with your manager". Overdue counts the person's own open work (In progress and Upcoming, the rows that
+ * show a due line); work handed to the manager is theirs to complete, so it counts only as "with your manager". */
 export function focusSummary(groups, today) {
-  const open = [...groups.inProgress, ...groups.upNext, ...groups.review]
+  const open = [...groups.inProgress, ...groups.upNext]
   const overdue = open.filter((m) => isOverdue(m, today)).length
   return [overdue ? `${overdue} overdue` : '', groups.review.length ? `${groups.review.length} with your manager` : '']
     .filter(Boolean).join(' · ')

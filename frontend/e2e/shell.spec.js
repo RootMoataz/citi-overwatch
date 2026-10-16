@@ -4,7 +4,8 @@ import { openProject, signIn, signOut } from './helpers.js'
 // Layout checks a unit test can't make (jsdom has no layout): the top bar's controls never overlap on a phone (320 to
 // 390 px) and the phone back link stays a 24 px target; the desktop crumbs give way to the controls beside them (at
 // 1440 px with a long name, and between md and lg for the demo admin); no page scrolls sideways at 375 px, nor the
-// Dashboard and Control centre between md and lg.
+// Dashboard, Control centre and My history between md and lg; on a phone the Week grid's fixed Milestone column never
+// covers the day cells, even with very long names.
 
 /** Runs in the page (it is self-contained). Each in-flow child of `container` as the stretch of x it draws over: its own box and everything drawn inside it,
  * text included (a logo box squeezed by flexbox while its wordmark kept drawing at full width was the bug, and so was
@@ -200,6 +201,37 @@ test.describe('desktop top bar between md and lg', { tag: '@desktop' }, () => {
 })
 
 test.describe('no sideways page scroll between md and lg', { tag: '@desktop' }, () => {
+  // My history at 1440 px fits its six columns; narrower, the table scrolls inside its card (with a fade at the edge),
+  // never the page. The sidebar open or collapsed.
+  test('employee.demo: My history at 900, 960, 1024 and 1440 px, sidebar open and collapsed', async ({ page }) => {
+    await signIn(page, 'employee.demo')
+    const history = await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'My history' })
+      .getAttribute('href')
+    const wide = []
+    for (const collapsed of [false, true]) {
+      await page.evaluate((c) => localStorage.setItem('overwatch.sidebarCollapsed', String(c)), collapsed)
+      for (const width of [900, 960, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 800 })
+        await page.goto(history)
+        const card = page.getByRole('region', { name: 'Work history' })
+        await expect(card.getByRole('table', { name: 'Milestones' })).toBeVisible()
+        await page.waitForLoadState('networkidle')
+        const scroll = await sideways(page)
+        if (scroll > width) wide.push(`${width} px${collapsed ? ', collapsed' : ''} (${scroll}px)`)
+        // The table ends inside its card, or scrolls inside it with the fade saying there is more.
+        const fit = await card.evaluate((section) => {
+          const box = section.querySelector('.MuiTableContainer-root')
+          return { inside: box.getBoundingClientRect().right <= section.getBoundingClientRect().right + 0.5,
+            overflows: box.scrollWidth - box.clientWidth > 1, fade: Boolean(section.querySelector('[data-scroll-fade="right"]')) }
+        })
+        expect.soft(fit.inside, `${width} px: the table's box stays inside its card`).toBe(true)
+        expect.soft(fit.fade, `${width} px: a fade shows exactly when the table is wider than its card`).toBe(fit.overflows)
+        if (width === 1440) expect.soft(fit.overflows, '1440 px: the six columns fit').toBe(false)
+      }
+    }
+    expect(wide, 'My history wider than the window').toEqual([])
+  })
+
   for (const [username, home] of [['manager.demo', 'Dashboard'], ['demo.admin', 'Control centre']]) {
     test(`${username}: ${home} at 900, 960 and 1024 px`, async ({ page }) => {
       await signIn(page, username)
@@ -290,13 +322,27 @@ test.describe('no sideways page scroll at 375 px', { tag: '@phone' }, () => {
           expect((await grid.getByRole('columnheader').nth(1).boundingBox()).x, 'the day columns moved').toBeLessThan(firstDay.x)
           expect((await milestone.boundingBox()).x, 'the Milestone column stayed in place').toBeCloseTo(before.x, 0)
           await card.evaluate((el) => { el.scrollLeft = 0 })
+          // The fixed Milestone column is capped (its name wraps), so the first day cell is never under it, long names
+          // included: the point at the middle of that cell is the cell itself.
+          const covered = await grid.evaluate((table) => {
+            const row = [...table.querySelectorAll('tbody tr')].find((tr) => tr.querySelector('th') && tr.querySelectorAll('td').length > 1)
+            const cell = row.querySelector('td')
+            cell.scrollIntoView({ block: 'center', inline: 'nearest' })   // elementFromPoint only sees what's on screen
+            const r = cell.getBoundingClientRect()
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 24))
+            return cell.contains(hit) ? null : `${hit?.tagName ?? 'nothing'} ${hit?.textContent?.slice(0, 40) ?? ''}`
+          })
+          expect.soft(covered, `${names} names: the first day cell is not covered by the Milestone column`).toBeNull()
           const entry = page.locator('[data-entry]').first()
+          // Eli always has saved hours this week (the seed logs his weekdays), so the check never skips for him.
+          if (username === 'employee.demo') await expect(entry, 'employee.demo has a saved entry this week').toBeVisible()
           if (await entry.count()) {
-            // A DOM click: with the stretched names the fixed Milestone column fills the card and covers the day cells.
-            await entry.evaluate((el) => el.click())
+            // A real tap: it fails if anything (the fixed column) covers the status line.
+            await entry.tap()
             await expect(page.getByRole('dialog', { name: 'Entry details' })).toBeVisible()
             if ((await sideways(page)) > 375) wide.push(`Entry details open (${await sideways(page)}px)`)
             await page.keyboard.press('Escape')
+            await expect(page.getByRole('dialog', { name: 'Entry details' })).toBeHidden()
           }
           await page.getByRole('button', { name: 'Month', exact: true }).click()
           await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible()
