@@ -50,7 +50,7 @@ One click on a day takes them to that day in the Day view to fix it.
 `GET /time-entries/calendar?month=YYYY-MM&user=`
 
 **`month`:**
-- Optional. It defaults to the current month, using the app's "today" (New York time), the same as a week.
+- Optional. It defaults to the current month, using the same server "today" as a week does.
 - Anything that isn't a real `YYYY-MM` month is `400 VALIDATION_ERROR` with `{month: "invalid_month"}`.
 
 **`user` and permissions:** exactly as for `GET /time-entries`:
