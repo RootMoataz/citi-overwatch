@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react'
 import { useCalendarMonth } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { addDays, formatHours, todayIso } from '../../lib/format.js'
-import { DayBox } from './MonthDayBox.jsx'
+import { DayBox, StatusShape } from './MonthDayBox.jsx'
 import MonthDayPanel from './MonthDayPanel.jsx'
 import { KIND, KINDS, KIND_ICON, kindColor, num, stateKey } from './monthText.js'
 import { dayLines, gridWeeks, monthOf, shiftMonth } from './monthLayout.js'
@@ -19,7 +19,7 @@ const monthName = (month, withYear) => new Date(`${month}-01T00:00:00Z`)
   .toLocaleDateString('en-US', { month: 'long', ...(withYear ? { year: 'numeric' } : {}), timeZone: 'UTC' })
 const isRealDay = (iso) => typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso) && addDays(iso, 0) === iso
 
-function Legend() {
+function Legend({ phone }) {
   return (
     <Paper variant="outlined" sx={{ mt: 2, px: 2, py: 1.25 }}>
       <Stack component="ul" direction="row" useFlexGap aria-label="Legend"
@@ -28,7 +28,7 @@ function Legend() {
           const Icon = KIND_ICON[kind]
           return (
             <Stack component="li" key={kind} direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
-              <Icon sx={{ fontSize: 18, color: (t) => kindColor(kind, t) }} />
+              {phone ? <StatusShape kind={kind} legend /> : <Icon sx={{ fontSize: 18, color: (t) => kindColor(kind, t) }} />}
               <Typography variant="body2" component="span">{KIND[kind].legend}</Typography>
             </Stack>
           )
@@ -126,7 +126,7 @@ export default function MonthView({ month, day, onMonthChange, onSelectDay, onOp
             <MonthDayPanel date={selected} isToday={selected === today} info={view.lines.get(selected)} names={view.names}
               locks={view.locks} deadlines={view.deadlines.get(selected) ?? []} today={today} onOpenDay={onOpenDay} onRequest={onRequest} />
           </Box>
-          <Legend />
+          <Legend phone={phone} />
         </>
       ) : null}
     </Box>

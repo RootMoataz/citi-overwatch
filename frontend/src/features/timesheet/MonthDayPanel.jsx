@@ -30,6 +30,8 @@ function StatusChip({ kind }) {
 function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
   const name = milestone?.name ?? 'Milestone'
   const closed = milestone ? closedLabel({ project: milestone.project }) : null
+  // A saved typed line in a cell that also holds timer hours: the cell is locked, though this line has no timer hours of its own.
+  const shared = Boolean(lock) && line.kind !== 'draft' && sourceOf(line) === 'Manual'
   const reason = line.kind === 'rejected' ? line.entry?.rejection_reason : null
   return (
     <Paper component="li" variant="outlined" sx={{ p: 2, listStyle: 'none' }}>
@@ -53,6 +55,7 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
         <Box component="dt" sx={term}>Source</Box>
         <Box component="dd" sx={value}>{sourceOf(line)}</Box>
       </Box>
+      {shared ? <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1 }}>Locked with this cell's timer hours</Typography> : null}
       {reason ? (
         <Typography variant="body2" sx={{ mt: 1.5, px: 1.25, py: 0.75, borderRadius: 1, bgcolor: (t) => alpha(statusColor(STATUS.rejected, t), 0.08) }}>
           {`Reason: ${reason}`}
@@ -122,7 +125,10 @@ export default function MonthDayPanel({ date, isToday, info, names, locks, deadl
         </Box>
       ) : null}
       {lines.every(lockOf) ? (
-        <Button variant="outlined" size="small" sx={{ mt: lines.length ? 1.5 : 0 }} onClick={() => onOpenDay(date)}>Edit in Day view</Button>
+        <Box sx={{ mt: lines.length ? 2 : 0 }}>
+          {lines.length ? <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mb: 0.75 }}>Other hours</Typography> : null}
+          <Button variant={lines.length ? 'outlined' : 'contained'} size="small" onClick={() => onOpenDay(date)}>Edit in Day view</Button>
+        </Box>
       ) : null}
       {deadlines.length ? <MilestoneDates deadlines={deadlines} today={today} /> : null}
     </Paper>

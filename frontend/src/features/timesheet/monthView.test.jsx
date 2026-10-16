@@ -220,8 +220,13 @@ describe('Month view on a phone', () => {
     render()
     const box = await dayBox('Wed 14 Oct, today, 8 hours, Schema Mapping 6 hours approved, Build 2 hours pending, Cutover 3 hours needs revision')
     expect(within(box).getByRole('img', { name: 'Approved' })).toHaveStyle('background-color: rgb(30, 125, 69)')
-    expect(within(box).getByRole('img', { name: 'Pending' })).toHaveStyle('background-color: rgb(178, 106, 0)')
+    expect(within(box).getByRole('img', { name: 'Pending' })).toHaveStyle('border: 2px solid rgb(178, 106, 0)')
     expect(within(box).getByRole('img', { name: 'Needs revision' })).toHaveStyle('background-color: rgb(179, 38, 30)')
+    // shape as well as colour: filled circle, ring, square
+    const shapes = ['Approved', 'Pending', 'Needs revision'].map((n) => within(box).getByRole('img', { name: n }).getAttribute('data-shape'))
+    expect(shapes).toEqual(['circle', 'ring', 'square'])
+    expect(within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('legend-shape').map((e) => e.getAttribute('data-shape')))
+      .toEqual(['circle', 'ring', 'square', 'dashed'])
     expect(chips(box)).toHaveLength(0) // no chips on a phone, only dots
     expect(within(screen.getByRole('list', { name: 'Legend' })).getByText('Approved')).toBeInTheDocument()
 

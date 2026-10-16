@@ -31,12 +31,20 @@ function LineChip({ line, name }) {
   )
 }
 
-/** On a phone: one dot per line (at most 3), in its status colour; a timer draft is a hollow, dashed dot. */
-function Dot({ kind }) {
+const SHAPE = { approved: 'circle', pending: 'ring', rejected: 'square', draft: 'dashed' }
+const shapeSx = (kind, t) => {
+  const c = kindColor(kind, t)
+  return { width: 8, height: 8, boxSizing: 'border-box', flexShrink: 0, display: 'inline-block',
+    ...(kind === 'approved' ? { bgcolor: c, borderRadius: '50%' } : kind === 'pending' ? { border: `2px solid ${c}`, borderRadius: '50%' }
+      : kind === 'rejected' ? { bgcolor: c, borderRadius: '1px' } : { border: `1px dashed ${c}`, borderRadius: '50%' }) }
+}
+
+/** A status as a small shape, so phones don't rely on colour alone: approved a filled circle, pending a ring, needs revision
+ * a square, a timer draft a dashed ring. In the legend it is decorative. */
+export function StatusShape({ kind, legend }) {
   return (
-    <Box component="span" role="img" aria-label={KIND[kind].legend}
-      sx={(t) => ({ width: 7, height: 7, borderRadius: '50%', boxSizing: 'border-box', flexShrink: 0,
-        ...(kind === 'draft' ? { border: `1px dashed ${kindColor(kind, t)}` } : { bgcolor: kindColor(kind, t) }) })} />
+    <Box component="span" data-shape={SHAPE[kind]} {...(legend ? { 'data-testid': 'legend-shape', 'aria-hidden': true } : { role: 'img', 'aria-label': KIND[kind].legend })}
+      sx={(t) => shapeSx(kind, t)} />
   )
 }
 
@@ -83,7 +91,7 @@ export function DayBox({ date, info, names, deadlines, overtime, inMonth, weeken
       </Box>
       {phone ? (
         <Box component="span" sx={{ display: 'flex', gap: '3px', alignItems: 'center', flexWrap: 'wrap', minHeight: 14 }}>
-          {lines.slice(0, MAX_LINES).map((l, i) => <Dot key={i} kind={l.kind} />)}
+          {lines.slice(0, MAX_LINES).map((l, i) => <StatusShape key={i} kind={l.kind} />)}
           {overtimeMark}
           {deadlineMark}
         </Box>

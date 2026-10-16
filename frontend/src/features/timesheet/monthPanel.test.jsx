@@ -84,6 +84,37 @@ describe('Month view selection and panel', () => {
     expect(calls.onRequest).toHaveBeenCalledWith({ milestoneId: 'm1', date: '2026-10-14', hours: 4, label: 'Schema Mapping' })
   })
 
+  test("a saved manual line sharing a cell with a timer draft says it is locked with the cell's timer hours", async () => {
+    server.use(calendar({ entries: [entry({ hours: 2, tracked_hours: 0 })], drafts: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 1.5 }],
+      locks: [lock({ hours: 1.5, draft_hours: 1.5, tracked_hours: 0 })] }))
+    render()
+    const region = await panel('Wednesday 14 October 2026')
+    const card = within(region).getAllByRole('listitem').find((li) => li.textContent.includes('Pending approval'))
+    expect(card).toHaveTextContent(/Source\s*Manual/)
+    expect(within(card).getByText("Locked with this cell's timer hours")).toBeInTheDocument()
+  })
+
+  test('a plain timer line has no cell-sharing note', async () => {
+    server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
+    render()
+    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    expect(within(card).queryByText("Locked with this cell's timer hours")).not.toBeInTheDocument()
+  })
+
+  test('the day-level Edit in Day view sits under "Other hours" when cards exist, and alone when none do', async () => {
+    server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
+    const first = render()
+    const region = await panel('Wednesday 14 October 2026')
+    expect(within(region).getByText('Other hours')).toBeInTheDocument()
+    expect(within(region).getByRole('button', { name: 'Edit in Day view' })).toBeInTheDocument()
+    first.unmount()
+    server.use(calendar({ entries: [] }))
+    render()
+    const empty = await panel('Wednesday 14 October 2026')
+    expect(within(empty).getByRole('button', { name: 'Edit in Day view' })).toBeInTheDocument()
+    expect(within(empty).queryByText('Other hours')).not.toBeInTheDocument()
+  })
+
   test('a pending change request shows Change requested, disabled', async () => {
     const request = { id: 'r1', current_hours: 4, requested_hours: 3, reason: 'Timer ran over lunch', status: 'pending' }
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock({ request })] }))
