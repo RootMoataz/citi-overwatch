@@ -19,6 +19,7 @@ export const closedLabel = (row) => (row.open === false || CLOSED[row.project?.s
 export function useTimesheetWeek(week) {
   const sheet = useWeek(week)
   const save = useSaveWeek()
+  const saveOne = useSaveWeek()
   const [drafts, setDrafts] = useState({})
   const [notes, setNotes] = useState({})
   const [failure, setFailure] = useState(null)
@@ -72,21 +73,33 @@ export function useTimesheetWeek(week) {
   // Drops what was typed in this week and any save failure (when the person moves to another week).
   const discard = () => { setDrafts((d) => without(d, inWeek)); setNotes((n) => without(n, inWeek)); setFailure(null) }
 
+  // One cell as the PUT sends it: its hours, and its note when one was typed (or a timer draft's note fills an empty one).
+  const cellBody = (k) => {
+    const [milestoneId, date] = k.split('|')
+    const note = k in notes ? notes[k] : hasDraft(k) && !entries[k]?.note && timerNotes[k] ? timerNotes[k] : undefined
+    return { milestone_id: milestoneId, work_date: date, hours: num(valueOf(k)), ...(note !== undefined ? { note } : {}) }
+  }
+  // Only what was sent is cleared: a note on a row with no hours has nothing to save yet and stays.
+  const clearSent = (sent) => {
+    setDrafts((d) => without(d, (k) => sent.has(k)))
+    setNotes((n) => without(n, (k) => sent.has(k)))
+  }
+
   const onSave = async () => {
     setFailure(null)
     const sent = new Set(changed)
-    const body = { week, entries: changed.map((k) => {
-      const [milestoneId, date] = k.split('|')
-      const note = k in notes ? notes[k] : hasDraft(k) && !entries[k]?.note && timerNotes[k] ? timerNotes[k] : undefined
-      return { milestone_id: milestoneId, work_date: date, hours: num(valueOf(k)), ...(note !== undefined ? { note } : {}) }
-    }) }
+    const body = { week, entries: changed.map(cellBody) }
     if (!body.entries.length) return
     try {
       await save.mutateAsync(body)
-      // Only what was sent is cleared: a note on a row with no hours has nothing to save yet and stays.
-      setDrafts((d) => without(d, (k) => sent.has(k)))
-      setNotes((n) => without(n, (k) => sent.has(k)))
+      clearSent(sent)
     } catch (err) { setFailure(err) }
+  }
+  // Entry details' Save & resubmit: one PUT with this cell alone. Every other cell's typing stays unsaved. A failure
+  // rejects with the API error for the panel to show; the week's `failure` (Submit's) is left as it is.
+  const saveCell = async (k) => {
+    await saveOne.mutateAsync({ week, entries: [cellBody(k)] })
+    clearSent(new Set([k]))
   }
   const nameOf = (milestoneId) => rows.find((r) => String(r.milestone.id) === String(milestoneId))?.milestone.name ?? 'A milestone'
 
@@ -101,7 +114,7 @@ export function useTimesheetWeek(week) {
     week, sheet, rows, groups, allDays, entries, locks,
     valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal,
     total, overDays, tooMany, tooFew, tooFewKeys, changed,
-    failure, setFailure, setHours, setNote, onSave, saving: save.isPending, discard,
+    failure, setFailure, setHours, setNote, onSave, saving: save.isPending, saveCell, savingCell: saveOne.isPending, discard,
     nameOf, closedLabel,
   }
 }

@@ -91,7 +91,8 @@ export default function LockedCell({ lock, label, onRequest, closed }) {
       {pending ? (
         <Tooltip title={`You asked for ${formatHours(pending.requested_hours)}: ${pending.reason}`}>
           <Chip size="small" color="warning" variant="outlined" label={`Change requested: ${formatHours(pending.requested_hours)}`}
-            sx={{ mt: 0.5, height: 20, maxWidth: 120 }} />
+            sx={{ mt: 0.5, height: 'auto', minHeight: 20, maxWidth: '100%',
+              '& .MuiChip-label': { whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.2, py: 0.25 } }} />
         </Tooltip>
       ) : !closed ? (
         <Button size="small" onClick={onRequest} aria-label={`Request a change, ${label}`}

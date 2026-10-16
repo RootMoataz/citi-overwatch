@@ -10,12 +10,14 @@ import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import { NOTE_MAX, NOTE_MIN } from '../timer/timerClock.js'
 import DayView from './DayView.jsx'
+import EntryPanel from './EntryPanel.jsx'
 import { RequestChangeDialog } from './LockedCell.jsx'
 import MonthView from './MonthView.jsx'
 import { monthOf } from './monthLayout.js'
 import WeekGrid from './WeekGrid.jsx'
 import WeekStrip from './WeekStrip.jsx'
 import WeekTotals from './WeekTotals.jsx'
+import { useEntryPanelUrl } from './useEntryPanelUrl.js'
 import { weekFigures } from './weekFigures.js'
 import { DAY_CAP, MIN_HOURS, key, useTimesheetWeek } from './useTimesheetWeek.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
@@ -23,6 +25,7 @@ import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import FootNote from '../../components/FootNote.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
+import SidePanel from '../../components/SidePanel.jsx'
 import { addDays, formatDayLabel, formatDayShort, formatHours, formatWeekRange, mondayOf, nyMondayIso, nyTodayIso } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
@@ -66,7 +69,7 @@ export default function TimesheetPage() {
   const [asking, setAsking] = useState(null)
   const [leaving, setLeaving] = useState({ open: false, week: null, day: undefined, count: 0 }) // the "discard your changes?" question
   const state = useTimesheetWeek(week)
-  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, onSave, dayTotal, nameOf, entries, isDraft } = state
+  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, savingCell, onSave, dayTotal, nameOf, entries, isDraft } = state
 
   const days = desktop || showWeekend ? allDays : allDays.slice(0, 5)
   const waitingDraft = Number(sheet.data?.totals?.draft ?? 0)
@@ -82,6 +85,16 @@ export default function TimesheetPage() {
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(askedMonth ?? '') ? askedMonth : monthOf(day)
   const n = changed.length
   const figures = weekFigures({ entries, changed, isDraft, total })
+
+  // Entry details (?entry=<milestone>:<date>) opens on a saved entry of a listed row in the shown week, in the Day or
+  // Week view; anything else is dropped once this week's own data is in (not the previous week's placeholder).
+  const panel = useEntryPanelUrl({
+    ready: Boolean(sheet.data) && !sheet.isPlaceholderData,
+    has: (k) => {
+      const [milestoneId, date] = k.split('|')
+      return !inMonth && allDays.includes(date) && Boolean(entries[k]) && rows.some((r) => String(r.milestone.id) === milestoneId)
+    },
+  })
 
   // Closing or reloading the tab with unsaved changes asks the browser to confirm.
   const dirty = n > 0
@@ -118,8 +131,16 @@ export default function TimesheetPage() {
     if (next !== 'month') setSheetView(next)
     setView(next)
     storeView(next)
-    // Leaving Month drops ?month=, or a reload would open Month again.
-    if (next !== 'month' && params.has('month')) setParams((p) => { const q = new URLSearchParams(p); q.delete('month'); return q }, { replace: true })
+    // Leaving Month drops ?month=, or a reload would open Month again. Any view change closes Entry details.
+    const dropMonth = next !== 'month' && params.has('month')
+    if (dropMonth || params.has('entry')) {
+      setParams((p) => {
+        const q = new URLSearchParams(p)
+        if (dropMonth) q.delete('month')
+        q.delete('entry')
+        return q
+      }, { replace: true })
+    }
   }
   // A cell named in an error; in the day view it links to its day.
   const cellRef = (milestoneId, date) => {
@@ -162,7 +183,7 @@ export default function TimesheetPage() {
   return (
     <>
       <PageHeader title="My timesheet" subtitle="Review your week. Submit with confidence."
-        actions={<Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving}>
+        actions={<Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
           {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>} />
       <WeekTotals figures={figures} cap={CAP} />
       {total > CAP ? (
@@ -228,33 +249,47 @@ export default function TimesheetPage() {
           {' '}— use Request a change on those cells instead.
         </Alert>
       ) : null}
-      <Paper variant="outlined" sx={{ p: 2 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' }, mb: 2 }}>
-          <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <IconButton aria-label="Previous week" onClick={() => goTo(addDays(week, -7))}><ChevronLeft /></IconButton>
-            <Typography variant="h2" component="h2" sx={{ fontSize: '1.125rem' }}>{formatWeekRange(week)}</Typography>
-            <IconButton aria-label="Next week" onClick={() => goTo(addDays(week, 7))}><ChevronRight /></IconButton>
-            <Button size="small" onClick={goThisWeek}>This week</Button>
-          </Stack>
-          <Box sx={{ flexGrow: 1 }} />
-          {toggle}
-          {!desktop && !inDayView ? <FormControlLabel control={<Switch checked={showWeekend} onChange={(e) => setShowWeekend(e.target.checked)} />} label="Weekend" /> : null}
-        </Stack>
-        {rows.length && inDayView ? (
-          <WeekStrip days={allDays} selected={day} dayTotal={dayTotal} overDays={overDays}
-            onSelect={(d) => setParams({ week, day: d }, { replace: true })} />
+      {/* From md up the week card is the list beside Entry details; on a phone the panel is a full-screen sheet over it. */}
+      <SidePanel open={Boolean(panel.entryKey)} title="Entry details" onClose={panel.close} returnFocus={panel.returnFocus}
+        list={(
+          <>
+            <Paper variant="outlined" sx={{ p: 2 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' }, mb: 2 }}>
+                <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                  <IconButton aria-label="Previous week" onClick={() => goTo(addDays(week, -7))}><ChevronLeft /></IconButton>
+                  <Typography variant="h2" component="h2" tabIndex={-1} data-week-range sx={{ fontSize: '1.125rem' }}>{formatWeekRange(week)}</Typography>
+                  <IconButton aria-label="Next week" onClick={() => goTo(addDays(week, 7))}><ChevronRight /></IconButton>
+                  <Button size="small" onClick={goThisWeek}>This week</Button>
+                </Stack>
+                <Box sx={{ flexGrow: 1 }} />
+                {toggle}
+                {!desktop && !inDayView ? <FormControlLabel control={<Switch checked={showWeekend} onChange={(e) => setShowWeekend(e.target.checked)} />} label="Weekend" /> : null}
+              </Stack>
+              {rows.length && inDayView ? (
+                <WeekStrip days={allDays} selected={day} dayTotal={dayTotal} overDays={overDays}
+                  onSelect={(d) => setParams({ week, day: d }, { replace: true })} />
+              ) : null}
+              {sheet.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
+              {!sheet.isLoading && !sheet.error && rows.length === 0 ? (
+                <EmptyState title="You're not assigned to any milestones this week"
+                  description="Your project manager assigns you to milestones; they'll show up here as rows." />
+              ) : null}
+              {rows.length && inDayView ? (
+                <DayView state={state} day={day} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} onOpenEntry={panel.open} />
+              ) : null}
+              {rows.length && !inDayView ? (
+                <WeekGrid state={state} days={days} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} onOpenEntry={panel.open} />
+              ) : null}
+            </Paper>
+            {figures.needsRevision > 0 ? (
+              <FootNote note={`${formatHours(figures.entered)} entered · ${formatHours(figures.needsRevision)} excluded until resubmitted.`} />
+            ) : null}
+          </>
+        )}>
+        {panel.entryKey ? (
+          <EntryPanel key={panel.entryKey} state={state} cellKey={panel.entryKey} onRequest={(cell) => setAsking(cell)} onClose={panel.close} />
         ) : null}
-        {sheet.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
-        {!sheet.isLoading && !sheet.error && rows.length === 0 ? (
-          <EmptyState title="You're not assigned to any milestones this week"
-            description="Your project manager assigns you to milestones; they'll show up here as rows." />
-        ) : null}
-        {rows.length && inDayView ? <DayView state={state} day={day} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} /> : null}
-        {rows.length && !inDayView ? <WeekGrid state={state} days={days} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} /> : null}
-      </Paper>
-      {figures.needsRevision > 0 ? (
-        <FootNote note={`${formatHours(figures.entered)} entered · ${formatHours(figures.needsRevision)} excluded until resubmitted.`} />
-      ) : null}
+      </SidePanel>
       {asking ? <RequestChangeDialog cell={asking} onClose={() => setAsking(null)} /> : null}
       <ConfirmDialog open={leaving.open} title={`Discard ${leaving.count} unsaved change${leaving.count === 1 ? '' : 's'}?`}
         body="The hours and notes you typed haven't been submitted and will be lost." confirmLabel="Discard"

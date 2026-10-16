@@ -14,12 +14,15 @@ export function StatusDot({ kind }) {
   )
 }
 
+/** The words StatusWords shows: "Needs revision", or "Pending, Overtime" for an over-40 entry. */
+const statusText = (entry) => [KIND[entryKind(entry)].legend, entry.over_40 ? 'Overtime' : null].filter(Boolean).join(', ')
+
 /** The entry's status as words: "Approved", "Pending" or "Needs revision", with "Overtime" beside it for an over-40 entry.
- * The words wrap rather than truncate in a narrow cell. */
+ * The words wrap rather than truncate in a narrow cell. Spans only, so it can sit inside a button. */
 export function StatusWords({ entry }) {
   const kind = entryKind(entry)
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 0.75, rowGap: 0.25, mt: 0.5 }}>
+    <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 0.75, rowGap: 0.25, mt: 0.5 }}>
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
         <StatusDot kind={kind} />
         <Typography variant="caption" component="span" sx={{ color: (t) => kindText(kind, t), lineHeight: 1.2, fontWeight: 600 }}>
@@ -30,6 +33,18 @@ export function StatusWords({ entry }) {
         <Typography variant="caption" component="span" sx={{ color: 'warning.main', lineHeight: 1.2, fontWeight: 600 }}>Overtime</Typography>
       ) : null}
     </Box>
+  )
+}
+
+/** A saved cell's status line: its StatusWords as a text button that opens Entry details. Its name starts with the words
+ * it shows: "Pending, Overtime, details for Schema Mapping, Thu Oct 15". entryParam ("m1:2026-10-15") marks it as the
+ * place focus returns to when the panel closes. */
+export function StatusLine({ entry, cellLabel, entryParam, onOpen }) {
+  return (
+    <Button size="small" onClick={() => onOpen()} data-entry={entryParam} aria-label={`${statusText(entry)}, details for ${cellLabel}`}
+      sx={{ display: 'flex', width: '100%', minWidth: 44, minHeight: 44, px: 0.5, py: 0, mt: 0.25, '& > span': { mt: 0 } }}>
+      <StatusWords entry={entry} />
+    </Button>
   )
 }
 

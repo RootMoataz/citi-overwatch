@@ -8,9 +8,10 @@ import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
 import TimerButton from '../timer/TimerButton.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
-import { CellStatus, StatusDot } from './EntryStatus.jsx'
+import { StatusDot, StatusLine } from './EntryStatus.jsx'
 import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
+import { entryParam } from './useEntryPanelUrl.js'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import { KIND, KINDS } from './monthText.js'
@@ -64,8 +65,10 @@ const dayTint = (d, today) => (d === today ? { bgcolor: (t) => alpha(t.palette.p
   : isWeekend(d) ? { bgcolor: (t) => alpha(t.palette.text.primary, 0.03) } : null)
 
 /** The week as a table: one row per milestone, one column per shown day, with a daily-total row.
- * state: the useTimesheetWeek result. days: the columns to show. onRequest(cell): a locked cell asks for a change. */
-export default function WeekGrid({ state, days, thisWeek, onRequest }) {
+ * state: the useTimesheetWeek result. days: the columns to show. onRequest(cell): a locked cell asks for a change.
+ * onOpenEntry(milestoneId, date): a saved cell's status line opens Entry details, where its Edited and Overtime chips,
+ * source, manager feedback and Save & resubmit live. */
+export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry }) {
   const { groups, overDays, dayTotal, total } = state
   const today = thisWeek ? nyTodayIso() : null
   return (
@@ -94,7 +97,8 @@ export default function WeekGrid({ state, days, thisWeek, onRequest }) {
           </TableHead>
           <TableBody>
             {groups.map((g) => (
-              <GroupRows key={g.project.id} group={g} days={days} today={today} state={state} thisWeek={thisWeek} onRequest={onRequest} />
+              <GroupRows key={g.project.id} group={g} days={days} today={today} state={state} thisWeek={thisWeek} onRequest={onRequest}
+                onOpenEntry={onOpenEntry} />
             ))}
             <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
               <TableCell component="th" scope="row" sx={STICKY}>Daily total (counted)</TableCell>
@@ -121,7 +125,7 @@ export default function WeekGrid({ state, days, thisWeek, onRequest }) {
   )
 }
 
-function GroupRows({ group, days, today, state, thisWeek, onRequest }) {
+function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry }) {
   const { rowTotal, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, setHours, setNote, closedLabel } = state
   return (
     <>
@@ -159,17 +163,19 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest }) {
                       onRequest={() => onRequest({ milestoneId: r.milestone.id, date: d, hours: locks[k].hours, label })} />
                   ) : <HoursField value={value} label={label} onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
                     error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(d)) || (isDraft(k) && tooLow(value))} />}
+                  {entries[k] ? (
+                    <StatusLine entry={entries[k]} cellLabel={label} entryParam={entryParam(r.milestone.id, d)}
+                      onOpen={() => onOpenEntry(r.milestone.id, d)} />
+                  ) : null}
                   {num(value) > 0 || entries[k] ? (
                     <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'center', mt: 0.25, gap: 0.5 }}>
-                      <NoteButton cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`} note={noteOf(k)} disabled={Boolean(closed)}
+                      <NoteButton cellLabel={label} note={noteOf(k)} disabled={Boolean(closed)}
                         attention={!closed && attention(k)} onChange={(v) => setNote(k, v)} />
                       {!closed && timerNeedsNote(k) ? (
                         <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 600 }}>Add a note</Typography>
                       ) : null}
                     </Stack>
                   ) : null}
-                  <CellStatus entry={entries[k]} cellLabel={`${r.milestone.name}, ${formatDayLabel(d)}`}
-                    resubmitting={isDraft(k)} closed={Boolean(closed)} onResubmit={() => setHours(k, String(entries[k].hours))} />
                 </TableCell>
               )
             })}

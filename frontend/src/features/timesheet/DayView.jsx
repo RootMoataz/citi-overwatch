@@ -6,6 +6,7 @@ import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
 import { CellStatus } from './EntryStatus.jsx'
+import { entryParam } from './useEntryPanelUrl.js'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import { formatDayFull, formatDayLabel, formatHours, nyTodayIso } from '../../lib/format.js'
@@ -13,9 +14,9 @@ import { formatDayFull, formatDayLabel, formatHours, nyTodayIso } from '../../li
 const LIST_SX = { listStyle: 'none', m: 0, p: 0, '& > li + li': { borderTop: 1, borderColor: 'divider' } }
 const COMPLETED = 'Milestone completed — hours logged after it was completed are flagged for review'
 
-/** One milestone on the open day: hours, a work note that is always there, and the saved entry's status.
+/** One milestone on the open day: hours, a work note that is always there, and the saved entry's status with Details.
  * closed: why nothing can be changed (project closed or on hold), or null. A completed milestone stays editable. */
-function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) {
+function DayRow({ state, row, day, closed, showProject, showTimer, onRequest, onOpenEntry }) {
   const { valueOf, noteOf, locks, entries, overDays, attention, isDraft, setHours, setNote } = state
   const k = key(row.milestone.id, day)
   const value = valueOf(k)
@@ -51,6 +52,12 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
           error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(day)) || (isDraft(k) && tooLow(value))} />}
         <CellStatus entry={entries[k]} cellLabel={label} resubmitting={isDraft(k)} closed={Boolean(closed)} inlineReason
           onResubmit={() => setHours(k, String(entries[k].hours))} />
+        {entries[k] ? (
+          <Button size="small" onClick={() => onOpenEntry(row.milestone.id, day)} aria-label={`Details for ${label}`}
+            data-entry-details={entryParam(row.milestone.id, day)} sx={{ display: 'flex', minWidth: 44, minHeight: 44, px: 1, mt: 0.25 }}>
+            Details
+          </Button>
+        ) : null}
       </Box>
       <TextField label="Work note" multiline minRows={2} fullWidth size="small" value={note} disabled={Boolean(closed)}
         onChange={(e) => setNote(k, e.target.value.slice(0, NOTE_MAX))}
@@ -63,8 +70,9 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest }) 
 }
 
 /** One day of the week: a row per milestone to log on, the closed ones tucked behind a button.
- * state: the useTimesheetWeek result. day: the open day. onRequest(cell): a locked cell asks for a change. */
-export default function DayView({ state, day, thisWeek, onRequest }) {
+ * state: the useTimesheetWeek result. day: the open day. onRequest(cell): a locked cell asks for a change.
+ * onOpenEntry(milestoneId, date): a row's Details opens Entry details for its saved entry that day. */
+export default function DayView({ state, day, thisWeek, onRequest, onOpenEntry }) {
   const { groups, dayTotal, overDays, closedLabel, changed, attention, entries } = state
   const [showClosed, setShowClosed] = useState(false)
   // Completed milestones are tucked away with the closed ones, but only a closed or on-hold project locks them.
@@ -86,7 +94,8 @@ export default function DayView({ state, day, thisWeek, onRequest }) {
       {rows.map((r) => {
         const closed = closedLabel(r)
         return <DayRow key={r.milestone.id} state={state} row={r} day={day} closed={closed} showProject={showProject}
-          showTimer={thisWeek && day === nyTodayIso() && !closed && r.milestone.status !== 'completed'} onRequest={onRequest} />
+          showTimer={thisWeek && day === nyTodayIso() && !closed && r.milestone.status !== 'completed'} onRequest={onRequest}
+          onOpenEntry={onOpenEntry} />
       })}
     </Box>
   )

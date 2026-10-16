@@ -122,39 +122,9 @@ describe('TimesheetPage', () => {
     await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WEEK, hours: 7.25 }] }))
   })
 
-  test('cells show the status words, Edited tag and rejection reason', async () => {
-    server.use(weekHandler([
-      entry({ id: 'e1', label: 'Pending (Overtime requested from Eli Employee)', over_40: true }),
-      entry({ id: 'e2', work_date: '2026-10-13', status: 'pending', edited_after_decision: true, label: 'Pending approval' }),
-      entry({ id: 'e3', work_date: '2026-10-14', status: 'rejected', label: 'Rejected', rejection_reason: 'Wrong milestone' }),
-    ]))
-    renderSheet()
-    const table = await screen.findByRole('table')
-    expect(await within(table).findByText('Overtime')).toBeInTheDocument()
-    expect(screen.getByText('Edited')).toBeInTheDocument()
-    const rejected = within(table).getByText('Needs revision')
-    await userEvent.hover(rejected)
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Wrong milestone')
-  })
-
-  test('a rejected cell can be resubmitted with the same hours', async () => {
-    let body = null
-    server.use(weekHandler([entry({ id: 'e3', work_date: '2026-10-14', hours: 6, status: 'rejected', label: 'Rejected',
-      rejection_reason: 'Check with me' })]),
-    http.put(`${API}/time-entries`, async ({ request }) => {
-      body = await request.json()
-      return HttpResponse.json({ week_start: WEEK, rows, entries: [], totals: { logged: 6, approved: 0 },
-        user: { id: users.employee.id, name: 'Eli Employee' } })
-    }))
-    renderSheet()
-    const user = userEvent.setup()
-    const save = await screen.findByRole('button', { name: /^submit/i })
-    expect(save).toBeDisabled()
-    await user.click(await screen.findByRole('button', { name: /resubmit schema mapping, wed oct 14/i }))
-    expect(save).toBeEnabled()
-    await user.click(save)
-    await waitFor(() => expect(body).toEqual({ week: WEEK, entries: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 6 }] }))
-  })
+  // "cells show the status words, Edited tag and rejection reason" and "a rejected cell can be resubmitted with the same
+  // hours" moved to Entry details (entryPanel.test.jsx): Edited, Overtime and the reason are in the panel, and its
+  // Save & resubmit sends the cell's same hours.
 
   test('a supporting row shows a Supporting chip', async () => {
     server.use(http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: WEEK,
@@ -203,7 +173,11 @@ describe('TimesheetPage', () => {
     renderSheet()
     const user = userEvent.setup()
     expect(await screen.findByText('Add a note')).toBeInTheDocument()
-    expect(screen.getByText('Tracked')).toBeInTheDocument()
+    // Where the hours came from is in Entry details now, opened from the cell's status line.
+    await user.click(screen.getByRole('button', { name: 'Pending, details for Schema Mapping, Mon Oct 12' }))
+    expect(within(await screen.findByRole('complementary', { name: 'Entry details' })).getByLabelText('Source')).toHaveValue('Tracked')
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('complementary')).not.toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: 'Add work note, Schema Mapping, Mon Oct 12' }))
     await user.type(await screen.findByLabelText(/what did you work on/i), 'Mapped the address tables')
     await user.click(screen.getByRole('button', { name: 'Done' }))
@@ -213,14 +187,8 @@ describe('TimesheetPage', () => {
       note: 'Mapped the address tables' }] }))
   })
 
-  test('cells say where their hours came from', async () => {
-    server.use(weekHandler([entry({ source: 'manual', tracked_hours: 0 }),
-      entry({ id: 'e2', work_date: '2026-10-13', source: 'mixed', tracked_hours: 3, note: 'Reviewed the mapping' })]))
-    renderSheet()
-    expect(await screen.findByText('Manual')).toBeInTheDocument()
-    expect(screen.getByText('Mixed')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit work note, Schema Mapping, Tue Oct 13' })).toBeInTheDocument()
-  })
+  // "cells say where their hours came from" moved to Entry details (entryPanel.test.jsx): its Source reads Manual, Tracked
+  // or Mixed, and the grid keeps the note button.
 
   test('a save refused for missing proof lists the cells that need a note', async () => {
     server.use(weekHandler(), http.put(`${API}/time-entries`, () => HttpResponse.json({ error: {

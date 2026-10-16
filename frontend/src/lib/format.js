@@ -71,6 +71,9 @@ export const formatDayShort = (iso) =>
 export const formatDayFull = (iso) => `${dayPart(iso, { weekday: 'long' })} ${dayPart(iso, { day: 'numeric' })} `
   + `${dayPart(iso, { month: 'long' })} ${dayPart(iso, { year: 'numeric' })}`
 
+/** "2026-10-14" → "Wed, Oct 14, 2026" */
+export const formatDayLong = (iso) => `${dayPart(iso, { weekday: 'short' })}, ${formatDate(iso)}`
+
 const nyParts = new Intl.DateTimeFormat('en-CA',
   { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' })
 
