@@ -41,11 +41,12 @@ export const isProofNote = (note) => {
 /** "tracked" | "manual" | "mixed" → the chip's label. */
 export const SOURCE_LABEL = { tracked: 'Tracked', manual: 'Manual', mixed: 'Mixed' }
 
-/** Short names for the red flags the server computes (backend app/rules/hour_flags.py); tooltips carry its sentence. */
+/** Short names for the red flags the server computes (backend app/rules/hour_flags.py); tooltips carry its sentence.
+ * One name per flag on every page (spec §4.4). */
 export const FLAG_LABEL = {
-  SAME_HOURS_DAILY: 'Same hours daily',
+  SAME_HOURS_DAILY: 'Repeated hours',
   LONG_DAY: 'Long day',
-  CLOSED_MILESTONE: 'Closed milestone',
+  CLOSED_MILESTONE: 'After completion',
   BACKDATED: 'Backdated',
   OVER_PLAN: 'Over plan',
   NO_ACTIVITY: 'No activity',
@@ -65,6 +66,15 @@ export function trackedShare(items) {
 export function shareText(entries) {
   const share = trackedShare(entries)
   return share ? `Tracked ${share.tracked}% · Manual ${share.manual}%` : null
+}
+
+/** A person-week's source (spec §7.2): 'tracked' at 100% tracked, 'manual' at 0%, 'mixed' in between, by the same
+ * rounded share `shareText` shows; null without hours. */
+export function weekSource(entries) {
+  const share = trackedShare(entries)
+  if (!share) return null
+  if (share.tracked === 100) return 'tracked'
+  return share.tracked === 0 ? 'manual' : 'mixed'
 }
 
 /** Tell the person what a stop did: hours added to the day's cell (not submitted yet), nothing, or why not. */

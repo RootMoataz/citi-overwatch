@@ -7,7 +7,7 @@ import { can } from '../../lib/permissions.js'
 import TimerButton from './TimerButton.jsx'
 import TimerChip from './TimerChip.jsx'
 import {
-  clockOffset, elapsedSeconds, formatElapsed, hoursIfStopped, isProofNote, shareText, trackedShare,
+  FLAG_LABEL, clockOffset, elapsedSeconds, formatElapsed, hoursIfStopped, isProofNote, shareText, trackedShare, weekSource,
 } from './timerClock.js'
 
 const MS = { id: 'm1', name: 'Schema Mapping' }
@@ -65,6 +65,21 @@ describe('timer arithmetic', () => {
     expect(trackedShare([{ hours: 8, tracked_hours: 8 }, { hours: 4, tracked_hours: 0 }])).toEqual({ tracked: 67, manual: 33 })
     expect(shareText([{ hours: 10, tracked_hours: 6.8 }])).toBe('Tracked 68% · Manual 32%')
     expect(shareText([])).toBeNull()
+  })
+
+  test("a person-week's source is Tracked at 100%, Manual at 0% and Mixed in between, by the rounded share (spec §7.2)", () => {
+    expect(weekSource([{ hours: 8, tracked_hours: 8 }, { hours: 4, tracked_hours: 4 }])).toBe('tracked')
+    expect(weekSource([{ hours: 8, tracked_hours: 0 }, { hours: 4 }])).toBe('manual')
+    expect(weekSource([{ hours: 8, tracked_hours: 6 }, { hours: 16, tracked_hours: 16 }])).toBe('mixed')
+    expect(weekSource([{ hours: 1000, tracked_hours: 999 }])).toBe('tracked')   // 99.9% reads 100%, as shareText says
+    expect(weekSource([])).toBeNull()
+  })
+
+  test('the red flags have one name everywhere (spec §4.4)', () => {
+    expect(FLAG_LABEL).toEqual({
+      SAME_HOURS_DAILY: 'Repeated hours', LONG_DAY: 'Long day', CLOSED_MILESTONE: 'After completion', BACKDATED: 'Backdated',
+      OVER_PLAN: 'Over plan', NO_ACTIVITY: 'No activity', NO_PROOF: 'No proof of work',
+    })
   })
 
   test('timers belong to whoever keeps a timesheet, and the public demo admin sees them disabled', () => {

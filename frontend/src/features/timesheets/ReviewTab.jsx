@@ -7,7 +7,8 @@ import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { num } from '../../lib/csv.js'
-import { formatDate, formatHours, mondayOf } from '../../lib/format.js'
+import { formatDate, formatHours } from '../../lib/format.js'
+import { groupByPersonWeek } from '../../lib/personWeeks.js'
 import ApprovalRow from '../approvals/ApprovalRow.jsx'
 import { FLAG_LABEL, SOURCE_LABEL, shareText } from '../timer/timerClock.js'
 
@@ -29,24 +30,6 @@ const CSV_COLUMNS = [
 ]
 
 const flagged = (item) => Boolean(item.flags?.length)
-
-/** "2026-10-14" → "2026-10-12" (its Monday), without timezone shifts. */
-const weekOf = (iso) => {
-  const [y, m, d] = iso.split('-').map(Number)
-  return mondayOf(new Date(y, m - 1, d))
-}
-
-/** Pending entries by person and week, oldest week first, people in the order the server sorted them. */
-function groupByPersonWeek(items) {
-  const groups = new Map()
-  for (const item of items) {
-    const week = weekOf(item.entry.work_date)
-    const key = `${item.user.id}|${week}`
-    if (!groups.has(key)) groups.set(key, { key, user: item.user, week, items: [] })
-    groups.get(key).items.push(item)
-  }
-  return [...groups.values()].sort((a, b) => a.week.localeCompare(b.week))
-}
 
 function PersonWeek({ group }) {
   const titleId = useId()

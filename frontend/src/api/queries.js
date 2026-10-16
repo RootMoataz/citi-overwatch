@@ -164,8 +164,12 @@ export const useSaveWeek = () => useApiMutation((body) => api.put('/time-entries
   { invalidate: [...timeKeys, ['timer']], success: 'Hours saved and sent for approval' })
 export const useApprovals = (filters = {}, enabled = true) =>
   useQuery({ queryKey: ['approvals', filters], enabled, queryFn: () => api.get('/approvals', filters) })
-export const useBreakdown = (entryId, enabled = true) =>
-  useQuery({ queryKey: ['breakdown', entryId], enabled, queryFn: () => api.get(`/time-entries/${entryId}/breakdown`) })
+const breakdownQuery = (entryId, enabled) =>
+  ({ queryKey: ['breakdown', entryId], enabled, queryFn: () => api.get(`/time-entries/${entryId}/breakdown`) })
+export const useBreakdown = (entryId, enabled = true) => useQuery(breakdownQuery(entryId, enabled))
+// Several entries' breakdowns at once (the same cache entries as useBreakdown), one result per id, in order.
+export const useBreakdowns = (entryIds, enabled = true) =>
+  useQueries({ queries: entryIds.map((id) => breakdownQuery(id, enabled)) })
 // expected_hours: the hours the manager saw; the server refuses (409 STALE_ENTRY) if the entry changed since.
 export const useApproveEntry = () => useApiMutation(({ id, expectedHours }) =>
   api.post(`/time-entries/${id}/approve`, { expected_hours: expectedHours }),
@@ -175,14 +179,16 @@ export function approvalsCleared(queryClient) {
   const lists = queryClient.getQueriesData({ queryKey: ['approvals'] }).map(([, data]) => data).filter(Array.isArray)
   return lists.length > 0 && lists.every((list) => list.length === 0)
 }
-export const useRejectEntry = () => useApiMutation(({ id, reason, expectedHours }) =>
+// `success` replaces the toast (a string, or (data, variables) => string) and null silences it.
+export const useRejectEntry = ({ success = 'Hours rejected' } = {}) => useApiMutation(({ id, reason, expectedHours }) =>
   api.post(`/time-entries/${id}/reject`, { reason, expected_hours: expectedHours }),
-  { invalidate: timeKeys, success: 'Hours rejected' })
-// One person's week in one step: every entry with the hours the approver saw; all or nothing on the server.
-export const useApproveWeek = () => useApiMutation((items) => api.post('/approvals/approve-week', {
+  { invalidate: timeKeys, success })
+const weekApproved = (d) => `Approved the week (${d.approved} ${d.approved === 1 ? 'entry' : 'entries'})`
+// One person's week in one step: every entry (approval items) with the hours the approver saw; all or nothing on the
+// server. `success` as for useRejectEntry; its variables are the items sent.
+export const useApproveWeek = ({ success = weekApproved } = {}) => useApiMutation((items) => api.post('/approvals/approve-week', {
   entries: items.map((i) => ({ id: i.entry.id, expected_hours: i.entry.hours })) }),
-{ invalidate: timeKeys, success: (d) => `Approved the week (${d.approved} ${d.approved === 1 ? 'entry' : 'entries'})`,
-  after: (_, __, queryClient) => { if (approvalsCleared(queryClient)) celebrate() } })
+{ invalidate: timeKeys, success, after: (_, __, queryClient) => { if (approvalsCleared(queryClient)) celebrate() } })
 // Approved hours per person-week; range = { from, to } (ISO dates).
 export const useApprovedWeeks = (range, enabled = true) => useQuery({
   queryKey: ['approved-weeks', range], enabled, queryFn: () => api.get('/timesheets/approved', range),

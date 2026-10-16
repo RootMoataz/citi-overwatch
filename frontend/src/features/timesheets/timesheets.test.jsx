@@ -126,7 +126,7 @@ describe('Timesheets: proof of work, tracked share and red flags', () => {
     expect(within(week).getByText('Tracked')).toBeInTheDocument()
     expect(within(week).getByText('“Mapped the address fields”')).toBeInTheDocument()
     expect(within(week).getByText('Progress update: Address mapping is 80% done')).toBeInTheDocument()
-    expect(within(week).getAllByText('⚠ Same hours daily')).toHaveLength(2)
+    expect(within(week).getAllByText('⚠ Repeated hours')).toHaveLength(2)
     await user.hover(within(week).getByText('⚠ Backdated'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Logged 10 days after the day worked')
     const ana_ = screen.getByRole('region', { name: /ana ruiz, week of oct 12, 2026/i })
@@ -160,7 +160,7 @@ describe('Timesheets: proof of work, tracked share and red flags', () => {
     await userEvent.click(screen.getByRole('button', { name: /export csv/i }))
     await waitFor(() => expect(downloads).toHaveLength(1))
     expect(downloads[0].csv).toContain('Source,Tracked hours,Red flags')
-    expect(downloads[0].csv).toContain('Tracked,8,Same hours daily; Backdated')
+    expect(downloads[0].csv).toContain('Tracked,8,Repeated hours; Backdated')
   })
 
   test('approved weeks show how much came from timers', async () => {

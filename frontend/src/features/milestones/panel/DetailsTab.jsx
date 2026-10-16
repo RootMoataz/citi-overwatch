@@ -8,7 +8,6 @@ import EstimateLine from '../../../components/EstimateLine.jsx'
 import PriorityChip from '../../../components/PriorityChip.jsx'
 import StatusChip from '../../../components/StatusChip.jsx'
 import { statusActions } from '../../../lib/milestoneActions.js'
-import MilestonePendingHours from '../../approvals/MilestonePendingHours.jsx'
 import TimerButton from '../../timer/TimerButton.jsx'
 import { useLoggable } from '../../timer/useLoggable.js'
 import KickbackDialog from '../KickbackDialog.jsx'
@@ -23,10 +22,10 @@ const Label = ({ children }) => (
 /**
  * The Details tab: priority and difficulty, the estimate and progress, the open kickback, the viewer's actions
  * (Claim, the status moves, Kick back, the timer), the objective, criteria and skills, the dependencies with their
- * state (the assignees, with who only supports, are the panel's facts above the tabs). `onEdit` is the kickback's "Edit or reassign" (managers). `decides` adds the milestone's
- * pending entries here until the Approvals tab takes them over.
+ * state (the assignees, with who only supports, are the panel's facts above the tabs). `onEdit` is the kickback's
+ * "Edit or reassign" (managers). The milestone's pending entries are the Approvals tab's.
  */
-export default function DetailsTab({ milestone: m, items, project, manage, decides = false, onEdit }) {
+export default function DetailsTab({ milestone: m, items, project, manage, onEdit }) {
   const status = useMilestoneStatus(project.id)
   const claim = useClaimMilestone(project.id)
   const loggable = useLoggable()
@@ -94,7 +93,6 @@ export default function DetailsTab({ milestone: m, items, project, manage, decid
           </Stack>
         ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>None</Typography>}
       </Box>
-      {decides ? <MilestonePendingHours milestone={m} /> : null}
       {kicking ? <KickbackDialog milestone={m} onClose={() => setKicking(false)} /> : null}
     </Stack>
   )

@@ -5,6 +5,7 @@ import Schedule from '@mui/icons-material/ScheduleOutlined'
 import { Box, Button, IconButton, Stack, Tab, Tabs, Tooltip, Typography } from '@mui/material'
 import { Fragment, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
+import { useApprovals } from '../../api/queries.js'
 import AvatarStack from '../../components/AvatarStack.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import SidePanel from '../../components/SidePanel.jsx'
@@ -18,6 +19,7 @@ import MilestoneMenu from './MilestoneMenu.jsx'
 import MilestoneNotes from './MilestoneNotes.jsx'
 import WorkLog from './WorkLog.jsx'
 import { assigneePeople, predecessorNames, stateOf } from './milestoneOrder.js'
+import ApprovalsTab from './panel/ApprovalsTab.jsx'
 import DetailsTab from './panel/DetailsTab.jsx'
 import DiscussionTab from './panel/DiscussionTab.jsx'
 import { panelTabFor, panelTabsFor } from './panel/panelTabs.js'
@@ -67,12 +69,26 @@ function Facts({ milestone: m, items, project, myHours }) {
   )
 }
 
+/** "Approvals" with its count in a badge, as drawn; the tab's accessible name reads "Approvals (7)". */
+function CountLabel({ label, count }) {
+  return (
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+      {label}
+      <Box component="span" sx={{ minWidth: 20, height: 20, px: 0.75, borderRadius: 10, bgcolor: 'primary.main',
+        color: 'primary.contrastText', fontSize: '0.75rem', fontWeight: 700, lineHeight: '20px', textAlign: 'center' }}>
+        {count}
+      </Box>
+    </Box>
+  )
+}
+
 /**
  * The milestone's side panel beside `list` (a full-screen sheet on phones), open while `milestone` is set. Header: the
  * name (H2) and its state, then "Edit" and the "⋯" for managers, and Close. Under it: the description and three facts
  * (dates and dependencies, people, hours with "· You: <N>h" for an assignee). Below the facts come the tabs
- * (Details, Approvals for people who decide hours, Discussion, Work log, History, Notes), the open one named by
- * `panel` (the URL's ?panel=; one the viewer doesn't have, or none, opens Details) and changed with `onPanel`; or
+ * (Details, Approvals with its pending count for people who decide hours, Discussion, Work log, History, Notes), the
+ * open one named by `panel` (the URL's ?panel=; one the viewer doesn't have, or none, opens Details) and changed with
+ * `onPanel`; or
  * `children` when given. Below `lg` the header has less room, so the state chip opens
  * the body instead and Edit is an icon. `onArchiveStart` and `onArchiveFailed` go to the "⋯" (see MilestoneMenu).
  */
@@ -83,6 +99,9 @@ export default function MilestonePanel({ project, milestone, items, members, vie
   const m = milestone
   const tabs = panelTabsFor(view)
   const tab = panelTabFor(view, panel)
+  // The same list the Approvals tab shows (one request, shared); only people who decide hours ever ask for it.
+  const approvals = useApprovals({ milestone: m?.id ?? null }, Boolean(m && view.decides))
+  const pending = view.decides ? approvals.data?.length ?? 0 : 0
   const state = m ? <StatusChip status={stateOf(m)} icon /> : null
   const actions = m && view.manage ? (
     <>
@@ -112,19 +131,21 @@ export default function MilestonePanel({ project, milestone, items, members, vie
                 <>
                   <Tabs value={tab} onChange={(_, value) => onPanel?.(value)} variant="scrollable" allowScrollButtonsMobile
                     aria-label={`Sections of ${m.name}`} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2, minHeight: 44 }}>
-                    {tabs.map((t) => <Tab key={t.value} value={t.value} label={t.label} id={`milestone-tab-${t.value}`}
-                      aria-controls={`milestone-panel-${t.value}`} sx={{ minHeight: 44 }} />)}
+                    {tabs.map((t) => {
+                      const count = t.value === 'approvals' ? pending : 0
+                      return (
+                        <Tab key={t.value} value={t.value} label={count ? <CountLabel label={t.label} count={count} /> : t.label}
+                          aria-label={count ? `${t.label} (${count})` : undefined} id={`milestone-tab-${t.value}`}
+                          aria-controls={`milestone-panel-${t.value}`} sx={{ minHeight: 44 }} />
+                      )
+                    })}
                   </Tabs>
                   <Box role="tabpanel" id={`milestone-panel-${tab}`} aria-labelledby={`milestone-tab-${tab}`} key={`${m.id}-${tab}`}>
                     {tab === 'details' ? (
-                      <DetailsTab milestone={m} items={items} project={project} manage={view.manage} decides={view.decides}
+                      <DetailsTab milestone={m} items={items} project={project} manage={view.manage}
                         onEdit={() => setEditing(true)} />
                     ) : null}
-                    {tab === 'approvals' ? (
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Hours waiting on this milestone are listed under Details for now.
-                      </Typography>
-                    ) : null}
+                    {tab === 'approvals' ? <ApprovalsTab milestone={m} /> : null}
                     {tab === 'discussion' ? <DiscussionTab milestone={m} manage={view.manage} user={user} /> : null}
                     {tab === 'worklog' ? <WorkLog milestone={m} /> : null}
                     {tab === 'history' ? <MilestoneHistory milestone={m} /> : null}
