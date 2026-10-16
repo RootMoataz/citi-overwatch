@@ -241,7 +241,7 @@ def _archived_setup(conn):
 
 
 def test_manager_own_profile_still_lists_archived(client, conn):
-    mgr, _ = _archived_setup(conn)
+    mgr = make_user(conn, role="manager")
     live = make_project(conn, mgr, name="MgrLive", **SPAN)
     shelved = make_project(conn, mgr, name="MgrShelved", archived=True, **SPAN)
     for p in (live, shelved):
@@ -254,6 +254,18 @@ def test_manager_own_profile_still_lists_archived(client, conn):
     # The archived project's row is a read-only record: shown, but not linked.
     assert (rows["MgrOld"]["project"]["is_archived"], rows["MgrOld"]["can_open"]) == (True, False)
     assert {p["name"] for p in body["projects"]} == {"MgrLive", "MgrShelved"}
+
+
+def test_executive_sees_archived_on_an_employee_profile(client, conn):
+    """Executives read everything (like admins), archived work included, but never a salary."""
+    exe = make_user(conn, role="executive")
+    _, emp = _archived_setup(conn)
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, exe))[1]
+    rows = {m["name"]: m for m in body["milestones"]}
+    assert set(rows) == {"Cut", "Old"}
+    assert (rows["Cut"]["is_archived"], rows["Old"]["project"]["is_archived"]) == (True, True)
+    assert {p["name"] for p in body["projects"]} == {"Live", "Shelved"}
+    assert "salary" not in body["user"]
 
 
 def test_admin_sees_archived_on_an_employee_profile(client, conn):

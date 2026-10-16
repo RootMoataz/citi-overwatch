@@ -13,8 +13,8 @@ from app.db import query, query_one
 from app.features.milestones.service import _latest_percent, display_status, open_predecessors
 from app.features.projects.service import visible_projects
 from app.features.skills.lookup import skills_of
-from app.features.users.coming_up import coming_up_for
 from app.features.time.service import _today, _week_logged, week_start
+from app.features.users.coming_up import coming_up_for
 from app.http import ApiError
 from app.rules.overtime import WEEKLY_CAP
 from app.validation import as_date

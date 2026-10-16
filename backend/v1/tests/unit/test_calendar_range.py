@@ -17,7 +17,7 @@ def test_month_starting_on_a_monday_has_no_lead_in():
 
 
 def test_a_month_can_span_six_weeks():
-    month, start, end = service.calendar_range("2026-08")
+    _, start, end = service.calendar_range("2026-08")
     assert (start, end) == (date(2026, 7, 27), date(2026, 9, 6)) and (end - start).days + 1 == 42
 
 
@@ -26,7 +26,7 @@ def test_month_starting_on_a_sunday():
 
 
 def test_a_four_week_month_is_exactly_28_days():
-    month, start, end = service.calendar_range("2027-02")
+    _, start, end = service.calendar_range("2027-02")
     assert (start, end) == (date(2027, 2, 1), date(2027, 2, 28)) and (end - start).days + 1 == 28
 
 

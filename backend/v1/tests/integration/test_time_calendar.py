@@ -1,6 +1,6 @@
 """GET /time-entries/calendar: a month's milestones, entries and timer drafts for the Month view."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 
 from tests.helpers import add_member, log_entry, make_milestone, make_project, make_user, token_for
@@ -241,26 +241,28 @@ def test_no_hourly_rate_in_the_response(client, conn):
 
 
 def stop_timer(conn, user, ms, day, hours):
-    stopped = datetime(2026, 10, 1, 15, tzinfo=timezone.utc)
+    stopped = datetime.combine(day, time(15), tzinfo=timezone.utc)  # stopped on the work date itself
     conn.run("""INSERT INTO time_timers (user_id, milestone_id, work_date, started_at, stopped_at, tracked_hours)
                 VALUES (:u, :m, :d, :s, :e, :h)""", u=user["id"], m=ms["id"], d=day,
              s=stopped - timedelta(hours=float(hours)), e=stopped, h=Decimal(str(hours)))
 
 
 def test_calendar_locks_list_timer_cells_with_their_pending_request(client, conn):
-    _, emp, project, ms = world(conn)
+    _, emp, _, ms = world(conn)
     day, manual_day = date(2026, 10, 6), date(2026, 10, 7)
     log_entry(conn, emp, ms, day, 3, status="pending")
     conn.run("UPDATE time_entries SET tracked_hours = 3 WHERE user_id = :u AND work_date = :d", u=emp["id"], d=day)
     log_entry(conn, emp, ms, manual_day, 2, status="pending")  # typed hours: no lock
-    conn.run("""INSERT INTO time_edit_requests (user_id, milestone_id, project_id, work_date, current_hours,
-                requested_hours, reason) VALUES (:u, :m, :p, :d, 3, 2, 'Left the timer running at lunch')""",
-             u=emp["id"], m=ms["id"], p=project["id"], d=day)
+    made = client.request("POST", "/time-edit-requests", token=token_for(conn, emp), json={
+        "milestone_id": str(ms["id"]), "work_date": str(day), "requested_hours": 2,
+        "reason": "Left the timer running at lunch"})
+    assert made[0] == 201, made[1]
     status, body, _, _ = calendar(client, conn, emp)
     assert status == 200, body
     [lock] = body["locks"]
     assert set(lock) == {"milestone_id", "work_date", "hours", "draft_hours", "tracked_hours", "request"}
-    assert (lock["milestone_id"], lock["work_date"], lock["hours"], lock["draft_hours"], lock["tracked_hours"]) ==         (str(ms["id"]), "2026-10-06", 3.0, 0.0, 3.0)
+    assert (lock["milestone_id"], lock["work_date"], lock["hours"], lock["draft_hours"], lock["tracked_hours"]) == \
+        (str(ms["id"]), "2026-10-06", 3.0, 0.0, 3.0)
     assert lock["request"]["requested_hours"] == 2.0 and lock["request"]["status"] == "pending"
 
 
@@ -268,7 +270,8 @@ def test_calendar_locks_include_unsubmitted_drafts(client, conn):
     _, emp, _, ms = world(conn)
     stop_timer(conn, emp, ms, date(2026, 10, 8), 2)
     [lock] = calendar(client, conn, emp)[1]["locks"]
-    assert (lock["work_date"], lock["hours"], lock["draft_hours"], lock["tracked_hours"], lock["request"]) ==         ("2026-10-08", 2.0, 2.0, 0.0, None)
+    assert (lock["work_date"], lock["hours"], lock["draft_hours"], lock["tracked_hours"], lock["request"]) == \
+        ("2026-10-08", 2.0, 2.0, 0.0, None)
 
 
 def test_calendar_locks_respect_the_manager_project_filter(client, conn):
@@ -280,7 +283,37 @@ def test_calendar_locks_respect_the_manager_project_filter(client, conn):
     stop_timer(conn, emp, ms, date(2026, 10, 6), 1)
     stop_timer(conn, emp, other_ms, date(2026, 10, 6), 2)
     log_entry(conn, emp, other_ms, date(2026, 10, 7), 4, status="pending")
-    conn.run("UPDATE time_entries SET tracked_hours = 4 WHERE user_id = :u AND work_date = :d", u=emp["id"], d=date(2026, 10, 7))
+    conn.run("UPDATE time_entries SET tracked_hours = 4 WHERE user_id = :u AND work_date = :d",
+             u=emp["id"], d=date(2026, 10, 7))
     assert [l["milestone_id"] for l in calendar(client, conn, mgr, emp)[1]["locks"]] == [str(ms["id"])]
     admin = make_user(conn, role="admin", first_name="Ada", last_name="Admin")
     assert len(calendar(client, conn, admin, emp)[1]["locks"]) == 3
+
+
+def test_drafts_follow_the_managers_project_filter(client, conn):
+    mgr, emp, _, ms = world(conn)
+    other_mgr = make_user(conn, role="manager", first_name="Otto", last_name="Other")
+    other_project = make_project(conn, other_mgr, name="Zeus", start=date(2026, 1, 1), end=date(2026, 12, 31))
+    other_ms = make_milestone(conn, other_project, name="Elsewhere", start=date(2026, 10, 5), end=date(2026, 10, 9))
+    assign(conn, other_ms, emp)
+    stop_timer(conn, emp, ms, date(2026, 10, 6), 1)
+    stop_timer(conn, emp, other_ms, date(2026, 10, 7), 2)
+    mine = calendar(client, conn, mgr, emp)[1]
+    assert mine["drafts"] == [{"milestone_id": str(ms["id"]), "work_date": "2026-10-06", "hours": 1.0}]
+    admin = make_user(conn, role="admin", first_name="Ada", last_name="Admin")
+    assert len(calendar(client, conn, admin, emp)[1]["drafts"]) == 2
+
+
+def test_drafts_on_archived_milestones_and_projects_are_left_out(client, conn):
+    mgr, emp, project, ms = world(conn)
+    gone = make_milestone(conn, project, name="Archived one",
+                          start=date(2026, 10, 5), end=date(2026, 10, 9), archived=True)
+    dead = make_project(conn, mgr, name="Dead", archived=True)
+    dead_ms = make_milestone(conn, dead, name="In dead project", start=date(2026, 10, 5), end=date(2026, 10, 9))
+    stop_timer(conn, emp, ms, date(2026, 10, 6), 1)
+    stop_timer(conn, emp, gone, date(2026, 10, 7), 2)
+    stop_timer(conn, emp, dead_ms, date(2026, 10, 8), 3)
+    body = calendar(client, conn, emp)[1]
+    assert body["drafts"] == [{"milestone_id": str(ms["id"]), "work_date": "2026-10-06", "hours": 1.0}]
+    assert [lock["milestone_id"] for lock in body["locks"]] == [str(ms["id"])]
+    assert [m["name"] for m in body["milestones"]] == ["Build"]

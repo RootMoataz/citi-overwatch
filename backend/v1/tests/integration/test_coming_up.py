@@ -123,15 +123,46 @@ def test_someone_elses_profile_has_empty_coming_up(client, conn):
     assert coming(client, conn, mgr, subject=emp) == []
 
 
-def test_owned_started_and_pull_milestones_are_left_out(client, conn):
+def test_a_milestone_that_someone_owns_is_left_out(client, conn):
     mgr, emp, project, sk = world(conn)
     taken = milestone(conn, project, "Taken", sk["Backend"])
-    milestone(conn, project, "Started", sk["Backend"], status="in_progress")
+    milestone(conn, project, "Free", sk["Backend"])
+    assert [i["milestone"]["name"] for i in coming(client, conn, emp)] == ["Taken", "Free"]  # control: both predicted
+    conn.run("INSERT INTO milestone_assignees (milestone_id, user_id, role) VALUES (:m, :u, 'primary')",
+             m=taken["id"], u=mgr["id"])
+    assert [i["milestone"]["name"] for i in coming(client, conn, emp)] == ["Free"]
+
+
+def test_a_milestone_the_person_already_has_is_left_out(client, conn):
+    _, emp, project, sk = world(conn)
     mine = milestone(conn, project, "Mine", sk["Backend"])
-    for m, who, role in ((taken, mgr, "primary"), (mine, emp, "supporting")):
-        conn.run("INSERT INTO milestone_assignees (milestone_id, user_id, role) VALUES (:m, :u, :r)",
-                 m=m["id"], u=who["id"], r=role)
-    assert coming(client, conn, emp) == []
-    conn.run("UPDATE projects SET work_mode = 'pull' WHERE id = :p", p=project["id"])
+    milestone(conn, project, "Other", sk["Backend"])
+    assert {i["milestone"]["name"] for i in coming(client, conn, emp)} == {"Mine", "Other"}  # control
+    conn.run("INSERT INTO milestone_assignees (milestone_id, user_id, role) VALUES (:m, :u, 'supporting')",
+             m=mine["id"], u=emp["id"])
+    assert [i["milestone"]["name"] for i in coming(client, conn, emp)] == ["Other"]
+
+
+def test_a_milestone_that_has_started_is_left_out(client, conn):
+    _, emp, project, sk = world(conn)
+    started = milestone(conn, project, "Started", sk["Backend"])
+    milestone(conn, project, "Waiting", sk["Backend"])
+    assert {i["milestone"]["name"] for i in coming(client, conn, emp)} == {"Started", "Waiting"}  # control
+    conn.run("UPDATE milestones SET status = 'in_progress' WHERE id = :m", m=started["id"])
+    assert [i["milestone"]["name"] for i in coming(client, conn, emp)] == ["Waiting"]
+
+
+def test_a_pull_project_gives_no_predictions_but_the_same_milestone_in_a_push_project_does(client, conn):
+    mgr, emp, project, sk = world(conn)
     milestone(conn, project, "Open", sk["Backend"])
-    assert coming(client, conn, emp) == []
+    assert [i["milestone"]["name"] for i in coming(client, conn, emp)] == ["Open"]  # push: predicted
+    conn.run("UPDATE projects SET work_mode = 'pull' WHERE id = :p", p=project["id"])
+    assert coming(client, conn, emp) == []                                           # pull: the team claims instead
+
+
+def test_an_overdue_milestone_comes_before_a_higher_priority_one(client, conn):
+    _, emp, project, sk = world(conn)
+    milestone(conn, project, "Urgent but fine", sk["Backend"], priority="critical")
+    late = milestone(conn, project, "Late", sk["Backend"], priority="low")
+    conn.run("UPDATE milestones SET end_date = :d WHERE id = :m", d=TODAY - timedelta(days=3), m=late["id"])
+    assert [i["milestone"]["name"] for i in coming(client, conn, emp)] == ["Late", "Urgent but fine"]
