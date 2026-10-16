@@ -15,7 +15,7 @@ The tests are built for **debugging**, not only for a green tick:
 | Frontend (component) | Vitest + React Testing Library + MSW | 1,009 (73 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices + 11 layout checks | The pieces don't fit together in a real browser (real API, real database, real cookies), or the layout breaks where jsdom can't see it: overlapping top-bar controls, crumbs under the search field, a page wider than a phone |
 
-Counts as of 2026-10-16: **1,200 backend** (387 unit, 813 integration, collected; 97% coverage at the last full run) and **1,009 frontend** in 73 files, plus **17 end-to-end** (6 journey runs and 11 layout checks); the frontend and end-to-end suites all pass. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-16: **1,227 backend** (387 unit, 840 integration, collected; 97% coverage at the last full run) and **1,009 frontend** in 73 files, plus **17 end-to-end** (6 journey runs and 11 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)); one other date-dependent check is still open (see [Known issue](#known-issue-deltas-spend-on-some-dates)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -83,12 +83,13 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 
 ## Current results (2026-10-16)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,200 tests (387 unit, 813 integration), 110 more than before the Month view (the backend counts are collected, not re-run in full; the timed runs below are earlier). The timed runs below come from `59d29fe` (the timer workflow) and `323ea89`, which had 1,087 tests; `f6c27bd` (no timer on a completed milestone) then added 3. The plain run was repeated at `3e61cd3` after 8 pm New York time, so it shows the known issue below. The frontend and end-to-end figures are from runs on 16 October, after the redesign's shell (phase 1) and its fix wave: the frontend suite passed five times in a row with no failure.
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The frontend and end-to-end figures are from runs on 16 October, after the redesign's shell (phase 1) and its fix wave: the frontend suite passed five times in a row with no failure.
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
 1087 passed in 182.73s (0:03:02)                  # at 323ea89, before f6c27bd added 3 tests
-1086 passed, 4 failed in 172.21s (0:02:52)        # at 3e61cd3, run after 8 pm New York time: the 4 date-dependent tests
+1086 passed, 4 failed in 172.21s (0:02:52)        # at 3e61cd3, Thursday evening New York = Friday UTC: the 4 weekday-dependent tests
+1227 passed in 209.94s (0:03:29)                  # 16 Oct, 07:53 UTC (a Friday), with the weekday fix
 
 # backend/v1: same, with --cov=app (at 323ea89)
 app\features\time\timers.py                240      9    96%
@@ -119,16 +120,36 @@ The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, plus 11
 - `login.test.jsx` (the demo session running out): it waited 1.5 s of real time; the session timer now runs on a controlled clock.
 Proof: the three files ran 10 times in a row next to a full suite (107/107 each time), and the full suite then passed five times in a row.
 
-### Known issue: date-dependent backend tests
+### Weekday-dependent backend tests (fixed 16 October)
 
-Four backend tests fail when the suite is run after 8 pm New York time and pass at any other time:
+Four backend tests failed whenever the **UTC date was a Friday, Saturday or Sunday**, at any hour, and passed Monday to Thursday:
 
 - `tests/integration/test_smart_insights.py::test_demo_manager_gets_at_least_three_meaningful_insights`
 - `tests/integration/test_smart_insights.py::test_department_filter_narrows_insights_like_the_dashboard`
 - `tests/integration/test_insights.py::test_dashboard_answers_all_seven_questions`
 - `tests/integration/test_curate.py::test_a_second_run_adds_nothing`
 
-From 8 pm in New York (EDT) the UTC date is already the next day, and these tests depend on today's date. The failure is identical at `5b2df05`, so it predates the timesheet work. It is recorded here, not fixed.
+An earlier note here blamed the hour (after 8 pm New York). It was the weekday: 8 pm on a Thursday in New York is already Friday in UTC, which is when they were first seen, and they failed again at 3 am New York on Friday. With Python's clock moved to each day of the week (and nothing else changed) they failed exactly on Friday, Saturday and Sunday UTC. The database session's time zone (UTC, America/New_York or Pacific/Kiritimati) made no difference: the app takes its dates from `datetime.now(timezone.utc)`, not from the database.
+
+What was wrong:
+
+1. **`demo_curate` put its overtime example in this week from Friday on.** Its timesheet step ([`app/curate.py`](../../backend/v1/app/curate.py) `_timesheets`) used this week "when there are days enough". From Friday, Monday to Thursday are in the past, and 4 × 11h fits the 42.5h example. A fresh seed already has Eli at 45h this week, so the dashboard and the smart insights showed a second person over 40h (Gia Rossi). That broke the dashboard test and the demo manager's insights test.
+2. **The examples weren't made once.** A second run stopped only because every person-week the examples could use was already taken. From Friday the overtime example no longer used a slot in last week, so a second run made another overtime week there: 5 entries, an `OVER_40H` alert and an audit row. The same happens on any day when one more person on an in-progress milestone still has last week free.
+3. **The department-filter test's own data.** Its 45h weeks were pending entries from Monday to Friday. From Friday the Monday entry is more than 3 days old, so the Technology view really did have an approval backlog.
+4. **Found by the same runs: the seed on a weekend.** On a Saturday or Sunday the seed put Eli's timer change-request entry (2h) on that day of this week. Eli then had 47h, while his alert said 45h, and the demo manager's insights test failed again.
+
+The fixes:
+
+- `app/curate.py`: the overtime example always goes in last week, the latest complete one. This week only gets hours so far (at most 38h), so nobody curated is over 40h this week. Each example is made once: `_examples_made()` finds the ones an earlier run wrote, and the run skips them. It looks for a week holding the step's notes that is over 40h, the step's wrong-day rejection, and a week last week holding its notes at 32–38h with no rejection.
+- `app/seed.py` `_change_request_slot`: last week's weekend comes before this week's.
+- `test_smart_insights.py`: the department test's overtime weeks are approved, so the only pending entry is the stale one in Operations. The test now also checks that the unfiltered list shows that backlog, so the filter is what removes it.
+- 27 tests added. `test_a_second_run_adds_nothing` runs once for each day of this week (7). `test_each_timesheet_example_is_made_once_even_while_someone_could_take_another` adds a fourth person whose last week is still free (7). `test_the_overtime_example_is_last_weeks_so_nobody_goes_over_40_this_week` (7). `test_elis_week_is_his_9h_a_day_whichever_day_the_seed_runs` pins the seed's clock to each day of the week, the way `conftest.py` pins the reminder clock (7). Before the fix these failed on Friday to Sunday, and the fourth-person test failed on every day.
+
+Proof: the four tests plus the new ones (31 runs) pass on the real clock. They also pass with Python's clock moved to Monday, Friday, Sunday, and 23:30 New York on Thursday, Saturday and Sunday (that is, Friday, Sunday and Monday in UTC). On the same clocks the old code fails the four tests on Friday, Sunday and Thursday 23:30 New York. The scratch plugin used for this is not part of the repo: it swaps `datetime.now()` for a shifted one before the app and test modules import it, and it can't shift PostgreSQL's `now()`.
+
+### Known issue: Delta's spend on some dates
+
+`test_curate.py::test_a_fresh_seed_is_curated_the_same_way` fails on some dates, and `test_budgets_stay_plausible` on others. In a scan of 5 October to 1 November with Python's clock moved, the first failed on 13, 20 and 21 October and the second on 27 October, before the fix above and after it. Delta Compliance Audit is a completed project, and the curation aims to end its spend at 70–85% of its $40,000 budget. Its new plan steps are filled at the people's planned hours (Kira Sato and Leo Martin, 20h a week each), which reaches only $27,500–28,500, so 68.7–71.2%. That amount moves with the dates: the steps are placed relative to today, and each person's weekly day off rotates. On a date where it lands under 70%, the curation warns ("spend ends at 69% of the budget, under 70%") and the tests' `70 <= budget_pct` check fails. This is not fixed: it needs a decision on the demo numbers (Delta's budget or its team's planned hours) or on the 70% floor.
 
 ## Results (2026-10-13, after the final review's fixes; Windows 11, PostgreSQL 17.11, Node 24, Python 3.12)
 

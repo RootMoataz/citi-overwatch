@@ -22,10 +22,11 @@ def by_kind(body):
     return {i["kind"]: i for i in body}
 
 
-def week_of_overtime(conn, user, milestone):
-    """45 hours this week (9h Monday to Friday)."""
+def week_of_overtime(conn, user, milestone, status="pending"):
+    """45 hours this week (9h Monday to Friday). From Friday on, Monday's pending entry is more than 3 days old, so it
+    also counts toward the approval backlog."""
     for offset in range(5):
-        log_entry(conn, user, milestone, MONDAY + timedelta(days=offset), 9, status="pending")
+        log_entry(conn, user, milestone, MONDAY + timedelta(days=offset), 9, status=status)
 
 
 def test_requires_sign_in(client):
@@ -152,14 +153,16 @@ def test_department_filter_narrows_insights_like_the_dashboard(client, conn):
             conn.run(f"UPDATE {table} SET department_id = :d WHERE id = :i", d=dept["id"], i=row["id"])
         add_member(conn, project, person)
         make_milestone(conn, project, name=f"Late {label}", end=TODAY - timedelta(days=2), status="in_progress")
-        week_of_overtime(conn, person, make_milestone(conn, project, status="in_progress"))
+        # Approved, so the only entry waiting for approval is ops' stale one below, on any day of the week.
+        week_of_overtime(conn, person, make_milestone(conn, project, status="in_progress"), status="approved")
         teams[label] = (project, person)
     stale = make_milestone(conn, teams["ops"][0], name="Stale ops", status="in_progress")
     log_entry(conn, teams["ops"][1], stale, TODAY - timedelta(days=10), 4, status="pending")
 
     token = token_for(conn, admin)
-    everything = json.dumps(client.request("GET", "/insights/smart", token=token)[1])
-    assert "Late ops" in everything and "Otto" in everything
+    everything = client.request("GET", "/insights/smart", token=token)[1]
+    assert "Late ops" in json.dumps(everything) and "Otto" in json.dumps(everything)
+    assert "approval_backlog" in by_kind(everything)  # ops' stale entry: the filter below is what drops it
 
     status, body, _, _ = client.request("GET", f"/insights/smart?department={tech['id']}", token=token)
     assert status == 200 and body

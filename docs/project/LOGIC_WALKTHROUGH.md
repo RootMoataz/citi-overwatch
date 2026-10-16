@@ -733,10 +733,13 @@ be filled in on them is a missing estimate). A second run adds nothing.
    week or 8h in a day across all their entries; rate = salary ÷ 2,080, decided by the project's manager in the
    past. The latest days are dropped until spend stays at most 10 points ahead of progress and the forecast under
    90% of the budget; a completed project ends at 70–85% of its budget (Delta).
-7. **Submitted timesheets** for last week and this week (up to yesterday), on active demo projects only: one
-   overtime request just over 40h (with the `OVER_40H` alert the app sends), one entry rejected for the wrong day
-   with its corrected resubmission (and the `ENTRY_REJECTED` alert), one normal 32–38h week, and everyone else's
-   hours so far this week, with short notes. A person's week is left alone once it has pending or rejected hours.
+7. **Submitted timesheets** for last week and this week (up to yesterday), on active demo projects only, with short
+   notes. Last week, the latest complete one, holds the examples: one overtime request just over 40h (with the
+   `OVER_40H` alert the app sends), one entry rejected for the wrong day with its corrected resubmission (and the
+   `ENTRY_REJECTED` alert) and one normal 32–38h week. This week gets only everyone else's hours so far (at most
+   38h), so the result has the same shape on every weekday and the seed's Eli stays this week's one overtime. A
+   person's week is left alone once it has pending or rejected hours, and each example is made once: a run that
+   finds one from an earlier run (by its notes and its wrong-day reason) doesn't make another.
 8. **Estimates** on every demo milestone that has none ([section 24](#24-expected-time-frame)).
 9. One `curate_demo_plan` audit entry per changed project, by System, and a JSON summary per project (`added`,
    `dependencies_added`, `team_added`, `hours_added`, `pending_added`, `rejected_added`, `estimates_set`,

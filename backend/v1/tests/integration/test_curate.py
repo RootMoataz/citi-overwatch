@@ -12,9 +12,12 @@ from app.features.projects.service import project_forecast
 from app.presets import preset_for
 from app.rules.cycles import creates_cycle
 from app.seed import PROJECT_DEPARTMENTS, seed
-from tests.helpers import token_for
+from tests.helpers import add_member, make_user, token_for
 
 TODAY = datetime.now(timezone.utc).date()
+# Every day of this week, for the operator running it on any of them (the old seed's world is the same all week).
+THIS_WEEK = [TODAY - timedelta(days=TODAY.weekday() - n) for n in range(7)]
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 TABLES = ("users", "projects", "project_members", "milestones", "milestone_dependencies", "milestone_assignees",
           "time_entries", "notifications", "audit_log", "departments", "project_requests", "conversations", "messages")
 
@@ -141,16 +144,53 @@ def test_a_test_project_with_a_team_or_milestones_is_left_alone(live):
     assert any("Test project" in w for w in result["warnings"])
 
 
-def test_a_second_run_adds_nothing(live):
-    demo_curate(live, dry_run=False, today=TODAY)
+@pytest.mark.parametrize("today", THIS_WEEK, ids=WEEKDAYS)
+def test_a_second_run_adds_nothing(live, today):
+    demo_curate(live, dry_run=False, today=today)
     before, rows = counts(live), snapshot(live)
-    again = demo_curate(live, dry_run=False, today=TODAY)
+    again = demo_curate(live, dry_run=False, today=today)
     assert (counts(live), snapshot(live)) == (before, rows)
     assert again["archived"] == []
     for name, project in again["projects"].items():
         assert project["added"] == [] and project["team_added"] == [] and project["dependencies_added"] == [], name
         assert project["hours_added"]["entries"] == 0
     assert again["timesheets"]["pending_added"] == again["timesheets"]["rejected_added"] == 0
+
+
+@pytest.mark.parametrize("today", THIS_WEEK, ids=WEEKDAYS)
+def test_each_timesheet_example_is_made_once_even_while_someone_could_take_another(live, today):
+    """One overtime week, one rejected-and-resubmitted week and one normal week: a second run finds them and makes no
+    other, even though a fourth person on Schema Mapping still has last week free."""
+    apollo = query_one(live, "SELECT * FROM projects WHERE name = 'Apollo Data Migration'")
+    mapping = query_one(live, "SELECT * FROM milestones WHERE name = 'Schema Mapping'")
+    fay = make_user(live, first_name="Fay", last_name="Extra")
+    add_member(live, apollo, fay)
+    live.run("INSERT INTO milestone_assignees (milestone_id, user_id) VALUES (:m, :u)", m=mapping["id"], u=fay["id"])
+    first = demo_curate(live, dry_run=False, today=today)
+    assert sorted(s["kind"] for s in first["timesheets"]["scenarios"] if s["kind"] != "this_week") == [
+        "normal_week", "overtime", "rejected_resubmitted"]
+    last_monday = today - timedelta(days=today.weekday() + 7)
+    free = query(live, """SELECT a.user_id FROM milestone_assignees a WHERE a.milestone_id = :m AND NOT EXISTS (
+                              SELECT 1 FROM time_entries t WHERE t.user_id = a.user_id
+                                AND t.status IN ('pending', 'rejected') AND t.work_date BETWEEN :a AND :b)""",
+                 m=mapping["id"], a=last_monday, b=last_monday + timedelta(days=6))
+    assert free  # somebody's last week is still open, so only "made once" stops a second example
+    before, rows = counts(live), snapshot(live)
+    again = demo_curate(live, dry_run=False, today=today)
+    assert (counts(live), snapshot(live)) == (before, rows)
+    assert again["timesheets"]["scenarios"] == [] and again["timesheets"]["pending_added"] == 0
+
+
+@pytest.mark.parametrize("today", THIS_WEEK, ids=WEEKDAYS)
+def test_the_overtime_example_is_last_weeks_so_nobody_goes_over_40_this_week(live, today):
+    """This week only gets the hours so far (the seed's Eli is this week's overtime), whichever day it runs."""
+    result = demo_curate(live, dry_run=False, today=today)
+    monday = today - timedelta(days=today.weekday())
+    overtime = [s["week"] for s in result["timesheets"]["scenarios"] if s["kind"] == "overtime"]
+    assert overtime == [str(monday - timedelta(days=7))]
+    assert query(live, """SELECT user_id FROM time_entries WHERE status IN ('pending', 'approved')
+                          AND work_date BETWEEN :a AND :b GROUP BY user_id HAVING sum(hours) > 40""",
+                 a=monday, b=monday + timedelta(days=6)) == []
 
 
 def test_every_project_gets_its_department_plan_around_what_it_had(live):

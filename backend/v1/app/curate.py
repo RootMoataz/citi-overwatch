@@ -593,6 +593,7 @@ TIMESHEET_NOTES = {
 WRONG_DAY_REASON = "Logged on the wrong day. Please log these hours on {day} instead."
 MOVED_NOTE = "Moved from {day} after review"
 NORMAL_WEEK, OVERTIME_WEEK = Decimal(36), Decimal("42.5")  # a full normal week; just over the 40h line
+NORMAL_RANGE = (Decimal(32), Decimal(38))  # what counts as the normal-week example
 COUNTED = ("pending", "approved")  # what the 40h week and the 24h day count, as in the app
 
 
@@ -606,14 +607,34 @@ def _is_curated_note(note: str) -> bool:
     return any(note in notes for notes in TIMESHEET_NOTES.values()) or note.startswith(MOVED_NOTE.split("{")[0])
 
 
+def _examples_made(existing: list[dict], week_total: dict, last: date) -> set[str]:
+    """The timesheet examples an earlier run already wrote, found by what this step writes: a week holding its notes
+    over 40h (overtime), its wrong-day rejection, and a week last week holding its notes in the normal range with no
+    rejection (the rejected example's week is in that range too)."""
+    curated = {(str(e["user_id"]), _monday(e["work_date"])) for e in existing if _is_curated_note(e["note"] or "")}
+    rejected = {(str(e["user_id"]), _monday(e["work_date"])) for e in existing if e["status"] == "rejected"}
+    wrong_day = WRONG_DAY_REASON.split("{")[0]
+    made = set()
+    if any(week_total.get(k, Decimal(0)) > WEEK_CAP for k in curated):
+        made.add("overtime")
+    if any(e["status"] == "rejected" and (e["rejection_reason"] or "").startswith(wrong_day) for e in existing):
+        made.add("rejected_resubmitted")
+    if any(k[1] == last and k not in rejected and NORMAL_RANGE[0] <= week_total.get(k, Decimal(0)) <= NORMAL_RANGE[1]
+           for k in curated):
+        made.add("normal_week")
+    return made
+
+
 def _timesheets(conn, today: date, warnings: list) -> dict:
     """Pending hours for last week and this week (up to yesterday), so the approval screens have something real
-    to review: one person just over 40h (an overtime request, with the OVER_40H alert the app sends), one entry
-    rejected for the wrong day with its corrected resubmission (and the ENTRY_REJECTED alert), one normal full week,
-    and this week's hours so far for everyone else. Only people assigned to in-progress milestones on active demo
-    projects, from the milestone's start to the project's end, on days they have nothing on that milestone yet.
-    A person's week is left alone once it holds any pending or rejected hours, or anything this step wrote, which
-    also makes a second run add nothing."""
+    to review. Last week, the latest complete one, holds the three examples: one person just over 40h (an overtime
+    request, with the OVER_40H alert the app sends), one entry rejected for the wrong day with its corrected
+    resubmission (and the ENTRY_REJECTED alert), and one normal full week. This week only gets everyone else's hours
+    so far (at most 38h), so nobody curated is over 40h this week, whichever weekday it runs (the seed's Eli is this
+    week's overtime). Only people assigned to in-progress milestones on active demo projects, from the milestone's
+    start to the project's end, on days they have nothing on that milestone yet.
+    A second run adds nothing: a person's week is left alone once it holds any pending or rejected hours, or anything
+    this step wrote, and each example is made once (a run that finds one from an earlier run makes no other)."""
     out = {"pending_added": 0, "rejected_added": 0, "hours": 0.0, "notifications": 0, "scenarios": [],
            "by_project": {}, "by_manager": {}}
     this_week = _monday(today)
@@ -633,7 +654,7 @@ def _timesheets(conn, today: date, warnings: list) -> dict:
                         "in-progress milestone); planned, on-hold and completed projects are closed to logging")
     existing = query(conn, """
         SELECT t.user_id, t.milestone_id, t.work_date, t.hours, t.status::text AS status, t.note,
-               (NOT m.is_archived AND NOT p.is_archived) AS live
+               t.rejection_reason, (NOT m.is_archived AND NOT p.is_archived) AS live
         FROM time_entries t JOIN milestones m ON m.id = t.milestone_id JOIN projects p ON p.id = t.project_id
         WHERE t.work_date >= :a""", a=weeks[0])
     taken = {(str(e["user_id"]), str(e["milestone_id"]), e["work_date"]) for e in existing}
@@ -647,6 +668,8 @@ def _timesheets(conn, today: date, warnings: list) -> dict:
             week_total[(uid, week)] = week_total.get((uid, week), Decimal(0)) + e["hours"]
         if e["status"] in ("pending", "rejected") or _is_curated_note(e["note"] or ""):
             closed_weeks.add((uid, week))
+    last = weeks[0]
+    made = _examples_made(existing, week_total, last)
 
     people: dict[str, list[dict]] = {}
     for w in work:
@@ -699,46 +722,47 @@ def _timesheets(conn, today: date, warnings: list) -> dict:
         for p in pending:
             day_total[(uid, p["day"])] = day_total.get((uid, p["day"]), Decimal(0)) + p["hours"]
 
-    # 1. An overtime request: a week just over 40h (this week when there are days enough, else last week).
-    for week in reversed(weeks):
-        pick = next(((uid, plan) for uid in people if free_week(uid, week)
-                     for plan in [fill(uid, week, OVERTIME_WEEK, Decimal(11))]
-                     if week_after(uid, week, plan) > 40), None)
+    # 1. An overtime request: last week just over 40h. Never this week: from Friday on it has the days for one, so
+    #    the result would depend on the weekday, and a fresh seed would have a second person over 40h next to Eli.
+    if "overtime" not in made:
+        pick = next(((uid, plan) for uid in people if free_week(uid, last)
+                     for plan in [fill(uid, last, OVERTIME_WEEK, Decimal(11))]
+                     if week_after(uid, last, plan) > 40), None)
         if pick:
-            take("overtime", pick[0], week, pick[1], [])
-            break
-    else:
-        warnings.append("timesheets: nobody could have an overtime week within the caps")
-    last = weeks[0]
+            take("overtime", pick[0], last, pick[1], [])
+        else:
+            warnings.append("timesheets: nobody could have an overtime week within the caps")
     # 2. Rejected for the wrong day, then resubmitted on the right day, in last week.
-    for uid in people:
-        if not free_week(uid, last):
-            continue
-        free = slots(uid, last)
-        pair = next(((a, b) for a, b in zip(free, free[1:]) if a[1] is b[1]
-                     and day_total.get((uid, a[0]), Decimal(0)) + 8 <= 10
-                     and day_total.get((uid, b[0]), Decimal(0)) + 8 <= 10), None)
-        if not pair:
-            continue
-        (wrong_day, w), (right_day, _) = pair
-        rejected = [{"day": wrong_day, "work": w, "hours": Decimal(8),
-                     "reason": WRONG_DAY_REASON.format(day=right_day.strftime("%A"))}]
-        moved = {"day": right_day, "work": w, "hours": Decimal(8),
-                 "note": MOVED_NOTE.format(day=wrong_day.strftime("%A"))}
-        rest = fill(uid, last, NORMAL_WEEK - 8, Decimal(9), skip={wrong_day, right_day})
-        take("rejected_resubmitted", uid, last, [moved] + rest, rejected)
-        break
-    else:
-        warnings.append("timesheets: nobody had two free days last week for a rejected-and-resubmitted example")
+    if "rejected_resubmitted" not in made:
+        for uid in people:
+            if not free_week(uid, last):
+                continue
+            free = slots(uid, last)
+            pair = next(((a, b) for a, b in zip(free, free[1:]) if a[1] is b[1]
+                         and day_total.get((uid, a[0]), Decimal(0)) + 8 <= 10
+                         and day_total.get((uid, b[0]), Decimal(0)) + 8 <= 10), None)
+            if not pair:
+                continue
+            (wrong_day, w), (right_day, _) = pair
+            rejected = [{"day": wrong_day, "work": w, "hours": Decimal(8),
+                         "reason": WRONG_DAY_REASON.format(day=right_day.strftime("%A"))}]
+            moved = {"day": right_day, "work": w, "hours": Decimal(8),
+                     "note": MOVED_NOTE.format(day=wrong_day.strftime("%A"))}
+            rest = fill(uid, last, NORMAL_WEEK - 8, Decimal(9), skip={wrong_day, right_day})
+            take("rejected_resubmitted", uid, last, [moved] + rest, rejected)
+            break
+        else:
+            warnings.append("timesheets: nobody had two free days last week for a rejected-and-resubmitted example")
     # 3. A normal full week (32-38h) last week.
-    for uid in people:
-        if free_week(uid, last):
-            plan = fill(uid, last, NORMAL_WEEK, Decimal(9))
-            if Decimal(32) <= week_after(uid, last, plan) <= 38:
-                take("normal_week", uid, last, plan, [])
-                break
-    else:
-        warnings.append("timesheets: nobody could have a normal 32-38h week last week")
+    if "normal_week" not in made:
+        for uid in people:
+            if free_week(uid, last):
+                plan = fill(uid, last, NORMAL_WEEK, Decimal(9))
+                if NORMAL_RANGE[0] <= week_after(uid, last, plan) <= NORMAL_RANGE[1]:
+                    take("normal_week", uid, last, plan, [])
+                    break
+        else:
+            warnings.append("timesheets: nobody could have a normal 32-38h week last week")
     # 4. Everyone else's hours so far this week.
     for uid in people:
         if free_week(uid, weeks[1]):

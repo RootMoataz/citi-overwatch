@@ -1,6 +1,8 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import pytest
+
 from app.db import query, query_one
 from app.rules.at_risk import at_risk_reasons
 from app.rules.cycles import dependency_order
@@ -64,7 +66,7 @@ def test_seed_contains_at_risk_and_overtime(conn):
                               WHERE u.username = 'employee.demo' AND t.work_date BETWEEN :a AND :b""",
                      a=monday, b=monday + timedelta(days=6))
     assert week["total"] > 40
-    # Eli's alert this week (the curated timesheets may add another person's overtime request).
+    # Eli's alert this week (the curated timesheets' overtime request is last week's).
     notes = query(conn, """SELECT n.* FROM notifications n JOIN users r ON r.id = n.recipient_id
                            JOIN users s ON s.id = n.subject_user_id
                            WHERE r.username = 'manager.demo' AND n.type = 'OVER_40H' AND n.read_at IS NULL
@@ -75,6 +77,40 @@ def test_seed_contains_at_risk_and_overtime(conn):
     assert query_one(conn, "SELECT count(*) AS n FROM time_entries WHERE over_40")["n"] >= 1
     rejected = query_one(conn, "SELECT rejection_reason FROM time_entries WHERE status = 'rejected' LIMIT 1")
     assert rejected["rejection_reason"]
+
+
+class _SeedClock:
+    """Stands in for app.seed's `datetime`: now() reads `at`, everything else is the real class."""
+
+    def __init__(self, at: datetime):
+        self.at = at
+
+    def now(self, tz=None):
+        return self.at
+
+    def __getattr__(self, name):
+        return getattr(datetime, name)
+
+
+@pytest.mark.parametrize("weekday", range(7), ids=["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"])
+def test_elis_week_is_his_9h_a_day_whichever_day_the_seed_runs(conn, monkeypatch, weekday):
+    """This week's story: Eli logs 9h Monday to Friday (45h, so Friday crosses 40h and his alert says 45h). Nothing
+    else lands in his week, on a weekend either: the timer change request's small entry goes in last week."""
+    import app.seed as seed_module
+    real = datetime.now(timezone.utc)
+    at = real + timedelta(days=weekday - real.weekday())  # that day of this week, at this time
+    monkeypatch.setattr(seed_module, "datetime", _SeedClock(at))
+    seed(conn)
+    monday = at.date() - timedelta(days=weekday)
+    rows = query(conn, """SELECT t.work_date, t.hours FROM time_entries t JOIN users u ON u.id = t.user_id
+                          WHERE u.username = 'employee.demo' AND t.status IN ('pending', 'approved')
+                            AND t.work_date BETWEEN :a AND :b ORDER BY t.work_date""",
+                 a=monday, b=monday + timedelta(days=6))
+    assert [(r["work_date"], r["hours"]) for r in rows] == [(monday + timedelta(days=n), 9) for n in range(5)]
+    alert = query_one(conn, """SELECT n.payload FROM notifications n JOIN users s ON s.id = n.subject_user_id
+                               WHERE n.type = 'OVER_40H' AND s.username = 'employee.demo' AND n.week_start = :w""",
+                      w=monday)
+    assert alert["payload"]["week_total"] == 45
 
 
 def test_seed_timesheets_and_hr_history(conn):

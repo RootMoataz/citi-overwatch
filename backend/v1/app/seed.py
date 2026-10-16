@@ -497,7 +497,8 @@ CHANGE_REASON = "I forgot to stop the timer when I took a phone call, so it ran 
 def _change_request_slot(conn, person_id):
     """(work item, day) for a small timer-tracked entry of the person: a milestone they're assigned to on an open
     project inside its dates and the milestone's, today or an earlier day of this week or last week (weekdays
-    first), with nothing on it that day and the day staying within 24h. None when nothing fits."""
+    first, and this week's weekend last), with nothing on it that day and the day staying within 24h. None when
+    nothing fits."""
     today = datetime.now(timezone.utc).date()
     this_week = today - timedelta(days=today.weekday())
     work = query(conn, """
@@ -508,11 +509,12 @@ def _change_request_slot(conn, person_id):
           AND NOT p.is_archived
         ORDER BY lower(p.name), lower(m.name)""", u=person_id)
     last_week = this_week - timedelta(days=7)
-    # Latest weekday first (this week up to today, then last week), then a weekend day (Saturday before Sunday).
+    # Latest weekday first (this week up to today, then last week), then a weekend day (Saturday before Sunday):
+    # last week's before this week's, so a seed run on a weekend leaves Eli's 45h week as the seed wrote it.
     days = [d for d in (this_week + timedelta(days=n) for n in reversed(WEEKDAYS)) if d <= today] + \
         [last_week + timedelta(days=n) for n in reversed(WEEKDAYS)] + \
-        [d for d in (this_week + timedelta(days=n) for n in (5, 6)) if d <= today] + \
-        [last_week + timedelta(days=n) for n in (5, 6)]
+        [last_week + timedelta(days=n) for n in (5, 6)] + \
+        [d for d in (this_week + timedelta(days=n) for n in (5, 6)) if d <= today]
     for w in work:
         for d in days:
             if not (max(w["start_date"], w["p_start"]) <= d <= min(w["end_date"], w["p_end"])):
