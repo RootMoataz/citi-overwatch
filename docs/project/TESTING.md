@@ -111,7 +111,8 @@ tests/unit:        399 tests
 tests/integration: 860 tests
 
 # frontend: npx vitest run (two runs in a row, each the same)
- Test Files  101 passed (101)
+ Test Files  102 passed (102)
+      Tests  1564 passed (1564)      # 16 Oct, 102 files, My profile restyle, one full run (150.9 s), lint clean
       Tests  1551 passed (1551)      # phase 3's final fix wave, both runs (137.9 s, 136.7 s)
       Tests  1513 passed (1513)      # phase 3 (Task 11), 98 files, both runs (119.1 s and 121.5 s, then 124.2 s and 122.5 s after a lint fix to one test file)
       Tests  1316 passed (1316)      # phase 2's final fix wave's follow-up, 87 files (109.0 s)

@@ -413,7 +413,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
 
 - **Success:**
   - The changes are saved and the top bar updates.
-  - Username, role, job title and my own salary are shown read-only. Everyone can see their own salary.
+  - **My profile** (`/profile`) has the same look as My history's profile card. On a desktop (900px and up) a profile card (photo, name, job title, "Role · Department" and the **Profile photo** button) sits on the left, with **Your details** (first name, last name, email, **Save**) and **Account** (username, role and job title, read-only) on the right; on a phone they stack in that order.
+  - My own salary sits under a collapsed **Employment details** in the Account card ("Annual salary and other employment details"). It is not on screen until it is opened.
 - **Failure:** an invalid email is flagged on the field, and a duplicate email returns `409`.
 
 ### F2. See someone's history (U)

@@ -257,9 +257,10 @@ async function expectDisabledWithTooltip(button) {
 describe('blocked actions are disabled for the demo admin', () => {
   test('profile: name, email and photo', async () => {
     server.use(http.get(`${API}/me`, () => HttpResponse.json({ ...users.demoAdmin, email: 'demo.admin@acme.example',
-      job_title: 'Public demo administrator', salary: 120000 })))
+      job_title: 'Public demo administrator', salary: 120000 })),
+    http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })))
     renderAsUser(<ProfilePage />, { user: users.demoAdmin, route: '/profile', path: '/profile' })
-    await expectDisabledWithTooltip(await screen.findByRole('button', { name: /change photo/i }))
+    await expectDisabledWithTooltip(await screen.findByRole('button', { name: /^profile photo$/i }))
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
     expect(screen.getByRole('textbox', { name: /email/i })).toBeDisabled()
   })

@@ -162,9 +162,13 @@ describe('ProfilePage', () => {
     let put = null
     server.use(http.get(`${API}/me`, () => HttpResponse.json({ id: 'u-emp', username: 'employee.demo', first_name: 'Eli',
       last_name: 'Employee', email: 'eli@acme.example', role: 'employee', job_title: 'Engineer', salary: 104000 })),
+    http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })),
     http.put(`${API}/me`, async ({ request }) => { put = await request.json(); return HttpResponse.json({ ...put }) }))
     renderAsUser(<ProfilePage />, { user: users.employee, route: '/profile', path: '/profile' })
     const user = userEvent.setup()
+    await screen.findByRole('heading', { name: 'Your details' })
+    expect(screen.queryByText('$104,000')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /employment details/i }))
     expect(await screen.findByText('$104,000')).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /salary/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: /role/i })).not.toBeInTheDocument()
@@ -177,9 +181,10 @@ describe('ProfilePage', () => {
 
   test('the profile page opens the photo dialog', async () => {
     server.use(http.get(`${API}/me`, () => HttpResponse.json({ id: 'u-emp', username: 'employee.demo', first_name: 'Eli',
-      last_name: 'Employee', email: 'eli@acme.example', role: 'employee', job_title: 'Engineer', salary: 104000 })))
+      last_name: 'Employee', email: 'eli@acme.example', role: 'employee', job_title: 'Engineer', salary: 104000 })),
+    http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })))
     renderAsUser(<ProfilePage />, { user: users.employee, route: '/profile', path: '/profile' })
-    await userEvent.click(await screen.findByRole('button', { name: /change photo/i }))
+    await userEvent.click(await screen.findByRole('button', { name: /^profile photo$/i }))
     expect(await screen.findByRole('dialog', { name: /profile photo/i })).toBeInTheDocument()
   })
 })

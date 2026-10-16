@@ -9,7 +9,7 @@ import SkillsCard from './SkillsCard.jsx'
 import YourManagerCard from './YourManagerCard.jsx'
 
 /** Employment details: collapsed on every visit; the salary is only rendered once it is opened. */
-function EmploymentDetails({ salary }) {
+export function EmploymentDetails({ salary }) {
   const [open, setOpen] = useState(false)
   const bodyId = useId()
   return (
