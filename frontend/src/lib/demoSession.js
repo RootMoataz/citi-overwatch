@@ -33,7 +33,7 @@ function writeFlag(key, on) {
 }
 
 /** A flag for this demo session that survives a reload of the tab: [value, set(value)]. */
-function useSessionFlag(name, user) {
+export function useSessionFlag(name, user) {
   const key = `acme-scout:${name}:${user?.session_expires_at ?? user?.id ?? ''}`
   const [flags, setFlags] = useState({})
   const value = flags[key] ?? readFlag(key)
@@ -45,14 +45,11 @@ function useSessionFlag(name, user) {
 export function useDemoNotice(user) {
   const active = isPublicDemo(user)
   const secondsLeft = useSecondsLeft(active ? user.session_expires_at : null)
-  const [hidden, setHidden] = useSessionFlag('demo-banner-hidden', user)
   const [welcomed, setWelcomed] = useSessionFlag('demo-welcomed', user)
   return {
     active,
+    secondsLeft,
     clock: secondsLeft == null ? null : formatClock(secondsLeft),
-    hidden,
-    hide: () => setHidden(true),
-    show: () => setHidden(false),
     welcomeOpen: active && !welcomed,
     closeWelcome: () => setWelcomed(true),
   }

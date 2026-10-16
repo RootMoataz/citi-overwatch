@@ -8,6 +8,7 @@ import DepartmentsPage from '../features/departments/DepartmentsPage.jsx'
 import PeoplePage from '../features/people/PeoplePage.jsx'
 import UserDetailPage from '../features/people/UserDetailPage.jsx'
 import ProfilePage from '../features/profile/ProfilePage.jsx'
+import SkillsPage from '../features/skills/SkillsPage.jsx'
 import ProjectDetailPage from '../features/projects/ProjectDetailPage.jsx'
 import { API, HttpResponse, http, server } from '../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
@@ -41,27 +42,68 @@ afterEach(() => {
   try { sessionStorage.clear() } catch { /* nothing stored */ }
 })
 
-describe('demo banner and welcome', () => {
-  test('a demo admin sees a live countdown banner', () => {
+describe('demo pill and welcome', () => {
+  test('only a public demo session has the pill, and no page banner exists', () => {
+    const { unmount } = renderLayout(users.admin)
+    expect(screen.queryByRole('button', { name: /demo session/i })).not.toBeInTheDocument()
+    unmount()
     renderLayout(demoWithTimeLeft())
-    const banner = screen.getByRole('region', { name: /demo session/i })
-    expect(banner).toHaveTextContent("Demo admin — for demonstration only. You'll be signed out in 4:32.")
-    act(() => { vi.advanceTimersByTime(1000) })
-    expect(banner).toHaveTextContent('signed out in 4:31')
-    act(() => { vi.advanceTimersByTime(4 * 60 * 1000 + 31 * 1000 + 5000) })
-    expect(banner).toHaveTextContent('signed out in 0:00')
+    expect(screen.getByRole('button', { name: /demo session/i })).toBeInTheDocument()
+    expect(screen.queryByText(/for demonstration only/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: /demo session/i })).not.toBeInTheDocument()
   })
 
-  test('the banner can be hidden but the countdown stays in the header', async () => {
-    const user = demoWithTimeLeft()
-    renderLayout(user)
-    act(() => { screen.getByRole('button', { name: /hide demo notice/i }).click() })
-    await vi.waitFor(() => expect(screen.queryByRole('region', { name: /demo session/i })).not.toBeInTheDocument())
-    const chip = screen.getByRole('button', { name: /demo admin: signed out in 4:32/i })
+  test('the pill counts down and its name says the time left in words', () => {
+    renderLayout(demoWithTimeLeft(269))
+    const pill = screen.getByRole('button', { name: /demo session/i })
+    expect(pill).toHaveTextContent('Demo session · 4:29')
+    expect(pill).toHaveAccessibleName('Demo session, signed out in 4 minutes 29 seconds')
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(pill).toHaveTextContent('Demo session · 4:28')
+    expect(pill).toHaveAccessibleName('Demo session, signed out in 4 minutes 28 seconds')
+    act(() => { vi.advanceTimersByTime(5 * 60 * 1000) })
+    expect(pill).toHaveTextContent('Demo session · 0:00')
+  })
+
+  test('the popover explains the demo', async () => {
+    renderLayout(demoWithTimeLeft())
+    act(() => { screen.getByRole('button', { name: /demo session/i }).click() })
+    expect(await screen.findByText("Public demo admin. Some actions are disabled, and you'll be signed out when the "
+      + 'timer ends.')).toBeInTheDocument()
+  })
+
+  test('the pill turns urgent under one minute', () => {
+    renderLayout(demoWithTimeLeft(62))
+    const pill = screen.getByRole('button', { name: /demo session/i })
+    expect(pill).toHaveAttribute('data-urgent', 'false')
     act(() => { vi.advanceTimersByTime(2000) })
-    expect(chip).toHaveAccessibleName(/signed out in 4:30/i)
-    act(() => { chip.click() })
-    expect(screen.getByRole('region', { name: /demo session/i })).toHaveTextContent('4:30')
+    expect(pill).toHaveAttribute('data-urgent', 'true')
+  })
+
+  test('one polite announcement at 1:00, never each second', () => {
+    renderLayout(demoWithTimeLeft(63))
+    const live = screen.getByRole('status')
+    expect(live).toHaveAttribute('aria-live', 'polite')
+    expect(live).toBeEmptyDOMElement()
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(live).toHaveTextContent('1 minute left in the demo session')
+    const changes = []
+    const observer = new MutationObserver((records) => changes.push(...records))
+    observer.observe(live, { childList: true, characterData: true, subtree: true })
+    act(() => { vi.advanceTimersByTime(10_000) })
+    observer.disconnect()
+    expect(changes).toHaveLength(0)
+    expect(live).toHaveTextContent(/^1 minute left in the demo session$/)
+  })
+
+  test('the announcement still comes, once, when a hidden tab wakes up below 1:00', () => {
+    renderLayout(demoWithTimeLeft(120))
+    const live = screen.getByRole('status')
+    expect(live).toBeEmptyDOMElement()
+    // The tab slept: the clock jumped 90 seconds before the next tick.
+    act(() => { vi.setSystemTime(new Date(NOW.getTime() + 90_000)); vi.advanceTimersByTime(1000) })
+    expect(live).toHaveTextContent(/^1 minute left in the demo session$/)
+    expect(screen.getByRole('button', { name: /demo session/i })).toHaveAttribute('data-urgent', 'true')
   })
 
   test('a welcome dialog explains the demo once per session', async () => {
@@ -78,9 +120,8 @@ describe('demo banner and welcome', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  test('everyone else gets no banner and no dialog', () => {
+  test('everyone else gets no dialog', () => {
     renderLayout(users.admin)
-    expect(screen.queryByRole('region', { name: /demo session/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -89,6 +130,16 @@ describe('demo banner and welcome', () => {
     renderLayout(users.demoAdmin)
     await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     const photo = screen.getByRole('menuitem', { name: /profile photo/i })
+    expect(photo).toHaveAttribute('aria-disabled', 'true')
+    expect(photo).toHaveTextContent(DISABLED)
+  })
+
+  test('the profile photo is locked when the menu opens from the sidebar chip too', async () => {
+    sessionStorage.setItem(`acme-scout:demo-welcomed:${users.demoAdmin.id}`, '1')
+    renderLayout(users.demoAdmin)
+    const chip = within(screen.getByTestId('sidebar')).getByRole('button', { name: /, account menu$/ })
+    await userEvent.click(chip)
+    const photo = await screen.findByRole('menuitem', { name: /profile photo/i })
     expect(photo).toHaveAttribute('aria-disabled', 'true')
     expect(photo).toHaveTextContent(DISABLED)
   })
@@ -161,5 +212,47 @@ describe('blocked actions are disabled for the demo admin', () => {
     expect(await screen.findByRole('button', { name: /restore gone project/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /restore lee leaver/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /restore dropped milestone/i })).toBeEnabled()
+  })
+})
+
+describe('Demo access notices', () => {
+  const PAGES = [
+    ['People', PeoplePage, '/people', 'Demo access · Account creation and editing are unavailable in this session.'],
+    ['Departments', DepartmentsPage, '/departments',
+      'Demo access · Adding, renaming and archiving departments is disabled.'],
+    ['Skills', SkillsPage, '/skills', 'Demo access · Adding, renaming and archiving skills is disabled.'],
+    ['Archive', ArchivePage, '/archive', 'Demo access · Only milestone restoration is available in this session.'],
+  ]
+  function stubLists() {
+    server.use(http.get(`${API}/users`, () => HttpResponse.json({ items: [], total: 0 })),
+      http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })),
+      http.get(`${API}/skills`, () => HttpResponse.json({ items: [] })),
+      http.get(`${API}/archive`, () => HttpResponse.json({ items: [] })))
+  }
+
+  test.each(PAGES)('%s shows its notice to the demo admin and nobody else', async (title, Page, route, text) => {
+    stubLists()
+    const { unmount } = renderAsUser(<Page />, { user: users.demoAdmin, route, path: route })
+    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
+    expect(screen.getByText(text)).toBeInTheDocument()
+    unmount()
+    renderAsUser(<Page />, { user: users.admin, route, path: route })
+    expect(await screen.findByRole('heading', { name: title })).toBeInTheDocument()
+    expect(screen.queryByText(/^Demo access/)).not.toBeInTheDocument()
+  })
+
+  test('the Archive notice can be hidden for the session, the others cannot', async () => {
+    stubLists()
+    const { unmount } = renderAsUser(<DepartmentsPage />, { user: users.demoAdmin, route: '/departments', path: '/departments' })
+    expect(await screen.findByText(/^Demo access/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /hide demo access notice/i })).not.toBeInTheDocument()
+    unmount()
+    const first = renderAsUser(<ArchivePage />, { user: users.demoAdmin, route: '/archive', path: '/archive' })
+    await userEvent.click(await screen.findByRole('button', { name: /hide demo access notice/i }))
+    expect(screen.queryByText(/^Demo access/)).not.toBeInTheDocument()
+    first.unmount()
+    renderAsUser(<ArchivePage />, { user: users.demoAdmin, route: '/archive', path: '/archive' })
+    expect(await screen.findByRole('heading', { name: 'Archive' })).toBeInTheDocument()
+    expect(screen.queryByText(/^Demo access/)).not.toBeInTheDocument()
   })
 })

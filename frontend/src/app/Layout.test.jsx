@@ -281,6 +281,17 @@ describe('top bar order', () => {
     expect(names).toEqual(['Search (Ctrl+K)', 'Timer', 'Puppy', 'Notifications', 'Account menu'])
   })
 
+  test('for a demo user the pill sits between Notifications and the account avatar', () => {
+    const user = { ...users.demoAdmin, session_expires_at: new Date(Date.now() + 269_000).toISOString() }
+    sessionStorage.setItem(`acme-scout:demo-welcomed:${user.session_expires_at}`, '1')
+    const extras = <><button>Timer</button><button>Puppy</button><button>Notifications</button></>
+    renderLayout(user, () => {}, { extras })
+    const names = within(screen.getByRole('banner')).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)
+    expect(names).toEqual(['Search (Ctrl+K)', 'Timer', 'Puppy', 'Notifications',
+      expect.stringMatching(/^Demo session, signed out in 4 minutes \d+ seconds$/), 'Account menu'])
+    sessionStorage.clear()
+  })
+
   test('Search is named "Search (Ctrl+K)" and opens the palette', async () => {
     renderAsUser(<Layout user={users.manager} onLogout={() => {}} />, { user: users.manager })
     await userEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }))

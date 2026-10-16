@@ -7,6 +7,7 @@ import { useArchiveSkill, useCreateSkill, useRenameSkill, useRestoreSkill, useSk
 import { useRedirectOnDenied } from '../../app/access.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import { DemoAccessNotice } from '../../app/DemoSession.jsx'
 import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -83,6 +84,7 @@ export default function SkillsPage() {
     <>
       <PageHeader title="Skills"
         subtitle="The skills people can have and milestones can need. Auto-routing matches the two." />
+      <DemoAccessNotice text="Demo access · Adding, renaming and archiving skills is disabled." />
       <Paper variant="outlined" component="form" noValidate onSubmit={add} sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 2, alignItems: { sm: 'flex-start' } }}>
           <TextField label="New skill" value={name} onChange={(e) => setName(e.target.value)}

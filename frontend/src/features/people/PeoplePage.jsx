@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUsers } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
+import { DemoAccessNotice } from '../../app/DemoSession.jsx'
 import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
@@ -66,6 +67,7 @@ export default function PeoplePage() {
             <Button variant="contained" startIcon={<PersonAdd />} onClick={() => setCreating(true)}>New account</Button>
           </DemoLock>
         </>} />
+      <DemoAccessNotice text="Demo access · Account creation and editing are unavailable in this session." />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', md: 'row' }} sx={{ gap: 2, alignItems: { md: 'center' } }}>
           <TextField type="search" label="Search people" value={search} onChange={(e) => setSearch(e.target.value)} sx={{ flex: 2 }}

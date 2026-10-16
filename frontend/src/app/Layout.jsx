@@ -22,7 +22,7 @@ import { useDemoNotice } from '../lib/demoSession.js'
 import { useAccountMenu } from './AccountMenu.jsx'
 import Breadcrumbs from './Breadcrumbs.jsx'
 import { BreadcrumbProvider } from './breadcrumbs.js'
-import { DemoBanner, DemoChip, DemoWelcome } from './DemoSession.jsx'
+import { DemoPill, DemoWelcome } from './DemoSession.jsx'
 import { COLLAPSED_WIDTH, DRAWER_WIDTH, NAV } from './nav.jsx'
 import { SIDEBAR_SHORTCUT, useSidebarCollapsed } from './sidebar.js'
 import { AVATAR_SIZE } from '../lib/avatarLook.js'
@@ -174,7 +174,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
           {topBarExtras}
-          <DemoChip notice={demo} />
+          <DemoPill notice={demo} />
           <IconButton aria-label="Account menu" aria-haspopup="menu" onClick={(e) => openMenu(e)} sx={{ p: 0.5 }}>
             <UserAvatar userId={user?.id} name={fullName(user)} size={AVATAR_SIZE.header} />
           </IconButton>
@@ -206,7 +206,6 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
 
       <Box component="main" key={pageKey(location.pathname)}
         sx={{ flexGrow: 1, minWidth: 0, px: { xs: 2, md: 4 }, pt: { xs: 10, md: 11 }, pb: 6, maxWidth: 1440 }}>
-        <DemoBanner notice={demo} />
         {/* Each page fades and rises in; nothing waits for it, and reduced motion skips it. */}
         <motion.div initial={calm ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.24, ease: EASE }}>

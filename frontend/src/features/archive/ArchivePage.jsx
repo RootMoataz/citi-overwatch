@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useArchive, useRestoreArchived } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import { DemoAccessNotice } from '../../app/DemoSession.jsx'
 import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
@@ -73,6 +74,7 @@ export default function ArchivePage() {
         : everything ? 'Everything archived, in one place. Restoring brings a record back exactly as it was.'
         : 'Archived work from the projects you manage. You can restore milestones; only an admin can restore a project.'}
         actions={<ExportCsvButton name="archive" columns={CSV_COLUMNS} rows={items} />} />
+      <DemoAccessNotice text="Demo access · Only milestone restoration is available in this session." dismissible />
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
         <TextField select label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 220 }}>
           <MenuItem value="">Everything ({all.length})</MenuItem>

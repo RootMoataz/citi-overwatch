@@ -8,6 +8,7 @@ import {
 } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import { DemoAccessNotice } from '../../app/DemoSession.jsx'
 import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import { useRedirectOnDenied } from '../../app/access.js'
@@ -85,6 +86,7 @@ export default function DepartmentsPage() {
     <>
       <PageHeader title="Departments"
         subtitle="Group people and projects by department. The dashboard can then be narrowed to one department." />
+      <DemoAccessNotice text="Demo access · Adding, renaming and archiving departments is disabled." />
       <Paper variant="outlined" component="form" noValidate onSubmit={add} sx={{ p: 2, mb: 2 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 2, alignItems: { sm: 'flex-start' } }}>
           <TextField label="New department" value={name} onChange={(e) => setName(e.target.value)}
