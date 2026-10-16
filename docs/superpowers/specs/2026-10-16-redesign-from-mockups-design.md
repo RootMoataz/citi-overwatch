@@ -242,7 +242,7 @@ The mockup's "Sample data" tag isn't built.
 | Progress | a bar and percent | `progress_pct` | `progress` |
 | Budget used | a bar and percent; the bar is warning-coloured from 80% and error-coloured from 100% (today's `budgetTone`) | `budget_pct` | `budget_used` |
 | Due date | the date. Under it: "N days left", "Due today", or, when not completed, "N days overdue" in the error colour. Nothing extra for a completed project | `predicted_end_date`, `status` | `due` |
-| Risk | an icon and "Past due" or "Budget ahead of progress"; otherwise "—", named "No risk" | `risk` (new) | `risk` |
+| Risk | an icon and the first at-risk reason in words ("Past due", "Budget ahead of progress", "Overdue milestone"); otherwise "—", named "No risk" | `at_risk_reasons` | `risk` (sort key) |
 
 - **Risk tooltips:**
   - Past due: "Ended Oct 12, 2026, 3 days ago, and isn't completed."
