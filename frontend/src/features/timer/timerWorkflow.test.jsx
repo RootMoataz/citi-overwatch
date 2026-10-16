@@ -59,7 +59,7 @@ describe('timesheet: timer drafts are pre-filled, locked and submitted with the 
     expect(screen.getByText('from timer, not submitted yet')).toBeInTheDocument()
     expect(screen.getByTestId('timer-draft-banner')).toHaveTextContent(
       'You have 2.5h of timer time not submitted yet — press Submit to send it.')
-    expect(screen.getByTestId('week-total')).toHaveTextContent('2.5h / 40h') // drafts count toward the live warnings
+    expect(screen.getByTestId('week-total')).toHaveTextContent('2.5h counted of 40h') // drafts count toward the live warnings
     await userEvent.hover(cell)
     expect(await screen.findByRole('tooltip')).toHaveTextContent("Timer hours can't be edited — request a change")
     // Other cells stay editable.

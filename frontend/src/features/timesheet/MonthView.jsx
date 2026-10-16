@@ -6,7 +6,7 @@ import { visuallyHidden } from '@mui/utils'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useCalendarMonth } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
-import { addDays, formatHours, todayIso } from '../../lib/format.js'
+import { addDays, formatHours, nyTodayIso } from '../../lib/format.js'
 import { DayBox, StatusShape } from './MonthDayBox.jsx'
 import MonthDayPanel from './MonthDayPanel.jsx'
 import { KIND, KINDS, KIND_ICON, kindColor, kindText, num, stateKey } from './monthText.js'
@@ -100,7 +100,7 @@ function SkeletonGrid() {
 export default function MonthView({ month, day, onMonthChange, onSelectDay, onOpenDay, onRequest }) {
   const phone = useMediaQuery(PHONE)
   const side = useMediaQuery(SIDE)
-  const [today] = useState(() => todayIso()) // read the clock once, not on every render
+  const [today] = useState(() => nyTodayIso()) // read the clock once, not on every render
   const { data, error, refetch } = useCalendarMonth(month)
   const headingRef = useRef(null)
   const hintId = useId()

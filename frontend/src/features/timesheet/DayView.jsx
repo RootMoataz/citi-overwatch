@@ -1,6 +1,6 @@
 import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import TimerButton from '../timer/TimerButton.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import HoursField from './HoursField.jsx'
@@ -8,7 +8,7 @@ import LockedCell from './LockedCell.jsx'
 import { CellStatus } from './WeekGrid.jsx'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
 import SupportingChip from '../../components/SupportingChip.jsx'
-import { formatDayFull, formatDayLabel, formatHours, todayIso } from '../../lib/format.js'
+import { formatDayFull, formatDayLabel, formatHours, nyTodayIso } from '../../lib/format.js'
 
 const LIST_SX = { listStyle: 'none', m: 0, p: 0, '& > li + li': { borderTop: 1, borderColor: 'divider' } }
 const COMPLETED = 'Milestone completed — hours logged after it was completed are flagged for review'
@@ -80,19 +80,20 @@ export default function DayView({ state, day, thisWeek, onRequest }) {
   const closedRows = groups.flatMap((g) => g.rows.filter((r) => !above(r)))
   const grouped = openGroups.length > 1
   const over = overDays.includes(day)
+  const headingId = useId()
   const list = (rows, showProject) => (
     <Box component="ul" sx={LIST_SX}>
       {rows.map((r) => {
         const closed = closedLabel(r)
         return <DayRow key={r.milestone.id} state={state} row={r} day={day} closed={closed} showProject={showProject}
-          showTimer={thisWeek && day === todayIso() && !closed && r.milestone.status !== 'completed'} onRequest={onRequest} />
+          showTimer={thisWeek && day === nyTodayIso() && !closed && r.milestone.status !== 'completed'} onRequest={onRequest} />
       })}
     </Box>
   )
   return (
-    <Paper variant="outlined">
+    <Paper variant="outlined" component="section" aria-labelledby={headingId}>
       <Stack direction="row" sx={{ p: 2, gap: 2, alignItems: 'baseline', justifyContent: 'space-between', borderBottom: 1, borderColor: 'divider' }}>
-        <Typography variant="h2" component="h2">{formatDayFull(day)}</Typography>
+        <Typography id={headingId} variant="h3" component="h3">{formatDayFull(day)}</Typography>
         <Typography data-testid={`day-total-${day}`} data-over={over} variant="h3" component="p"
           sx={{ color: over ? 'error.main' : 'text.primary' }}>{formatHours(dayTotal(day))}</Typography>
       </Stack>

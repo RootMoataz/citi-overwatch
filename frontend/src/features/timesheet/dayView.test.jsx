@@ -84,7 +84,7 @@ describe('Timesheet day view', () => {
     expect(dayButton('Mon 12 Oct, 3h')).toBeInTheDocument()
     expect(dayButton('Tue 13 Oct, 0h')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d+ Oct, / })).toHaveLength(7)
-    expect(screen.getByTestId('week-total')).toHaveTextContent('9h / 40h')
+    expect(screen.getByTestId('week-total')).toHaveTextContent('9h counted of 40h')
     await user.type(screen.getByLabelText('Build, Wed Oct 14'), '20')
     expect(dayButton('Wed 14 Oct, 26h, over 24h')).toHaveAttribute('data-over', 'true')
     expect(dayButton('Mon 12 Oct, 3h')).toHaveAttribute('data-over', 'false')

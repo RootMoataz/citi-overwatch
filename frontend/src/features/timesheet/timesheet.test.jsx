@@ -1,13 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
-import { beforeEach, describe, expect, test } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import Layout from '../../app/Layout.jsx'
 import NotificationBell from '../../components/NotificationBell.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../../test/render.jsx'
 import TimesheetsPage from '../timesheets/TimesheetsPage.jsx'
 import BreakdownPanel from '../approvals/BreakdownPanel.jsx'
+import { useLoggable } from '../timer/useLoggable.js'
 import TimesheetPage from './TimesheetPage.jsx'
 
 const WEEK = '2026-10-12'
@@ -26,7 +27,7 @@ function weekHandler(entries = [], seen = {}) {
   })
 }
 
-const renderSheet = () => renderAsUser(<TimesheetPage />, { user: users.employee, route: `/timesheet?week=${WEEK}`, path: '/timesheet' })
+const renderSheet = (route = `/timesheet?week=${WEEK}`) => renderAsUser(<TimesheetPage />, { user: users.employee, route, path: '/timesheet' })
 
 describe('TimesheetPage', () => {
   // These tests drive the week grid; the day view has its own in dayView.test.jsx.
@@ -54,11 +55,11 @@ describe('TimesheetPage', () => {
     renderSheet()
     const user = userEvent.setup()
     const tue = await screen.findByLabelText('Schema Mapping, Tue Oct 13')
-    expect(screen.getByTestId('week-total')).toHaveTextContent('8h / 40h')
+    expect(screen.getByTestId('week-total')).toHaveTextContent('8h counted of 40h')
     await user.type(tue, '9')
-    expect(screen.getByTestId('week-total')).toHaveTextContent('17h / 40h')
+    expect(screen.getByTestId('week-total')).toHaveTextContent('17h counted of 40h')
     await user.type(screen.getByLabelText('Build, Wed Oct 14'), '30')
-    expect(screen.getByTestId('week-total')).toHaveTextContent('47h / 40h')
+    expect(screen.getByTestId('week-total')).toHaveTextContent('47h counted of 40h')
     expect(await screen.findByText('More than 24h on Wed Oct 14')).toBeInTheDocument()
     await user.clear(screen.getByLabelText('Build, Wed Oct 14'))
     await user.click(screen.getByRole('button', { name: /^submit/i }))
@@ -422,4 +423,132 @@ describe('NotificationBell', () => {
 test('employee does not see Timesheets in navigation', () => {
   renderWithProviders(<Routes><Route path="*" element={<Layout user={users.employee} />} /></Routes>)
   expect(screen.getByRole('navigation', { name: /main/i })).not.toHaveTextContent('Timesheets')
+})
+
+// The mockup's week: Mon 0.25, Tue 7.75 and Fri 7.75 approved; Thu 4 pending; Wed 8 rejected.
+const mockRows = [{ milestone: { id: 'm1', name: 'Schema Mapping', status: 'in_progress' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true },
+  { milestone: { id: 'm2', name: 'Build', status: 'in_progress' }, project: { id: 'p1', name: 'Apollo', status: 'active' }, open: true }]
+const mockEntries = [
+  entry({ id: 'a', work_date: '2026-10-12', hours: 0.25, status: 'approved' }),
+  entry({ id: 'b', work_date: '2026-10-13', hours: 7.75, status: 'approved' }),
+  entry({ id: 'c', work_date: '2026-10-14', hours: 8, status: 'rejected', rejection_reason: 'Wrong milestone' }),
+  entry({ id: 'd', work_date: '2026-10-15', hours: 4, status: 'pending' }),
+  entry({ id: 'f', work_date: '2026-10-16', hours: 7.75, status: 'approved' }),
+]
+const mockWeek = (entries = mockEntries, seen = []) => http.get(`${API}/time-entries`, ({ request }) => {
+  seen.push(new URL(request.url).searchParams.get('week'))
+  return HttpResponse.json({ week_start: WEEK, user: { id: users.employee.id, name: 'Eli Employee' }, rows: mockRows, entries,
+    totals: { logged: 19.75, approved: 15.75 } })
+})
+const emptyCalendar = () => http.get(`${API}/time-entries/calendar`, ({ request }) => HttpResponse.json({
+  month: new URL(request.url).searchParams.get('month'), range: { start: '2026-09-28', end: '2026-11-01' },
+  user: { id: users.employee.id, name: 'Eli Employee' }, milestones: [], entries: [], drafts: [], locks: [] }))
+function Loggable() { return <p>{useLoggable().size} loggable</p> }
+
+describe('My timesheet header, totals and week bar', () => {
+  beforeEach(() => {
+    localStorage.setItem('overwatch.timesheet.view', 'week')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+  })
+  afterEach(() => {
+    server.events.removeAllListeners()
+    vi.useRealTimers()
+  })
+
+  test('the header has the new subtitle, Submit starts disabled and nothing says saved', async () => {
+    server.use(mockWeek())
+    renderSheet()
+    expect(await screen.findByRole('heading', { level: 1, name: 'My timesheet' })).toBeInTheDocument()
+    expect(screen.getByText('Review your week. Submit with confidence.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
+    expect(screen.queryByText(/saved/i)).not.toBeInTheDocument()
+  })
+
+  test('the Week totals card holds counted, percent, the three figures and the note', async () => {
+    server.use(mockWeek())
+    renderSheet()
+    const card = await screen.findByRole('group', { name: 'Week totals' })
+    expect(await within(card).findByText('19.75h counted of 40h')).toBe(screen.getByTestId('week-total'))
+    expect(within(card).getByText('49%')).toBeInTheDocument()
+    expect(within(card).getByRole('progressbar', { name: 'Counted hours against 40h' })).toHaveAttribute('aria-valuetext', '19.75h of 40h')
+    for (const [hours, word] of [['15.75h', 'Approved'], ['4h', 'Pending'], ['8h', 'Needs revision']]) {
+      expect(within(card).getByText(hours)).toBeInTheDocument()
+      expect(within(card).getByText(word)).toBeInTheDocument()
+    }
+    expect(within(card).getByText(/Rejected hours are excluded from counted totals\./)).toBeInTheDocument()
+  })
+
+  test('typing hours counts them as pending, and past 40h the total warns', async () => {
+    server.use(mockWeek())
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Sat Oct 17'), '2')
+    const card = screen.getByRole('group', { name: 'Week totals' })
+    expect(screen.getByTestId('week-total')).toHaveTextContent('21.75h counted of 40h')
+    expect(within(card).getByText('6h')).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Build, Sun Oct 18'), '20')
+    expect(screen.getByTestId('week-total')).toHaveAttribute('data-over', 'true')
+    expect(screen.getByText(/Hours above 40 are sent to your manager as an overtime request/)).toBeInTheDocument()
+  })
+
+  test('the footnote shows entered and excluded hours only when something is rejected', async () => {
+    server.use(mockWeek())
+    const first = renderSheet()
+    expect(await screen.findByText(/27\.75h entered · 8h excluded until resubmitted\./)).toBeInTheDocument()
+    first.unmount()
+    server.use(mockWeek(mockEntries.filter((x) => x.status !== 'rejected')))
+    renderSheet()
+    await screen.findByLabelText('Build, Sat Oct 17')
+    expect(screen.queryByText(/excluded until resubmitted/)).not.toBeInTheDocument()
+  })
+
+  test('the week bar names the week, moves between weeks and has the view toggle', async () => {
+    server.use(mockWeek())
+    renderSheet()
+    const user = userEvent.setup()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toBeInTheDocument()
+    const toggle = screen.getByRole('group', { name: 'Timesheet view' })
+    expect(within(toggle).getAllByRole('button').map((b) => b.textContent)).toEqual(['Day', 'Week', 'Month'])
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 19 – 25, 2026' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Previous week' }))
+    await user.click(screen.getByRole('button', { name: 'Previous week' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 5 – 11, 2026' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'This week' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toBeInTheDocument()
+  })
+
+  test('Sunday evening in New York is still the week of Oct 12, and Sunday is the open day', async () => {
+    vi.setSystemTime(new Date('2026-10-19T02:00:00Z'))
+    localStorage.setItem('overwatch.timesheet.view', 'day')
+    const seen = []
+    server.use(mockWeek(mockEntries, seen))
+    renderAsUser(<><TimesheetPage /><Loggable /></>, { user: users.employee, route: '/timesheet', path: '/timesheet' })
+    expect(await screen.findByRole('region', { name: 'Sunday 18 October 2026' })).toBeInTheDocument()
+    expect(await screen.findByText('2 loggable')).toBeInTheDocument()
+    expect(new Set(seen)).toEqual(new Set([WEEK]))
+  })
+
+  test("Month's today box is Oct 18 on a Sunday evening in New York", async () => {
+    vi.setSystemTime(new Date('2026-10-19T02:00:00Z'))
+    localStorage.setItem('overwatch.timesheet.view', 'month')
+    server.use(mockWeek(), emptyCalendar())
+    renderSheet('/timesheet')
+    expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
+    const today = await screen.findByRole('button', { name: /^Sun 18 Oct, today/ })
+    expect(today).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('loading the week and switching to Month never asks for another person or for approvals', async () => {
+    const urls = []
+    server.events.on('request:start', ({ request }) => urls.push(new URL(request.url)))
+    server.use(mockWeek(), emptyCalendar())
+    renderSheet()
+    await screen.findByLabelText('Build, Sat Oct 17')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Month' }))
+    await screen.findByRole('heading', { name: 'October 2026' })
+    expect(urls.length).toBeGreaterThan(0)
+    expect(urls.filter((u) => u.searchParams.has('user') || u.pathname.includes('/approvals'))).toEqual([])
+  })
 })
