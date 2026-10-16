@@ -68,9 +68,9 @@ describe('HomePage by role', () => {
     renderAsUser(<HomePage />, { user: users.employee, route: '/' })
     expect(await screen.findByRole('heading', { level: 1, name: /my week/i })).toBeInTheDocument()
     const week = await screen.findByRole('region', { name: /this week/i })
-    expect(within(week).getByText('32h of 40h')).toBeInTheDocument()
+    expect(within(week).getByText('32h logged')).toBeInTheDocument()
     expect(within(week).getByRole('progressbar', { name: /hours logged this week/i })).toHaveAttribute('aria-valuenow', '80')
-    expect(within(week).getByRole('link', { name: /open my timesheet/i })).toHaveAttribute('href', '/timesheet')
+    expect(within(week).getByRole('link', { name: /open my timesheet/i })).toHaveAttribute('href', '/timesheet?week=2026-10-12')
 
     const focus = screen.getByRole('region', { name: 'Your focus' })
     const now = within(focus).getByRole('group', { name: 'Now' })

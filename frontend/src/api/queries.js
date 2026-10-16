@@ -264,6 +264,11 @@ export const useUsers = (filters) => useQuery({
 })
 export const useUser = (id) => useQuery({ queryKey: ['user', id], queryFn: () => api.get(`/users/${id}`) })
 export const useProfile = (id, enabled = true) => useQuery({ queryKey: ['profile', id], enabled, queryFn: () => api.get(`/users/${id}/profile`) })
+// One week's hours for the My week card: only `this_week`, for any past week. Saves invalidate ['profile'], which covers it.
+export const useProfileWeek = (id, week, enabled = true) => useQuery({
+  queryKey: ['profile', id, 'week', week], enabled, placeholderData: keepPreviousData,
+  queryFn: () => api.get(`/users/${id}/profile`, { week, sections: 'this_week' }),
+})
 export const useUsernameCheck = (params, enabled = true) => useQuery({
   queryKey: ['username-check', params], enabled, queryFn: () => api.get('/users/username-availability', params),
   placeholderData: keepPreviousData, refetchInterval: false,
