@@ -31,13 +31,18 @@ export default function SidePanel({ open, title, titleAdornment, actions, onClos
   useLayoutEffect(() => {
     if (open && !wasOpen.current) prior.current = document.activeElement
   }, [open])
+  const restoreFocus = () => {
+    const target = returnFocus?.() ?? prior.current
+    if (target && target !== document.body) target.focus?.()
+  }
+  const restoreRef = useRef(restoreFocus)
   useEffect(() => {
-    if (!open && wasOpen.current) {
-      const target = returnFocus?.() ?? prior.current
-      if (target && target !== document.body) target.focus?.()
-    }
+    restoreRef.current = restoreFocus
+    if (!open && wasOpen.current) restoreFocus()
     wasOpen.current = Boolean(open)
   })
+  // Unmounting while open (the page navigates away) still gives focus back.
+  useEffect(() => () => { if (wasOpen.current) restoreRef.current() }, [])
 
   const header = <PanelHeader id={titleId} title={title} titleAdornment={titleAdornment} actions={actions} onClose={onClose} />
 

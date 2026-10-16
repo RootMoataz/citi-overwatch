@@ -1,3 +1,10 @@
+// Keyboard and click contract (one tab stop per row): rows are NOT focusable. A row's keyboard target is the record's
+// name link or button, which callers put in a cell; Enter on it opens the record. A click anywhere else on the row
+// opens it too (onRowOpen), which only widens the target. A click on an interactive element inside a row (link, button,
+// checkbox, menu item) runs that element's own handler and never also calls onRowOpen.
+//
+// Client sort: values come from `sortValue`; null/undefined always sort last (in both directions), numbers compare as
+// numbers, everything else as text (case-insensitive, numeric-aware). Equal values keep their input order (stable).
 import { useMemo, useState } from 'react'
 import { Box, Skeleton, Table, TableBody, TableCell, TableContainer, TableHead, TablePagination, TableRow, TableSortLabel,
   Tooltip, Typography } from '@mui/material'
@@ -7,6 +14,9 @@ import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { CardList } from './ResponsiveTable.jsx'
 
 const TOTAL_ID = '__total__'
+const INTERACTIVE = 'a,button,input,select,textarea,label,[role="button"],[role="menuitem"],[role="checkbox"],[role="switch"],[role="link"]'
+
+const tintFor = (theme, tone) => (tone === 'warning' ? { bgcolor: alpha(theme.palette.warning.main, 0.1) } : null)
 
 function compare(a, b) {
   if (a == null && b == null) return 0
@@ -21,10 +31,15 @@ function sortRows(rows, columns, sort) {
   const column = columns.find((c) => c.key === sort?.key)
   if (!column?.sortValue) return rows
   const sign = sort.dir === 'desc' ? -1 : 1
-  return [...rows].sort((a, b) => sign * compare(column.sortValue(a), column.sortValue(b)))
+  return [...rows].sort((a, b) => {
+    const x = column.sortValue(a)
+    const y = column.sortValue(b)
+    if (x == null || y == null) return compare(x, y) // missing values last, whichever the direction
+    return sign * compare(x, y)
+  })
 }
 
-function CardLine({ label, value, main }) {
+function CardLine({ label, value, main = false }) {
   if (main) return <Typography component="div" sx={{ fontWeight: 600, mb: 0.5 }}>{value}</Typography>
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', alignItems: 'baseline', py: 0.25 }}>
@@ -64,24 +79,38 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
     const cardRows = totalRow ? [...ordered, { [TOTAL_ID]: true }] : ordered
     const card = (row) => {
       if (row[TOTAL_ID]) {
-        return shown.filter((c) => totalRow[c.key] != null).map((c, i) => (
-          <CardLine key={c.key} label={c.cardLabel ?? c.header} value={totalRow[c.key]} main={i === 0} />))
+        return shown.map((c, i) => {
+          if (i === 0) return <CardLine key={c.key} main value={totalRow[c.key] ?? 'Total'} />
+          return totalRow[c.key] == null ? null
+            : <CardLine key={c.key} label={c.cardLabel ?? c.header} value={totalRow[c.key]} />
+        })
       }
       return renderCard ? renderCard(row) : shown.map((c, i) => (
         <CardLine key={c.key} label={c.cardLabel ?? c.header} value={c.render(row)} main={i === 0} />))
     }
     return (
-      <>
+      <Box aria-busy={loading || undefined}>
         <CardList rows={cardRows} renderCard={card} ariaLabel={ariaLabel} loading={loading}
-          onRowClick={onRowOpen && ((row) => { if (!row[TOTAL_ID]) onRowOpen(row) })}
+          onRowClick={onRowOpen} isRowClickable={(row) => !row[TOTAL_ID]}
+          getRowProps={(row) => {
+            if (row[TOTAL_ID]) return {}
+            const tone = rowTone?.(row)
+            const selected = selectedId != null && selectedId === getRowId(row)
+            return {
+              'data-tone': tone || undefined,
+              'aria-current': selected ? 'true' : undefined,
+              sx: (theme) => ({ ...tintFor(theme, tone),
+                ...(selected ? { outline: '2px solid', outlineColor: theme.palette.primary.main } : null) }),
+            }
+          }}
           getRowId={(row) => (row[TOTAL_ID] ? TOTAL_ID : getRowId(row))} />
         {pager}
-      </>
+      </Box>
     )
   }
 
   return (
-    <Box>
+    <Box aria-busy={loading || undefined}>
       <TableContainer>
         <Table size="small" aria-label={ariaLabel}>
           <TableHead>
@@ -117,10 +146,13 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
                 const tone = rowTone?.(row)
                 const selected = selectedId != null && selectedId === id
                 return (
-                  <TableRow key={id} hover={Boolean(onRowOpen)} onClick={onRowOpen ? () => onRowOpen(row) : undefined}
+                  <TableRow key={id} hover={Boolean(onRowOpen)} onClick={onRowOpen ? (e) => {
+                    const inner = e.target.closest?.(INTERACTIVE)
+                    if (inner && e.currentTarget.contains(inner)) return
+                    onRowOpen(row)
+                  } : undefined}
                     aria-current={selected ? 'true' : undefined} selected={selected}
-                    sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default',
-                      ...(tone === 'warning' ? { bgcolor: alpha(theme.palette.warning.main, 0.1) } : null) })}>
+                    sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default', ...tintFor(theme, tone) })}>
                     {shown.map((c) => <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>)}
                   </TableRow>
                 )

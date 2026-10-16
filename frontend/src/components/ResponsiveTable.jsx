@@ -31,21 +31,25 @@ export default function ResponsiveTable({ rows, columns, renderCard, loading = f
 }
 
 /** The phone layout: one tappable card per row (a plain card when there is no row click). */
-export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, loading = false }) {
+export function CardList({ rows, renderCard, onRowClick, getRowId, ariaLabel, loading = false, isRowClickable, getRowProps }) {
   if (loading) {
     return <Stack sx={{ gap: 1 }}>{[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={88} />)}</Stack>
   }
   return (
     <Stack component="ul" aria-label={ariaLabel} sx={{ gap: 1, listStyle: 'none', p: 0, m: 0 }}>
-      {rows.map((row) => (
-        <li key={getRowId ? getRowId(row) : row.id}>
-          <Card>
-            {onRowClick ? (
-              <CardActionArea onClick={() => onRowClick(row)}><CardContent>{renderCard(row)}</CardContent></CardActionArea>
-            ) : <CardContent>{renderCard(row)}</CardContent>}
-          </Card>
-        </li>
-      ))}
+      {rows.map((row) => {
+        const { sx: cardSx, ...liProps } = getRowProps?.(row) ?? {}
+        const clickable = onRowClick && (isRowClickable ? isRowClickable(row) : true)
+        return (
+          <li key={getRowId ? getRowId(row) : row.id} {...liProps}>
+            <Card sx={cardSx}>
+              {clickable ? (
+                <CardActionArea onClick={() => onRowClick(row)}><CardContent>{renderCard(row)}</CardContent></CardActionArea>
+              ) : <CardContent>{renderCard(row)}</CardContent>}
+            </Card>
+          </li>
+        )
+      })}
     </Stack>
   )
 }

@@ -216,4 +216,93 @@ describe('DataTable', () => {
     expect(within(cards[0]).getByText('Beta')).toBeInTheDocument()
     expect(within(cards[3]).getByText('Total')).toBeInTheDocument()
   })
+  test('a click on a button inside a row runs its own handler, not onRowOpen', async () => {
+    const onRowOpen = vi.fn()
+    const onInner = vi.fn()
+    const cols = [{ key: 'name', header: 'Name', render: (r) => <button onClick={() => onInner(r.id)}>{`Open ${r.name}`}</button> }]
+    renderWithProviders(<DataTable {...base} columns={cols} onRowOpen={onRowOpen} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Open Alpha' }))
+    expect(onInner).toHaveBeenCalledWith(2)
+    expect(onRowOpen).not.toHaveBeenCalled()
+  })
+
+  test('null sort values go last in both directions', async () => {
+    const data = [{ id: 1, name: 'A', n: null }, { id: 2, name: 'B', n: 3 }, { id: 3, name: 'C', n: 1 }]
+    renderWithProviders(<DataTable {...base} rows={data} defaultSort={{ key: 'n', dir: 'asc' }} />)
+    expect(names()).toEqual(['C', 'B', 'A'])
+    await userEvent.click(screen.getByRole('button', { name: /Count/ }))
+    expect(names()).toEqual(['B', 'C', 'A'])
+  })
+
+  test('aria-busy while loading', () => {
+    const { container } = renderWithProviders(<DataTable {...base} loading />)
+    expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument()
+  })
+
+  test('375 px with totalRow and onRowOpen: the Total card is not a button and keeps each label', async () => {
+    setViewport(375)
+    const onRowOpen = vi.fn()
+    renderWithProviders(<DataTable {...base} totalRow={{ name: 'Total', n: 5, grp: 'all' }} onRowOpen={onRowOpen} />)
+    const cards = screen.getAllByRole('listitem')
+    const total = cards[cards.length - 1]
+    expect(within(total).queryByRole('button')).not.toBeInTheDocument()
+    expect(within(total).getByText('Total')).toBeInTheDocument()
+    expect(within(total).getByText('Count:')).toBeInTheDocument()
+    expect(within(total).getByText('Group:')).toBeInTheDocument()
+    expect(within(total).getByText('all')).toBeInTheDocument()
+    await userEvent.click(within(cards[0]).getByRole('button'))
+    expect(onRowOpen).toHaveBeenCalledWith(rows[0])
+  })
+
+  test('375 px: cards carry rowTone and the selected row', () => {
+    setViewport(375)
+    renderWithProviders(<DataTable {...base} selectedId={2} rowTone={(r) => (r.id === 1 ? 'warning' : null)} />)
+    const cards = screen.getAllByRole('listitem')
+    expect(cards[0]).toHaveAttribute('data-tone', 'warning')
+    expect(cards[1]).not.toHaveAttribute('data-tone')
+    expect(cards[1]).toHaveAttribute('aria-current', 'true')
+    expect(cards[0]).not.toHaveAttribute('aria-current')
+  })
+})
+
+describe('SidePanel focus, more', () => {
+  test('375 px: the title has focus after opening', async () => {
+    setViewport(375)
+    renderWithProviders(<PanelHarness />)
+    await userEvent.click(screen.getByRole('button', { name: 'Open it' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'Kickoff' })).toHaveFocus()
+  })
+
+  test('unmounting while open gives focus back', () => {
+    const outside = document.createElement('button')
+    document.body.appendChild(outside)
+    outside.focus()
+    const { unmount } = renderWithProviders(<SidePanel open title="T" onClose={() => {}} list={<p>list</p>}>x</SidePanel>)
+    expect(screen.getByRole('heading', { level: 2, name: 'T' })).toHaveFocus()
+    unmount()
+    expect(outside).toHaveFocus()
+    outside.remove()
+  })
+})
+
+describe('KpiStrip, more', () => {
+  const three = [{ key: 'a', label: 'one', value: '1' }, { key: 'b', label: 'two', value: '2' }, { key: 'c', label: 'three', value: '3' }]
+  test('3 items in 2 phone columns leave no tinted empty cell', () => {
+    setViewport(375)
+    renderWithProviders(<KpiStrip ariaLabel="S" items={three} />)
+    const grid = screen.getByRole('group', { name: 'S' }).firstElementChild
+    expect(grid.children).toHaveLength(3)
+    expect(['', 'transparent', 'rgba(0, 0, 0, 0)']).toContain(getComputedStyle(grid).backgroundColor)
+    expect(getComputedStyle(grid).gap).not.toBe('1px')
+  })
+  test('value-first puts the number before the label', () => {
+    renderWithProviders(<KpiStrip ariaLabel="S" layout="value-first" items={three} />)
+    const cell = screen.getByText('one').parentElement
+    expect(cell.textContent).toBe('1one')
+  })
+  test('loading is announced as busy and shows no values', () => {
+    renderWithProviders(<KpiStrip ariaLabel="S" items={three} loading />)
+    expect(screen.getByRole('group', { name: 'S' })).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByText('one')).not.toBeInTheDocument()
+  })
 })

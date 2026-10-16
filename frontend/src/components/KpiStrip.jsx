@@ -6,7 +6,7 @@ import ErrorAlert from './ErrorAlert.jsx'
 
 const BAR_COLOUR = { ok: 'primary', warning: 'warning', alert: 'error', error: 'error' }
 
-function Item({ item, layout }) {
+function Item({ item, layout, divider }) {
   const toneColour = item.tone ? `${item.tone}.main` : 'text.primary'
   const label = (
     <Typography variant="body2" component="span" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
@@ -42,7 +42,7 @@ function Item({ item, layout }) {
     </>
   )
   const sx = { position: 'relative', display: 'block', width: '100%', height: '100%', textAlign: 'left', p: 2,
-    bgcolor: 'background.paper', minHeight: 44 }
+    bgcolor: 'background.paper', minHeight: 44, ...divider }
   if (item.onClick) {
     return (
       <ButtonBase onClick={item.onClick} aria-label={`${item.value} ${item.label}`}
@@ -67,14 +67,17 @@ export default function KpiStrip({ ariaLabel, items, layout = 'label-first', pho
     )
   }
   const columns = desktop ? Math.max(items.length, 1) : phoneColumns
+  // Dividers are borders on the cells, so a short last row leaves its empty space untinted.
+  const dividerFor = (i) => ({ ...(i % columns ? { borderLeft: 1, borderColor: 'divider' } : null),
+    ...(i >= columns ? { borderTop: 1, borderColor: 'divider' } : null) })
   return (
-    <Paper variant="outlined" role="group" aria-label={ariaLabel} sx={{ overflow: 'hidden' }}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: '1px', bgcolor: 'divider' }}>
+    <Paper variant="outlined" role="group" aria-label={ariaLabel} aria-busy={loading || undefined} sx={{ overflow: 'hidden' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
         {loading
           ? Array.from({ length: Math.max(items.length, columns) }, (_, i) => (
-            <Box key={i} sx={{ p: 2, bgcolor: 'background.paper' }}><Skeleton width="60%" /><Skeleton width="40%" height={36} /></Box>
+            <Box key={i} sx={{ p: 2, bgcolor: 'background.paper', ...dividerFor(i) }}><Skeleton width="60%" /><Skeleton width="40%" height={36} /></Box>
           ))
-          : items.map((item) => <Item key={item.key ?? item.label} item={item} layout={layout} />)}
+          : items.map((item, i) => <Item key={item.key ?? item.label} item={item} layout={layout} divider={dividerFor(i)} />)}
       </Box>
     </Paper>
   )

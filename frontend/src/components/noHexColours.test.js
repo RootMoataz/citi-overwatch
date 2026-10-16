@@ -4,8 +4,8 @@ const own = import.meta.glob(['./SidePanel.jsx', './KpiStrip.jsx', './FilterBar.
   { query: '?raw', import: 'default', eager: true })
 const sources = {
   ...own,
-  ...import.meta.glob('../features/projects/*.jsx', { query: '?raw', import: 'default', eager: true }),
-  ...import.meta.glob('../features/milestones/**/*.jsx', { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob(['../features/projects/*.jsx', '!../features/projects/*.test.*'], { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob(['../features/milestones/**/*.jsx', '!../features/milestones/**/*.test.*'], { query: '?raw', import: 'default', eager: true }),
 }
 
 describe('colours come from the theme', () => {
