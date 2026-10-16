@@ -151,13 +151,14 @@ Sign out, click **Manager**.
    every tab: status, the health chip, the manager and the dates. **Overview** shows Progress, Approved spend,
    Forecast at finish and Delivery, the milestone schedule, **Needs attention** and **Team this week**. Walk the tabs:
    **Milestones**, **Team**, **Budget** and **Hours**.
-7. **Approve from the milestone panel (WRITE, one-shot).** On **Milestones**, select *Build: frontend* (its status
-   shows a "pending" chip) and open the panel's **Approvals** tab. Entries are grouped by person and week; Gia
+7. **Approve from the milestone panel (WRITE, one-shot).** On **Milestones**, select *Build: frontend* (its
+   **Approvals** column shows a "pending" chip, which moves under the status once the panel is open) and open the
+   panel's **Approvals** tab. Entries are grouped by person and week; Gia
    Rossi's week of 5 Oct, the one step 4 left alone, carries **Repeated hours** and **Over plan**. Say: "Milestone
    completion does not approve time entries." Tick the week and press **View budget impact**, then **Approve <N>h**
    (a rejection is **Request changes**, and it needs a reason). One toast reads "Approved <N>h for Gia Rossi".
 8. **Complete and auto-route (WRITE, one-shot).** Back on **Milestones**. *Cutover*
-   (Critical, Hard) has **Nobody assigned** and waits on *Schema Mapping*. On *Schema Mapping* (Ready for review,
+   (Critical, Hard) is **Unassigned** and waits on *Schema Mapping*. On *Schema Mapping* (Ready for review,
    Eli, Ben, Ana), open its **⋯** menu and choose **Complete** (or press **Complete** in the panel's Details). Confetti fires and the toast reads "Completed. Auto-assigned Ben Okafor to
    Cutover". Say: "Cutover needs Backend Development or DevOps. Ben has both, so he matched the most required skills.
    He also fits under his 40-hour plan."
@@ -280,8 +281,8 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,227 backend tests (97% coverage at the last full run), 1,016 frontend component tests, and 23 end-to-end tests
-> (3 journeys on desktop and iPhone, plus layout checks on phones and narrow desktops); the frontend and end-to-end suites all passed on 16 October.
+> Tests: 1,254 backend tests (97% coverage at the last full run), 1,315 frontend component tests, and 23 end-to-end tests
+> (3 journeys on desktop and iPhone, plus layout checks on phones and narrow desktops); all three suites passed on 16 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
 > renamed to ACME Scout after this presentation."
@@ -320,8 +321,8 @@ Nothing is deleted, only archived. The hourly rate (salary ÷ 2,080) is frozen o
 One open kickback per milestone and one running timer per person are enforced by partial unique indexes. HR
 submissions keep a frozen copy of each payroll CSV.
 
-**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (387 unit tests).
-840 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,016 component tests use Vitest
+**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (399 unit tests).
+855 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,315 component tests use Vitest
 and MSW, where an unhandled request fails the test. 23 Playwright tests cover 3 journeys on desktop Chrome and iPhone
 13 and 17 layout checks (the top bar never overlaps from 320 px phones to 1440 px desktops, long names never push a page
 sideways at 375 px); these and

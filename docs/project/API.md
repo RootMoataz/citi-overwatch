@@ -257,7 +257,7 @@ GET /api/v1/projects?page_size=1
  "total": 3}
 ```
 
-`at_risk_reasons` lists any of `OVERDUE_MILESTONE`, `PAST_DUE`, `BUDGET_BURN` and `BLOCKED_MILESTONE` ([rule](LOGIC_WALKTHROUGH.md#6-the-at-risk-rule)).
+`at_risk_reasons` lists any of `OVERDUE_MILESTONE`, `PAST_DUE`, `BUDGET_BURN` and `BLOCKED_MILESTONE` ([rule](LOGIC_WALKTHROUGH.md#6-the-at-risk-rule)). "Today" for `PAST_DUE` and `OVERDUE_MILESTONE` is the New York date, the timesheets' business day.
 
 A missing field:
 ```json

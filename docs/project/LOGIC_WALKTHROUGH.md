@@ -230,12 +230,13 @@ flowchart LR
 ```
 
 - **Code:** [`app/rules/at_risk.py`](../../backend/v1/app/rules/at_risk.py), a pure function of dates and numbers.
+- **"Today" is the New York date**, the business day the timesheets use (`risk_today()` in [`projects/service.py`](../../backend/v1/app/features/projects/service.py), from `ny_date`). A project ending today in New York isn't *Past due* in the New York evening after the UTC date has rolled over, and a milestone ending today isn't overdue yet; both are from New York's midnight. Every caller goes through `decorate`, so the Projects list, the `at_risk=true` filter, its count and the dashboard agree, and they agree with the client's due lines ("Due today").
 - **The inputs** (milestone counts, consumed budget) are gathered in one query by [`app/features/insights/`](../../backend/v1/app/features/insights/) and [`projects/`](../../backend/v1/app/features/projects/).
 - **Completed % is weighted by difficulty** (easy 1, medium 2, hard 3), the same figure as the project's progress.
 - **A project with no milestones** counts as 0% complete, so spending on it can flag burn.
 - **`BLOCKED_MILESTONE`** (a milestone with status `blocked`, see [§9b](#9b-kickbacks-and-escalation)): the dashboard's Risk tiles count these one by one (`blocked_count` per at-risk project) and list them under `milestones.blocked`.
 - **Older pages show each reason as a badge** with [`RiskBadges.jsx`](../../frontend/src/components/RiskBadges.jsx), such as the dashboard.
-- **The Projects list and the project header show risk in words.** `RISK_SHORT` in [`lib/labels.js`](../../frontend/src/lib/labels.js) gives "Past due", "Budget ahead of progress", "Overdue milestone" and "Kicked back"; no reason reads "—" (health chip "On track"). Only the first reason is shown, and hovering it explains it ("Ended Oct 12, 2026, 3 days ago, and isn't completed."; "81% of the budget used against 62% progress: 19 points ahead.").
+- **The Projects list and the project header show risk in words.** `RISK_SHORT` in [`lib/labels.js`](../../frontend/src/lib/labels.js) gives "Past due", "Budget ahead of progress", "Overdue milestone" and "Kicked back"; no reason reads "—" (health chip "On track"). Only the first reason is shown as a word; hovering it lists every reason, one sentence each ("Ended Oct 12, 2026, 3 days ago, and isn't completed."; "81% of the budget used against 62% progress: 19 points ahead."; the other two read their labels). A project that ended today reads "Ended today and isn't completed." rather than "0 days ago".
 - **"First reason" means the most severe, not the array's first.** The order is `PAST_DUE`, `BUDGET_BURN`, `OVERDUE_MILESTONE`, `BLOCKED_MILESTONE`, then none. The Risk column, the health chip and the list's `sort=risk` all use it, so they always agree; the server sorts the same way (`sort_projects` in [`projects/service.py`](../../backend/v1/app/features/projects/service.py)).
 - **Sort order on the Projects list.** `GET /projects` sorts before it pages (`sort`, `dir`), and projects with equal values stay in name order whichever way it sorts. Sorting by risk puts the most severe first; by status it runs planned, active, on hold, completed.
 
@@ -260,7 +261,7 @@ flowchart TD
 - **Code:** `creates_cycle()` and `dependency_order()` in [`app/rules/cycles.py`](../../backend/v1/app/rules/cycles.py). `dependency_order()` is a topological sort that the timeline uses, with ties broken by start date.
 - **Waiting on dependencies** is computed (the view's `blocked: true`, shown as `display_status: "waiting"`, "Waiting on dependencies"). A waiting milestone can't move out of `not_started` ([`app/rules/milestone_status.py`](../../backend/v1/app/rules/milestone_status.py)). Until migration 009 this showed as "Blocked"; *blocked* now means a kickback ([§9b](#9b-kickbacks-and-escalation)).
 - **Example:** with *Discovery → Schema Mapping → Cutover*, making *Discovery* depend on *Cutover* walks Cutover → Schema Mapping → Discovery. That reaches the milestone being edited, so the change is rejected.
-- **UI:** the dependency picker is in [`MilestoneDialog.jsx`](../../frontend/src/features/milestones/MilestoneDialog.jsx), and the charts on the Milestones tab: [`MilestoneStatusBar.jsx`](../../frontend/src/components/MilestoneStatusBar.jsx), one bar of the project's milestones by state headed "<done> of <total> milestones done", and the date bars in [`Timeline.jsx`](../../frontend/src/components/Timeline.jsx), on a month axis with "<Mon D> – <Mon D> · <state>" on every bar, a progress fill, an overdue mark and a "You" tag on your own milestones; clicking a bar (or pressing Enter or Space) sets `?milestone=` and scrolls to that milestone's card, which is highlighted with its details open; waiting and blocked are striped in both charts. On the Budget tab, [`MilestoneCostTable.jsx`](../../frontend/src/features/projects/MilestoneCostTable.jsx) draws each milestone's share of the budget as a bar scaled to the costliest milestone, which fills its bar, so the bars compare milestones while the percent stays the share of the whole budget.
+- **UI:** the dependency picker is in [`MilestoneDialog.jsx`](../../frontend/src/features/milestones/MilestoneDialog.jsx), and the charts on the Milestones tab: [`MilestoneStatusBar.jsx`](../../frontend/src/components/MilestoneStatusBar.jsx), one bar of the project's milestones by state headed "<done> of <total> milestones complete", and the date bars in [`Timeline.jsx`](../../frontend/src/components/Timeline.jsx), on a month axis with "<Mon D> – <Mon D> · <state>" on every bar, a progress fill, an overdue mark and a "You" tag on your own milestones; clicking a bar (or pressing Enter or Space) sets `?milestone=` and opens that milestone's panel beside the timeline; waiting and blocked are striped in both charts. On the Budget tab, [`MilestoneCostTable.jsx`](../../frontend/src/features/projects/MilestoneCostTable.jsx) draws each milestone's share of the budget as a bar scaled to the costliest milestone, which fills its bar, so the bars compare milestones while the percent stays the share of the whole budget.
 
 ## 8. The planned 40-hour cap
 
@@ -300,7 +301,7 @@ flowchart TD
 - **They stay on the reviewed milestone**, in case the manager sends it back.
 - **A manager moving the milestone** isn't routed anywhere unless they're one of its assignees.
 - **Example:** Ada marks *Discovery* ready for review. The in-progress milestones on her projects that she isn't on are *Build* (ended 3 days ago) and *Cutover* (due in 5 days), so she's added to *Build* as support. She sees "You've been added as support on Build (Apollo), due …", and the project's manager sees "Ada Lovelace was auto-routed to support Build".
-- **UI:** the toast after **Ready for review** names the milestone, and a "Supporting" chip ([`SupportingChip.jsx`](../../frontend/src/components/SupportingChip.jsx)) appears next to the person's name on the milestone card and on their timesheet row.
+- **UI:** the toast after **Ready for review** names the milestone, and a "Supporting" chip ([`SupportingChip.jsx`](../../frontend/src/components/SupportingChip.jsx)) appears next to the person's name in the milestone panel's facts and on their timesheet row (the row's avatar tooltip says "Supporting" too).
 
 ### 9a. After "Completed": the next milestone as primary
 
@@ -645,7 +646,8 @@ been archived is refused; the screen shows that thread read-only.
 One-to-one conversations are unique per pair (`pair_key`): starting one again posts into the existing one. A
 milestone's **Discuss** thread is a group with its active assignees, the project's manager and whoever opened it
 (the project's manager or an admin), subject "*Milestone* · *Project*"; opening it again adds anyone assigned since.
-Assignees open it from the milestone card ("Open discussion") once it exists but can't start it.
+Everyone in it reads and writes it in the milestone panel's **Discussion** tab (managers also reach it with "Open
+discussion" in the row's "⋯"); assignees can't start it ("No discussion yet. Your manager can start one.").
 
 Unread counts are messages from others newer than your `last_read_at`; viewing a thread marks it read, and sending
 counts as reading. "Seen" shows under your last message once every other participant's `last_read_at` is at or after

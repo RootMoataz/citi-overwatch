@@ -122,7 +122,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - Each row shows status, manager, milestone progress, budget used, the due date ("75 days left", "Due today", "12 days overdue") and the first risk reason in words: "Past due", "Budget ahead of progress", "Overdue milestone" or "Kicked back" ("—" when there is none). Hovering a reason gives the numbers behind it.
   - Columns sort ascending or descending; **Risk** puts the most severe first.
   - **Export CSV** downloads every project that matches, not just the page.
-  - On phones, rows become cards with a "⋯" menu.
+  - On phones, rows become cards; tapping one opens the project.
   - Clicking a row opens the project.
 - **Failure / empty:**
   - "No projects match", with a **Clear filters** button.
@@ -198,7 +198,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
 - **Success:**
   - Selecting a row opens a panel (a full-screen sheet on phones) with the dates, the dependency, the hours logged against the estimate, and tabs Details, Approvals, Discussion, Work log, History and Notes. The milestone and the tab are in the URL (`?milestone=` and `?panel=`), so a link opens the same view.
   - Details holds the status moves (Start, Ready for review, and Complete for the manager or an admin), kick back, and the timer for the people on it. The row's "⋯" menu has the same moves plus Edit details, Assign people, Dependencies, Open discussion and Archive milestone.
-  - **Approvals** (for the people who decide hours) lists pending entries grouped by person and week, with flags (Repeated hours, Long day, After completion, Backdated, Over plan, No activity, No proof of work). Selecting entries shows "<N> selected · <N>h", **View budget impact**, **Request changes** (a reason is required) and **Approve <N>h**. A week is approved whole, and one toast names who was approved ("Approved 34h for Gia Rossi"). Milestone completion does not approve time entries.
+  - **Approvals** (for the people who decide hours) lists pending entries grouped by person and week, with flags (Repeated hours, Long day, After completion, Backdated, Over plan, No activity, No proof of work). Selecting entries shows "<N> selected · <N>h", **View budget impact**, **Request changes** (a reason is required) and **Approve <N>h**. Approve sends the selected entries as one all-or-nothing request per person-week (a week the server refuses leaves the others approved), and one toast names who was approved ("Approved 34h for Gia Rossi"). Each entry also shows its cues: "Overtime" (its tooltip is "Pending (Overtime requested from …)"), "Edited", and "Changed after HR submission — re-send"; each group shows the person's hours that week ("42.5h this week"). Milestone completion does not approve time entries.
   - Closing the panel returns focus to its row, or to the search field when the row isn't on screen.
 - **Employee variant:** no Approvals tab, and "Your part" and "Your hours" instead of everyone's hours. An `?panel=approvals` link shows Details and requests nothing.
 - **Failure:** a milestone that is no longer there shows "That milestone is no longer available."
@@ -225,8 +225,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
 **As** anyone on the project, **I want** a timeline **so that** I can see what waits on what.
 
 - **Success:**
-  - A bar above the timeline shows the milestones by state, headed "<done> of <total> milestones done".
-  - Horizontal date bars appear in dependency order on a month axis, with a "Today" marker. Every bar reads "<Mon D> – <Mon D> · <state>", shows its progress, marks an overdue milestone and tags your own with "You"; clicking one (or pressing Enter or Space on it) scrolls to that milestone's card below and highlights it, opening its details.
+  - A bar at the top of the Milestones tab shows the milestones by state, headed "<done> of <total> milestones complete".
+  - **Timeline** shows horizontal date bars in dependency order on a month axis, with a "Today" marker. Every bar reads "<Mon D> – <Mon D> · <state>", shows its progress, marks an overdue milestone and tags your own with "You"; clicking one (or pressing Enter or Space on it) opens that milestone's panel beside the timeline.
   - Each milestone lists what it waits on, with a "Waiting on: …" tooltip on its disabled Start button.
 - **Empty:** "No milestones yet", with **Add milestone** for managers.
 
@@ -237,8 +237,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - **Start** moves it from *not started* to *in progress*.
   - **Ready for review** moves it on to *ready for review*.
   - I can't mark it completed. That button only appears for the project's manager or an admin.
-  - Milestones assigned to me are marked "Assigned to you".
-  - **Ready for review** also adds me as support on the most urgent in-progress milestone of my active projects that I'm not already on ([auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review-and-completed)). The toast names it, the bell tells me and that project's manager, and my name shows a "Supporting" chip on its card. If nothing qualifies, or I'm planned past 40 hours, nothing happens.
+  - Milestones assigned to me are marked "You".
+  - **Ready for review** also adds me as support on the most urgent in-progress milestone of my active projects that I'm not already on ([auto-routing](LOGIC_WALKTHROUGH.md#9-auto-routing-after-ready-for-review-and-completed)). The toast names it, the bell tells me and that project's manager, and my name shows a "Supporting" chip in that milestone's panel facts (and "Supporting" in its row's avatar tooltip). If nothing qualifies, or I'm planned past 40 hours, nothing happens.
 - **Failure:**
   - Milestones I'm not assigned to show no status buttons, and the API returns `403` if I try anyway.
   - A blocked milestone's Start button is disabled, and its tooltip names what it's waiting on.
@@ -250,7 +250,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
   - **Complete** marks it done and unblocks the milestones that depend on it.
   - **Send back** returns it to *in progress*.
   - **Reopen** undoes a completion.
-- **Failure:** a transition that isn't allowed returns `INVALID_TRANSITION`, shown on the card.
+- **Failure:** a transition that isn't allowed returns `INVALID_TRANSITION`, shown in the milestone panel.
 
 ### M5. Leave progress notes (U)
 **As** an assignee or the manager, **I want to** add notes to a milestone **so that** progress is recorded where the work is.
@@ -493,7 +493,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### N4. Message the people I work with (U) — Done
 **As** anyone, **I want** one-to-one conversations and a discussion thread per milestone **so that** questions stay next to the work.
-- **Success:** an inbox with unread counts, threads grouped by day, "Seen" receipts, a bell alert per conversation (never the text), and a **Discuss** button on each milestone.
+- **Success:** an inbox with unread counts, threads grouped by day, "Seen" receipts, a bell alert per conversation (never the text), and a discussion per milestone in its panel's **Discussion** tab (managers also reach it with **Open discussion** in the row's "⋯").
 - **Rules:** admins, executives and managers can start a conversation with anyone active; an employee with their own manager, the managers and active delegates of their projects, and other employees.
 - **Failure:** "Employees can message their manager, their project managers and other employees." (`403`); "You're sending messages too fast" after 20 a minute (`429`).
 
