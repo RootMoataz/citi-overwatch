@@ -1032,7 +1032,9 @@ def _load(conn) -> None:
     for username in ("isla.nguyen", "jack.brown", "finn.walsh"):
         member(cobalt, username, 20)
     assign(assessment, "isla.nguyen", "jack.brown")
-    delta = project("Delta Compliance Audit", "manager.demo", "completed", d(-200), d(-30), 40000,
+    # $37,000: the curated history at Kira's and Leo's planned hours costs $27,400-30,000 depending on the date, so
+    # Delta always ends at 74-81% of its budget, inside the curation's 70-85% band for a completed project.
+    delta = project("Delta Compliance Audit", "manager.demo", "completed", d(-200), d(-30), 37000,
                     "Annual controls audit.", completed=True)
     audit = milestone(delta, "Audit Fieldwork", d(-200), d(-30), "completed")
     member(delta, "kira.sato", 20)

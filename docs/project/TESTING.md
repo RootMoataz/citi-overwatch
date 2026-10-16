@@ -15,7 +15,7 @@ The tests are built for **debugging**, not only for a green tick:
 | Frontend (component) | Vitest + React Testing Library + MSW | 1,009 (73 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices + 11 layout checks | The pieces don't fit together in a real browser (real API, real database, real cookies), or the layout breaks where jsdom can't see it: overlapping top-bar controls, crumbs under the search field, a page wider than a phone |
 
-Counts as of 2026-10-16: **1,227 backend** (387 unit, 840 integration, collected; 97% coverage at the last full run) and **1,009 frontend** in 73 files, plus **17 end-to-end** (6 journey runs and 11 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)); one other date-dependent check is still open (see [Known issue](#known-issue-deltas-spend-on-some-dates)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-16: **1,227 backend** (387 unit, 840 integration, collected; 97% coverage at the last full run) and **1,009 frontend** in 73 files, plus **17 end-to-end** (6 journey runs and 11 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)), and so are the two that failed on a few dates because of Delta's demo budget (see [Delta's spend](#deltas-spend-on-some-dates-fixed-16-october)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -90,6 +90,7 @@ Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit,
 1087 passed in 182.73s (0:03:02)                  # at 323ea89, before f6c27bd added 3 tests
 1086 passed, 4 failed in 172.21s (0:02:52)        # at 3e61cd3, Thursday evening New York = Friday UTC: the 4 weekday-dependent tests
 1227 passed in 209.94s (0:03:29)                  # 16 Oct, 07:53 UTC (a Friday), with the weekday fix
+1227 passed in 211.16s (0:03:31)                  # 16 Oct, 08:05 UTC, with Delta's $37,000 budget too
 
 # backend/v1: same, with --cov=app (at 323ea89)
 app\features\time\timers.py                240      9    96%
@@ -147,9 +148,18 @@ The fixes:
 
 Proof: the four tests plus the new ones (31 runs) pass on the real clock. They also pass with Python's clock moved to Monday, Friday, Sunday, and 23:30 New York on Thursday, Saturday and Sunday (that is, Friday, Sunday and Monday in UTC). On the same clocks the old code fails the four tests on Friday, Sunday and Thursday 23:30 New York. The scratch plugin used for this is not part of the repo: it swaps `datetime.now()` for a shifted one before the app and test modules import it, and it can't shift PostgreSQL's `now()`.
 
-### Known issue: Delta's spend on some dates
+### Delta's spend on some dates (fixed 16 October)
 
-`test_curate.py::test_a_fresh_seed_is_curated_the_same_way` fails on some dates, and `test_budgets_stay_plausible` on others. In a scan of 5 October to 1 November with Python's clock moved, the first failed on 13, 20 and 21 October and the second on 27 October, before the fix above and after it. Delta Compliance Audit is a completed project, and the curation aims to end its spend at 70–85% of its $40,000 budget. Its new plan steps are filled at the people's planned hours (Kira Sato and Leo Martin, 20h a week each), which reaches only $27,500–28,500, so 68.7–71.2%. That amount moves with the dates: the steps are placed relative to today, and each person's weekly day off rotates. On a date where it lands under 70%, the curation warns ("spend ends at 69% of the budget, under 70%") and the tests' `70 <= budget_pct` check fails. This is not fixed: it needs a decision on the demo numbers (Delta's budget or its team's planned hours) or on the 70% floor.
+`test_curate.py::test_a_fresh_seed_is_curated_the_same_way` and `test_budgets_stay_plausible` each failed on a few dates. With Python's clock moved, the first failed on 13, 20 and 21 October, and the second on 27 October and 3 and 4 November.
+
+Delta Compliance Audit is a completed project, and the curation aims to end its spend at 70–85% of its budget. Its new plan steps are filled at the people's planned hours (Kira Sato and Leo Martin, 20h a week each). That costs $27,400–30,000, depending on the date: the steps are placed relative to today, and each person's weekly day off rotates. Against the seed's $40,000 budget that was 68.7–74.9%. On a date under 70%, the curation warned ("spend ends at 69% of the budget, under 70%") and the tests' `70 <= budget_pct` check failed.
+
+**Fix:** the seed gives Delta a **$37,000** budget, so its spend ends at 74–81% on every date, in the middle of the band. The tests and the 70–85% rule are unchanged. Proof:
+
+- Both tests ran once a day from 16 October to 30 November with Python's clock moved. Before the change, 41 of 46 dates passed: they failed on 20 and 21 October and 27 October, and 3 and 4 November. After it, all 46 passed.
+- The measured spend on those dates is $27,463–29,976 (74.2–81.0% of $37,000).
+
+The live database keeps its own $40,000. Its Delta steps and hours already exist, so a later `demo_curate` adds no history there.
 
 ## Results (2026-10-13, after the final review's fixes; Windows 11, PostgreSQL 17.11, Node 24, Python 3.12)
 
