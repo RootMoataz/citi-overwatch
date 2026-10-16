@@ -12,7 +12,7 @@ import { useMediaQuery } from 'react-responsive'
 import { useSession } from '../auth/sessionContext.js'
 import { demoTone, useSessionFlag } from '../lib/demoSession.js'
 import { isPublicDemo } from '../lib/permissions.js'
-import { DESKTOP_QUERY } from '../lib/responsive.js'
+import { WIDE_QUERY } from '../lib/responsive.js'
 
 const URGENT_AT = 60
 const POPOVER_TEXT = "Public demo admin. Some actions are disabled, and you'll be signed out when the timer ends."
@@ -23,9 +23,10 @@ function spoken(seconds) {
   return `${plural(Math.floor(s / 60), 'minute')} ${plural(s % 60, 'second')}`
 }
 
-/** The countdown pill; `notice` comes from useDemoNotice(user). Below md it shows the timer icon and m:ss only. */
+/** The countdown pill; `notice` comes from useDemoNotice(user). Below lg (phones, and a desktop with the sidebar open,
+ * where the bar is short of room) it shows the timer icon and m:ss only, and its name then starts with that m:ss. */
 export function DemoPill({ notice }) {
-  const desktop = useMediaQuery(DESKTOP_QUERY)
+  const wide = useMediaQuery(WIDE_QUERY)
   const [anchor, setAnchor] = useState(null)
   const [announcement, setAnnouncement] = useState('')
   // The name a screen reader got when the pill took focus; it holds still until focus leaves, so the time isn't
@@ -49,9 +50,13 @@ export function DemoPill({ notice }) {
     return () => clearTimeout(timer)
   }, [announcement])
   if (!notice.active) return null
-  const name = left == null ? 'Demo session' : `Demo session, signed out in ${spoken(left)}`
+  // The name holds what the pill shows (label in name, for speech control): "Demo session…" on the full pill, the m:ss
+  // first on the compact one.
+  const name = left == null ? 'Demo session'
+    : wide ? `Demo session, signed out in ${spoken(left)}`
+      : `${notice.clock} left in the demo session, signed out in ${spoken(left)}`
   // One run of text: split over two flex items, the space after "·" would collapse.
-  const label = desktop ? `Demo session · ${notice.clock}` : notice.clock
+  const label = wide ? `Demo session · ${notice.clock}` : notice.clock
   return (
     <>
       <Button size="small" data-urgent={String(urgent)} startIcon={<Timer />}
@@ -61,7 +66,7 @@ export function DemoPill({ notice }) {
         sx={(theme) => {
           const tone = demoTone(theme, { urgent })
           return { flexShrink: 0, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', minWidth: 0, borderRadius: 999,
-            px: { xs: 1, md: 1.5 }, color: tone.text, bgcolor: tone.fill, '&:hover': { bgcolor: tone.hover },
+            px: wide ? 1.5 : 1, color: tone.text, bgcolor: tone.fill, '&:hover': { bgcolor: tone.hover },
             '& .MuiButton-startIcon': { mr: 0.5, ml: 0 } }
         }}>
         {label}

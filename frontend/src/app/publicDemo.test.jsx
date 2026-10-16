@@ -66,12 +66,34 @@ describe('demo pill and welcome', () => {
     expect(within(pill).getByText('Demo session · 4:29')).toBeInTheDocument()
   })
 
-  test('below md the pill is compact: the timer icon and m:ss, with the same name', () => {
-    setViewport(390)
+  // Below lg the pill shows the icon and m:ss only; its name starts with what it shows, so someone using speech control
+  // can say "click 4:29" (WCAG 2.5.3, label in name).
+  test.each([[390, 'a phone'], [1024, 'between md and lg']])('at %i px (%s) the pill is compact and its name starts with what it shows',
+    (width) => {
+      setViewport(width)
+      renderLayout(demoWithTimeLeft(269))
+      const pill = screen.getByRole('button', { name: '4:29 left in the demo session, signed out in 4 minutes 29 seconds' })
+      expect(pill).toHaveTextContent(/^4:29$/)
+      expect(pill.querySelector('svg')).not.toBeNull()
+    })
+
+  test('from lg (1200 px) the pill reads "Demo session · m:ss"', () => {
+    setViewport(1200)
     renderLayout(demoWithTimeLeft(269))
     const pill = screen.getByRole('button', { name: 'Demo session, signed out in 4 minutes 29 seconds' })
-    expect(pill).toHaveTextContent(/^4:29$/)
-    expect(pill.querySelector('svg')).not.toBeNull()
+    expect(pill).toHaveTextContent(/^Demo session · 4:29$/)
+  })
+
+  test("the compact pill's name also holds still while it has focus, and catches up when focus leaves", () => {
+    setViewport(390)
+    renderLayout(demoWithTimeLeft(269))
+    const pill = screen.getByRole('button', { name: /left in the demo session/ })
+    act(() => { pill.focus() })
+    act(() => { vi.advanceTimersByTime(3000) })
+    expect(pill).toHaveTextContent(/^4:26$/)
+    expect(pill).toHaveAccessibleName('4:29 left in the demo session, signed out in 4 minutes 29 seconds')
+    act(() => { pill.blur() })
+    expect(pill).toHaveAccessibleName('4:26 left in the demo session, signed out in 4 minutes 26 seconds')
   })
 
   test("the pill's name holds still while it has focus, and catches up when focus leaves", () => {
