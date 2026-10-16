@@ -10,9 +10,19 @@ import ProfilePage from './ProfilePage.jsx'
 const ME = { id: 'u-emp', username: 'employee.demo', first_name: 'Eli', last_name: 'Employee', email: 'eli@acme.example',
   role: 'employee', job_title: 'Engineer', department_id: 'd1', salary: 104000 }
 
-function serve(me = ME) {
-  const calls = { put: [] }
+const MANAGER = { id: 'u-mgr', name: 'Morgan Manager', first_name: 'Morgan', job_title: 'Delivery Manager',
+  department: { id: 'd1', name: 'Technology' }, is_archived: false }
+const profileOf = (extra = {}) => ({ user: { id: 'u-emp', name: 'Eli Employee', manager: MANAGER }, this_week: {}, all_time: {},
+  skills: [{ id: 's1', name: 'Backend Development' }, { id: 's2', name: 'Testing' }], can_edit_skills: false, projects: [], milestones: [], ...extra })
+
+function serve(me = ME, profile = profileOf()) {
+  const calls = { put: [], profile: [] }
   server.use(http.get(`${API}/me`, () => HttpResponse.json(me)),
+    http.get(`${API}/users/:id/profile`, ({ params }) => {
+      calls.profile.push(params.id)
+      return profile instanceof Response ? profile : HttpResponse.json(profile)
+    }),
+    http.get(`${API}/messages/contacts`, () => HttpResponse.json({ items: [{ id: 'u-mgr', name: 'Morgan Manager' }], can_group: false })),
     http.get(`${API}/departments`, () => HttpResponse.json({ items: [{ id: 'd1', name: 'Technology', is_archived: false }] })),
     http.put(`${API}/me`, async ({ request }) => { const body = await request.json(); calls.put.push(body); return HttpResponse.json({ ...me, ...body }) }))
   return calls
@@ -132,5 +142,64 @@ describe('My profile', () => {
     expect(screen.getByRole('heading', { name: 'Account' })).toBeInTheDocument()
     spy.mockRestore()
     expect(errors).toEqual([])
+  })
+
+  test('Your manager and Skills sit under the profile card, from the viewer own profile', async () => {
+    const calls = serve()
+    open()
+    const manager = (await screen.findByRole('heading', { name: 'Your manager', level: 2 })).closest('section')
+    expect(within(manager).getByText('Morgan Manager')).toBeInTheDocument()
+    expect(await within(manager).findByRole('link', { name: 'Message Morgan' })).toBeInTheDocument()
+    const skills = screen.getByRole('region', { name: 'Skills' })
+    expect(within(skills).getByRole('heading', { name: 'Skills', level: 2 })).toBeInTheDocument()
+    expect(within(skills).getByText('Backend Development')).toBeInTheDocument()
+    expect(within(skills).getByText('Testing')).toBeInTheDocument()
+    expect(within(skills).queryByRole('button', { name: /edit skills/i })).not.toBeInTheDocument()
+    expect(new Set(calls.profile)).toEqual(new Set(['u-emp']))
+  })
+
+  test('no Your manager card when there is no manager', async () => {
+    serve(ME, profileOf({ user: { id: 'u-emp', name: 'Eli Employee', manager: null } }))
+    open()
+    await screen.findByRole('region', { name: 'Skills' })
+    expect(screen.queryByRole('heading', { name: 'Your manager' })).not.toBeInTheDocument()
+  })
+
+  test('Edit skills appears only when the profile allows it', async () => {
+    serve(ME, profileOf({ can_edit_skills: true }))
+    open()
+    expect(await screen.findByRole('button', { name: /edit skills/i })).toBeEnabled()
+  })
+
+  test('the demo admin sees Edit skills locked', async () => {
+    serve({ ...ME, ...users.demoAdmin, email: 'demo.admin@acme.example' }, profileOf({ can_edit_skills: true }))
+    open(users.demoAdmin)
+    const edit = await screen.findByRole('button', { name: /edit skills/i })
+    expect(edit).toBeDisabled()
+    await userEvent.hover(edit.parentElement)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(DEMO_DISABLED)
+  })
+
+  test('if the profile fails both cards offer a retry and the rest of the page still saves', async () => {
+    const calls = serve(ME, HttpResponse.json({ error: 'boom' }, { status: 500 }))
+    open()
+    const user = userEvent.setup()
+    expect(await screen.findAllByRole('button', { name: /retry|try again/i })).toHaveLength(2)
+    expect(screen.getByRole('heading', { name: 'Your details' })).toBeInTheDocument()
+    const first = screen.getByLabelText(/first name/i)
+    await user.clear(first)
+    await user.type(first, 'Elias')
+    await user.click(screen.getByRole('button', { name: /^save$/i }))
+    await waitFor(() => expect(calls.put).toHaveLength(1))
+  })
+
+  test('phones: profile card, Your details, Account, Your manager, then Skills', async () => {
+    setViewport(375)
+    serve()
+    open()
+    const order = [await screen.findByRole('heading', { name: 'Eli Employee', level: 2 }), screen.getByRole('heading', { name: 'Your details' }),
+      screen.getByRole('heading', { name: 'Account' }), await screen.findByRole('heading', { name: 'Your manager', level: 2 }),
+      await screen.findByRole('heading', { name: 'Skills', level: 2 })]
+    order.slice(1).forEach((h, i) => expect(order[i].compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy())
   })
 })

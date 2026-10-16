@@ -413,7 +413,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
 
 - **Success:**
   - The changes are saved and the top bar updates.
-  - **My profile** (`/profile`) has the same look as My history's profile card. On a desktop (900px and up) a profile card (photo, name, job title, "Role · Department" and the **Profile photo** button) sits on the left, with **Your details** (first name, last name, email, **Save**) and **Account** (username, role and job title, read-only) on the right; on a phone they stack in that order.
+  - **My profile** (`/profile`) has the same look as My history's profile card. On a desktop (900px and up) a profile card (photo, name, job title, "Role · Department" and the **Profile photo** button) sits on the left, with **Your details** (first name, last name, email, **Save**) and **Account** (username, role and job title, read-only) on the right. Under the profile card sit **Your manager** (name, job, **Message <first name>**; nothing without a manager) and **Skills** (**Edit skills** only where the profile allows it, locked for the demo admin), read from the same profile My history uses; if that fails only those two cards show a retry. On a phone they stack: profile card, Your details, Account, Your manager, Skills.
   - My own salary sits under a collapsed **Employment details** in the Account card ("Annual salary and other employment details"). It is not on screen until it is opened.
 - **Failure:** an invalid email is flagged on the field, and a duplicate email returns `409`.
 
