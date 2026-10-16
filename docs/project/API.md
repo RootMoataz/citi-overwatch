@@ -150,7 +150,7 @@ If `user.must_change_password` is `true`, the token is **restricted**: every end
                  "approved_hours": 16.0, "can_open": true, "…": "…"}]}
 ```
 
-`logged` counts pending and approved hours; `overtime` is the hours logged this week beyond 40. Totals leave out archived projects and milestones. The history lists every project they've been on and every milestone they're assigned to or logged time on, completed ones included; `role` is `null` once they're no longer assigned. Archived projects and milestones are in the history only for admins and for the person themselves (their own past work); a manager viewing someone sees live work only. Each milestone's `project` carries its `status` and `is_archived`. Nothing on the profile is editable.
+`logged` counts pending and approved hours; `overtime` is the hours logged this week beyond 40. Totals leave out archived projects and milestones. The history lists every project they've been on and every milestone they're assigned to or logged time on, completed ones included; `role` is `null` once they're no longer assigned. Archived projects and milestones are in the history only for admins, executives and a manager's own page (their own past work); an employee's own page, like a manager viewing someone, shows live work only. Each milestone carries `display_status` (`waiting` while a predecessor isn't completed; archived predecessors don't count), `waiting_on` (`[{id, name}]`, those non-archived, not-completed predecessors) and `progress_percent` (the newest update that gave one, or `null`), and its `project` carries its `status` and `is_archived`. Nothing on the profile is editable.
 
 ```http
 GET /api/v1/users/username-availability?username=jsmith&first=Jane&last=Smith

@@ -15,7 +15,7 @@ from app.audit import record
 from app.authz import APPROVER_SQL, acts_as_delegate, is_assignee, load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
-from app.features.milestones.service import _latest_percent, display_status
+from app.features.milestones.service import _latest_percent, display_status, open_predecessors
 from app.features.projects.service import project_consumed
 from app.features.time.flags import person_week_flags
 from app.http import ApiError
@@ -228,10 +228,7 @@ def get_month(conn, ctx: Ctx, params: dict) -> dict:
         WHERE t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b{project_filter}
         ORDER BY t.work_date, t.milestone_id""", u=user_id, a=start, b=end, **args)
     ids = [str(r["id"]) for r in rows]
-    waiting = {str(r["milestone_id"]) for r in query(conn, """
-        SELECT DISTINCT d.milestone_id FROM milestone_dependencies d JOIN milestones pre ON pre.id = d.depends_on_id
-        WHERE d.milestone_id = ANY(CAST(:ids AS uuid[])) AND NOT pre.is_archived AND pre.status <> 'completed'""",
-                                                  ids=ids)} if ids else set()
+    waiting = set(open_predecessors(conn, ids))
     percents = _latest_percent(conn, ids)
     overtime: set[str] = set()
     for week in range(0, (end - start).days + 1, 7):  # the 40h mark is per week, so each week of the grid on its own

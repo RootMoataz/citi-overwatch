@@ -10,6 +10,7 @@ from decimal import Decimal
 from app.authz import APPROVER_SQL, is_uuid
 from app.ctx import Ctx
 from app.db import query, query_one
+from app.features.milestones.service import _latest_percent, display_status, open_predecessors
 from app.features.projects.service import visible_projects
 from app.features.skills.lookup import skills_of
 from app.features.time.service import _today, _week_logged, week_start
@@ -107,8 +108,9 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
     uid = str(user["id"])
     start = week_start(as_date(params["week"], "week") if params.get("week") else _today())
     # Archived projects and milestones are out of every total (spec §3.1). The history still lists them for
-    # admins and for the person themselves (their own past work, read-only); managers see live work only.
-    whole_history = ctx.sees_all or uid == ctx.user_id
+    # admins and executives, and for a manager's own page (their past work, read-only); everyone else, an employee
+    # looking at their own page included, sees live work only.
+    whole_history = ctx.sees_all or (uid == ctx.user_id and ctx.role == "manager")
     live = "" if whole_history else " AND NOT p.is_archived AND NOT m.is_archived"
     totals = query_one(conn, f"""SELECT {HOURS} FROM time_entries t
                                  JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
@@ -134,6 +136,8 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
         LEFT JOIN time_entries t ON t.milestone_id = m.id AND t.user_id = CAST(:u AS uuid)
         WHERE (a.user_id IS NOT NULL OR t.id IS NOT NULL){live}
         GROUP BY m.id, p.id, a.role ORDER BY m.start_date DESC, lower(m.name)""", u=uid)
+    ids = [m["id"] for m in milestones]
+    waiting_on, percents = open_predecessors(conn, ids), _latest_percent(conn, ids)
     openable = None if ctx.sees_all else {str(p["id"]) for p in visible_projects(conn, ctx)}
 
     def can_open(project_id) -> bool:
@@ -152,6 +156,8 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
                      for p in projects],
         "milestones": [{"id": m["id"], "name": m["name"], "status": m["status"], "difficulty": m["difficulty"],
                         "priority": m["priority"],
+                        "display_status": display_status(m["status"], str(m["id"]) in waiting_on),
+                        "waiting_on": waiting_on.get(str(m["id"]), []), "progress_percent": percents.get(str(m["id"])),
                         "start_date": m["start_date"], "end_date": m["end_date"], "is_archived": m["is_archived"], "role": m["role"],
                         "project": {"id": m["project_id"], "name": m["project_name"],
                                     "status": m["project_status"], "is_archived": m["project_archived"]},

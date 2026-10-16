@@ -119,15 +119,21 @@ def test_own_history_includes_archived_and_completed_work_read_only(client, conn
     log_entry(conn, emp, old, MONDAY - timedelta(days=14), 4)
     log_entry(conn, emp, cut, MONDAY - timedelta(days=14), 2, status="pending")
 
-    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, emp))[1]
+    # An employee's own page is live work only; admins still see the archive (and a manager's own page does too).
+    admin = make_user(conn, role="admin")
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, admin))[1]
     milestones = {m["name"]: m for m in body["milestones"]}
     assert set(milestones) == {"Wrap", "Old", "Cut"}
     assert milestones["Wrap"]["project"] == {"id": str(done["id"]), "name": "Done", "status": "completed",
                                              "is_archived": False}
-    assert (milestones["Old"]["project"]["is_archived"], milestones["Old"]["can_open"]) == (True, False)
+    assert (milestones["Old"]["project"]["is_archived"], milestones["Old"]["can_open"]) == (True, True)
     assert (milestones["Cut"]["is_archived"], milestones["Cut"]["logged_hours"]) == (True, 2.0)
     assert {p["name"] for p in body["projects"]} == {"Done", "Shelved", "Live"}
     assert body["all_time"] == {"logged": 6.0, "approved": 6.0}      # archived work stays out of the totals
+
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, emp))[1]
+    assert {m["name"] for m in body["milestones"]} == {"Wrap"}
+    assert {p["name"] for p in body["projects"]} == {"Done", "Live"}
 
     # Their manager still sees only live work: the archive view of someone's history is the owner's and admins'.
     body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[1]
@@ -157,3 +163,98 @@ def test_managers_see_people_whose_hours_wait_for_their_approval(client, conn):
     assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 200
     conn.run("UPDATE time_entries SET status = 'approved' WHERE id = :i", i=entry["id"])
     assert client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, mgr))[0] == 404
+
+
+def depend(conn, milestone, on):
+    conn.run("""INSERT INTO milestone_dependencies (milestone_id, depends_on_id)
+                VALUES (CAST(:m AS uuid), CAST(:d AS uuid))""", m=str(milestone["id"]), d=str(on["id"]))
+
+
+def test_profile_milestones_carry_display_status_waiting_on_and_progress(client, conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=mgr["id"])
+    project = make_project(conn, mgr, **SPAN)
+    add_member(conn, project, emp)
+    first = make_milestone(conn, project, name="First")
+    second = make_milestone(conn, project, name="Second")
+    free = make_milestone(conn, project, name="Free")
+    depend(conn, second, first)
+    for m in (second, free):
+        assign(conn, m, emp)
+    conn.run("""INSERT INTO milestone_updates (milestone_id, author_id, body, percent_complete)
+                VALUES (CAST(:m AS uuid), CAST(:a AS uuid), 'going', 40)""", m=str(free["id"]), a=str(emp["id"]))
+
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, emp))[1]
+    items = {m["name"]: m for m in body["milestones"]}
+    assert items["Second"]["display_status"] == "waiting"
+    assert items["Second"]["waiting_on"] == [{"id": str(first["id"]), "name": "First"}]
+    assert items["Second"]["progress_percent"] is None
+    assert (items["Free"]["display_status"], items["Free"]["waiting_on"]) == ("not_started", [])
+    assert items["Free"]["progress_percent"] == 40
+
+
+def test_archived_predecessor_does_not_make_a_milestone_wait(client, conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=mgr["id"])
+    project = make_project(conn, mgr, **SPAN)
+    add_member(conn, project, emp)
+    cut = make_milestone(conn, project, name="Cut", archived=True)
+    done = make_milestone(conn, project, name="Done", status="completed")
+    mine = make_milestone(conn, project, name="Mine")
+    depend(conn, mine, cut)
+    depend(conn, mine, done)
+    assign(conn, mine, emp)
+
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, emp))[1]
+    item = body["milestones"][0]
+    assert (item["display_status"], item["waiting_on"]) == ("not_started", [])
+
+
+def test_employee_own_profile_hides_archived_projects_and_milestones(client, conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=mgr["id"])
+    live = make_project(conn, mgr, name="Live", **SPAN)
+    shelved = make_project(conn, mgr, name="Shelved", archived=True, **SPAN)
+    for p in (live, shelved):
+        add_member(conn, p, emp)
+    keep = make_milestone(conn, live, name="Keep")
+    cut = make_milestone(conn, live, name="Cut", archived=True)
+    old = make_milestone(conn, shelved, name="Old")
+    for m in (keep, cut, old):
+        assign(conn, m, emp)
+
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, emp))[1]
+    assert {m["name"] for m in body["milestones"]} == {"Keep"}
+    assert {p["name"] for p in body["projects"]} == {"Live"}
+
+
+def _archived_setup(conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=mgr["id"])
+    live = make_project(conn, mgr, name="Live", **SPAN)
+    shelved = make_project(conn, mgr, name="Shelved", archived=True, **SPAN)
+    for p in (live, shelved):
+        add_member(conn, p, emp)
+    assign(conn, make_milestone(conn, live, name="Cut", archived=True), emp)
+    assign(conn, make_milestone(conn, shelved, name="Old"), emp)
+    return mgr, emp
+
+
+def test_manager_own_profile_still_lists_archived(client, conn):
+    mgr, _ = _archived_setup(conn)
+    live = make_project(conn, mgr, name="MgrLive", **SPAN)
+    shelved = make_project(conn, mgr, name="MgrShelved", archived=True, **SPAN)
+    for p in (live, shelved):
+        add_member(conn, p, mgr)
+    assign(conn, make_milestone(conn, live, name="MgrCut", archived=True), mgr)
+    body = client.request("GET", f"/users/{mgr['id']}/profile", token=token_for(conn, mgr))[1]
+    assert {m["name"] for m in body["milestones"]} == {"MgrCut"}
+    assert {p["name"] for p in body["projects"]} == {"MgrLive", "MgrShelved"}
+
+
+def test_admin_sees_archived_on_an_employee_profile(client, conn):
+    admin = make_user(conn, role="admin")
+    _, emp = _archived_setup(conn)
+    body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, admin))[1]
+    assert {m["name"] for m in body["milestones"]} == {"Cut", "Old"}
+    assert {p["name"] for p in body["projects"]} == {"Live", "Shelved"}

@@ -197,7 +197,7 @@ stateDiagram-v2
 
 - **Code:** `load_milestone()` in [`app/authz.py`](../../backend/v1/app/authz.py) lets an archived milestone through only for someone who manages its project, so other managers and employees get `404`; `restore_milestone()` asks for `manage=True`. Projects stay admin-only at the route. [`app/features/archive/service.py`](../../backend/v1/app/features/archive/service.py) filters a manager's list to `p.manager_id = me`, leaves people out, and sets `can_restore` per item.
 - **UI:** [`ArchivePage.jsx`](../../frontend/src/features/archive/ArchivePage.jsx) shows **Restore** only where `can_restore` is true and hides the People filter from managers. Milestones are archived from the project's Milestones tab.
-- **History:** a person's own profile ("My history") also lists their work on archived projects and milestones, marked *Archived* / *Project archived* / *Project completed*, with nothing editable. Totals still leave archived work out. A manager looking at someone sees live work only.
+- **History:** a manager's own profile and admins' and executives' views of anyone also list work on archived projects and milestones, marked *Archived* / *Project archived* / *Project completed*, with nothing editable. Totals still leave archived work out. An employee's own page, and a manager looking at someone, show live work only.
 
 ## 5c. The timesheet's Month view
 

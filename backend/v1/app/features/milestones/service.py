@@ -88,6 +88,23 @@ def _latest_percent(conn, milestone_ids) -> dict[str, int]:
     return {str(r["milestone_id"]): r["percent_complete"] for r in rows}
 
 
+def open_predecessors(conn, milestone_ids) -> dict[str, list[dict]]:
+    """milestone id -> its non-archived predecessors that aren't completed, as [{id, name}] by name. The one
+    'waiting' rule: archived predecessors never hold a milestone up, and an archived milestone waits on nothing."""
+    ids = sorted({str(m) for m in milestone_ids})
+    if not ids:
+        return {}
+    rows = query(conn, """SELECT d.milestone_id, pre.id, pre.name FROM milestone_dependencies d
+                          JOIN milestones m ON m.id = d.milestone_id JOIN milestones pre ON pre.id = d.depends_on_id
+                          WHERE d.milestone_id = ANY(CAST(:ids AS uuid[])) AND NOT m.is_archived
+                            AND NOT pre.is_archived AND pre.status <> 'completed'
+                          ORDER BY lower(pre.name), pre.id""", ids=ids)
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        out.setdefault(str(r["milestone_id"]), []).append({"id": r["id"], "name": r["name"]})
+    return out
+
+
 def display_status(status: str, waiting: bool) -> str:
     """What the card shows: 'waiting' while a predecessor isn't completed (computed, never stored); otherwise the
     stored status, 'blocked' meaning kicked back and waiting for the manager's review."""
@@ -97,18 +114,18 @@ def display_status(status: str, waiting: bool) -> str:
 def _views(conn, ctx: Ctx, project_id: str, milestones: list[dict]) -> list[dict]:
     edges = _edges(conn, project_id)
     assignees, supporting = _assignees(conn, project_id)
-    status_of = {str(m["id"]): m["status"] for m in _project_milestones(conn, project_id)}
     project = query_one(conn, "SELECT * FROM projects WHERE id = CAST(:p AS uuid)", p=str(project_id))
     on_team = is_member(conn, str(project_id), ctx.user_id)
     logged = _logged(conn, project_id)
     ids = [m["id"] for m in milestones]
     required, kickbacks, percents = required_skills_of(conn, ids), open_kickbacks(conn, ids), _latest_percent(conn, ids)
+    waiting_on = open_predecessors(conn, ids)
     managing, resolving = manages(ctx, project), can_resolve(ctx, project)
     out = []
     for m in milestones:
         mid = str(m["id"])
         preds = sorted(edges.get(mid, set()))
-        blocked = any(status_of.get(p) != "completed" for p in preds)
+        blocked = bool(waiting_on.get(mid))
         people = assignees.get(mid, [])
         mine = any(str(a["id"]) == ctx.user_id for a in people)
         claimable = claim_blocker(work_mode=project["work_mode"], project_status=project["status"],
