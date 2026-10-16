@@ -17,9 +17,10 @@ from app.features.time.service import _today, _week_logged, week_start
 from app.features.users.coming_up import coming_up_for
 from app.http import ApiError
 from app.rules.overtime import WEEKLY_CAP
-from app.validation import as_date
+from app.validation import as_date, as_enum
 
 NOT_FOUND = ApiError(404, "NOT_FOUND", "Not found")
+SECTIONS = ("this_week",)
 HOURS = """coalesce(sum(t.hours) FILTER (WHERE t.status IN ('pending', 'approved')), 0) AS logged,
            coalesce(sum(t.hours) FILTER (WHERE t.status = 'approved'), 0) AS approved"""
 
@@ -108,6 +109,10 @@ def get_profile(conn, ctx: Ctx, user_id: str, params: dict) -> dict:
         raise NOT_FOUND
     uid = str(user["id"])
     start = week_start(as_date(params["week"], "week") if params.get("week") else _today())
+    # `sections=this_week` is the cheap read for a week picker: just that week's hours, no history queries.
+    if params.get("sections"):
+        as_enum(params["sections"], "sections", SECTIONS)
+        return {"user": {"id": user["id"]}, "this_week": _this_week(conn, uid, start)}
     # Archived projects and milestones are out of every total (spec §3.1). The history still lists them for
     # admins and executives, and for a manager's own page (their past work, read-only); everyone else, an employee
     # looking at their own page included, sees live work only.

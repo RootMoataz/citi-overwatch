@@ -274,3 +274,50 @@ def test_admin_sees_archived_on_an_employee_profile(client, conn):
     body = client.request("GET", f"/users/{emp['id']}/profile", token=token_for(conn, admin))[1]
     assert {m["name"] for m in body["milestones"]} == {"Cut", "Old"}
     assert {p["name"] for p in body["projects"]} == {"Live", "Shelved"}
+
+
+def _week_fixture(conn):
+    mgr = make_user(conn, role="manager")
+    emp = make_user(conn, manager_id=mgr["id"])
+    other = make_user(conn, manager_id=mgr["id"])
+    project = make_project(conn, mgr, name="Apollo", **SPAN)
+    add_member(conn, project, emp, Decimal("30"))
+    ms = make_milestone(conn, project, name="Build")
+    assign(conn, ms, emp)
+    last = MONDAY - timedelta(days=7)
+    log_entry(conn, emp, ms, last, 8)                                          # approved
+    log_entry(conn, emp, ms, last + timedelta(days=1), 4, status="pending")
+    log_entry(conn, emp, ms, last + timedelta(days=2), 5, status="rejected")   # never counted
+    return mgr, emp, other, last + timedelta(days=2)
+
+
+def test_sections_this_week_returns_only_the_week(client, conn):
+    _, emp, _, wednesday = _week_fixture(conn)
+    status, body, _, _ = client.request("GET", f"/users/{emp['id']}/profile?week={wednesday}&sections=this_week",
+                                        token=token_for(conn, emp))
+    assert status == 200
+    assert set(body) == {"user", "this_week"}
+    assert body["user"] == {"id": str(emp["id"])}
+    assert body["this_week"] == {"week_start": str(MONDAY - timedelta(days=7)), "logged": 12.0, "overtime": 0.0,
+                                 "planned": 30.0}
+
+
+def test_sections_bad_value_is_400(client, conn):
+    _, emp, _, _ = _week_fixture(conn)
+    token = token_for(conn, emp)
+    status, body, _, _ = client.request("GET", f"/users/{emp['id']}/profile?sections=milestones", token=token)
+    assert status == 400
+    assert body["error"]["details"] == {"sections": "invalid_choice"}
+    status, body, _, _ = client.request("GET", f"/users/{emp['id']}/profile?sections=", token=token)
+    assert status == 200
+    assert "milestones" in body
+
+
+def test_sections_this_week_keeps_the_profile_permissions(client, conn):
+    mgr, emp, other, _ = _week_fixture(conn)
+    execu = make_user(conn, role="executive")
+    path = "/profile?sections=this_week"
+    assert client.request("GET", f"/users/{other['id']}{path}", token=token_for(conn, emp))[0] == 404
+    status, body, _, _ = client.request("GET", f"/users/{emp['id']}{path}", token=token_for(conn, mgr))
+    assert status == 200 and set(body) == {"user", "this_week"}
+    assert client.request("GET", f"/users/{emp['id']}{path}", token=token_for(conn, execu))[0] == 200
