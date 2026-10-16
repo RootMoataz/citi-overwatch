@@ -92,3 +92,14 @@ export function formatDateRange(startIso, endIso) {
   const start = sameYear ? dayPart(startIso, { month: 'short', day: 'numeric' }) : formatDate(startIso)
   return `${start} – ${formatDate(endIso)}`
 }
+
+/** "2026-10-12" (a Monday) → "Oct 12 – 18, 2026"; "Sep 28 – Oct 4, 2026"; "Dec 28, 2026 – Jan 3, 2027". */
+export function formatWeekRange(mondayIso) {
+  const end = addDays(mondayIso, 6)
+  const [startYear, startMonth] = [mondayIso.slice(0, 4), mondayIso.slice(5, 7)]
+  if (startYear !== end.slice(0, 4)) return `${formatDate(mondayIso)} – ${formatDate(end)}`
+  if (startMonth === end.slice(5, 7)) {
+    return `${dayPart(mondayIso, { month: 'short', day: 'numeric' })} – ${dayPart(end, { day: 'numeric' })}, ${startYear}`
+  }
+  return formatDateRange(mondayIso, end)
+}
