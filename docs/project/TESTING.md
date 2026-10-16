@@ -78,7 +78,7 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 [`shell.spec.js`](../../frontend/e2e/shell.spec.js) adds 11 layout checks that jsdom can't make (no layout engine). Each runs once, in its own project: tagged `@phone` (mobile only) or `@desktop` (desktop only), so nothing shows as skipped.
 
 4. **Phone top bar** at 375 and 390 px: for the public demo admin's home, an employee's project page, and an employee with a running timer (home and project page), no top-bar control draws over another or off the screen. Each control is measured with everything drawn inside it, text included, minus what an ellipsis clips.
-5. **Desktop crumbs** at 1440 px: a 113-character project name (stretched in the API response; nothing is saved) ends in an ellipsis and stops before the search field.
+5. **Desktop crumbs** at 1440 px: with a 113-character project name (stretched in the API response; nothing is saved) no crumb's text runs under the next, and the name ends in an ellipsis before the search field.
 6. **No sideways scroll at 375 px:** every page in each role's navigation, a project page and My profile, for employee, manager, executive and admin, once with the seeded names and once with every name stretched (a long name plus a 35-letter word): `document.documentElement.scrollWidth` must stay 375.
 
 ## Current results (2026-10-16)

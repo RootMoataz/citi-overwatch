@@ -4,46 +4,55 @@ import { openProject, signIn, signOut } from './helpers.js'
 // Layout checks a unit test can't make (jsdom has no layout): the top bar's controls never overlap on a phone, the
 // desktop crumbs give way to the controls beside them, and no page scrolls sideways at 375 px.
 
-/** Each in-flow control of the top bar as the stretch of x it draws over: its own box and everything drawn inside it,
- * text included (a logo box squeezed by flexbox while its wordmark kept drawing at full width was the bug). What an
- * ancestor clips (an ellipsis) doesn't count; badges and visually hidden live regions sit outside the flow. */
-async function topBarControls(page) {
-  return page.getByRole('banner').evaluate((banner) => {
-    const bar = banner.firstElementChild
-    const placed = (el) => !['absolute', 'fixed'].includes(getComputedStyle(el).position)
-    const clips = (el) => getComputedStyle(el).overflowX !== 'visible'
-    // What is left of `rect` after every element from `from` up to the control that clips its content.
-    const visible = (from, rect, control) => {
-      let { left, right } = rect
-      for (let a = from; a && a !== control.parentElement; a = a.parentElement) {
-        if (clips(a)) {
-          const r = a.getBoundingClientRect()
-          left = Math.max(left, r.left)
-          right = Math.min(right, r.right)
-        }
+/** Runs in the page (it is self-contained). Each in-flow child of `container` as the stretch of x it draws over: its own box and everything drawn inside it,
+ * text included (a logo box squeezed by flexbox while its wordmark kept drawing at full width was the bug, and so was
+ * a crumb whose box shrank while its text ran on under the next one). What an ancestor clips (an ellipsis) doesn't
+ * count; badges and visually hidden live regions sit outside the flow. */
+function drawnChildren(container) {
+  const placed = (el) => !['absolute', 'fixed'].includes(getComputedStyle(el).position)
+  const clips = (el) => getComputedStyle(el).overflowX !== 'visible'
+  // What is left of `rect` after every element from `from` up to the child that clips its content.
+  const visible = (from, rect, child) => {
+    let { left, right } = rect
+    for (let a = from; a && a !== child.parentElement; a = a.parentElement) {
+      if (clips(a)) {
+        const r = a.getBoundingClientRect()
+        left = Math.max(left, r.left)
+        right = Math.min(right, r.right)
       }
-      return right > left ? { left, right } : null
     }
-    return [...bar.children].filter((child) => placed(child) && getComputedStyle(child).display !== 'none').map((child) => {
-      const own = child.getBoundingClientRect()
-      let { left, right } = own
-      const take = (part) => { if (part) { left = Math.min(left, part.left); right = Math.max(right, part.right) } }
-      for (const el of child.querySelectorAll('*')) {
-        if (!placed(el) || el.closest('[class*="MuiBadge-badge"]')) continue
-        const r = el.getBoundingClientRect()
-        if (r.width && r.height) take(visible(el.parentElement, r, child))
-      }
-      const walker = document.createTreeWalker(child, NodeFilter.SHOW_TEXT)
-      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        if (!text.textContent.trim() || text.parentElement.closest('[class*="MuiBadge-badge"]')) continue
-        const range = document.createRange()
-        range.selectNodeContents(text)
-        const r = range.getBoundingClientRect()
-        if (r.width && r.height) take(visible(text.parentElement, r, child))
-      }
-      const name = child.getAttribute('aria-label') || child.textContent.trim() || child.tagName
-      return { name, left, right, width: own.width }
-    }).filter((c) => c.width > 0)
+    return right > left ? { left, right } : null
+  }
+  return [...container.children].filter((child) => placed(child) && getComputedStyle(child).display !== 'none').map((child) => {
+    const own = child.getBoundingClientRect()
+    let { left, right } = own
+    const take = (part) => { if (part) { left = Math.min(left, part.left); right = Math.max(right, part.right) } }
+    for (const el of child.querySelectorAll('*')) {
+      if (!placed(el) || el.closest('[class*="MuiBadge-badge"]')) continue
+      const r = el.getBoundingClientRect()
+      if (r.width && r.height) take(visible(el.parentElement, r, child))
+    }
+    const walker = document.createTreeWalker(child, NodeFilter.SHOW_TEXT)
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (!text.textContent.trim() || text.parentElement.closest('[class*="MuiBadge-badge"]')) continue
+      const range = document.createRange()
+      range.selectNodeContents(text)
+      const r = range.getBoundingClientRect()
+      if (r.width && r.height) take(visible(text.parentElement, r, child))
+    }
+    const name = child.getAttribute('aria-label') || child.textContent.trim() || child.tagName
+    return { name, left, right, width: own.width }
+  }).filter((c) => c.width > 0).sort((a, b) => a.left - b.left)
+}
+
+/** Fails (softly, naming the pair) for any of `items` drawn over the one before it or off [0, width]. */
+function expectApart(items, width, label) {
+  for (const c of items) {
+    expect.soft(c.left, `${label}: ${c.name} starts on screen`).toBeGreaterThanOrEqual(-0.5)
+    expect.soft(c.right, `${label}: ${c.name} ends on screen`).toBeLessThanOrEqual(width + 0.5)
+  }
+  items.slice(1).forEach((c, i) => {
+    expect.soft(c.left, `${label}: ${c.name} overlaps ${items[i].name}`).toBeGreaterThanOrEqual(items[i].right - 0.5)
   })
 }
 
@@ -51,15 +60,8 @@ async function expectTopBarFits(page, width, label) {
   // The shell settles (crumb names, the timer chip) before measuring.
   await expect(page.getByRole('banner')).toBeVisible()
   await page.waitForLoadState('networkidle')
-  const controls = (await topBarControls(page)).sort((a, b) => a.left - b.left)
-  for (const c of controls) {
-    expect.soft(c.left, `${label}: ${c.name} starts on screen`).toBeGreaterThanOrEqual(-0.5)
-    expect.soft(c.right, `${label}: ${c.name} ends on screen`).toBeLessThanOrEqual(width + 0.5)
-  }
-  controls.slice(1).forEach((c, i) => {
-    const before = controls[i]
-    expect.soft(c.left, `${label}: ${c.name} overlaps ${before.name}`).toBeGreaterThanOrEqual(before.right - 0.5)
-  })
+  // The bar's toolbar is the banner's only child; Playwright runs drawnChildren in the page on it.
+  expectApart(await page.getByRole('banner').locator(':scope > *').evaluate(drawnChildren), width, label)
 }
 
 const sideways = (page) => page.evaluate(() => document.documentElement.scrollWidth)
@@ -121,13 +123,11 @@ test('desktop crumbs: a long project name ends in an ellipsis and never runs und
   await openProject(page, 'Apollo Data Migration')
   const crumbs = page.getByRole('navigation', { name: 'Breadcrumb' })
   await expect(crumbs.getByText(long)).toBeVisible()
-  const items = await crumbs.getByRole('listitem').evaluateAll((lis) => lis.map((li) => {
-    const r = li.getBoundingClientRect()
-    return { text: li.textContent, left: r.left, right: r.right }
-  }))
-  items.slice(1).forEach((item, i) => expect(item.left, `${item.text} overlaps ${items[i].text}`).toBeGreaterThanOrEqual(items[i].right - 0.5))
+  await page.waitForLoadState('networkidle')
+  // Each crumb as drawn, text included: none runs under the next, and the last stops before the search field.
+  const items = await crumbs.getByRole('list').evaluate(drawnChildren)
   const search = await page.getByRole('button', { name: /^Search \(/ }).boundingBox()
-  expect(items.at(-1).right).toBeLessThanOrEqual(search.x)
+  expectApart(items, search.x, 'desktop crumbs')
   const last = crumbs.getByText(long)
   expect(await last.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true) // cut short with an ellipsis
   await expect(last).toHaveCSS('text-overflow', 'ellipsis')
