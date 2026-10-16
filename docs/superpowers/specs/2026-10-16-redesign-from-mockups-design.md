@@ -128,8 +128,9 @@ Mockups: the frame of every file. Code: `app/Layout.jsx`, `app/nav.jsx`, `app/De
 
 - **Left (desktop):** the breadcrumbs (3.4).
 - **Left (phones):**
-  - the menu button and the logo;
-  - on a nested page (a project or a person), a back link to the parent crumb, e.g. "‹ Projects".
+  - the menu button and the logo (the glyph alone below `md`, linking home);
+  - on a nested page (a project or a person), a back link to the parent crumb takes the logo's place, e.g. "‹ Projects". It is named "Back to <parent>" and shrinks to its arrow (at least 24 × 24 px) when space is tight. *(Built 16 Oct; replaces showing both.)*
+  - below 375 px, Puppy moves from the top bar into the account menu so the bar never overflows. *(Built 16 Oct.)*
 - **Right, in this order, on every page:**
   1. **Search:** today's command palette button, drawn as a field: a magnifier, "Search…" and the key hint "Ctrl K" ("⌘K" on Apple devices). It's icon-only under `md`. Its name is "Search (Ctrl+K)".
   2. **Running-timer chip:** today's `TimerChip`, only while a timer runs.
@@ -173,7 +174,7 @@ Mockups: `Departments.png` ("Demo session · 3:41"), `Skills.png`, `Project - Ov
 - **Label:** "Demo session · m:ss", counting down to `session_expires_at`. It uses today's `useDemoNotice`, a timer icon, the warning colour and tabular numbers. It turns the error colour under 1:00.
 - **It's a button.** Its name is "Demo session, signed out in 4 minutes 29 seconds". It opens a popover: "Public demo admin. Some actions are disabled, and you'll be signed out when the timer ends."
 - **Screen readers:** a polite live region says "1 minute left in the demo session" once, at 1:00. Nothing is announced each second.
-- **Phones:** the pill shows the timer icon and "m:ss"; the popover is the same.
+- **Compact pill:** below `lg` (1200 px), on phones and on narrow desktops, the pill shows the timer icon and "m:ss"; its name then starts with what it shows: "4:59 left in the demo session, signed out in 4 minutes 59 seconds". The name holds still while the pill has focus. The popover is the same and also shows the time left. *(Built 16 Oct.)*
 - **Removed:** the page-top `DemoBanner` and the `DemoChip`.
 - **Kept:** the one-time welcome dialog (`DemoWelcome`).
 
