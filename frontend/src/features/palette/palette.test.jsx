@@ -42,7 +42,7 @@ describe('command palette', () => {
     handlers()
     const user = userEvent.setup()
     renderAsUser(<PaletteButton />, { user: users.admin, route: '/' })
-    expect(screen.getByRole('button', { name: /search \((ctrl k|⌘k)\)/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /search \((ctrl\+k|⌘k)\)/i })).toBeInTheDocument()
     openWithShortcut()
     const input = await screen.findByRole('combobox', { name: 'Search Scout' })
     await user.type(input, 'at-risk projects in Technology')

@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react'
 import CommandPalette from './CommandPalette.jsx'
 import { typingIn } from './search.js'
 
-const isMac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform ?? '')
+const isMac = () => {
+  if (typeof navigator === 'undefined') return false
+  const platform = navigator.userAgentData?.platform ?? navigator.platform ?? ''
+  return /Mac|iPhone|iPad/.test(platform)
+}
 
 /**
  * The header's search pill ("Search… Ctrl K"; an icon on phones) and the command palette it opens. It also owns
@@ -12,7 +16,7 @@ const isMac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(n
  */
 export default function PaletteButton() {
   const [open, setOpen] = useState(false)
-  const phone = useMediaQuery((theme) => theme.breakpoints.down('sm'))
+  const phone = useMediaQuery((theme) => theme.breakpoints.down('md'))
   const shortcut = isMac() ? '⌘K' : 'Ctrl K'
 
   useEffect(() => {
@@ -29,7 +33,7 @@ export default function PaletteButton() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  const label = `Search (${shortcut})`
+  const label = `Search (${isMac() ? '⌘K' : 'Ctrl+K'})`
   return (
     <>
       {phone ? (

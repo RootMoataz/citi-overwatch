@@ -87,7 +87,7 @@ describe('demo banner and welcome', () => {
   test('the account menu keeps the profile photo out of reach', async () => {
     sessionStorage.setItem(`acme-scout:demo-welcomed:${users.demoAdmin.id}`, '1')
     renderLayout(users.demoAdmin)
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     const photo = screen.getByRole('menuitem', { name: /profile photo/i })
     expect(photo).toHaveAttribute('aria-disabled', 'true')
     expect(photo).toHaveTextContent(DISABLED)

@@ -58,7 +58,7 @@ export default function UserDetailPage() {
   const [confirm, setConfirm] = useState(null)
   const [shown, setShown] = useState(null)
   const leaving = useRedirectOnDenied(person.error)
-  useBreadcrumb(person.data ? fullName(person.data) : undefined)
+  useBreadcrumb(person.data ? fullName(person.data) : undefined, { failed: Boolean(person.error) })
   const back = <Link component={RouterLink} to="/people" underline="hover" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
     <ArrowBack fontSize="small" /> People</Link>
 

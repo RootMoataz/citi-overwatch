@@ -56,7 +56,7 @@ export default function PersonProfilePage() {
   const profile = useProfile(id)
   // The server answers 404 for anyone the viewer may not see, so that reads as "no access", not "missing".
   const leaving = useRedirectOnDenied(profile.error, { notFound: NO_ACCESS })
-  useBreadcrumb(profile.data?.user?.name)
+  useBreadcrumb(profile.data?.user?.name, { failed: Boolean(profile.error) })
   if (leaving) return null
   if (profile.isLoading) return <Skeleton variant="rounded" height={320} />
   if (profile.error) return <ErrorAlert error={profile.error} onRetry={() => profile.refetch()} />

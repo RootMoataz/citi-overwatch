@@ -29,7 +29,7 @@ export default function ProjectDetailPage() {
   const [editing, setEditing] = useState(false)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const leaving = useRedirectOnDenied(project.error)
-  useBreadcrumb(project.data?.name)
+  useBreadcrumb(project.data?.name, { failed: Boolean(project.error) })
 
   const back = <Link component={RouterLink} to="/projects" underline="hover"
     sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1 }}><ArrowBack fontSize="small" /> Projects</Link>

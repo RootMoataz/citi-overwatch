@@ -68,7 +68,7 @@ describe('executive: read-only leadership view', () => {
     renderWithProviders(
       <Routes><Route element={<Layout user={executive} />}><Route path="/" element={<p>Home</p>} /></Route></Routes>,
     )
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     expect(await screen.findByText('executive.demo · Executive')).toBeInTheDocument()
   })
 

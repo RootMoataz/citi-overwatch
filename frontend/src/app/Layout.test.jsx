@@ -2,14 +2,14 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import { describe, expect, test, vi } from 'vitest'
-import { renderWithProviders, users } from '../test/render.jsx'
+import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
 import { setViewport } from '../test/setup.js'
 import Layout from './Layout.jsx'
 
-function renderLayout(user, onLogout = () => {}, { badges } = {}) {
+function renderLayout(user, onLogout = () => {}, { badges, extras } = {}) {
   return renderWithProviders(
     <Routes>
-      <Route element={<Layout user={user} onLogout={onLogout} badges={badges} />}>
+      <Route element={<Layout user={user} onLogout={onLogout} badges={badges} topBarExtras={extras} />}>
         <Route path="/" element={<><p>Home content</p><input aria-label="Notes" /></>} />
       </Route>
     </Routes>,
@@ -96,14 +96,14 @@ describe('Layout', () => {
   test('user menu signs out', async () => {
     const onLogout = vi.fn()
     renderLayout(users.manager, onLogout)
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }))
     expect(onLogout).toHaveBeenCalled()
   })
 
   test.each(['employee', 'manager', 'admin'])('every role (%s) can open the profile photo dialog from the account menu', async (role) => {
     renderLayout(users[role])
-    const button = screen.getByRole('button', { name: /account menu/i })
+    const button = screen.getByRole('button', { name: 'Account menu' })
     const initials = `${users[role].first_name[0]}${users[role].last_name[0]}`
     expect(button).toHaveTextContent(initials)
     await userEvent.click(button)
@@ -194,4 +194,103 @@ describe('collapsible sidebar', () => {
     expect(within(banner).getByRole('button', { name: /^search/i })).toHaveAttribute('aria-haspopup', 'dialog')
   })
 
+})
+
+const NAV_BY_ROLE = [
+  ['employee', users.employee, { Work: ['My week', 'Messages', 'Projects', 'My timesheet', 'My history'] }],
+  ['manager', users.manager,
+    { Work: ['Dashboard', 'Messages', 'Projects', 'Timesheets', 'Allocation', 'Project requests', 'Archive'] }],
+  ['manager who tracks their own hours', { ...users.manager, tracks_own_hours: true },
+    { Work: ['Dashboard', 'Messages', 'Projects', 'My timesheet', 'Timesheets', 'Allocation', 'Project requests', 'Archive'] }],
+  ['executive', users.executive,
+    { Work: ['Dashboard', 'Messages', 'Projects', 'Timesheets', 'Allocation', 'Archive', 'Audit log'] }],
+  ['admin', users.admin, {
+    Work: ['Control centre', 'Messages', 'Projects', 'Timesheets', 'Allocation'],
+    Admin: ['People', 'Departments', 'Skills', 'Project requests', 'Archive', 'Audit log'],
+  }],
+]
+
+describe('sidebar navigation per role', () => {
+  test.each(NAV_BY_ROLE)('%s: group headings, items and order', (_name, user, groups) => {
+    renderLayout(user)
+    const nav = screen.getByRole('navigation', { name: /main/i })
+    const lists = within(nav).getAllByRole('list')
+    expect(lists.map((list) => list.getAttribute('aria-labelledby')).map((id) => document.getElementById(id).textContent))
+      .toEqual(Object.keys(groups))
+    Object.values(groups).forEach((items, index) => {
+      expect(within(lists[index]).getAllByRole('link').map((a) => a.textContent)).toEqual(items)
+    })
+  })
+})
+
+describe('account menu and user chip', () => {
+  const chipName = `${users.manager.first_name} ${users.manager.last_name}, account menu`
+
+  async function expectFullMenu() {
+    expect(await screen.findByRole('menuitem', { name: /my profile/i })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /profile photo/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual(['Light', 'Dark', 'SystemMatch this device'])
+    expect(screen.getByRole('menuitem', { name: /sign out/i })).toBeInTheDocument()
+  }
+
+  test('the sidebar user chip is named for the person and opens the menu', async () => {
+    renderLayout(users.manager)
+    await userEvent.click(within(screen.getByTestId('sidebar')).getByRole('button', { name: chipName }))
+    await expectFullMenu()
+  })
+
+  test('the header avatar opens the same menu', async () => {
+    renderLayout(users.manager)
+    await userEvent.click(within(screen.getByRole('banner')).getByRole('button', { name: 'Account menu' }))
+    await expectFullMenu()
+  })
+
+  test('with the sidebar collapsed the chip is the avatar alone, still named, and still opens the menu', async () => {
+    renderLayout(users.manager)
+    await userEvent.click(screen.getByRole('button', { name: /collapse sidebar/i }))
+    const chip = within(screen.getByTestId('sidebar')).getByRole('button', { name: chipName })
+    expect(chip).not.toHaveTextContent('Morgan Manager')
+    await userEvent.click(chip)
+    await expectFullMenu()
+  })
+
+  test('Sign out from the chip signs out', async () => {
+    const onLogout = vi.fn()
+    renderLayout(users.manager, onLogout)
+    await userEvent.click(screen.getByRole('button', { name: chipName }))
+    await userEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }))
+    expect(onLogout).toHaveBeenCalled()
+  })
+
+  test('the phone drawer shows the chip at the bottom and no Collapse', async () => {
+    setViewport(390)
+    renderLayout(users.manager)
+    await userEvent.click(screen.getByRole('button', { name: /open navigation/i }))
+    const nav = await screen.findByRole('navigation', { name: /main/i })
+    const chip = screen.getByRole('button', { name: chipName })
+    expect(nav.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /collapse sidebar/i })).toBeNull()
+  })
+})
+
+describe('top bar order', () => {
+  test('Search, timer, Puppy, Notifications, then the account avatar', () => {
+    const extras = <><button>Timer</button><button>Puppy</button><button>Notifications</button></>
+    renderLayout(users.manager, () => {}, { extras })
+    const names = within(screen.getByRole('banner')).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)
+    expect(names).toEqual(['Search (Ctrl+K)', 'Timer', 'Puppy', 'Notifications', 'Account menu'])
+  })
+
+  test('Search is named "Search (Ctrl+K)" and opens the palette', async () => {
+    renderAsUser(<Layout user={users.manager} onLogout={() => {}} />, { user: users.manager })
+    await userEvent.click(screen.getByRole('button', { name: 'Search (Ctrl+K)' }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  test('below md Search is icon-only but keeps its name', () => {
+    setViewport(700)
+    renderLayout(users.manager)
+    const search = screen.getByRole('button', { name: 'Search (Ctrl+K)' })
+    expect(search).not.toHaveTextContent('Search…')
+  })
 })

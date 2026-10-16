@@ -6,12 +6,12 @@ import { setViewport } from '../test/setup.js'
 import { useBreadcrumb } from './breadcrumbs.js'
 import Layout from './Layout.jsx'
 
-function NamedPage({ name }) {
-  useBreadcrumb(name)
+function NamedPage({ name, failed }) {
+  useBreadcrumb(name, { failed })
   return <p>Page body</p>
 }
 
-function renderAt(user, route, name) {
+function renderAt(user, route, name, failed) {
   return renderWithProviders(
     <Routes>
       <Route element={<Layout user={user} onLogout={() => {}} />}>
@@ -19,9 +19,9 @@ function renderAt(user, route, name) {
         <Route path="people" element={<p>People</p>} />
         <Route path="archive" element={<p>Archive</p>} />
         <Route path="profile" element={<p>Profile</p>} />
-        <Route path="projects/:id" element={<NamedPage name={name} />} />
-        <Route path="people/:id/profile" element={<NamedPage name={name} />} />
-        <Route path="people/:id" element={<NamedPage name={name} />} />
+        <Route path="projects/:id" element={<NamedPage name={name} failed={failed} />} />
+        <Route path="people/:id/profile" element={<NamedPage name={name} failed={failed} />} />
+        <Route path="people/:id" element={<NamedPage name={name} failed={failed} />} />
         <Route path="*" element={<p>Not found</p>} />
       </Route>
     </Routes>,
@@ -29,7 +29,7 @@ function renderAt(user, route, name) {
   )
 }
 
-const trail = () => within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getAllByRole('listitem').map((li) => li.textContent)
+const trail = () => within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getAllByRole('listitem').map((li) => li.textContent.replace(/^\//, ''))
 
 describe('breadcrumbs', () => {
   test.each([
@@ -91,5 +91,21 @@ describe('breadcrumbs', () => {
     expect(screen.getByRole('link', { name: 'Projects' })).toHaveAttribute('href', '/projects')
     expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull()
     expect(screen.queryByText('Apollo')).toBeNull()
+  })
+
+  test('when the page fails to load the last crumb says "Not found", not a skeleton', () => {
+    renderAt(users.manager, '/projects/p1', undefined, true)
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    expect(trail()).toEqual(['Projects', 'Not found'])
+    expect(nav.querySelector('.MuiSkeleton-root')).toBeNull()
+    expect(within(nav).getByText('Not found')).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('the "/" separators are real aria-hidden elements, not generated content', () => {
+    renderAt(users.admin, '/people/u-9', 'Sam Smith')
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' })
+    const separators = nav.querySelectorAll('li > [aria-hidden="true"]')
+    expect(separators).toHaveLength(2)
+    separators.forEach((sep) => expect(sep).toHaveTextContent('/'))
   })
 })

@@ -22,7 +22,7 @@ function renderApp() {
   )
 }
 
-const openMenu = () => userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+const openMenu = () => userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
 
 describe('colour theme', () => {
   afterEach(() => vi.restoreAllMocks())

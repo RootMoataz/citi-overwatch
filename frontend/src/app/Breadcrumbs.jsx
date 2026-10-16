@@ -22,12 +22,12 @@ export default function Breadcrumbs({ user, desktop }) {
   return (
     <Box component="nav" aria-label="Breadcrumb" sx={{ minWidth: 0 }}>
       <Box component="ol" sx={{ display: 'flex', alignItems: 'center', listStyle: 'none', m: 0, p: 0, minWidth: 0,
-        '& > li': { display: 'flex', alignItems: 'center', minWidth: 0 },
-        '& > li + li::before': { content: '"/"', mx: 1, color: 'text.disabled' } }}>
+        '& > li': { display: 'flex', alignItems: 'center', minWidth: 0 } }}>
         {crumbs.map((crumb, index) => {
           const last = index === crumbs.length - 1
           return (
             <li key={`${index}-${crumb.label ?? 'pending'}`}>
+              {index > 0 ? <Box component="span" aria-hidden="true" sx={{ mx: 1, color: 'text.disabled' }}>/</Box> : null}
               {crumb.pending ? (
                 <Skeleton variant="text" width={96} aria-current="page" aria-busy="true" />
               ) : crumb.to && !last ? (

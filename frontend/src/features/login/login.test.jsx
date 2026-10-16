@@ -212,7 +212,7 @@ describe('where sign-in lands', () => {
   }
 
   async function signOutFromMenu() {
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: /sign out/i }))
     await screen.findByRole('heading', { name: /sign in/i })
   }

@@ -43,15 +43,20 @@ export function BreadcrumbProvider({ children }) {
   return createElement(BreadcrumbContext.Provider, { value }, children)
 }
 
-/** A page calls this with its own name (it may be undefined while loading); the crumb clears when the page goes. */
-export function useBreadcrumb(label) {
+/**
+ * A page calls this with its own name (it may be undefined while loading); the crumb clears when the page goes.
+ * Pass `{ failed: true }` when the page couldn't load: with no name the last crumb then reads "Not found" instead of
+ * a skeleton that never resolves.
+ */
+export function useBreadcrumb(label, { failed = false } = {}) {
   const context = useContext(BreadcrumbContext)
   const setLabel = context?.setLabel
+  const shown = label || (failed ? 'Not found' : null)
   useEffect(() => {
     if (!setLabel) return undefined
-    setLabel(label || null)
+    setLabel(shown)
     return () => setLabel(null)
-  }, [setLabel, label])
+  }, [setLabel, shown])
 }
 
 /** The label the open page named, or null. */
