@@ -1,5 +1,7 @@
 import { screen, within } from '@testing-library/react'
-import { Route, Routes } from 'react-router-dom'
+import userEvent from '@testing-library/user-event'
+import { useLayoutEffect } from 'react'
+import { Link, Route, Routes, useParams } from 'react-router-dom'
 import { describe, expect, test } from 'vitest'
 import { renderWithProviders, users } from '../test/render.jsx'
 import { setViewport } from '../test/setup.js'
@@ -99,6 +101,36 @@ describe('breadcrumbs', () => {
     expect(trail()).toEqual(['Projects', 'Not found'])
     expect(nav.querySelector('.MuiSkeleton-root')).toBeNull()
     expect(within(nav).getByText('Not found')).toHaveAttribute('aria-current', 'page')
+  })
+
+  test('an executive viewing someone is Workspace / name (only admins reach /people/:id; the guard sends others home)', () => {
+    renderAt(users.executive, '/people/u-9/profile', 'Sam Smith')
+    expect(trail()).toEqual(['Workspace', 'Sam Smith'])
+  })
+
+  test("moving from project A to project B never paints A's name on B, not even for one frame", async () => {
+    // B's name is still loading when it first renders. What the bar shows at that first commit is read in a layout
+    // effect, which runs after the DOM changes and before the browser paints (a findBy would only see the settled state).
+    const firstPaint = []
+    function Project() {
+      const { id } = useParams()
+      useBreadcrumb(id === 'a' ? 'Apollo' : undefined)
+      useLayoutEffect(() => { firstPaint.push(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent) }, [])
+      return <Link to="/projects/b">Open project B</Link>
+    }
+    renderWithProviders(
+      <Routes>
+        <Route element={<Layout user={users.manager} onLogout={() => {}} />}>
+          <Route path="projects/:id" element={<Project />} />
+        </Route>
+      </Routes>,
+      { route: '/projects/a' },
+    )
+    expect(await screen.findByText('Apollo')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('link', { name: 'Open project B' }))
+    expect(firstPaint).toHaveLength(2)
+    expect(firstPaint[1]).not.toContain('Apollo')
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).not.toHaveTextContent('Apollo')
   })
 
   test('the "/" separators are real aria-hidden elements, not generated content', () => {

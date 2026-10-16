@@ -78,9 +78,20 @@ describe('a conversation', () => {
     msg('m3', mgr, '<b>Flag</b> anything that does not parse', 2)]
 
   test('shows my messages on one side, theirs on the other, as plain text, and marks it read', async () => {
+    // Like the server, a read moves the conversation's last_read_at, so the refetched thread no longer needs one. (A thread
+    // that never moved would be marked read again after every refetch, and "once" would depend on when the check ran.)
     let read = 0
-    server.use(inbox(), threadHandler(direct, items),
-      http.post(`${API}/conversations/c1/read`, () => { read += 1; return HttpResponse.json({ conversation_id: 'c1', last_read_at: recent(0) }) }))
+    let lastRead = direct.last_read_at
+    const threadCalls = {}
+    server.use(inbox(), http.get(`${API}/conversations/c1/messages`, () => {
+      threadCalls.n = (threadCalls.n ?? 0) + 1
+      return HttpResponse.json({ items, has_more: false, conversation: { ...direct, last_read_at: lastRead } })
+    }),
+    http.post(`${API}/conversations/c1/read`, () => {
+      read += 1
+      lastRead = recent(0)
+      return HttpResponse.json({ conversation_id: 'c1', last_read_at: lastRead })
+    }))
     renderPage(users.employee, '/messages/c1')
     const log = await screen.findByRole('log', { name: 'Messages' })
     expect(await within(log).findByText('How is it going?')).toBeInTheDocument()
@@ -90,6 +101,9 @@ describe('a conversation', () => {
     expect(within(log).getByText(/Nearly there/).textContent).toBe('Nearly there\nAddresses left')
     expect(within(log).getByRole('separator', { name: 'Today' })).toBeInTheDocument()
     await waitFor(() => expect(read).toBe(1))
+    // The read refreshes the thread, which now carries the new last_read_at.
+    await waitFor(() => expect(threadCalls.n).toBeGreaterThanOrEqual(2))
+    expect(read).toBe(1)
   })
 
   test('says "Seen" under my last message once everyone has read it', async () => {
@@ -307,6 +321,50 @@ describe('Discuss on a milestone', () => {
       http.get(`${API}/projects/p1/members`, () => HttpResponse.json([])))
     renderAsUser(<MilestonesTab project={project} manage={false} />, { user: users.employee })
     expect(await screen.findByRole('link', { name: /open the discussion about schema mapping/i })).toBeInTheDocument()
+  })
+})
+
+describe('the breadcrumb and the back control in the shell', () => {
+  function renderInShell(user, route) {
+    return renderAsUser(
+      <Routes>
+        <Route element={<Layout user={user} onLogout={() => {}} />}>
+          <Route path="/messages/:id?" element={<MessagesPage />} />
+        </Route>
+      </Routes>, { user, route })
+  }
+  const crumbs = () => within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getAllByRole('listitem')
+    .map((li) => li.textContent.replace(/^\//, ''))
+
+  test('a thread is Workspace / Messages / its subject', async () => {
+    server.use(inbox(), threadHandler(discussion, []))
+    renderInShell(users.employee, '/messages/c2')
+    await waitFor(() => expect(crumbs()).toEqual(['Workspace', 'Messages', 'Schema Mapping · Apollo']))
+    expect(within(screen.getByRole('navigation', { name: 'Breadcrumb' })).getByRole('link', { name: 'Messages' }))
+      .toHaveAttribute('href', '/messages')
+  })
+
+  test('a thread that is not in the loaded list still names its crumb from the thread', async () => {
+    server.use(inbox([direct]), threadHandler(discussion, []))
+    renderInShell(users.employee, '/messages/c2')
+    await waitFor(() => expect(crumbs()).toEqual(['Workspace', 'Messages', 'Schema Mapping · Apollo']))
+  })
+
+  test('an unknown thread ends the trail with "Not found", not a skeleton that never resolves', async () => {
+    server.use(inbox(), http.get(`${API}/conversations/zz/messages`, () =>
+      HttpResponse.json({ error: { code: 'NOT_FOUND', message: 'Not found' } }, { status: 404 })))
+    renderInShell(users.employee, '/messages/zz')
+    expect(await screen.findByText("This conversation isn't available")).toBeInTheDocument()
+    await waitFor(() => expect(crumbs()).toEqual(['Workspace', 'Messages', 'Not found']))
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).querySelector('.MuiSkeleton-root')).toBeNull()
+  })
+
+  test('on a phone a thread has one back control: its own, not a second "‹ Messages" in the top bar', async () => {
+    setViewport(390)
+    server.use(inbox(), threadHandler(direct, []))
+    renderInShell(users.employee, '/messages/c1')
+    expect(await screen.findByRole('button', { name: 'Back to conversations' })).toBeInTheDocument()
+    expect(within(screen.getByRole('banner')).queryByRole('link', { name: /messages/i })).toBeNull()
   })
 })
 

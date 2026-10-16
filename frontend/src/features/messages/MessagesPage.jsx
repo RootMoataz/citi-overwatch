@@ -3,7 +3,6 @@ import Forum from '@mui/icons-material/ForumOutlined'
 import { Box, Button, Paper } from '@mui/material'
 import { useMediaQuery } from 'react-responsive'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useBreadcrumb } from '../../app/breadcrumbs.js'
 import { useConversations } from '../../api/messages.js'
 import { useSession } from '../../auth/sessionContext.js'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -28,7 +27,6 @@ export default function MessagesPage() {
   const conversations = useConversations({ fast: true })
   const to = params.get('to')
   const open = id ? conversations.data?.items?.find((c) => String(c.id) === String(id)) : null
-  useBreadcrumb(open ? conversationTitle(open, user) : undefined)
   const composing = params.has('compose') || Boolean(to)
 
   if (to && conversations.data) {
@@ -57,7 +55,8 @@ export default function MessagesPage() {
         ) : null}
         {threadOpen ? (
           <Box sx={{ minHeight: 0, minWidth: 0 }}>
-            <ThreadView key={id} id={id} me={user} onBack={desktop ? undefined : () => navigate('/messages')} />
+            <ThreadView key={id} id={id} me={user} title={open ? conversationTitle(open, user) : undefined}
+              onBack={desktop ? undefined : () => navigate('/messages')} />
           </Box>
         ) : desktop ? (
           <Box sx={{ display: 'grid', placeItems: 'center' }}>

@@ -1,4 +1,5 @@
 import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { can } from '../lib/permissions.js'
 import { NAV } from './nav.jsx'
 
@@ -36,10 +37,11 @@ export function crumbsFor(pathname, user, lastLabel) {
 
 const BreadcrumbContext = createContext(null)
 
-/** Holds the name the open page gives its last crumb. Wrap the shell (top bar and page) in it. */
+/** Holds the name the open page gives its last crumb, with the address it was given for. Wrap the shell (top bar
+ * and page) in it. */
 export function BreadcrumbProvider({ children }) {
-  const [label, setLabel] = useState(null)
-  const value = useMemo(() => ({ label, setLabel }), [label])
+  const [entry, setEntry] = useState(null) // { pathname, label }
+  const value = useMemo(() => ({ entry, setEntry }), [entry])
   return createElement(BreadcrumbContext.Provider, { value }, children)
 }
 
@@ -49,17 +51,23 @@ export function BreadcrumbProvider({ children }) {
  * a skeleton that never resolves.
  */
 export function useBreadcrumb(label, { failed = false } = {}) {
-  const context = useContext(BreadcrumbContext)
-  const setLabel = context?.setLabel
+  const { pathname } = useLocation()
+  const setEntry = useContext(BreadcrumbContext)?.setEntry
   const shown = label || (failed ? 'Not found' : null)
   useEffect(() => {
-    if (!setLabel) return undefined
-    setLabel(shown)
-    return () => setLabel(null)
-  }, [setLabel, shown])
+    if (!setEntry) return undefined
+    setEntry({ pathname, label: shown })
+    return () => setEntry((entry) => (entry?.pathname === pathname ? null : entry))
+  }, [setEntry, pathname, shown])
 }
 
-/** The label the open page named, or null. */
+/**
+ * The label the open page named, or null. A label given for another address is ignored: on the first render after
+ * moving from project A to project B the old page's name is still held (its clean-up hasn't run yet), and it must
+ * never show on B.
+ */
 export function useCrumbLabel() {
-  return useContext(BreadcrumbContext)?.label ?? null
+  const { pathname } = useLocation()
+  const entry = useContext(BreadcrumbContext)?.entry
+  return entry && entry.pathname === pathname ? entry.label : null
 }

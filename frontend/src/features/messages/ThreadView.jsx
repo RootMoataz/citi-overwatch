@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useLoadOlder, useMarkConversationRead, useThread } from '../../api/messages.js'
+import { useBreadcrumb } from '../../app/breadcrumbs.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -96,9 +97,13 @@ function Header({ conversation, me, onBack }) {
   )
 }
 
-/** One conversation: header, the messages (mine on the right) and the composer. Reading it marks it read. */
-export default function ThreadView({ id, me, onBack }) {
+/** One conversation: header, the messages (mine on the right) and the composer. Reading it marks it read. It names
+ * the top bar's last crumb: `title` (from the inbox) at once, else the thread's own conversation once it loads (one
+ * outside the loaded inbox page too), or "Not found" when it can't be opened. */
+export default function ThreadView({ id, me, title, onBack }) {
   const thread = useThread(id)
+  const loaded = thread.data?.conversation
+  useBreadcrumb(title ?? (loaded ? conversationTitle(loaded, me) : undefined), { failed: Boolean(thread.error) })
   const older = useLoadOlder(id)
   const { mutate: markRead, isPending: marking } = useMarkConversationRead()
   const calm = useCalmMotion()
