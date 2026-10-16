@@ -49,9 +49,12 @@ export default function PersonProfilePage() {
       {history
         ? <PageHeader title="My history" subtitle="Your work record, including completed milestones." actions={actions} />
         : <PageHeader title={p.name} subtitle={<>{p.job_title || ROLE_LABEL[p.role]}{p.is_archived ? ' · Archived' : ''}</>} actions={actions} />}
+      {/* Keyed by person: Employment details and the tab filters start fresh on each profile, a cached one included.
+          The history card spans the width under the profile card and the figures, so its six columns fit (the
+          mockup's widths); narrower, its table scrolls inside the card. */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, md: 4 }}>
-          <ProfileCard person={p} skills={skills ?? []} canEditSkills={Boolean(canEditSkills)} own={own} />
+          <ProfileCard key={p.id} person={p} skills={skills ?? []} canEditSkills={Boolean(canEditSkills)} own={own} />
         </Grid>
         <Grid size={{ xs: 12, md: 8 }}>
           <Stack sx={{ gap: 2 }}>
@@ -65,9 +68,11 @@ export default function PersonProfilePage() {
               { key: 'logged', label: 'Total hours logged', value: formatHours(total.logged), hint: 'All time' },
               { key: 'approved', label: 'Total hours approved', value: formatHours(total.approved), hint: 'All time' },
             ]} />
-            <HistoryTabs projects={projects} milestones={milestones} canSeeArchived={canSeeArchived} />
-            {own ? <FootNote icon={<LockOutlined fontSize="inherit" />} note="Read-only history. Edit eligible hours in My timesheet." /> : null}
           </Stack>
+        </Grid>
+        <Grid size={12}>
+          <HistoryTabs key={p.id} projects={projects} milestones={milestones} canSeeArchived={canSeeArchived} />
+          {own ? <FootNote icon={<LockOutlined fontSize="inherit" />} note="Read-only history. Edit eligible hours in My timesheet." /> : null}
         </Grid>
       </Grid>
     </>

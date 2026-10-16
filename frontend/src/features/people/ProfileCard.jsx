@@ -27,7 +27,7 @@ function EmploymentDetails({ salary }) {
         {open ? (
           <Stack sx={{ mt: 1.5 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>Annual salary</Typography>
-            <Typography variant="body1">{formatMoney(salary)}</Typography>
+            <Typography variant="body1">{salary == null ? '—' : formatMoney(salary)}</Typography>
           </Stack>
         ) : null}
       </div>
@@ -38,6 +38,9 @@ function EmploymentDetails({ salary }) {
 /** Who this is: photo, name, title, skills, manager, and (only when the profile carries `salary`) Employment details. */
 export default function ProfileCard({ person, skills = [], canEditSkills = false, own = false }) {
   const where = [ROLE_LABEL[person.role], person.department?.name].filter(Boolean).join(' · ')
+  // Someone else's page names who they report to even when that account is archived; their own lists a manager to contact.
+  const manager = person.manager
+  const showsManager = Boolean(manager?.id) && (!manager.is_archived || !own)
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
       <Stack sx={{ gap: 0.5, alignItems: 'flex-start', mb: 2 }}>
@@ -48,8 +51,8 @@ export default function ProfileCard({ person, skills = [], canEditSkills = false
       </Stack>
       <Divider sx={{ mb: 2 }} />
       <SkillsCard embedded person={person} skills={skills} canEdit={canEditSkills} />
-      {person.manager?.id && !person.manager.is_archived ? <Divider sx={{ my: 2 }} /> : null}
-      <YourManagerCard embedded manager={person.manager} title={own ? 'Your manager' : 'Reports to'} />
+      {showsManager ? <Divider sx={{ my: 2 }} /> : null}
+      <YourManagerCard embedded manager={manager} title={own ? 'Your manager' : 'Reports to'} keepArchived={!own} />
       {'salary' in person ? (
         <>
           <Divider sx={{ my: 2 }} />

@@ -127,6 +127,7 @@ export default function MilestoneGroups({ groups, comingUp, today, sections }) {
                 <DateLine {...dueLine(m, today)} />
                 <StatusChip icon status={stateKey(m)} />
                 <Words muted>{upNextLabel(m, today)}</Words>
+                {loggable.has(String(m.id)) ? <TimerButton milestone={m} /> : null}
               </>
             )} />
           ))}

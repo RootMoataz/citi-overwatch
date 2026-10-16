@@ -1,5 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
@@ -221,5 +222,97 @@ describe("My history: someone else's page, or a manager's own", () => {
     renderProfile(users.admin, profile())
     await screen.findByRole('heading', { name: 'Eli Employee', level: 1 })
     expect(screen.getByText('Employee · Technology')).toBeInTheDocument()
+  })
+})
+
+// Moves the page to another profile in the same mounted route, as a link would.
+function Go() {
+  const navigate = useNavigate()
+  return (
+    <>
+      <button type="button" onClick={() => navigate('/people/u-a/profile')}>Go to A</button>
+      <button type="button" onClick={() => navigate('/people/u-b/profile')}>Go to B</button>
+    </>
+  )
+}
+
+describe('My history: final review fixes', () => {
+  test("Sunday evening in New York (UTC already Monday) shows the week of Oct 12 and asks for it by its Monday", async () => {
+    vi.setSystemTime(new Date('2026-10-19T02:00:00Z'))
+    const weeks = []
+    server.use(http.get(`${API}/users/u-emp/profile`, ({ request }) => {
+      const week = new URL(request.url).searchParams.get('week')
+      weeks.push(week)
+      // Without ?week= the server answers with its own (UTC) week, which is already Oct 19.
+      return HttpResponse.json({ ...profile({ salary: 95000 }), this_week: { week_start: week ?? '2026-10-19', logged: 0, overtime: 0, planned: 30 } })
+    }))
+    renderAsUser(<PersonProfilePage />, { user: users.employee, route: '/people/u-emp/profile', path: '/people/:id/profile' })
+    expect(await screen.findByRole('heading', { name: 'Week of Oct 12, 2026' })).toBeInTheDocument()
+    expect(weeks).toEqual(['2026-10-12'])
+  })
+
+  test('Employment details and the tab filters start fresh on each profile, a cached one included', async () => {
+    const a = profile({ id: 'u-a', salary: 90000 })
+    const b = { ...profile({ id: 'u-b', salary: 70000 }), user: { ...profile({ id: 'u-b', salary: 70000 }).user, name: 'Bea Builder' } }
+    stub(a, 'u-a')
+    stub(b, 'u-b')
+    renderAsUser(<><PersonProfilePage /><Go /></>, { user: users.admin, route: '/people/u-b/profile', path: '/people/:id/profile' })
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { name: 'Bea Builder', level: 1 })
+    await user.click(screen.getByRole('button', { name: 'Go to A' }))
+    await screen.findByRole('heading', { name: 'Eli Employee', level: 1 })
+    await user.click(screen.getByRole('button', { name: /Employment details/ }))
+    expect(screen.getByText('$90,000')).toBeInTheDocument()
+    await user.type(screen.getByRole('textbox', { name: 'Search milestones' }), 'Schema')
+    // B is cached: it shows at once, with its own state.
+    await user.click(screen.getByRole('button', { name: 'Go to B' }))
+    expect(await screen.findByRole('heading', { name: 'Bea Builder', level: 1 })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Employment details/ })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('$70,000')).not.toBeInTheDocument()
+    expect(screen.queryByText('$90,000')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Search milestones' })).toHaveValue('')
+  })
+
+  test('Include archived sits above both tabs: on Projects it shows and brings the archived project in', async () => {
+    renderProfile(users.admin, profile({ salary: 90000, archived: true }), { route: '/people/u-emp/profile?tab=projects' })
+    const box = await screen.findByRole('checkbox', { name: 'Include archived' })
+    expect(screen.getByRole('tab', { name: 'Projects 2' })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(box)
+    expect(screen.getByRole('tab', { name: 'Projects 3' })).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: 'Projects' })).getByText('Archived')).toBeInTheDocument()
+    // The same box still counts for Milestones.
+    await userEvent.click(screen.getByRole('tab', { name: 'Milestones 8' }))
+    expect(screen.getByRole('checkbox', { name: 'Include archived' })).toBeChecked()
+  })
+
+  test("on someone else's page an archived manager is still named under Reports to, with no way to message them", async () => {
+    renderProfile(users.admin, profile({ boss: { ...manager, is_archived: true } }))
+    const reports = await screen.findByRole('region', { name: 'Reports to' })
+    expect(within(reports).getByText('Morgan Manager')).toBeInTheDocument()
+    expect(within(reports).getByText('Archived')).toBeInTheDocument()
+    expect(within(reports).queryByRole('link', { name: /Message/ })).not.toBeInTheDocument()
+  })
+
+  test('on their own page an archived manager has no Your manager card', async () => {
+    renderProfile(users.employee, profile({ salary: 95000, boss: { ...manager, is_archived: true } }))
+    await screen.findByRole('heading', { name: 'My history', level: 1 })
+    expect(screen.queryByRole('region', { name: 'Your manager' })).not.toBeInTheDocument()
+  })
+
+  test('the history card is a region named by its H2, Work history', async () => {
+    ownPage()
+    const card = await screen.findByRole('region', { name: 'Work history' })
+    expect(within(card).getByRole('heading', { level: 2, name: 'Work history' })).toBeInTheDocument()
+    expect(within(card).getByRole('tab', { name: 'Milestones 7' })).toBeInTheDocument()
+  })
+
+  test('a salary of null reads as a dash once Employment details is opened, never $0', async () => {
+    const body = profile({ salary: 1 })
+    body.user.salary = null
+    renderProfile(users.employee, body)
+    await userEvent.click(await screen.findByRole('button', { name: /Employment details/ }))
+    expect(screen.getByText('Annual salary')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument()
   })
 })

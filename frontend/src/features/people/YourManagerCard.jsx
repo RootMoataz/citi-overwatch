@@ -13,24 +13,30 @@ import Section from '../dashboard/Section.jsx'
  * (the Messages ?to= flow opens the existing conversation, or a new message to them). Nothing without a manager.
 
  * `collapsible` (with `open` and `onToggle`) lets My week fold it away. `embedded` drops the outline for use inside
- * another card: `title` becomes an H3 and Message is outlined and full width ("Reports to" on someone else's page). */
+ * another card: `title` becomes an H3 and Message is outlined and full width ("Reports to" on someone else's page).
+ * `stacked` puts Message under the name and job, full width, for a narrow column (My week's right one on a desktop).
+ * `keepArchived` still names a manager whose account is archived (with "Archived", and no Message): "Reports to" is a
+ * fact about the person, while "Your manager" is someone to contact, so the card shows only a manager still here. */
 export default function YourManagerCard({ manager, sx, collapsible = false, open = true, onToggle, embedded = false,
-  title = 'Your manager' }) {
+  title = 'Your manager', stacked = false, keepArchived = false }) {
   const { user } = useSession()
   const headingId = useId()
-  const contacts = useContacts(Boolean(manager?.id))
-  if (!manager?.id || manager.is_archived) return null
+  const archived = Boolean(manager?.is_archived)
+  const contacts = useContacts(Boolean(manager?.id) && !archived)
+  if (!manager?.id || (archived && !keepArchived)) return null
   const first = manager.first_name ?? String(manager.name ?? '').split(' ')[0]
   const details = [manager.job_title, manager.department?.name].filter(Boolean).join(' · ')
-  const messageable = canMessage(contacts.data, manager, user)
+  const messageable = !archived && canMessage(contacts.data, manager, user)
+  const column = embedded || stacked
   const body = (
-    <Stack direction={embedded ? 'column' : { xs: 'column', sm: 'row' }}
-      sx={{ gap: 2, alignItems: embedded ? 'stretch' : { sm: 'center' } }}>
+    <Stack direction={column ? 'column' : { xs: 'column', sm: 'row' }}
+      sx={{ gap: 2, alignItems: column ? 'stretch' : { sm: 'center' } }}>
       <Stack direction="row" sx={{ gap: 1.5, alignItems: 'center', minWidth: 0, flexGrow: 1 }}>
         <UserAvatar userId={manager.id} name={manager.name} size={48} />
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="subtitle1" component="p" sx={{ fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{manager.name}</Typography>
           {details ? <Typography variant="body2" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>{details}</Typography> : null}
+          {archived ? <Typography variant="body2" sx={{ color: 'text.secondary' }}>Archived</Typography> : null}
           {canViewProfile(user, manager.id) ? (
             <Link component={RouterLink} to={`/people/${manager.id}/profile`} variant="body2" underline="hover">View profile</Link>
           ) : null}
@@ -38,8 +44,8 @@ export default function YourManagerCard({ manager, sx, collapsible = false, open
       </Stack>
       {messageable ? (
         <Button component={RouterLink} to={`/messages?to=${encodeURIComponent(manager.id)}`} variant="outlined"
-          fullWidth={embedded} startIcon={<ChatOutlined />}
-          sx={embedded ? { minHeight: 44 } : { flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' }, minHeight: 44 }}>
+          fullWidth={column} startIcon={<ChatOutlined />}
+          sx={column ? { minHeight: 44 } : { flexShrink: 0, alignSelf: { xs: 'stretch', sm: 'center' }, minHeight: 44 }}>
           Message {first}
         </Button>
       ) : null}

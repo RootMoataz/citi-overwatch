@@ -1,6 +1,6 @@
-import { Grid, Skeleton, Stack, useMediaQuery } from '@mui/material'
-import { useTheme } from '@mui/material/styles'
+import { Grid, Skeleton, Stack } from '@mui/material'
 import { flushSync } from 'react-dom'
+import { useMediaQuery } from 'react-responsive'
 import { useSearchParams } from 'react-router-dom'
 import { useProfile, useProfileWeek } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
@@ -8,6 +8,7 @@ import Reveal from '../../components/Reveal.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import { mondayOfIso, nyMondayIso, nyTodayIso } from '../../lib/format.js'
+import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import TimerLimitBanner from '../timer/TimerLimitBanner.jsx'
 import YourManagerCard from '../people/YourManagerCard.jsx'
 import Claimable from './Claimable.jsx'
@@ -34,7 +35,7 @@ export default function MyWeekPage() {
   const profile = useProfile(user.id)
   const sections = useCollapsedSections()
   const [params, setParams] = useSearchParams()
-  const wide = useMediaQuery(useTheme().breakpoints.up('md'))
+  const wide = useMediaQuery(DESKTOP_QUERY)
   const today = nyTodayIso()
   const current = nyMondayIso()
   const week = shownWeek(params.get('week'), current)
@@ -78,7 +79,7 @@ export default function MyWeekPage() {
     </Reveal>
   ) : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null
   const manager = data?.user?.manager
-    ? <YourManagerCard manager={data.user.manager} collapsible open={sections.isOpen('manager')}
+    ? <YourManagerCard manager={data.user.manager} collapsible stacked={wide} open={sections.isOpen('manager')}
       onToggle={() => sections.toggle('manager')} /> : null
 
   return (

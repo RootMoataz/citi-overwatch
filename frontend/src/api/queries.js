@@ -2,6 +2,7 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../app/toast.js'
 import { celebrate } from '../lib/celebrate.js'
+import { nyMondayIso } from '../lib/format.js'
 import { statusToast } from '../lib/workflow.js'
 import { api } from './client.js'
 
@@ -263,7 +264,12 @@ export const useUsers = (filters) => useQuery({
   placeholderData: keepPreviousData,
 })
 export const useUser = (id) => useQuery({ queryKey: ['user', id], queryFn: () => api.get(`/users/${id}`) })
-export const useProfile = (id, enabled = true) => useQuery({ queryKey: ['profile', id], enabled, queryFn: () => api.get(`/users/${id}/profile`) })
+// The full profile, its `this_week` for New York's week: the server's default is the UTC week, a day ahead on a Sunday
+// evening in New York. The week is in the key, so a new week asks again.
+export function useProfile(id, enabled = true) {
+  const week = nyMondayIso()
+  return useQuery({ queryKey: ['profile', id, week], enabled, queryFn: () => api.get(`/users/${id}/profile`, { week }) })
+}
 // One week's hours for the My week card: only `this_week`, for any past week. Saves invalidate ['profile'], which covers it.
 export const useProfileWeek = (id, week, enabled = true) => useQuery({
   queryKey: ['profile', id, 'week', week], enabled, placeholderData: keepPreviousData,

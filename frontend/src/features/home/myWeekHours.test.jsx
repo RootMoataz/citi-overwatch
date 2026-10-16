@@ -39,7 +39,7 @@ function serve({ profile = full(), weekly = () => slim(past), weeklyStatus = 200
         return weeklyStatus === 200 ? HttpResponse.json(weekly(url.searchParams.get('week')))
           : HttpResponse.json({ error: { code: 'X', message: 'Could not load that week' } }, { status: weeklyStatus })
       }
-      return HttpResponse.json(profile)
+      return HttpResponse.json(typeof profile === 'function' ? profile(url.searchParams.get('week')) : profile)
     }),
     http.get(`${API}/messages/contacts`, () => HttpResponse.json({ items: [{ id: 'u-mgr', name: 'Morgan Manager' }], can_group: false })),
     http.get(`${API}/projects`, () => HttpResponse.json({ items: [], total: 0 })),
@@ -109,15 +109,17 @@ describe('header and week picker', () => {
     expect(await hoursCard('Hours · week of Dec 29, 2025')).toBeInTheDocument()
   })
 
-  test('Sunday evening in New York, after the UTC date rolled to Monday: still the week of Oct 12', async () => {
+  test('Sunday evening in New York, after the UTC date rolled to Monday: still the week of Oct 12, from one request', async () => {
     freeze('2026-10-19T02:00:00Z')
-    serve({ profile: full(thisWeek({ week_start: '2026-10-19' })), weekly: () => slim(thisWeek({ logged: 7 })) })
+    // The profile is asked for New York's week; without ?week= the server would answer with its own (UTC) week, Oct 19.
+    serve({ profile: (week) => full(thisWeek(week ? { week_start: week, logged: 7 } : { week_start: '2026-10-19', logged: 99 })),
+      weekly: () => slim(thisWeek({ logged: 99 })) })
     render()
     const card = await hoursCard()
     expect(within(picker()).getByText('Oct 12 – 18, 2026')).toBeInTheDocument()
     expect(within(picker()).getByRole('button', { name: 'Next week' })).toBeDisabled()
     expect(await within(card).findByText('7h logged')).toBeInTheDocument()
-    expect(calls).toContain('?week=2026-10-12&sections=this_week')
+    expect(calls).toEqual(['?week=2026-10-12'])
   })
 
   test.each(['2026-11-02', 'garbage'])('a typed ?week=%s shows this week and names no future week', async (typed) => {
@@ -203,6 +205,18 @@ describe('Your manager', () => {
     expect(await within(card).findByRole('link', { name: 'Message Morgan' })).toHaveAttribute('href', '/messages?to=u-mgr')
     await userEvent.click(within(card).getByRole('button', { name: 'Your manager' }))
     expect(JSON.parse(localStorage.getItem('overwatch.myweek.sections'))).toEqual({ manager: true })
+  })
+})
+
+describe('Your manager in the narrow column', () => {
+  const messageRow = async () => (await within(await screen.findByRole('region', { name: 'Your manager' }))
+    .findByRole('link', { name: 'Message Morgan' })).parentElement
+  test('beside This week\'s hours on a desktop, Message Morgan sits under the name and job, full width', async () => {
+    serve()
+    render()
+    const row = await messageRow()
+    expect(row).toHaveStyle({ flexDirection: 'column' })
+    expect(within(row).getByRole('link', { name: 'Message Morgan' })).toHaveClass('MuiButton-fullWidth')
   })
 })
 

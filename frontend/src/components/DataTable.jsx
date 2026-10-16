@@ -12,6 +12,8 @@ import { alpha } from '@mui/material/styles'
 import { useMediaQuery } from 'react-responsive'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 import { CardList } from './ResponsiveTable.jsx'
+import ScrollHint from './ScrollHint.jsx'
+import { thinScrollbar } from './thinScrollbar.js'
 import { onInnerControl } from './rowClick.js'
 
 const TOTAL_ID = '__total__'
@@ -54,11 +56,12 @@ function CardLine({ label, value, main = false }) {
  * (then the caller owns the order). `pagination.page` is zero-based, as in `TablePagination`. On phones,
  * `renderCardActions(row)` puts a row's actions (a "⋯") beside its card's tap area; the Total card gets none.
  * A column with `rowHeader: true` (the record's name) renders its body cells as `<th scope="row">`, so screen readers
- * announce each row by it.
+ * announce each row by it. `scrollHint`: when the table is wider than its card it scrolls inside it with a fade at the
+ * edge that has more (ScrollHint), never cut off silently.
  */
 export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => r.id, sort, defaultSort, onSortChange,
   serverSort = false, visibleKeys, onRowOpen, selectedId, rowTone, totalRow, renderCard, renderCardActions, loading = false,
-  skeletonRows = 5, empty, pagination }) {
+  skeletonRows = 5, empty, pagination, scrollHint = false }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const [ownSort, setOwnSort] = useState(defaultSort)
   const active = sort ?? ownSort
@@ -113,67 +116,72 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
     )
   }
 
+  const table = (
+    <Table size="small" aria-label={ariaLabel}>
+      <TableHead>
+        <TableRow>
+          {shown.map((c) => {
+            const sorted = active?.key === c.key
+            const ariaSort = sorted ? (active.dir === 'desc' ? 'descending' : 'ascending') : 'none'
+            return (
+              <TableCell key={c.key} align={c.align} aria-sort={c.sortable ? ariaSort : undefined}
+                sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                {c.sortable ? (
+                  <TableSortLabel active={sorted} direction={sorted ? active.dir : 'asc'} onClick={() => changeSort(c)}>
+                    {c.header}
+                  </TableSortLabel>
+                ) : c.header}
+                {c.info ? (
+                  <Tooltip title={c.info}>
+                    <Box component="span" tabIndex={0} role="img" aria-label={c.info} sx={{ ml: 0.5, cursor: 'help' }}>ⓘ</Box>
+                  </Tooltip>
+                ) : null}
+              </TableCell>
+            )
+          })}
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {loading
+          ? Array.from({ length: skeletonRows }, (_, i) => (
+            <TableRow key={i}>{shown.map((c) => <TableCell key={c.key}><Skeleton /></TableCell>)}</TableRow>
+          ))
+          : ordered.map((row) => {
+            const id = getRowId(row)
+            const tone = rowTone?.(row)
+            const selected = selectedId != null && selectedId === id
+            return (
+              <TableRow key={id} hover={Boolean(onRowOpen)} onClick={onRowOpen ? (e) => {
+                // A portalled menu or backdrop opened from a cell bubbles here through React but is not inside the row.
+                if (!e.currentTarget.contains(e.target)) return
+                if (onInnerControl(e)) return
+                onRowOpen(row)
+              } : undefined}
+                aria-current={selected ? 'true' : undefined} selected={selected} data-tone={tone || undefined}
+                sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default', ...tintFor(theme, tone) })}>
+                {shown.map((c) => (c.rowHeader
+                  ? <TableCell key={c.key} align={c.align} component="th" scope="row">{c.render(row)}</TableCell>
+                  : <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>))}
+              </TableRow>
+            )
+          })}
+        {!loading && totalRow ? (
+          <TableRow sx={{ '& > *': { fontWeight: 700, borderTop: 2, borderColor: 'divider' } }}>
+            {shown.map((c, i) => (i === 0
+              ? <TableCell key={c.key} component="th" scope="row">{totalRow[c.key]}</TableCell>
+              : <TableCell key={c.key} align={c.align}>{totalRow[c.key]}</TableCell>))}
+          </TableRow>
+        ) : null}
+      </TableBody>
+    </Table>
+  )
   return (
     <Box aria-busy={loading || undefined}>
-      <TableContainer>
-        <Table size="small" aria-label={ariaLabel}>
-          <TableHead>
-            <TableRow>
-              {shown.map((c) => {
-                const sorted = active?.key === c.key
-                const ariaSort = sorted ? (active.dir === 'desc' ? 'descending' : 'ascending') : 'none'
-                return (
-                  <TableCell key={c.key} align={c.align} aria-sort={c.sortable ? ariaSort : undefined}
-                    sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {c.sortable ? (
-                      <TableSortLabel active={sorted} direction={sorted ? active.dir : 'asc'} onClick={() => changeSort(c)}>
-                        {c.header}
-                      </TableSortLabel>
-                    ) : c.header}
-                    {c.info ? (
-                      <Tooltip title={c.info}>
-                        <Box component="span" tabIndex={0} role="img" aria-label={c.info} sx={{ ml: 0.5, cursor: 'help' }}>ⓘ</Box>
-                      </Tooltip>
-                    ) : null}
-                  </TableCell>
-                )
-              })}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading
-              ? Array.from({ length: skeletonRows }, (_, i) => (
-                <TableRow key={i}>{shown.map((c) => <TableCell key={c.key}><Skeleton /></TableCell>)}</TableRow>
-              ))
-              : ordered.map((row) => {
-                const id = getRowId(row)
-                const tone = rowTone?.(row)
-                const selected = selectedId != null && selectedId === id
-                return (
-                  <TableRow key={id} hover={Boolean(onRowOpen)} onClick={onRowOpen ? (e) => {
-                    // A portalled menu or backdrop opened from a cell bubbles here through React but is not inside the row.
-                    if (!e.currentTarget.contains(e.target)) return
-                    if (onInnerControl(e)) return
-                    onRowOpen(row)
-                  } : undefined}
-                    aria-current={selected ? 'true' : undefined} selected={selected} data-tone={tone || undefined}
-                    sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default', ...tintFor(theme, tone) })}>
-                    {shown.map((c) => (c.rowHeader
-                      ? <TableCell key={c.key} align={c.align} component="th" scope="row">{c.render(row)}</TableCell>
-                      : <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>))}
-                  </TableRow>
-                )
-              })}
-            {!loading && totalRow ? (
-              <TableRow sx={{ '& > *': { fontWeight: 700, borderTop: 2, borderColor: 'divider' } }}>
-                {shown.map((c, i) => (i === 0
-                  ? <TableCell key={c.key} component="th" scope="row">{totalRow[c.key]}</TableCell>
-                  : <TableCell key={c.key} align={c.align}>{totalRow[c.key]}</TableCell>))}
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {scrollHint ? (
+        <ScrollHint>
+          {(ref, onScroll) => <TableContainer ref={ref} onScroll={onScroll} sx={thinScrollbar}>{table}</TableContainer>}
+        </ScrollHint>
+      ) : <TableContainer>{table}</TableContainer>}
       {pager}
     </Box>
   )

@@ -1,4 +1,5 @@
-import { Box, Checkbox, Chip, FormControlLabel, Link, MenuItem, Paper, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { Box, Checkbox, Chip, FormControlLabel, Link, MenuItem, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+import { visuallyHidden } from '@mui/utils'
 import { useId, useMemo, useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import DataTable from '../../components/DataTable.jsx'
@@ -66,14 +67,17 @@ function TabLabel({ label, count }) {
   )
 }
 
-/** Projects and Milestones as tabs (?tab=projects, else Milestones). Archived rows are hidden unless the viewer may see
- * them (`canSeeArchived`) and ticks Include archived. */
+/** Projects and Milestones as tabs (?tab=projects, else Milestones), in a card named "Work history" (an H2 kept for
+ * screen readers; the tabs say the rest). Archived rows are hidden unless the viewer may see them (`canSeeArchived`) and
+ * ticks Include archived, which sits beside the tabs so it counts for both. Wider than the card, a table scrolls inside
+ * it with a fade at the edge (DataTable's scrollHint). */
 export default function HistoryTabs({ projects = NONE, milestones = NONE, canSeeArchived = false }) {
   const [params, setParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [projectId, setProjectId] = useState('')
   const [includeArchived, setIncludeArchived] = useState(false)
   const ids = useId()
+  const headingId = `${ids}-heading`
   const tab = params.get('tab') === 'projects' ? 'projects' : 'milestones'
   const withArchived = canSeeArchived && includeArchived
 
@@ -99,16 +103,24 @@ export default function HistoryTabs({ projects = NONE, milestones = NONE, canSee
   const panelId = (t) => `${ids}-panel-${t}`
 
   return (
-    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      <Tabs value={tab} onChange={choose} aria-label="Work history" sx={{ borderBottom: 1, borderColor: 'divider', minHeight: 48, px: 1 }}>
-        <Tab value="projects" id={tabId('projects')} aria-controls={panelId('projects')} sx={TAB_SX}
-          label={<TabLabel label="Projects" count={shownProjects.length} />} />
-        <Tab value="milestones" id={tabId('milestones')} aria-controls={panelId('milestones')} sx={TAB_SX}
-          label={<TabLabel label="Milestones" count={shownMilestones.length} />} />
-      </Tabs>
+    <Paper component="section" variant="outlined" aria-labelledby={headingId} sx={{ overflow: 'hidden' }}>
+      <Typography id={headingId} component="h2" sx={visuallyHidden}>Work history</Typography>
+      <Stack direction="row" useFlexGap sx={{ borderBottom: 1, borderColor: 'divider', px: 1, alignItems: 'center',
+        flexWrap: 'wrap', columnGap: 2 }}>
+        <Tabs value={tab} onChange={choose} aria-label="Work history" sx={{ minHeight: 48, flexGrow: 1 }}>
+          <Tab value="projects" id={tabId('projects')} aria-controls={panelId('projects')} sx={TAB_SX}
+            label={<TabLabel label="Projects" count={shownProjects.length} />} />
+          <Tab value="milestones" id={tabId('milestones')} aria-controls={panelId('milestones')} sx={TAB_SX}
+            label={<TabLabel label="Milestones" count={shownMilestones.length} />} />
+        </Tabs>
+        {canSeeArchived ? (
+          <FormControlLabel label="Include archived" sx={{ mr: 1, minHeight: 44 }}
+            control={<Checkbox checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />} />
+        ) : null}
+      </Stack>
       <Box role="tabpanel" id={panelId('projects')} aria-labelledby={tabId('projects')} hidden={tab !== 'projects'} sx={{ p: 2 }}>
         {tab === 'projects' ? (
-          <DataTable ariaLabel="Projects" columns={PROJECT_COLUMNS} rows={shownProjects}
+          <DataTable ariaLabel="Projects" columns={PROJECT_COLUMNS} rows={shownProjects} scrollHint
             empty={<Typography variant="body2" sx={{ color: 'text.secondary' }}>Not on any projects yet.</Typography>} />
         ) : null}
       </Box>
@@ -121,13 +133,9 @@ export default function HistoryTabs({ projects = NONE, milestones = NONE, canSee
                 <MenuItem value="">All projects</MenuItem>
                 {options.map(([id, name]) => <MenuItem key={id} value={id}>{name}</MenuItem>)}
               </TextField>
-              {canSeeArchived ? (
-                <FormControlLabel label="Include archived"
-                  control={<Checkbox checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />} />
-              ) : null}
             </FilterBar>
             <Box sx={{ mt: 1.5 }}>
-              <DataTable ariaLabel="Milestones" columns={MILESTONE_COLUMNS} rows={rows} defaultSort={{ key: 'dates', dir: 'desc' }}
+              <DataTable ariaLabel="Milestones" columns={MILESTONE_COLUMNS} rows={rows} defaultSort={{ key: 'dates', dir: 'desc' }} scrollHint
                 empty={<Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   {shownMilestones.length ? 'No milestones match.' : 'No milestones yet.'}</Typography>} />
             </Box>

@@ -374,6 +374,18 @@ describe('Start timer', () => {
     expect(screen.queryByRole('button', { name: /^Start timer on/ })).not.toBeInTheDocument()
   })
 
+  test('an Upcoming milestone the timesheet lists open has Start too; one it does not list has none', async () => {
+    serve({ milestones: [design, hypercare, review], comingUp: [], rows: [row(design), row(hypercare)] })
+    await openPage()
+    const upcoming = region(/^Upcoming/)
+    expect(await within(upcoming).findByRole('button', { name: 'Start timer on Hypercare' })).toBeInTheDocument()
+    expect(within(upcoming).queryByRole('button', { name: 'Start timer on Review' })).not.toBeInTheDocument()
+    // The chips stay as they were: the due line, the state and the label, no priority or difficulty.
+    const [first] = rowsOf(upcoming)
+    expect(within(first).getByText('Ready to start')).toBeInTheDocument()
+    expect(within(first).queryByLabelText(/^Difficulty/)).not.toBeInTheDocument()
+  })
+
   test('none on a completed milestone', async () => {
     const finished = doneMs('m12', 'Finished design', '2026-10-09')
     serve({ milestones: [design, finished], comingUp: [], rows: [row(design), row(finished)] })
