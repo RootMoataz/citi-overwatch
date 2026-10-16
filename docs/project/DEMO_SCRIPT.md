@@ -67,13 +67,17 @@ that each one signs in to a public demo account with sample data.
 
 Click **Employee**.
 
-1. **My week (READ).** Start with **Your focus**: the **Now** card is *Build* (Atlas), overdue, with **Critical
-   priority**, **Hard difficulty**, its progress and **View milestone**; **Next** is the first upcoming milestone.
+1. **My week (READ).** Start with **Your focus**: the **Now** card is *Build* (Atlas), overdue (its due line says
+   by how many days), with **Critical priority**, **Hard difficulty** and **View milestone**; **Next** is the first
+   upcoming milestone, *Hypercare*, which reads "Waiting on Cutover" (Cutover isn't completed yet).
    Then open the groups below it (each button says its count, for example "In progress, 1 milestone", and
    remembers whether you closed it):
-   - **In progress**: *Build* (Atlas).
-   - **With your manager**: *Schema Mapping* (Apollo), "Submitted for review. Your manager completes the milestone.", **High priority**.
-   - **Upcoming**: *Hypercare* (Apollo), "Ready to start", **Easy difficulty** (the default Medium priority chip is hidden).
+   - **In progress**: *Build* (Atlas), with its due line, its state and its **Critical Priority** and **Hard
+     Difficulty** chips.
+   - **With your manager**: *Schema Mapping* (Apollo), with just "Submitted for review. Your manager completes the
+     milestone." (no chips: it's in the manager's hands now).
+   - **Upcoming**: *Hypercare* (Apollo), with its due date, its state ("Waiting on dependencies") and "Waiting on
+     Cutover". A row the timesheet lets you log on today also has **Start**.
 
    Then the **This week's hours** card: "31.75h logged" of the 40h weekly reference, with the planned and logged bars.
    Press **Previous week** in its week picker to show an earlier week's hours, then **This week**. Say: "Priority is
@@ -84,8 +88,9 @@ Click **Employee**.
    own hours in **Your hours**. Select the *Schema Mapping* row: the panel's **Details** reads "Est. 441h · …" with
    how much of the estimate is logged. The line turns amber above 90% and red above 100%. Close the panel with
    **Close** or Esc.
-3. **Your manager (READ).** At the foot of My week (above the hours on a phone), the **Your manager** card shows Morgan's photo, title and
-   department and a **Message Morgan** button. Say: "One press to message your manager." (Same card on your own
+3. **Your manager (READ).** In My week's right column, under **This week's hours** (on a phone, last on the page,
+   after **Available to claim**), the **Your manager** card shows Morgan's photo, title and department and a
+   **Message Morgan** button. Say: "One press to message your manager." (Same card on your own
    profile.)
 4. **Timer: start → stop → pre-filled, locked row → Submit (WRITE, repeatable).** The timer started in the other
    window is running: the header chip ticks and turns amber, and a banner says "You've reached your 8h for today on
@@ -292,7 +297,7 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,255 backend tests (97% coverage at the last full run), 1,316 frontend component tests, and 23 end-to-end tests
+> Tests: 1,259 backend tests (97% coverage at the last full run), 1,551 frontend component tests, and 24 end-to-end tests
 > (3 journeys on desktop and iPhone, plus layout checks on phones and narrow desktops); all three suites passed on 16 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
@@ -333,9 +338,9 @@ One open kickback per milestone and one running timer per person are enforced by
 submissions keep a frozen copy of each payroll CSV.
 
 **Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (399 unit tests).
-856 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,316 component tests use Vitest
-and MSW, where an unhandled request fails the test. 23 Playwright tests cover 3 journeys on desktop Chrome and iPhone
-13 and 17 layout checks (the top bar never overlaps from 320 px phones to 1440 px desktops, long names never push a page
+860 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,551 component tests use Vitest
+and MSW, where an unhandled request fails the test. 24 Playwright tests cover 3 journeys on desktop Chrome and iPhone
+13 and 18 layout checks (the top bar never overlaps from 320 px phones to 1440 px desktops, long names never push a page
 sideways at 375 px); these and
 the component tests all passed on 16 October. Two fail-closed tests walk every write route for the executive and demo-admin guards.
 
