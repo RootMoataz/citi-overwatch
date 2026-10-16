@@ -51,7 +51,7 @@ export default function BudgetTab({ project, view }) {
   const [row] = budgetRows([{ id: 'p', name: project.name, budget, consumed, forecast }])
   const items = [
     { key: 'budget', label: 'Budget', value: formatMoney(budget) },
-    { key: 'spend', label: 'Approved spend', value: formatMoney(consumed), hint: `${formatPct(row.usedPct)} of budget used` },
+    { key: 'spend', label: 'Approved spend', value: formatMoney(consumed), hint: row.hasBudget ? `${formatPct(row.usedPct)} of budget used` : undefined },
     { key: 'available', label: 'Available budget', value: remaining < 0 ? `${formatMoney(-remaining)} over budget` : formatMoney(remaining),
       tone: remaining < 0 ? 'error' : undefined },
     { key: 'forecast', label: 'Forecast at completion', value: formatMoney(forecast),
@@ -75,7 +75,7 @@ export default function BudgetTab({ project, view }) {
             <div>
               <Typography id="budget-spend" variant="h3" component="h2">Spend and forecast</Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                {`${formatPct(row.usedPct)} approved spend · ${formatPct(row.forecastPct)} forecast`}
+                {row.hasBudget ? `${formatPct(row.usedPct)} approved spend · ${formatPct(row.forecastPct)} forecast` : '— approved spend · — forecast'}
               </Typography>
             </div>
             <span data-print="hide"><PrintButton /></span>

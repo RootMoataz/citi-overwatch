@@ -99,7 +99,7 @@ describe('Budget tab', () => {
     const table = await screen.findByRole('table', { name: /cost by milestone/i })
     for (const c of ['Milestone', 'Approved hours', 'Pending hours', 'Approved cost', 'Share of project budget'])
       expect(within(table).getByRole('columnheader', { name: c })).toBeInTheDocument()
-    const row = within(table).getByRole('rowheader', { name: /schema mapping/i }).closest('tr')
+    const row = within(table).getByText(/schema mapping/i).closest('tr')
     expect(within(row).getByText('600h')).toBeInTheDocument()
     expect(within(row).getByText('$30,000')).toBeInTheDocument()
     const total = within(table).getByRole('rowheader', { name: /total/i }).closest('tr')
@@ -125,7 +125,7 @@ describe('Budget tab', () => {
 
     test('the bar sits in the Approved cost cell and the Share cell reads the percent', async () => {
       const t = await table()
-      const row = within(t).getByRole('rowheader', { name: /cutover/i }).closest('tr')
+      const row = within(t).getByText(/cutover/i).closest('tr')
       const cells = within(row).getAllByRole('cell')
       const cost = cells.find((c) => within(c).queryByText('$20,000'))
       expect(within(cost).getByRole('meter', { name: /cutover share of budget/i })).toHaveAttribute('aria-valuetext', '8%')
@@ -161,9 +161,39 @@ describe('Budget tab', () => {
     expect(rateTexts.map((n) => n.textContent).every((t) => /rate saved at approval/.test(t))).toBe(true)
   })
 
-  test('phone: the cost table still renders', async () => {
+  test('phone: cost by milestone is stacked cards with labelled values, bars and a Total card', async () => {
     setViewport(375)
     open()
     expect(await screen.findByRole('heading', { level: 2, name: 'Cost by milestone' })).toBeInTheDocument()
+    const list = await screen.findByRole('list', { name: /cost by milestone/i })
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+    const cards = within(list).getAllByRole('listitem')
+    expect(cards).toHaveLength(3)
+    const first = cards[0]
+    expect(first.textContent.indexOf('Schema Mapping')).toBeLessThan(first.textContent.indexOf('Approved hours'))
+    for (const l of ['Approved hours:', 'Pending hours:', 'Approved cost:', 'Share of project budget:']) expect(within(first).getByText(l)).toBeInTheDocument()
+    expect(within(first).getByText('600h')).toBeInTheDocument()
+    expect(within(first).getByText('$30,000')).toBeInTheDocument()
+    expect(within(first).getByRole('meter', { name: /schema mapping share of budget/i })).toHaveAttribute('aria-valuetext', '12%')
+    const total = cards[2]
+    expect(within(total).getByText('Total')).toBeInTheDocument()
+    expect(within(total).getByText('$50,000')).toBeInTheDocument()
+    expect(within(total).queryByRole('button')).not.toBeInTheDocument()
+  })
+
+  test('phone, employee: no hours lines on the cards', async () => {
+    setViewport(375)
+    open({ who: users.employee, hoursVisible: false })
+    const list = await screen.findByRole('list', { name: /cost by milestone/i })
+    expect(within(list).queryByText(/hours:/)).not.toBeInTheDocument()
+    expect(within(list).getAllByText('$20,000').length).toBeGreaterThan(0)
+  })
+
+  test('no budget: no NaN or Infinity anywhere, dashes instead', async () => {
+    open({ p: project({ budget: 0, budget_pct: null }), summary: { budget: 0, remaining: -21745, budget_pct: null } })
+    const subtitle = await screen.findByText('— approved spend · — forecast')
+    expect(subtitle).toBeInTheDocument()
+    await screen.findByRole('table', { name: /cost by milestone/i })
+    expect(screen.getByRole('tabpanel').textContent).not.toMatch(/NaN|Infinity/)
   })
 })
