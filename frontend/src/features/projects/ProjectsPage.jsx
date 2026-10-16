@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client.js'
 import { useCreateProject, useDepartments, useManagers, useProjects } from '../../api/queries.js'
+import { useToast } from '../../app/toast.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import DataBar from '../../components/DataBar.jsx'
@@ -97,6 +98,7 @@ export default function ProjectsPage() {
   const projects = useProjects({ ...filters, sort: sort.key, dir: sort.dir, page, page_size: PAGE_SIZE })
   const showManagerFilter = can(user, 'projects.filterByManager')  // admins and executives see every manager's projects
   const managers = useManagers(showManagerFilter)
+  const toast = useToast()
   const create = useCreateProject()
   const departments = useDepartments({ enabled: Boolean(filters.department) })
   const department = (departments.data?.items ?? []).find((d) => String(d.id) === filters.department)
@@ -154,6 +156,8 @@ export default function ProjectsPage() {
         if (!items.length || all.length >= (res.total ?? 0)) break
       }
       downloadCsv(csvFilename('projects'), toCsv(CSV_COLUMNS, all))
+    } catch {
+      toast.error("Couldn't export the projects. Try again.")   // nothing is downloaded on a partial result
     } finally {
       setExporting(false)
     }

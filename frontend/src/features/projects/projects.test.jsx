@@ -386,27 +386,48 @@ describe('ProjectsPage', () => {
       expect(seen.filter((q) => q.q)).toHaveLength(1)
     })
 
-    test('Export CSV fetches every page of the filtered, sorted set and sends the active filters', async () => {
-      const blobs = []
-      URL.createObjectURL = vi.fn((blob) => { blobs.push(blob); return 'blob:csv' })
-      URL.revokeObjectURL = vi.fn()
-      vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-      const all = Array.from({ length: 30 }, (_, i) => project({ id: `p${i}`, name: `Project ${String(30 - i).padStart(2, '0')}` }))
-      const seen = serve([], { respond: (q) => {
+    describe('Export CSV', () => {
+      let blobs
+      beforeEach(() => {
+        blobs = []
+        URL.createObjectURL = vi.fn((blob) => { blobs.push(blob); return 'blob:csv' })
+        URL.revokeObjectURL = vi.fn()
+        vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+      })
+      afterEach(() => { vi.restoreAllMocks() })
+      const many = Array.from({ length: 130 }, (_, i) => project({ id: `p${i}`, name: `Project ${String(130 - i).padStart(3, '0')}` }))
+      const slice = (q) => {
         const size = Number(q.page_size); const from = (Number(q.page ?? 1) - 1) * size
-        return HttpResponse.json({ items: all.slice(from, from + size), total: 30, counts })
-      } })
-      go(users.admin, '/projects?status=active&sort=progress&dir=desc')
-      await screen.findByRole('link', { name: 'Project 30' })
-      seen.length = 0
-      await userEvent.setup().click(screen.getByRole('button', { name: 'Export CSV' }))
-      await waitFor(() => expect(blobs).toHaveLength(1))
-      const lines = (await blobs[0].text()).split(/\r?\n/).filter(Boolean)
-      expect(lines).toHaveLength(31)            // header + 30
-      expect(lines[1]).toContain('Project 30')
-      expect(lines[30]).toContain('Project 01')
-      expect(seen.every((q) => q.status === 'active' && q.sort === 'progress' && q.dir === 'desc' && q.page_size === '100')).toBe(true)
-      vi.restoreAllMocks()
+        return { items: many.slice(from, from + size), total: 130, counts }
+      }
+
+      test('fetches every page of the filtered, sorted set and sends the active filters', async () => {
+        const seen = serve([], { respond: (q) => HttpResponse.json(slice(q)) })
+        go(users.admin, '/projects?status=active&sort=progress&dir=desc')
+        await screen.findByRole('link', { name: 'Project 130' })
+        seen.length = 0
+        await userEvent.setup().click(screen.getByRole('button', { name: 'Export CSV' }))
+        await waitFor(() => expect(blobs).toHaveLength(1))
+        const lines = (await blobs[0].text()).split(/\r?\n/).filter(Boolean)
+        expect(lines).toHaveLength(131)            // header + 130
+        expect(lines[1]).toContain('Project 130')
+        expect(lines[130]).toContain('Project 001')
+        expect(seen.map((q) => [q.page, q.page_size])).toEqual([['1', '100'], ['2', '100']])
+        expect(seen.every((q) => q.status === 'active' && q.sort === 'progress' && q.dir === 'desc')).toBe(true)
+      })
+
+      test('a failed page says so, downloads nothing and re-enables the button', async () => {
+        const seen = serve([], { respond: (q) => (Number(q.page_size) === 100 && q.page === '2'
+          ? HttpResponse.json({ error: { code: 'INTERNAL', message: 'Boom' } }, { status: 500 })
+          : HttpResponse.json(slice(q))) })
+        go(users.admin)
+        await screen.findByRole('link', { name: 'Project 130' })
+        seen.length = 0
+        await userEvent.setup().click(screen.getByRole('button', { name: 'Export CSV' }))
+        expect(await screen.findByText("Couldn't export the projects. Try again.")).toBeInTheDocument()
+        expect(blobs).toHaveLength(0)
+        expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled()
+      })
     })
 
     test('a page past the last one goes to the last page and keeps the pager', async () => {
