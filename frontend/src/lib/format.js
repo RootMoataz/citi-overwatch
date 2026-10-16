@@ -112,3 +112,8 @@ export function formatWeekRange(mondayIso) {
   }
   return formatDateRange(mondayIso, end)
 }
+
+/** The Monday (YYYY-MM-DD) of the New York week that `now` falls in. */
+export function nyMondayIso(now = new Date()) {
+  return mondayOfIso(nyTodayIso(now))
+}

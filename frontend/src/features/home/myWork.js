@@ -1,0 +1,66 @@
+// Pure helpers that group a person's milestones for My week. `today` is a New York ISO date.
+import { daysBetween, formatDate, plural } from '../../lib/format.js'
+import { priorityRank } from '../../lib/labels.js'
+
+const byName = (a, b) => String(a.name).localeCompare(String(b.name))
+const byEnd = (a, b) => String(a.end_date).localeCompare(String(b.end_date))
+const byStart = (a, b) => String(a.start_date).localeCompare(String(b.start_date))
+
+export const isOverdue = (m, today) => m.status !== 'completed' && Boolean(m.end_date) && m.end_date < today
+
+const isWaiting = (m) => (m.waiting_on ?? []).length > 0
+const isReady = (m, today) => !isWaiting(m) && m.start_date <= today
+
+/** Up next order: ready first, then future starts, then waiting. */
+const upNextTier = (m, today) => (isWaiting(m) ? 2 : isReady(m, today) ? 0 : 1)
+
+/** Groups use the stored `status` (not `display_status`, which would drop waiting work from every group). */
+export function groupMilestones(milestones, today) {
+  const mine = (milestones ?? []).filter((m) => m.role != null && !m.is_archived && !m.project?.is_archived)
+  const of = (status) => mine.filter((m) => (Array.isArray(status) ? status.includes(m.status) : m.status === status))
+  return {
+    inProgress: of(['in_progress', 'blocked']).sort((a, b) =>
+      Number(isOverdue(b, today)) - Number(isOverdue(a, today))
+      || priorityRank(a.priority) - priorityRank(b.priority) || byEnd(a, b) || byName(a, b)),
+    upNext: of('not_started').sort((a, b) =>
+      upNextTier(a, today) - upNextTier(b, today) || byStart(a, b) || byName(a, b)),
+    review: of('ready_for_review').sort((a, b) => byEnd(a, b) || byName(a, b)),
+    done: of('completed').sort((a, b) => byEnd(b, a) || byName(a, b)),
+  }
+}
+
+const waitingNames = (m) => (m.waiting_on ?? []).map((w) => (typeof w === 'string' ? w : w.name))
+
+export function upNextLabel(m, today) {
+  if (isWaiting(m)) return `Waiting on ${waitingNames(m).join(', ')}`
+  if (m.start_date > today) return `Starts ${formatDate(m.start_date)}`
+  return 'Ready to start'
+}
+
+export function nowAndNext(groups, comingUp, today) {
+  const now = groups.inProgress[0] ?? null
+  const next = groups.upNext[0] ?? null
+  const startNext = now ? null : groups.upNext.find((m) => isReady(m, today)) ?? null
+  const first = comingUp?.[0]
+  const priority = first?.milestone?.priority ?? first?.priority
+  const urgent = first && (first.milestone?.end_date < today || priority === 'critical' || priority === 'high')
+  return { now, next, startNext, headsUp: urgent ? first : null }
+}
+
+export function focusSummary(groups, today) {
+  const open = [...groups.inProgress, ...groups.upNext, ...groups.review]
+  const overdue = open.filter((m) => isOverdue(m, today)).length
+  return [overdue ? `${overdue} overdue` : '', groups.review.length ? `${groups.review.length} with your manager` : '']
+    .filter(Boolean).join(' · ')
+}
+
+export function dueLine(m, today) {
+  const due = `Due ${formatDate(m.end_date)}`
+  if (!isOverdue(m, today)) return { text: due, overdue: false }
+  return { text: `${due} · ${plural(daysBetween(m.end_date, today), 'day')} overdue`, overdue: true }
+}
+
+export function skillsSentence(names) {
+  const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0]
+  return `Needs ${list}, which you have`
+}

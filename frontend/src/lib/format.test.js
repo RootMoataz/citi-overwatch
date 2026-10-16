@@ -1,10 +1,14 @@
 import { describe, expect, test } from 'vitest'
-import { daysBetween, formatDateRange, formatLongDate, formatWeekRange, mondayOfIso, nyTodayIso, plural } from './format.js'
+import { daysBetween, formatDateRange, formatLongDate, formatWeekRange, mondayOfIso, nyMondayIso, nyTodayIso, plural } from './format.js'
 
 describe('New York dates', () => {
   test('nyTodayIso reads the New York calendar, not UTC', () => {
     expect(nyTodayIso(new Date('2026-10-16T02:00:00Z'))).toBe('2026-10-15')
     expect(nyTodayIso(new Date('2026-10-16T14:00:00Z'))).toBe('2026-10-16')
+  })
+  test('nyMondayIso is the Monday of the New York week', () => {
+    expect(nyMondayIso(new Date('2026-10-19T02:00:00Z'))).toBe('2026-10-12')
+    expect(nyMondayIso(new Date('2026-10-15T16:00:00Z'))).toBe('2026-10-12')
   })
   test('formatLongDate spells the month out', () => {
     expect(formatLongDate('2026-10-15')).toBe('October 15, 2026')
