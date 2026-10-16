@@ -1,13 +1,14 @@
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import EventOutlined from '@mui/icons-material/EventOutlined'
 import { Box, Button, IconButton, Paper, Skeleton, Stack, Typography, useMediaQuery } from '@mui/material'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useCalendarMonth } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { addDays, formatHours, todayIso } from '../../lib/format.js'
 import { DayBox, StatusShape } from './MonthDayBox.jsx'
 import MonthDayPanel from './MonthDayPanel.jsx'
-import { KIND, KINDS, KIND_ICON, kindColor, num, stateKey } from './monthText.js'
+import { KIND, KINDS, KIND_ICON, kindColor, kindText, num, stateKey } from './monthText.js'
 import { dayLines, gridWeeks, monthOf, shiftMonth } from './monthLayout.js'
 
 // Plain queries, not theme.breakpoints, whose fractional widths the test stub can't read. `xs` is under 600px; the panel
@@ -33,6 +34,18 @@ function Legend({ phone }) {
             </Stack>
           )
         })}
+        {phone ? (
+          <>
+            <Stack component="li" direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+              <Box component="span" aria-hidden sx={{ color: (t) => kindText('pending', t), fontWeight: 600 }}>⚠</Box>
+              <Typography variant="body2" component="span">Over 40h</Typography>
+            </Stack>
+            <Stack component="li" direction="row" sx={{ alignItems: 'center', gap: 0.75 }}>
+              <EventOutlined aria-hidden sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography variant="body2" component="span">Milestone deadline</Typography>
+            </Stack>
+          </>
+        ) : null}
         <Box component="li" sx={{ pl: { md: 3 }, borderLeft: { md: 1 }, borderColor: { md: 'divider' } }}>
           <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
             Milestone dates appear separately from time-entry status.
@@ -59,6 +72,7 @@ export default function MonthView({ month, day, onMonthChange, onSelectDay, onOp
   const side = useMediaQuery(SIDE)
   const [today] = useState(() => todayIso()) // read the clock once, not on every render
   const { data, error, refetch } = useCalendarMonth(month)
+  const headingRef = useRef(null)
 
   const view = useMemo(() => {
     if (!data) return null
@@ -115,7 +129,8 @@ export default function MonthView({ month, day, onMonthChange, onSelectDay, onOp
                         <Box component="td" key={date} sx={{ p: 0, height: '1px', verticalAlign: 'top', borderTop: 1, borderLeft: i ? 1 : 0, borderColor: 'divider' }}>
                           <DayBox date={date} info={view.lines.get(date)} names={view.names} deadlines={view.deadlines.get(date)?.length ?? 0}
                             overtime={view.overtime.has(date)} inMonth={monthOf(date) === month} weekend={i >= 5} isToday={date === today}
-                            selected={date === selected} phone={phone} onPick={onSelectDay} />
+                            selected={date === selected} phone={phone}
+                            onPick={(iso, keyboard) => { onSelectDay(iso); if (keyboard) headingRef.current?.focus() }} />
                         </Box>
                       ))}
                     </tr>
@@ -124,7 +139,7 @@ export default function MonthView({ month, day, onMonthChange, onSelectDay, onOp
               </Box>
             </Paper>
             <MonthDayPanel date={selected} isToday={selected === today} info={view.lines.get(selected)} names={view.names}
-              locks={view.locks} deadlines={view.deadlines.get(selected) ?? []} today={today} onOpenDay={onOpenDay} onRequest={onRequest} />
+              locks={view.locks} overtime={view.overtime.has(selected)} headingRef={headingRef} deadlines={view.deadlines.get(selected) ?? []} today={today} onOpenDay={onOpenDay} onRequest={onRequest} />
           </Box>
           <Legend phone={phone} />
         </>

@@ -67,8 +67,8 @@ describe('Month view selection and panel', () => {
     const card = cardOf(region, 'Schema Mapping')
     expect(within(card).getByText('Needs revision')).toBeInTheDocument()
     expect(within(card).getByText('Reason: Split this across two milestones')).toBeInTheDocument()
-    expect(within(card).queryByRole('button', { name: 'Request a change' })).not.toBeInTheDocument()
-    await user.click(within(card).getByRole('button', { name: 'Edit in Day view' }))
+    expect(within(card).queryByRole('button', { name: /^Request a change/ })).not.toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Edit Schema Mapping in Day view' }))
     expect(calls.onOpenDay).toHaveBeenCalledWith('2026-10-14')
   })
 
@@ -79,8 +79,8 @@ describe('Month view selection and panel', () => {
     const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
     expect(within(card).getByRole('img', { name: 'Locked' })).toBeInTheDocument()
     expect(within(card).getByText('Timer hours are locked; your manager approves any change')).toBeInTheDocument()
-    expect(within(card).queryByRole('button', { name: 'Edit in Day view' })).not.toBeInTheDocument()
-    await user.click(within(card).getByRole('button', { name: 'Request a change' }))
+    expect(within(card).queryByRole('button', { name: /in Day view/ })).not.toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Request a change, Schema Mapping' }))
     expect(calls.onRequest).toHaveBeenCalledWith({ milestoneId: 'm1', date: '2026-10-14', hours: 4, label: 'Schema Mapping' })
   })
 
@@ -121,7 +121,7 @@ describe('Month view selection and panel', () => {
     render()
     const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
     expect(within(card).getByRole('button', { name: 'Change requested' })).toBeDisabled()
-    expect(within(card).queryByRole('button', { name: 'Request a change' })).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /^Request a change/ })).not.toBeInTheDocument()
   })
 
   test("the panel lists that day's milestone dates with Overdue when past and unfinished, and View milestones links to the milestone", async () => {
@@ -135,13 +135,13 @@ describe('Month view selection and panel', () => {
     expect(within(past).getByRole('heading', { name: 'Milestone dates' })).toBeInTheDocument()
     const late = within(past).getByText('Discovery · Due Oct 9').closest('li')
     expect(late).toHaveTextContent('Overdue')
-    expect(within(late).getByRole('link', { name: 'View milestones' })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m5')
+    expect(within(late).getByRole('link', { name: 'View Discovery' })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m5')
 
     await user.click(screen.getByRole('button', { name: /^Fri 23 Oct/ }))
     const ahead = await panel('Friday 23 October 2026')
     const due = within(ahead).getByText('Build: frontend · Due Oct 23').closest('li')
     expect(due).not.toHaveTextContent('Overdue')
-    expect(within(due).getByRole('link', { name: 'View milestones' })).toHaveAttribute('href', '/projects/p2?tab=milestones&milestone=m6')
+    expect(within(due).getByRole('link', { name: 'View Build: frontend' })).toHaveAttribute('href', '/projects/p2?tab=milestones&milestone=m6')
     expect(within(ahead).queryByText(/Discovery/)).not.toBeInTheDocument()
   })
 
@@ -166,5 +166,73 @@ describe('Month view selection and panel', () => {
     second.unmount()
     render('2026-10', '2026-10-45') // not a real date
     expect(await panel('Wednesday 14 October 2026')).toBeInTheDocument()
+  })
+
+  test('a timer draft card says it is not submitted and offers its own Edit in Day view; the day caption follows', async () => {
+    server.use(calendar({ drafts: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 1.5 }],
+      locks: [lock({ hours: 1.5, draft_hours: 1.5, tracked_hours: 0 })] }))
+    const user = userEvent.setup()
+    render()
+    const region = await panel('Wednesday 14 October 2026')
+    const card = cardOf(region, 'Schema Mapping')
+    expect(within(card).getByText('Not submitted yet — submit it in the Day view')).toBeInTheDocument()
+    expect(within(card).queryByText('Timer hours are locked; your manager approves any change')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: /^Request a change/ })).not.toBeInTheDocument()
+    await user.click(within(card).getByRole('button', { name: 'Edit Schema Mapping in Day view' }))
+    expect(calls.onOpenDay).toHaveBeenCalledWith('2026-10-14')
+    expect(within(region).getByText('Submit timer hours or log other hours')).toBeInTheDocument()
+    expect(within(region).queryByText('Other hours')).not.toBeInTheDocument()
+  })
+
+  test('hours on a milestone the person is no longer assigned to have no dead actions', async () => {
+    const gone = milestone('m1', 'Schema Mapping', { role: null })
+    server.use(calendar({ milestones: [gone], entries: [entry({ hours: 4, tracked_hours: 4 }), entry({ id: 'x', hours: 2, status: 'rejected' })],
+      locks: [lock()] }))
+    render()
+    const region = await panel('Wednesday 14 October 2026')
+    const cards = within(region).getAllByRole('listitem')
+    expect(cards).toHaveLength(2)
+    for (const li of cards) {
+      expect(within(li).getByText("You're no longer assigned to this milestone")).toBeInTheDocument()
+      expect(within(li).queryByRole('button')).not.toBeInTheDocument()
+    }
+  })
+
+  test('a pending request shows on a closed project, with the hours asked for', async () => {
+    const request = { id: 'r1', current_hours: 4, requested_hours: 1.5, reason: 'Timer ran over lunch', status: 'pending' }
+    const closed = milestone('m1', 'Schema Mapping', { project: { id: 'p1', name: 'Apollo Data Migration', status: 'completed' } })
+    server.use(calendar({ milestones: [closed], entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock({ request })] }))
+    render()
+    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    expect(within(card).getByRole('button', { name: /^Change requested/ })).toBeDisabled()
+    expect(within(card).getByText('You asked for 1.5h')).toBeInTheDocument()
+  })
+
+  test('the source comes from the entry when the API sends it', async () => {
+    server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 0, source: 'mixed' })] }))
+    render()
+    expect(cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')).toHaveTextContent(/Source\s*Mixed/)
+  })
+
+  test('the panel summary flags a day holding an over-40 entry', async () => {
+    server.use(calendar({ entries: [entry({ over_40: true })] }))
+    render()
+    const region = await panel('Wednesday 14 October 2026')
+    expect(within(region).getByText('Over 40h this week')).toBeInTheDocument()
+  })
+
+  test('after selecting a day with the keyboard focus moves to the panel heading; a click leaves it', async () => {
+    const user = userEvent.setup()
+    render()
+    await panel('Wednesday 14 October 2026')
+    const box = screen.getByRole('button', { name: /^Mon 19 Oct/ })
+    await user.click(box)
+    expect(box).toHaveFocus()
+    screen.getByRole('button', { name: /^Tue 20 Oct/ }).focus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('heading', { name: 'Tuesday 20 October 2026' })).toHaveFocus()
+    screen.getByRole('button', { name: /^Wed 21 Oct/ }).focus()
+    await user.keyboard(' ')
+    expect(screen.getByRole('heading', { name: 'Wednesday 21 October 2026' })).toHaveFocus()
   })
 })

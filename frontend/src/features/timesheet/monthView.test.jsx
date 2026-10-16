@@ -53,7 +53,7 @@ describe('Month view grid', () => {
     }))
     render()
     const box = await dayBox(/^Wed 14 Oct, today, 2 hours,/)
-    expect(within(box).getByText('2h')).toBeInTheDocument()
+    expect(within(box).getAllByText('2h')[0]).toBeInTheDocument()
     // A day holding only a rejected line counts nothing.
     const tuesday = screen.getByRole('button', { name: 'Tue 13 Oct, 0 hours, Schema Mapping 4 hours needs revision' })
     expect(within(tuesday).getByText('0h')).toBeInTheDocument()
@@ -252,5 +252,31 @@ describe('Month view on a phone', () => {
     expect(box).toHaveTextContent('⚠')
     expect(box).not.toHaveTextContent('Over 40h')
     expect(box).not.toHaveTextContent('milestone deadline')
+  })
+
+  test('the legend explains the over-40 and deadline marks on a phone only', async () => {
+    setViewport(390)
+    const first = render()
+    await dayBox(/^Wed 14 Oct/)
+    const legend = screen.getByRole('list', { name: 'Legend' })
+    expect(within(legend).getByText('Over 40h')).toBeInTheDocument()
+    expect(within(legend).getByText('Milestone deadline')).toBeInTheDocument()
+    first.unmount()
+    setViewport(1280)
+    render()
+    await dayBox(/^Wed 14 Oct/)
+    const wide = screen.getByRole('list', { name: 'Legend' })
+    expect(within(wide).queryByText('Over 40h')).not.toBeInTheDocument()
+    expect(within(wide).queryByText('Milestone deadline')).not.toBeInTheDocument()
+  })
+
+  test('a long milestone name is clamped to two lines in its chip, yet the box keeps the full name', async () => {
+    const long = 'Cross-region data residency verification and sign-off with every regional compliance team'
+    server.use(calendar({ milestones: [milestone('m1', long)], entries: [entry({ hours: 3 })] }))
+    render()
+    const box = await dayBox(new RegExp(`^Wed 14 Oct.*${long}`))
+    const clamp = box.querySelector('[data-line] [data-clamp]')
+    expect(clamp).toHaveTextContent(long)
+    expect(clamp).toHaveStyle({ overflow: 'hidden' })
   })
 })

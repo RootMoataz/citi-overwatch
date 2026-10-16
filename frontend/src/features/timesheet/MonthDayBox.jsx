@@ -22,9 +22,10 @@ function LineChip({ line, name }) {
       sx={[{ ...caption, display: 'flex', alignItems: 'flex-start', gap: 0.5, px: 0.625, py: 0.375, minWidth: 0 }, chipSx(kind)]}>
       <Icon titleAccess={word ? undefined : KIND[kind].panel} sx={{ fontSize: 14, mt: '1px', flexShrink: 0, color: (t) => kindColor(kind, t) }} />
       <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere', color: 'text.primary' }}>
-        {kind === 'rejected'
-          ? <>{name} <Box component="s" sx={{ textDecoration: 'line-through' }}>{formatHours(line.hours)}</Box></>
-          : `${name} ${formatHours(line.hours)}`}
+        <Box component="span" sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
+          <Box component="span" data-clamp sx={{ minWidth: 0, flex: '0 1 auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{name}</Box>{' '}
+          <Box component={kind === 'rejected' ? 's' : 'span'} sx={{ flexShrink: 0 }}>{formatHours(line.hours)}</Box>
+        </Box>
         {word ? <Box component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: (t) => kindText(kind, t) }}>{word}</Box> : null}
       </Box>
     </Box>
@@ -70,7 +71,7 @@ export function DayBox({ date, info, names, deadlines, overtime, inMonth, weeken
     </Box>
   ) : null
   return (
-    <ButtonBase component="button" aria-label={name} aria-pressed={selected} onClick={() => onPick(date)}
+    <ButtonBase component="button" aria-label={name} aria-pressed={selected} onClick={(e) => onPick(date, e.detail === 0)}
       sx={(t) => ({ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 0.5,
         width: '100%', height: '100%', minWidth: 0, minHeight: phone ? 64 : 112, p: phone ? 0.5 : 1, overflow: 'hidden', textAlign: 'left',
         bgcolor: selected ? alpha(t.palette.primary.main, 0.08) : weekend ? alpha(t.palette.text.primary, 0.035) : 'transparent',

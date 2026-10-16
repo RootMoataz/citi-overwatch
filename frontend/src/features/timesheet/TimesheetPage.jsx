@@ -88,10 +88,13 @@ export default function TimesheetPage() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
-  // The month is written into the URL as soon as the Month view opens, so a reload or a shared link keeps it.
+  // The month is written into the URL as soon as the Month view opens, so a reload or a shared link keeps it. So is the day on
+  // show (a past week's Monday, not the 1st), so Month opens on the day you were looking at.
   useEffect(() => {
-    if (inMonth && askedMonth !== month) setParams((p) => { const next = new URLSearchParams(p); next.set('month', month); return next }, { replace: true })
-  }, [inMonth, askedMonth, month, setParams])
+    if (inMonth && askedMonth !== month) {
+      setParams((p) => { const next = new URLSearchParams(p); next.set('month', month); if (!next.has('day')) next.set('day', day); return next }, { replace: true })
+    }
+  }, [inMonth, askedMonth, month, day, setParams])
 
   // With a day, the week opens in the Day view on that day (a day picked in the Month view).
   const toWeek = (target, pick) => {

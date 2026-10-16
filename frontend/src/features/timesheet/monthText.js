@@ -40,9 +40,14 @@ export const chipSx = (kind) => (theme) => {
 
 export const deadlineWords = (n) => `${n} milestone deadline${n === 1 ? '' : 's'}`
 
-/** Manual when no hours came from a timer, Tracked when all of them did, Mixed otherwise. A timer draft is all timer. */
+const SOURCES = { tracked: 'Tracked', manual: 'Manual', mixed: 'Mixed' }
+
+/** The API's `source` when the entry has one; else Manual when no hours came from a timer, Tracked when all of them did,
+ * Mixed otherwise. A timer draft is all timer. */
 export function sourceOf(line) {
   if (line.kind === 'draft') return 'Tracked'
+  const given = SOURCES[line.entry?.source]
+  if (given) return given
   const tracked = num(line.entry?.tracked_hours)
   if (tracked <= 0) return 'Manual'
   return tracked >= num(line.hours) ? 'Tracked' : 'Mixed'

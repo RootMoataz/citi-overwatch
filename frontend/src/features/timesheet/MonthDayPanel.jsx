@@ -10,7 +10,7 @@ import { formatDayFull, formatHours } from '../../lib/format.js'
 import { closedLabel } from './useTimesheetWeek.js'
 import { KIND, KIND_ICON, chipSx, daySummary, isOverdue, kindColor, kindText, milestoneHref, shortDate, sourceOf } from './monthText.js'
 
-const LOCK_NOTE ='Timer hours are locked; your manager approves any change'
+const LOCK_NOTE = 'Timer hours are locked; your manager approves any change'
 const term = { typography: 'body2', color: 'text.secondary' }
 const value = { typography: 'body2', fontWeight: 600, m: 0, display: 'flex', alignItems: 'center', gap: 0.75 }
 
@@ -33,6 +33,12 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
   // A saved typed line in a cell that also holds timer hours: the cell is locked, though this line has no timer hours of its own.
   const shared = Boolean(lock) && line.kind !== 'draft' && sourceOf(line) === 'Manual'
   const reason = line.kind === 'rejected' ? line.entry?.rejection_reason : null
+  // Neither action works on a milestone the person has left: a request is refused and the Day view has no row for it.
+  const unassigned = Boolean(milestone) && milestone.role == null
+  const draft = line.kind === 'draft'
+  const editInDay = (
+    <Button variant="outlined" size="small" sx={{ mt: 1.5 }} aria-label={`Edit ${name} in Day view`} onClick={() => onOpenDay(date)}>Edit in Day view</Button>
+  )
   return (
     <Paper component="li" variant="outlined" sx={{ p: 2, listStyle: 'none' }}>
       <Stack direction="row" useFlexGap sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap' }}>
@@ -61,17 +67,29 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
           {`Reason: ${reason}`}
         </Typography>
       ) : null}
-      {lock ? (
+      {unassigned ? (
+        <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>You're no longer assigned to this milestone</Typography>
+      ) : draft ? (
+        <>
+          <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>Not submitted yet — submit it in the Day view</Typography>
+          {editInDay}
+        </>
+      ) : lock ? (
         <>
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>{LOCK_NOTE}</Typography>
-          {closed ? <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>{closed}</Typography> : (
-            <Button variant="outlined" size="small" disabled={Boolean(lock.request)} sx={{ mt: 1 }}
+          {lock.request ? (
+            <>
+              <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>{`You asked for ${formatHours(lock.request.requested_hours)}`}</Typography>
+              <Button variant="outlined" size="small" disabled sx={{ mt: 1 }}>Change requested</Button>
+            </>
+          ) : closed ? <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>{closed}</Typography> : (
+            <Button variant="outlined" size="small" sx={{ mt: 1 }} aria-label={`Request a change, ${name}`}
               onClick={() => onRequest({ milestoneId: line.milestone_id, date, hours: lock.hours, label: name })}>
-              {lock.request ? 'Change requested' : 'Request a change'}
+              Request a change
             </Button>
           )}
         </>
-      ) : <Button variant="outlined" size="small" sx={{ mt: 1.5 }} onClick={() => onOpenDay(date)}>Edit in Day view</Button>}
+      ) : editInDay}
     </Paper>
   )
 }
@@ -93,7 +111,7 @@ function MilestoneDates({ deadlines, today }) {
                 </Typography>
               ) : null}
             </Stack>
-            <Link component={RouterLink} to={milestoneHref(m)} variant="body2" underline="hover" sx={{ display: 'inline-block', ml: 3.25, mt: 0.25 }}>
+            <Link component={RouterLink} to={milestoneHref(m)} variant="body2" aria-label={`View ${m.name}`} underline="hover" sx={{ display: 'inline-block', ml: 3.25, mt: 0.25 }}>
               View milestones
             </Link>
           </Box>
@@ -105,17 +123,22 @@ function MilestoneDates({ deadlines, today }) {
 
 /** The selected day: its date, a summary of its hours, one card per line, and the milestones due that day. A region named by
  * its date. A day with no line to edit (none, or only timer hours) still offers the Day view, to log other hours there. */
-export default function MonthDayPanel({ date, isToday, info, names, locks, deadlines, today, onOpenDay, onRequest }) {
+export default function MonthDayPanel({ date, isToday, info, names, locks, deadlines, today, overtime, headingRef, onOpenDay, onRequest }) {
   const headingId = useId()
   const lines = info?.lines ?? []
   const lockOf = (l) => locks.get(`${l.milestone_id}|${date}`)
   return (
     <Paper component="section" aria-labelledby={headingId} variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, minWidth: 0 }}>
       <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Typography id={headingId} component="h3" variant="h6" sx={{ fontWeight: 700 }}>{formatDayFull(date)}</Typography>
+        <Typography id={headingId} ref={headingRef} tabIndex={-1} component="h3" variant="h6" sx={{ fontWeight: 700 }}>{formatDayFull(date)}</Typography>
         {isToday ? <Chip label="Today" size="small" color="primary" variant="outlined" /> : null}
       </Stack>
       <Typography variant="subtitle1" component="p" sx={{ color: 'text.secondary', mb: 2 }}>{daySummary(lines, info?.total)}</Typography>
+      {overtime ? (
+        <Typography variant="body2" component="p" sx={{ fontWeight: 600, mt: -1.5, mb: 2, color: (t) => kindText('pending', t) }}>
+          <Box component="span" aria-hidden>⚠ </Box>Over 40h this week
+        </Typography>
+      ) : null}
       {lines.length ? (
         <Box component="ul" aria-label="Entries" sx={{ m: 0, p: 0, display: 'grid', gap: 1.5 }}>
           {lines.map((l) => (
@@ -126,7 +149,11 @@ export default function MonthDayPanel({ date, isToday, info, names, locks, deadl
       ) : null}
       {lines.every(lockOf) ? (
         <Box sx={{ mt: lines.length ? 2 : 0 }}>
-          {lines.length ? <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mb: 0.75 }}>Other hours</Typography> : null}
+          {lines.length ? (
+            <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mb: 0.75 }}>
+              {lines.some((l) => l.kind === 'draft') ? 'Submit timer hours or log other hours' : 'Other hours'}
+            </Typography>
+          ) : null}
           <Button variant={lines.length ? 'outlined' : 'contained'} size="small" onClick={() => onOpenDay(date)}>Edit in Day view</Button>
         </Box>
       ) : null}
