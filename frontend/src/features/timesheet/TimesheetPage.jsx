@@ -20,6 +20,7 @@ import WeekTotals from './WeekTotals.jsx'
 import { useEntryPanelUrl } from './useEntryPanelUrl.js'
 import { weekFigures } from './weekFigures.js'
 import { DAY_CAP, MIN_HOURS, key, useTimesheetWeek } from './useTimesheetWeek.js'
+import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -68,8 +69,10 @@ export default function TimesheetPage() {
   const [showWeekend, setShowWeekend] = useState(false)
   const [asking, setAsking] = useState(null)
   const [leaving, setLeaving] = useState({ open: false, week: null, day: undefined, count: 0 }) // the "discard your changes?" question
-  const state = useTimesheetWeek(week)
-  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, savingCell, onSave, dayTotal, nameOf, entries, isDraft } = state
+  // Unsaved typing is kept in this tab per person (sessionStorage), so a reload brings it back.
+  const { user } = useSession()
+  const state = useTimesheetWeek(week, { userId: user?.id })
+  const { sheet, rows, allDays, total, overDays, tooMany, tooFew, tooFewKeys, changed, failure, saving, savingCell, onSave, dayTotal, nameOf, entries, isDraft, restored, dismissRestored } = state
 
   const days = desktop || showWeekend ? allDays : allDays.slice(0, 5)
   const waitingDraft = Number(sheet.data?.totals?.draft ?? 0)
@@ -186,6 +189,9 @@ export default function TimesheetPage() {
         actions={<Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
           {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>} />
       <WeekTotals figures={figures} cap={CAP} />
+      {restored && n > 0 ? (
+        <Alert severity="info" role="status" onClose={dismissRestored} sx={{ mb: 2 }}>Unsaved changes restored. Submit to send them.</Alert>
+      ) : null}
       {total > CAP ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
           This week is {formatHours(total)} — {formatHours(total - CAP)} over {CAP}h. Hours above {CAP} are sent to your manager as an overtime request.

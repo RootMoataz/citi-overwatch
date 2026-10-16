@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client.js'
+import { clearAllUnsaved } from '../features/timesheet/unsavedStore.js'
 import { SessionContext } from './sessionContext.js'
 
 const statusFor = (user) => (user ? (user.must_change_password ? 'restricted' : 'ready') : 'anon')
@@ -19,8 +20,10 @@ export default function SessionProvider({ children }) {
     api.onSessionExpired((err) => {
       if (!alive) return
       queryClient.clear()
-      // A demo ending is a sign-out, and so is any late expiry after one: neither keeps a return path.
+      // A demo ending is a sign-out, and so is any late expiry after one: neither keeps a return path. A demo's end also
+      // clears the unsaved timesheet typing, as a sign-out does; an ordinary lapse keeps it for the same person's next sign-in.
       const demo = err?.code === 'DEMO_SESSION_EXPIRED'
+      if (demo) clearAllUnsaved()
       setState((s) => ({ user: null, status: 'anon', ended: demo ? 'demo' : (s.signedOut ? s.ended : null),
         signedOut: demo || s.signedOut, lastUserId: s.user?.id ?? s.lastUserId }))
     })
@@ -47,6 +50,8 @@ export default function SessionProvider({ children }) {
 
   const logout = useCallback(async (ended = null) => {
     try { await api.post('/auth/logout') } catch { /* signing out locally is enough */ }
+    // A sign-out (the demo's end included) clears the unsaved timesheet typing kept in this tab.
+    clearAllUnsaved()
     api.setToken(null)
     queryClient.clear()
     setState((s) => ({ user: null, status: 'anon', ended, signedOut: true, lastUserId: s.user?.id ?? s.lastUserId }))

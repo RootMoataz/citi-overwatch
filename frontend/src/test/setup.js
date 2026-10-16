@@ -59,5 +59,6 @@ afterEach(() => {
   setViewport(1280)
   prefersDark = false
   try { localStorage.clear() } catch { /* nothing stored */ }
+  try { sessionStorage.clear() } catch { /* nothing stored */ }
 })
 afterAll(() => server.close())

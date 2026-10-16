@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSaveWeek, useWeek } from '../../api/queries.js'
 import { isProofNote } from '../timer/timerClock.js'
 import { addDays } from '../../lib/format.js'
+import { readUnsaved, writeUnsaved } from './unsavedStore.js'
 
 export const DAY_CAP = 24
 export const MIN_HOURS = 0.25
@@ -9,20 +10,27 @@ export const key = (milestoneId, date) => `${milestoneId}|${date}`
 export const num = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v))
 export const tooLow = (v) => num(v) > 0 && num(v) < MIN_HOURS
 const without = (obj, drop) => Object.fromEntries(Object.entries(obj).filter(([k]) => !drop(k)))
+const only = (obj, keep) => without(obj, (k) => !keep(k))
 
 // On hold pauses logging; completed closes it. The server refuses changes on both (409 PROJECT_NOT_OPEN).
 const CLOSED = { on_hold: 'Project on hold — logging paused', completed: 'Project completed — logging closed' }
 export const closedLabel = (row) => (row.open === false || CLOSED[row.project?.status]
   ? CLOSED[row.project?.status] ?? 'Logging closed on this project' : null)
 
-/** One week of a person's timesheet: the saved sheet, what is being typed, and everything derived from both. */
-export function useTimesheetWeek(week) {
+/**
+ * One week of a person's timesheet: the saved sheet, what is being typed, and everything derived from both.
+ * userId: whose typing this is. With it, unsaved typing is kept in this tab (unsavedStore.js) and restored after a reload;
+ * `restored` says a restore brought back cells that are still unsaved changes, and `dismissRestored()` hides that notice.
+ */
+export function useTimesheetWeek(week, { userId } = {}) {
   const sheet = useWeek(week)
   const save = useSaveWeek()
   const saveOne = useSaveWeek()
   const [drafts, setDrafts] = useState({})
   const [notes, setNotes] = useState({})
   const [failure, setFailure] = useState(null)
+  // Typing kept in this tab: the '<userId>.<week>'s whose stored typing was checked, and the cells the last restore brought back.
+  const [kept, setKept] = useState({ checked: [], id: null, cells: [] })
 
   const allDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(week, i)), [week])
   const inWeek = (k) => allDays.includes(k.split('|')[1])
@@ -36,6 +44,34 @@ export function useTimesheetWeek(week) {
   const countsToward = (k) => (hasDraft(k) || k in drafts ? true : entries[k] && entries[k].status !== 'rejected')
 
   const rows = sheet.data?.rows ?? []
+
+  // Restore runs once per week, when the sheet holds that week's own data (never the previous week's, shown while this one
+  // loads) and nothing is typed in it yet. Only cells of rows still listed and open come back; their values are taken as
+  // typed, since `changed` already ignores one equal to the saved hours. Done while rendering, so no frame shows the week
+  // without its typing and the mirror below never sees the week before its check.
+  const storeId = userId ? `${userId}.${week}` : null
+  const checked = storeId !== null && kept.checked.includes(storeId)
+  if (storeId && !checked && sheet.data && !sheet.isPlaceholderData) {
+    const typed = Object.keys(drafts).some(inWeek) || Object.keys(notes).some(inWeek)
+    const stored = typed ? null : readUnsaved(userId, week)
+    const open = (k) => {
+      const row = rows.find((r) => String(r.milestone.id) === k.split('|')[0])
+      return Boolean(row) && !closedLabel(row)
+    }
+    const back = { drafts: only(stored?.drafts ?? {}, open), notes: only(stored?.notes ?? {}, open) }
+    if (Object.keys(back.drafts).length) setDrafts((d) => ({ ...d, ...back.drafts }))
+    if (Object.keys(back.notes).length) setNotes((n) => ({ ...n, ...back.notes }))
+    setKept((s) => (s.checked.includes(storeId) ? s : { checked: [...s.checked, storeId], id: storeId,
+      cells: [...new Set([...Object.keys(back.drafts), ...Object.keys(back.notes)])] }))
+  }
+  // The mirror: this week's typed hours and notes go to storage after every change, once its check has run. Hours are
+  // never sent from here; only Submit and Save & resubmit send them, and what they sent leaves memory and so storage.
+  useEffect(() => {
+    if (!checked) return
+    const mine = (k) => allDays.includes(k.split('|')[1])
+    writeUnsaved(userId, week, { drafts: only(drafts, mine), notes: only(notes, mine) })
+  }, [checked, userId, week, allDays, drafts, notes])
+
   const closedKeys = new Set(rows.filter((r) => closedLabel(r)).flatMap((r) => allDays.map((d) => key(r.milestone.id, d))))
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
   const total = cellKeys.reduce((s, k) => s + (countsToward(k) ? num(valueOf(k)) : 0), 0)
@@ -56,9 +92,11 @@ export function useTimesheetWeek(week) {
   const noteChanged = (k) => k in notes && notes[k] !== (entries[k]?.note ?? '')
   // A note alone on an empty cell has nothing to save; it goes with the hours once they're typed.
   // Only this week's cells count: edits made in another week stay in memory until the person is back in that week.
-  const changed = [...new Set([...Object.keys(drafts), ...Object.keys(notes),
-    ...Object.keys(locks).filter((k) => hasDraft(k) && rows.some((r) => k.startsWith(`${r.milestone.id}|`)) && !closedKeys.has(k))])]
-    .filter(inWeek)
+  // And only cells of rows the sheet lists as open: typing on a row unassigned or put on hold since (a refetch, or a
+  // restore from cached data) stays in memory, but Submit never sends a cell the sheet doesn't list.
+  const openKeys = new Set(cellKeys.filter((k) => !closedKeys.has(k)))
+  const changed = [...new Set([...Object.keys(drafts), ...Object.keys(notes), ...Object.keys(locks).filter(hasDraft)])]
+    .filter((k) => openKeys.has(k))
     .filter((k) => (hoursChanged(k) || noteChanged(k)) && (entries[k] || num(valueOf(k)) > 0))
   // Cells the server said need proof of work (PROOF_REQUIRED), until a note is added to them.
   const proofCells = new Set(failure?.code === 'PROOF_REQUIRED'
@@ -70,8 +108,15 @@ export function useTimesheetWeek(week) {
 
   const setHours = (k, v) => setDrafts((d) => ({ ...d, [k]: v }))
   const setNote = (k, v) => setNotes((n) => ({ ...n, [k]: v }))
-  // Drops what was typed in this week and any save failure (when the person moves to another week).
-  const discard = () => { setDrafts((d) => without(d, inWeek)); setNotes((n) => without(n, inWeek)); setFailure(null) }
+  // Drops what was typed in this week, its stored copy and any save failure (when the person moves to another week). A week
+  // left before its own data came in was never checked, so what it has stored stays for when the person is back.
+  const discard = () => {
+    setDrafts((d) => without(d, inWeek))
+    setNotes((n) => without(n, inWeek))
+    setFailure(null)
+    setKept((s) => ({ ...s, cells: [] }))
+    if (checked) writeUnsaved(userId, week, {})
+  }
 
   // One cell as the PUT sends it: its hours, and its note when one was typed (or a timer draft's note fills an empty one).
   const cellBody = (k) => {
@@ -83,6 +128,7 @@ export function useTimesheetWeek(week) {
   const clearSent = (sent) => {
     setDrafts((d) => without(d, (k) => sent.has(k)))
     setNotes((n) => without(n, (k) => sent.has(k)))
+    setKept((s) => ({ ...s, cells: s.cells.filter((k) => !sent.has(k)) }))
   }
 
   const onSave = async () => {
@@ -101,6 +147,9 @@ export function useTimesheetWeek(week) {
     await saveOne.mutateAsync({ week, entries: [cellBody(k)] })
     clearSent(new Set([k]))
   }
+  // The restore notice: a restore of this week brought back cells that are still unsaved changes.
+  const restored = kept.id === storeId && kept.cells.some((k) => changed.includes(k))
+  const dismissRestored = () => setKept((s) => ({ ...s, cells: [] }))
   const nameOf = (milestoneId) => rows.find((r) => String(r.milestone.id) === String(milestoneId))?.milestone.name ?? 'A milestone'
 
   const groups = rows.reduce((acc, r) => {
@@ -115,6 +164,6 @@ export function useTimesheetWeek(week) {
     valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal,
     total, overDays, tooMany, tooFew, tooFewKeys, changed,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, saveCell, savingCell: saveOne.isPending, discard,
-    nameOf, closedLabel,
+    restored, dismissRestored, nameOf, closedLabel,
   }
 }
