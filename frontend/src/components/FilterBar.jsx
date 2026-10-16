@@ -13,7 +13,9 @@ export default function FilterBar({ search, children, end }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   return (
     <Stack sx={{ flexDirection: desktop ? 'row' : 'column', alignItems: desktop ? 'center' : 'stretch', gap: 1.5,
-      flexWrap: 'wrap', ...(desktop ? null : touch) }}>
+      flexWrap: 'wrap',
+      // The theme makes every TextField full width, which on a desktop would put each select on a row of its own.
+      ...(desktop ? { '& > .MuiFormControl-fullWidth': { width: 'auto' } } : touch) }}>
       {search ? (
         <TextField size="small" value={search.value} onChange={(e) => search.onChange(e.target.value)}
           placeholder={search.placeholder} sx={{ minWidth: { md: 260 }, flex: { md: '0 1 320px' } }}

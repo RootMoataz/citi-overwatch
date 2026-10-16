@@ -75,8 +75,11 @@ Click **Employee**.
 
    Say: "Priority is how urgent. Difficulty is how much the milestone weighs in progress. They're separate, and
    each is written in words."
-2. **Estimates (READ).** Open **Projects → Apollo Data Migration → Milestones**. *Schema Mapping* reads
-   "Est. 383h · …" and "306.75h logged · 80% of estimate". The line turns amber above 90% and red above 100%.
+2. **Estimates (READ).** Open **Projects → Apollo Data Migration → Milestones**. Each row shows **Effort (logged /
+   estimate)** (*Schema Mapping* reads about "355h / 441h"), a **You** tag on the milestones that are yours, and your
+   own hours in **Your hours**. Select the *Schema Mapping* row: the panel's **Details** reads "Est. 441h · …" with
+   how much of the estimate is logged. The line turns amber above 90% and red above 100%. Close the panel with
+   **Close** or Esc.
 3. **Your manager (READ).** Under **This week**, the **Your manager** card shows Morgan's photo, title and
    department and a **Message Morgan** button. Say: "One press to message your manager." (Same card on your own
    profile.)
@@ -135,27 +138,38 @@ Sign out, click **Manager**.
    change**. Eli's cell becomes 1.5h, pending approval like any hours, and he is told. (Reject keeps the cell and sends
    the comment instead.)
 4. **Timesheets → To review (READ).** Still on **Timesheets**. Turn on **Only flagged**. Gia Rossi has two weeks:
-   - Week of Mon 5 Oct: 4 × 8.5h on *Build: frontend*, flagged **Same hours daily** and **Over plan**,
+   - Week of Mon 5 Oct: 4 × 8.5h on *Build: frontend*, flagged **Repeated hours** and **Over plan**,
      "Tracked 0% · Manual 100%".
    - Week of Mon 12 Oct: 24h, flagged **Over plan**, "Tracked 83% · Manual 17%", with work notes beside each entry.
 
    Say: "Red flags inform the approver. They never block."
 5. **Approve week (WRITE, one-shot).** On Gia's week of 12 Oct, press **Approve week**. Approved hours move to
    **Approved**, and Apollo's consumed budget rises. Leave the week of 5 Oct for later demos.
-6. **Complete and auto-route (WRITE, one-shot).** Open **Projects → Apollo Data Migration → Milestones**. *Cutover*
+6. **Project walk-through (READ).** Open **Projects**. The three tiles count projects, active and at risk; the
+   **Risk** column names the first reason in words ("Past due", "Budget ahead of progress", "Overdue milestone" or
+   "Kicked back") and hovering it shows the numbers behind it. Open **Apollo Data Migration**. One header sits above
+   every tab: status, the health chip, the manager and the dates. **Overview** shows Progress, Approved spend,
+   Forecast at finish and Delivery, the milestone schedule, **Needs attention** and **Team this week**. Walk the tabs:
+   **Milestones**, **Team**, **Budget** and **Hours**.
+7. **Approve from the milestone panel (WRITE, one-shot).** On **Milestones**, select *Build: frontend* (its status
+   shows a "pending" chip) and open the panel's **Approvals** tab. Entries are grouped by person and week; Gia
+   Rossi's week of 5 Oct, the one step 4 left alone, carries **Repeated hours** and **Over plan**. Say: "Milestone
+   completion does not approve time entries." Tick the week and press **View budget impact**, then **Approve <N>h**
+   (a rejection is **Request changes**, and it needs a reason). One toast reads "Approved <N>h for Gia Rossi".
+8. **Complete and auto-route (WRITE, one-shot).** Back on **Milestones**. *Cutover*
    (Critical, Hard) has **Nobody assigned** and waits on *Schema Mapping*. On *Schema Mapping* (Ready for review,
-   Eli, Ben, Ana), press **Complete**. Confetti fires and the toast reads "Completed. Auto-assigned Ben Okafor to
+   Eli, Ben, Ana), open its **⋯** menu and choose **Complete** (or press **Complete** in the panel's Details). Confetti fires and the toast reads "Completed. Auto-assigned Ben Okafor to
    Cutover". Say: "Cutover needs Backend Development or DevOps. Ben has both, so he matched the most required skills.
    He also fits under his 40-hour plan."
-7. **Planning board (READ).** Open **Projects → Beacon Mobile App**. The **Plan** tab is a Kanban board: Backlog →
+9. **Planning board (READ).** Open **Projects → Beacon Mobile App**. The **Plan** tab is a Kanban board: Backlog →
    Ready → Scheduled. Press **Finalize plan**. The dialog "Finalize the plan for Beacon Mobile App?" lists six checks;
    two fail (cards left in Ready and Backlog; scheduled milestones with nobody assigned), so finalizing stays
    disabled. Close it. Don't drag cards: moves are saved.
-8. **Email this report (WRITE, repeatable).** Back on the dashboard, press **Email this report**. Untick
+10. **Email this report (WRITE, repeatable).** Back on the dashboard, press **Email this report**. Untick
    **Send to me** (Morgan's address is a demo address). The field then reads **Recipient email**: type your own
    address and press **Send**. A per-recipient result appears ("Sent to …"). Say: "The report is built in the
    browser and sent through EmailJS, because the Lambda has no internet route."
-9. **Ctrl+K (READ).** Press Ctrl+K and type "at-risk projects in Technology". The palette shows the interpreted chip
+11. **Ctrl+K (READ).** Press Ctrl+K and type "at-risk projects in Technology". The palette shows the interpreted chip
    *Projects · At risk · Technology*. Press Enter. The list shows Apollo if Eli kicked back Hypercare; otherwise
    it's empty, which is the right answer for Morgan's projects.
 

@@ -10,7 +10,7 @@ test.use({ contextOptions: { reducedMotion: 'reduce' } })
 
 async function consumed(page) {
   await openProject(page, 'Apollo Data Migration', 'budget')
-  const value = page.getByText('Consumed (approved hours)').locator('xpath=following-sibling::*[1]')
+  const value = page.getByRole('group', { name: 'Budget figures' }).getByText('Approved spend', { exact: true }).locator('xpath=following-sibling::*[1]')
   await expect(value).toHaveText(/\$/)
   return dollars(await value.innerText())
 }

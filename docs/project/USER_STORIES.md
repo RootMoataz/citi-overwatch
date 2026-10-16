@@ -114,14 +114,18 @@ Each panel is titled with the question it answers, and the panels are labelled r
 ### P1. Find a project (E: search and filter)
 **As** any user, **I want to** search and filter the projects I can see **so that** I can get to the right one quickly.
 
-- **Loading:** table skeleton.
+- **Loading:** summary tiles and table skeleton.
 - **Success:**
-  - I can search by name, filter by status and manager, and tick "At risk only". Admins can also show archived projects.
-  - Each row shows status, milestone progress, budget used, risk badges and due date.
-  - On phones, rows become cards.
+  - Three tiles read "<N> projects", "<N> active" and "<N> at risk", over every project I can see (the filters don't change them).
+  - I can search by name, filter by status and manager, and tick "At risk only". Admins can also show archived projects. A department chip appears when I arrive from a department link.
+  - The filters, the sort and the page live in the URL, so a link or a reload keeps them. Changing a filter or the sort goes back to page 1. The list shows 25 projects a page.
+  - Each row shows status, manager, milestone progress, budget used, the due date ("75 days left", "Due today", "12 days overdue") and the first risk reason in words: "Past due", "Budget ahead of progress", "Overdue milestone" or "Kicked back" ("—" when there is none). Hovering a reason gives the numbers behind it.
+  - Columns sort ascending or descending; **Risk** puts the most severe first.
+  - **Export CSV** downloads every project that matches, not just the page.
+  - On phones, rows become cards with a "⋯" menu.
   - Clicking a row opens the project.
 - **Failure / empty:**
-  - "No projects match these filters", with a **Clear filters** button.
+  - "No projects match", with a **Clear filters** button.
   - Admins with no projects at all see **Create the first project**.
 
 ### P2. Create and edit a project (E: CRUD projects)
@@ -151,8 +155,11 @@ Each panel is titled with the question it answers, and the panels are labelled r
 **As** anyone on the project, **I want** its summary **so that** I know where it stands.
 
 - **Success:**
-  - Tiles show milestones done, budget used (consumed of planned), predicted end and team size.
-  - A "Why it's at risk" box lists every reason that applies.
+  - One header sits above every tab: the name, the status, a health chip ("On track" or the first risk reason), the manager, the department, the dates, the description (under **More** when long), and **Edit project**, **Archive project** or **Restore project** for those allowed to.
+  - The Overview shows four tiles (Progress, Approved spend with the share of budget used, Forecast at finish, Delivery with the days remaining or overdue), the milestone schedule, the next milestones, **Needs attention** (pending entries, overdue milestones, kicked-back milestones) and **Team this week**.
+  - A project still being planned points to its Plan tab.
+- **Employee variant:** an employee on the team sees **Your part** (their milestones, their logged and approved hours, this week against plan and **Open my timesheet**). An employee not on the team is told so. They never see anyone else's hours or the pending entries.
+- **Executive variant:** read-only; no edit actions and no approvals.
 - **Failure:** a project I can't see returns *Not found*, so its existence isn't revealed.
 
 ### P5. Staff a project within 40 planned hours (Q3, U)
@@ -179,9 +186,22 @@ Each panel is titled with the question it answers, and the panels are labelled r
 ### P7. See the team's hours (Q3, Q5)
 **As** the project's manager, **I want to** see each person's logged, pending and approved hours per week on my project.
 
-- **Success:** a week picker with previous/next buttons and a per-person table.
+- **Success:** a week bar with previous and next buttons, **This week** and a date picker (the week is in the URL), four tiles (Planned, Logged, Approved, Pending) and a per-person table with totals and **View entries**. A banner offers **Review this week's entries** when hours are waiting.
+- **Employee variant:** **Your hours**, by milestone, with **Open my timesheet**.
+- **Executive variant:** "Team hours are private".
 - **Empty:** "No hours this week — hours appear as the team logs them."
-- **Failure:** employees see "Team hours are private" rather than other people's data.
+- **Failure:** employees never see other people's data.
+
+### P8. Work a milestone from its panel (Q4, U)
+**As** a manager (or an assignee), **I want** to open a milestone beside the list **so that** I can see and act on it without losing my place.
+
+- **Success:**
+  - Selecting a row opens a panel (a full-screen sheet on phones) with the dates, the dependency, the hours logged against the estimate, and tabs Details, Approvals, Discussion, Work log, History and Notes. The milestone and the tab are in the URL (`?milestone=` and `?panel=`), so a link opens the same view.
+  - Details holds the status moves (Start, Ready for review, and Complete for the manager or an admin), kick back, and the timer for the people on it. The row's "⋯" menu has the same moves plus Edit details, Assign people, Dependencies, Open discussion and Archive milestone.
+  - **Approvals** (for the people who decide hours) lists pending entries grouped by person and week, with flags (Repeated hours, Long day, After completion, Backdated, Over plan, No activity, No proof of work). Selecting entries shows "<N> selected · <N>h", **View budget impact**, **Request changes** (a reason is required) and **Approve <N>h**. A week is approved whole, and one toast names who was approved ("Approved 34h for Gia Rossi"). Milestone completion does not approve time entries.
+  - Closing the panel returns focus to its row, or to the search field when the row isn't on screen.
+- **Employee variant:** no Approvals tab, and "Your part" and "Your hours" instead of everyone's hours. An `?panel=approvals` link shows Details and requests nothing.
+- **Failure:** a milestone that is no longer there shows "That milestone is no longer available."
 
 ---
 

@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,227 backend (387 unit · 840 integration; 97% coverage at the last full run) · 1,016 frontend component (73 files) · 23 end-to-end (3 journeys × desktop + mobile, and 17 layout checks: the phone top bar from 320 px, the desktop crumbs, no sideways scroll at 375 px or between 900 and 1024 px); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,250 backend (399 unit · 851 integration; 97% coverage at the last full run) · 1,290 frontend component (86 files) · 23 end-to-end (3 journeys × desktop + mobile, and 17 layout checks: the phone top bar from 320 px, the desktop crumbs, no sideways scroll at 375 px or between 900 and 1024 px); frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -38,6 +38,7 @@ Highlights:
 - **One shell on every page.** A sidebar (Work for everyone, Admin for admins) with your name at the bottom and a Collapse control (press `[`); breadcrumbs across the top, or a back link on phones; then a search field (Ctrl K), your running timer while one runs, Puppy, notifications and your avatar. The name at the bottom of the sidebar and the avatar open the same account menu: profile, photo, theme and sign out.
 - **Responsive.** A sidebar on desktop, a drawer on phones, and tables that become cards on small screens.
 
+- **Projects.** The Projects list shows three summary tiles, filters and sorting kept in the URL, 25 projects a page and each project's first risk reason in words ("Past due", "Budget ahead of progress", "Overdue milestone", "Kicked back"). A project page has one header over five tabs (Overview, Milestones, Team, Budget, Hours); a milestone opens in a side panel (a full-screen sheet on a phone) where the manager approves hours by person and week. Employees see their own part and their own hours only.
 - **Planning and milestones.** Department templates, a Backlog → Ready → Scheduled planning board with a finalize checklist, priority and difficulty, skills, auto-routing when work is handed in or completed, and kickbacks when an employee is blocked.
 - **Messages, Puppy and the command palette.** One-to-one and milestone threads under clear who-may-message-whom rules, a rule-based assistant that summarises what needs you, and Ctrl+K search that understands phrases like "at-risk projects in Technology". None of it uses an AI service.
 
@@ -71,14 +72,18 @@ Screenshots from the live site with the demo data (light mode unless noted).
 
 | | |
 |---|---|
-| ![Manager dashboard: approvals waiting beside Live now with one running timer, then the risk tiles](docs/images/dashboard.png) | ![Timesheets To review filtered to flagged weeks: Gia Rossi's entries with work notes, Same hours daily and Over plan red flags, and the tracked/manual share](docs/images/timesheets-review.png) |
+| ![Manager dashboard: approvals waiting beside Live now with one running timer, then the risk tiles](docs/images/dashboard.png) | ![Timesheets To review filtered to flagged weeks: Gia Rossi's entries with work notes, Repeated hours and Over plan red flags, and the tracked/manual share](docs/images/timesheets-review.png) |
 | **Dashboard**: approvals, Live now, risk, insights and project status | **Timesheets → To review**: red flags, work notes and the tracked share |
 | ![Manager home: Approvals beside the Live now card, where Eli Employee's timer on Schema Mapping ticks with 8h today, a Warning: 8h day chip and a Stop timer button](docs/images/live-now.png) | ![Timesheets page: Live now with Eli's running timer, then Change requests with Eli Employee's request on Schema Mapping, Sat Oct 10, 2h → 1.5h, his reason and Approve and Reject buttons](docs/images/change-requests.png) |
 | **Live now**: running timers tick here, with Warning/Over chips and **Stop timer** | **Change requests**: approve or reject a change to locked timer hours |
 | ![Beacon Mobile App planning board with Backlog, Ready and Scheduled columns of milestone cards](docs/images/planning-board.png) | ![Finalize the plan dialog listing six plan checks, two of them needing fixes](docs/images/finalize-checklist.png) |
 | **Planning board** for a planned project | **Finalize** checks before the project goes active |
-| ![Apollo Data Migration Milestones tab: a state bar of milestones done, then a month-axis timeline with a date range and state on every bar](docs/images/milestones.png) | ![Apollo Data Migration Budget tab: planned, consumed and remaining budget, a forecast marker and cost by milestone with bars compared against the costliest milestone](docs/images/budget.png) |
-| **Milestones**: a state bar and a readable timeline above the list | **Budget**: consumed vs planned, forecast, cost per milestone (the costliest fills its bar) |
+| ![Projects list: three summary tiles (projects, active, at risk), search, status and at-risk filters, and a table with progress, budget used, due date and the first risk reason in words](docs/images/projects.png) | ![Apollo Data Migration Overview: one header with status and health, then Progress, Approved spend, Forecast at finish and Delivery tiles, the milestone schedule, Needs attention and Team this week](docs/images/project-overview.png) |
+| **Projects**: summary tiles, filters and sorting kept in the URL, and each project's first risk reason in words | **Project page, Overview**: one header on every tab, four figures, the schedule and what needs attention |
+| ![Apollo Data Migration Milestones tab: a status bar, a toolbar with search, status, List and Timeline, and a milestone list with dependency, status, assignees, planned dates, effort and pending approvals](docs/images/milestones.png) | ![The Build: frontend milestone panel open beside the list on its Approvals tab: nine entries awaiting approval, grouped by person and week, with flags and Request changes and Approve buttons](docs/images/milestone-panel.png) |
+| **Milestones**: a list or a timeline, with dependencies and effort on every row | **Milestone panel**: Details, **Approvals**, Discussion, Work log, History and Notes; approve a week without leaving the milestone |
+| ![Apollo Data Migration Budget tab: Budget, Approved spend, Available budget and Forecast at completion, a pending-hours banner, the spend and forecast chart and cost by milestone](docs/images/budget.png) | |
+| **Budget**: approved spend against budget, forecast, and cost by milestone | |
 | ![Messages: the Schema Mapping discussion thread with Ana and Ben](docs/images/messages.png) | ![Puppy assistant Summary tab: what needs you, a tip and the top insight](docs/images/puppy.png) |
 | **Messages**: one-to-one and milestone discussions | **Puppy**: a rule-based summary of what needs you |
 

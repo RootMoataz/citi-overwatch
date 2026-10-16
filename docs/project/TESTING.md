@@ -9,13 +9,13 @@ The tests are built for **debugging**, not only for a green tick:
 
 | Layer | Tool | Count | What a failure here means |
 |---|---|---|---|
-| Rules (unit) | pytest | part of 387 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
-| Core (unit) | pytest | part of 387 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
-| API (integration) | pytest + real PostgreSQL 17 | 813 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 1,016 (73 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Rules (unit) | pytest | part of 399 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
+| Core (unit) | pytest | part of 399 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
+| API (integration) | pytest + real PostgreSQL 17 | 851 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
+| Frontend (component) | Vitest + React Testing Library + MSW | 1,290 (86 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices + 17 layout checks | The pieces don't fit together in a real browser (real API, real database, real cookies), or the layout breaks where jsdom can't see it: overlapping top-bar controls, crumbs under the search field, a page wider than the window |
 
-Counts as of 2026-10-16: **1,227 backend** (387 unit, 840 integration, collected; 97% coverage at the last full run) and **1,016 frontend** in 73 files, plus **23 end-to-end** (6 journey runs and 17 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)), and so are the two that failed on a few dates because of Delta's demo budget (see [Delta's spend](#deltas-spend-on-some-dates-fixed-16-october)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-16, after phase 2 of the redesign (the project page and the Projects list): **1,250 backend** (399 unit, 851 integration, collected; 97% coverage at the last full run) and **1,290 frontend** in 86 files, plus **23 end-to-end** (6 journey runs and 17 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)), and so are the two that failed on a few dates because of Delta's demo budget (see [Delta's spend](#deltas-spend-on-some-dates-fixed-16-october)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -72,20 +72,20 @@ npx playwright show-report               # traces + screenshots of any failure
 Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profile (WebKit)**. The journeys:
 
 1. **Onboarding:** an admin creates an account in the wizard. The test reads the welcome email from `backend/v1/.outbox/`, then the new user signs in with the temporary password, is forced to change it, and lands on **My week** with the **Your manager** card.
-2. **Milestones:** a manager adds a milestone that depends on *Discovery* and assigns Eli. Eli starts it and moves it to *ready for review*; Eli can't complete it. The manager then completes it.
-3. **Overtime:** an employee logs 9 h Monday to Friday in the timesheet's Day view: for each day they pick it in the week strip, type the hours and a work note (proof of work), and they press **Submit** once at the end. Stepping through the days afterwards, only Friday shows "Pending (Overtime requested from …)". The manager gets exactly one notification and opens it on the Timesheets page, filtered to that person. The manager then views the budget impact and approves, and the project's consumed budget goes up.
+2. **Milestones:** a manager adds a milestone that depends on *Discovery* and assigns Eli; its row reads "Dependency: after Discovery" and names Eli. Eli opens the row, and in the panel's Details clicks **Start** and then **Ready for review**; **Complete** isn't offered to him. The manager then completes it from the row's **⋯** menu, and the row shows Completed.
+3. **Overtime:** an employee logs 9 h Monday to Friday in the timesheet's Day view: for each day they pick it in the week strip, type the hours and a work note (proof of work), and they press **Submit** once at the end. Stepping through the days afterwards, only Friday shows "Pending (Overtime requested from …)". The manager gets exactly one notification and opens it on the Timesheets page, filtered to that person. The manager then views the budget impact and approves, and the Budget tab's **Approved spend** goes up.
 
 [`shell.spec.js`](../../frontend/e2e/shell.spec.js) adds 17 layout checks that jsdom can't make (no layout engine). Each runs once, in its own project: tagged `@phone` (mobile only) or `@desktop` (desktop only), so nothing shows as skipped.
 
 4. **Phone top bar** at 320, 375 and 390 px (3 checks): for the public demo admin's home and project page, an employee's project page, and an employee with a running timer (home and project page), no top-bar control draws over another or off the screen. Each control is measured with everything drawn inside it, text included, minus what an ellipsis clips. On every project page the back link is at least 24 × 24 px (WCAG 2.5.8). At 320 px Puppy is in the account menu and opens from there; from 375 px its button is in the bar.
 5. **Desktop crumbs** at 1440 px: with a 113-character project name (stretched in the API response; nothing is saved) no crumb's text runs under the next, and the name ends in an ellipsis before the search field.
 6. **Desktop top bar between md and lg** at 900, 960 and 1024 px (3 checks), sidebar open: for the demo admin's home, a project page and a person page, no crumb runs under the next or under the search field, the current page's crumb keeps at least 40 px, and the bar's controls don't overlap.
-7. **No sideways scroll at 375 px:** every page in each role's navigation, a project page and My profile, for employee, manager, executive and admin, once with the seeded names and once with every name stretched (a long name plus a 35-letter word): `document.documentElement.scrollWidth` must stay 375 (8 checks).
+7. **No sideways scroll at 375 px:** every page in each role's navigation, a project page with each of its tabs (Overview, Milestones, Team, Budget, Hours) and an open milestone panel, and My profile, for employee, manager, executive and admin, once with the seeded names and once with every name stretched (a long name plus a 35-letter word): `document.documentElement.scrollWidth` must stay 375 (8 checks).
 8. **No sideways scroll between md and lg:** the manager's Dashboard and the demo admin's Control centre at 900, 960 and 1024 px (2 checks): `scrollWidth` must stay the window's width.
 
 ## Current results (2026-10-16)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The frontend and end-to-end figures are from runs on 16 October, after the redesign's shell (phase 1), its fix wave and the last layout fixes (wave 3): the frontend suite passed twice in a row with no failure (and five times in a row at the fix wave). The release run at `bc663bf`, just before the 16 October deploy, repeated all three: backend 1,227 passed, frontend 1,016 passed twice in a row, lint clean, end-to-end 23 passed (5.4 minutes, run alone).
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The latest figures come from phase 2 of the redesign (Task 12 of the project-page plan, 16 October): backend 1,250 passed (399 unit, 851 integration; the additions are the `sort`, `dir` and `counts` options on `GET /projects`), frontend 1,290 passed in 86 files twice in a row, lint clean, and end-to-end 23 passed (6.6 minutes, run alone). The release run at `bc663bf`, just before the 16 October deploy, had backend 1,227, frontend 1,016 (twice in a row), lint clean and end-to-end 23 passed (5.4 minutes, run alone).
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
@@ -94,6 +94,7 @@ Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit,
 1227 passed in 209.94s (0:03:29)                  # 16 Oct, 07:53 UTC (a Friday), with the weekday fix
 1227 passed in 211.16s (0:03:31)                  # 16 Oct, 08:05 UTC, with Delta's $37,000 budget too
 1227 passed in 312.50s (0:05:12)                  # 16 Oct, 09:04 UTC, at bc663bf: the release run before the deploy
+1250 passed in 212.65s (0:03:32)                  # 16 Oct, phase 2 (Task 12): the project page and the Projects list
 
 # backend/v1: same, with --cov=app (at 323ea89)
 app\features\time\timers.py                240      9    96%
@@ -102,12 +103,12 @@ TOTAL                                     6456    175    97%
 1087 passed in 276.86s (0:04:36)
 
 # collected per layer
-tests/unit:        387 tests
-tests/integration: 840 tests
+tests/unit:        399 tests
+tests/integration: 851 tests
 
 # frontend: npx vitest run (two runs in a row, each the same)
- Test Files  73 passed (73)
-      Tests  1016 passed (1016)
+ Test Files  86 passed (86)
+      Tests  1290 passed (1290)      # phase 2 (Task 12), both runs; 73 files and 1016 tests at bc663bf
 
 # frontend: npm run lint
 no problems
@@ -115,6 +116,7 @@ no problems
 # frontend: npx playwright test
   23 passed (5.2m)
   23 passed (5.4m)                                 # the release run at bc663bf, alone
+  23 passed (6.6m)                                 # phase 2 (Task 12), alone
 ```
 
 The end-to-end suite (3 journeys × desktop Chrome and iPhone 13 WebKit, plus 17 layout checks: 23 tests, 5.2 minutes) was last brought up to date on 16 October, with the shell fix wave and wave 3 (the layout checks: 320 px phones, the 24 px back link, 900–1024 px desktops; the Month panel's buttons are now named "Edit in Day view, <milestone>"): the overtime journey logs day by day in the Day view (hours and a work note per day, one **Submit** for the week) and follows the alert to the Timesheets page (after submitting, it switches to **Month**, selects Friday, checks that the day's panel lists its 9h pending, and presses **Edit in Day view** to land on that day; on a phone the panel sits under the grid), and the onboarding journey lands on My week. All 23 pass. When the machine is busy with other suites, the milestones journey can time out waiting on the API; run the end-to-end suite on its own.

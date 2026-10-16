@@ -234,7 +234,10 @@ flowchart LR
 - **Completed % is weighted by difficulty** (easy 1, medium 2, hard 3), the same figure as the project's progress.
 - **A project with no milestones** counts as 0% complete, so spending on it can flag burn.
 - **`BLOCKED_MILESTONE`** (a milestone with status `blocked`, see [§9b](#9b-kickbacks-and-escalation)): the dashboard's Risk tiles count these one by one (`blocked_count` per at-risk project) and list them under `milestones.blocked`.
-- **Each reason is shown as a badge** by [`RiskBadges.jsx`](../../frontend/src/components/RiskBadges.jsx), on the dashboard, in the project list and on the project overview.
+- **Older pages show each reason as a badge** with [`RiskBadges.jsx`](../../frontend/src/components/RiskBadges.jsx), such as the dashboard.
+- **The Projects list and the project header show risk in words.** `RISK_SHORT` in [`lib/labels.js`](../../frontend/src/lib/labels.js) gives "Past due", "Budget ahead of progress", "Overdue milestone" and "Kicked back"; no reason reads "—" (health chip "On track"). Only the first reason is shown, and hovering it explains it ("Ended Oct 12, 2026, 3 days ago, and isn't completed."; "81% of the budget used against 62% progress: 19 points ahead.").
+- **"First reason" means the most severe, not the array's first.** The order is `PAST_DUE`, `BUDGET_BURN`, `OVERDUE_MILESTONE`, `BLOCKED_MILESTONE`, then none. The Risk column, the health chip and the list's `sort=risk` all use it, so they always agree; the server sorts the same way (`sort_projects` in [`projects/service.py`](../../backend/v1/app/features/projects/service.py)).
+- **Sort order on the Projects list.** `GET /projects` sorts before it pages (`sort`, `dir`), and projects with equal values stay in name order whichever way it sorts. Sorting by risk puts the most severe first; by status it runs planned, active, on hold, completed.
 
 **Worked example:**
 - **Atlas Customer Portal** in the demo data ended 4 days ago, and its *Build* and *Launch* milestones are past their end dates. It shows two reasons: *Past due date* and *Overdue milestone*.

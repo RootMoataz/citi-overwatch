@@ -261,6 +261,18 @@ test.describe('no sideways page scroll at 375 px', { tag: '@phone' }, () => {
         await page.getByText(/^Apollo Data Migration/).first().click()
         await expect(page).toHaveURL(/\/projects\/[^/?]+/)
         await check('a project page')
+        // Every project tab, then an open milestone panel (a full-screen sheet on a phone).
+        const project = new URL(page.url()).pathname
+        for (const tab of ['overview', 'milestones', 'team', 'budget', 'hours']) {
+          await page.goto(`${project}?tab=${tab}`)
+          await check(`the project's ${tab} tab`)
+        }
+        await page.goto(`${project}?tab=milestones`)
+        const first = page.locator('[data-milestone-card], tbody tr').first()
+        await expect(first).toBeVisible()
+        await first.click()
+        await expect(page).toHaveURL(/milestone=/)
+        await check('an open milestone panel')
         await page.goto('/profile')
         await check('/profile')
         expect(wide, `pages wider than 375 px for ${username} with ${names} names`).toEqual([])
