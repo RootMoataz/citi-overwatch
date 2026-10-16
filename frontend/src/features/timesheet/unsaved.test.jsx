@@ -402,6 +402,38 @@ describe('nothing is sent while a week loads, and typing on a row closed since i
     expect(puts[0]).toEqual({ week: WEEK, entries: [{ milestone_id: 'm2', work_date: WED, hours: 3 }] })
   })
 
+  test('typing while a week loads is never dropped silently: leaving asks first, and closing the tab warns', async () => {
+    let release
+    const gate = new Promise((resolve) => { release = resolve })
+    server.use(http.get(`${API}/time-entries`, async ({ request }) => {
+      const week = new URL(request.url).searchParams.get('week')
+      if (week === WEEK) {
+        await gate
+        return HttpResponse.json(body({ entries: [] }))
+      }
+      return HttpResponse.json(body({ week, entries: [] }))
+    }))
+    renderSheet(`/timesheet?week=${PREV}`)
+    const user = userEvent.setup()
+    await screen.findByLabelText('Schema Mapping, Tue Oct 6')
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toBeInTheDocument()
+    // Oct 5's rows are still on screen; the typing goes into Oct 12.
+    await user.type(screen.getByLabelText('Build, Wed Oct 14'), '3')
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeDisabled()
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Next week' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard 1 unsaved change?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Build, Wed Oct 14')).toHaveValue('3')
+    release()
+    expect(await screen.findByRole('button', { name: 'Submit 1 change' })).toBeEnabled()
+  })
+
   test('typing on a row put on hold since leaves the totals and Submit, and a line says it is held back', async () => {
     const puts = []
     let listed = [build, mapping]

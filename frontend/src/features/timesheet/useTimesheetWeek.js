@@ -131,6 +131,11 @@ export function useTimesheetWeek(week, { userId } = {}) {
   const heldBack = loading ? [] : [...new Set([...Object.keys(drafts), ...Object.keys(notes)])]
     .filter((k) => inWeek(k) && !openKeys.has(k))
     .filter(wouldChange)
+  // Typing in this week before its own rows are in: Submit can't send it yet (it counts once they are), but leaving
+  // the week or the page must still ask first, or it would go without a word.
+  const typedWhileLoading = !loading ? [] : [...new Set([
+    ...Object.keys(drafts).filter((k) => drafts[k] !== ''), ...Object.keys(notes).filter((k) => notes[k].trim())])]
+    .filter(inWeek)
   // Cells the server said need proof of work (PROOF_REQUIRED), until a note is added to them.
   const proofCells = new Set(failure?.code === 'PROOF_REQUIRED'
     ? (failure.details?.cells ?? []).map((c) => key(c.milestone_id, c.work_date)) : [])
@@ -204,7 +209,7 @@ export function useTimesheetWeek(week, { userId } = {}) {
   return {
     week, sheet, loading, rows, groups, allDays, entries, locks,
     valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal, savedOthers,
-    total, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack,
+    total, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack, typedWhileLoading,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, saveCell, savingCell: saveOne.isPending, discard,
     restored, dismissRestored, nameOf, closedLabel,
   }

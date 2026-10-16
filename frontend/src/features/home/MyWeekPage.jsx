@@ -40,7 +40,7 @@ export default function MyWeekPage() {
   const current = nyMondayIso()
   const week = shownWeek(params.get('week'), current)
   const data = profile.data
-  // The full profile carries the server's default week (the UTC one); use it only when that is the week shown.
+  // The full profile carries New York's current week (useProfile asks for it); a past week shown needs its own read.
   const fromProfile = data?.this_week?.week_start === week
   const weekly = useProfileWeek(user.id, week, Boolean(data) && !fromProfile)
   const hoursData = fromProfile ? data.this_week : weekly.data?.this_week

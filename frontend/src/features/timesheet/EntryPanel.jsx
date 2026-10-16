@@ -68,10 +68,11 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
   const shortNote = note.trim().length > 0 && !isProofNote(note)
   const tracked = num(entry.tracked_hours)
   const resubmittable = entry.status === 'rejected' && !closed
-  // The server's day rule for this cell saved alone: the day's saved hours on other cells plus these. Unsaved typing
-  // elsewhere doesn't count for Save & resubmit; it does for Submit, which sends it (the week's overDays).
-  const dayOver = num(value) > 0 && savedOthers(date, cellKey) + num(value) > DAY_CAP
-  const over = num(value) > DAY_CAP || dayOver || (!resubmittable && num(value) > 0 && overDays.includes(date))
+  // The day as this panel's own save would send it. Save & resubmit sends this cell alone, so the server adds it to the
+  // day's saved hours on other cells (unsaved typing elsewhere doesn't count). Done leaves it for Submit, which sends
+  // all the week's typing: the week's overDays.
+  const dayOver = resubmittable && num(value) > 0 && savedOthers(date, cellKey) + num(value) > DAY_CAP
+  const over = num(value) > DAY_CAP || (resubmittable ? dayOver : num(value) > 0 && overDays.includes(date))
   const invalid = num(value) <= 0 || num(value) > DAY_CAP || dayOver || tooLow(value) || shortNote
 
   const resubmit = async () => {

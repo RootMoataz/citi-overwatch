@@ -472,6 +472,31 @@ describe('Entry details: final review fixes', () => {
     expect(within(region).getByRole('button', { name: 'Save & resubmit' })).toBeDisabled()
   })
 
+  test("a Done panel's Hours follow Submit's day, not the saved one: lowering another cell makes room", async () => {
+    server.use(sheet({ locks: [], entries: [
+      entry({ id: 'd', work_date: WED, hours: 8, status: 'pending', note: NOTE }),
+      entry({ id: 'g', milestone_id: 'm2', work_date: WED, hours: 10, status: 'pending', note: NOTE })] }))
+    renderSheet()
+    const user = userEvent.setup()
+    // Build's saved 10h on Wed is lowered to 2h (unsaved): Submit would send both, so 15h here makes a 17h day.
+    const build = await screen.findByLabelText('Build, Wed Oct 14')
+    await user.clear(build)
+    await user.type(build, '2')
+    await user.click(await statusLine('Pending, details for Schema Mapping, Wed Oct 14'))
+    const region = await panel()
+    expect(within(region).queryByRole('button', { name: 'Save & resubmit' })).not.toBeInTheDocument()
+    const hours = within(region).getByLabelText('Hours')
+    await user.clear(hours)
+    await user.type(hours, '15')
+    expect(screen.queryByText('More than 24h on Wed Oct 14')).not.toBeInTheDocument()
+    expect(hours).toHaveAttribute('aria-invalid', 'false')
+    // 23h makes the day 25h with Build's 2h: the page and the panel both say so.
+    await user.clear(hours)
+    await user.type(hours, '23')
+    expect(screen.getByText('More than 24h on Wed Oct 14')).toBeInTheDocument()
+    expect(hours).toHaveAttribute('aria-invalid', 'true')
+  })
+
   test('Save & resubmit is disabled while Submit is saving', async () => {
     let release
     const gate = new Promise((resolve) => { release = resolve })

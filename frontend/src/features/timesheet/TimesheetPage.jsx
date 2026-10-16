@@ -71,7 +71,7 @@ export default function TimesheetPage() {
   // Unsaved typing is kept in this tab per person (sessionStorage), so a reload brings it back.
   const { user } = useSession()
   const state = useTimesheetWeek(week, { userId: user?.id })
-  const { sheet, loading, rows, allDays, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack, failure, saving, savingCell,
+  const { sheet, loading, rows, allDays, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack, typedWhileLoading, failure, saving, savingCell,
     onSave, dayTotal, nameOf, entries, restored, dismissRestored } = state
 
   const days = desktop || showWeekend ? allDays : allDays.slice(0, 5)
@@ -88,6 +88,8 @@ export default function TimesheetPage() {
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(askedMonth ?? '') ? askedMonth : monthOf(day)
   const n = changed.length
   const held = heldBack.length
+  // What leaving would lose: the changes Submit would send, or, while the week loads, whatever was typed into it.
+  const unsent = loading ? typedWhileLoading.length : n
 
   // Entry details (?entry=<milestone>:<date>) opens on a saved entry of a listed row in the shown week, in the Day or
   // Week view; anything else is dropped once this week's own data is in (not the previous week's placeholder).
@@ -100,7 +102,7 @@ export default function TimesheetPage() {
   })
 
   // Closing or reloading the tab with unsaved changes asks the browser to confirm.
-  const dirty = n > 0
+  const dirty = unsent > 0
   useEffect(() => {
     if (!dirty) return undefined
     const warn = (e) => { e.preventDefault(); e.returnValue = '' }
@@ -121,7 +123,7 @@ export default function TimesheetPage() {
     state.discard()
     if (pick) { chooseView('day'); setParams({ week: target, day: pick }, { replace: true }) } else setParams({ week: target }, { replace: true })
   }
-  const goTo = (target, pick) => (n ? setLeaving({ open: true, week: target, day: pick, count: n }) : toWeek(target, pick))
+  const goTo = (target, pick) => (unsent ? setLeaving({ open: true, week: target, day: pick, count: unsent }) : toWeek(target, pick))
   const openDay = (iso) => {
     const target = mondayOfIso(iso)
     if (target === week) { chooseView('day'); setParams({ week, day: iso }, { replace: true }) } else goTo(target, iso)
@@ -163,9 +165,9 @@ export default function TimesheetPage() {
     return (
       <>
         <PageHeader title="My timesheet" subtitle="Review your hours by day. Select a date for entry details." actions={toggle} />
-        {n ? (
+        {unsent ? (
           <Alert severity="info" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={() => chooseView(sheetView)}>Back to that week</Button>}>
-            You have {n} unsaved change{n === 1 ? '' : 's'} in the week of {formatDayShort(week)}.
+            You have {unsent} unsaved change{unsent === 1 ? '' : 's'} in the week of {formatDayShort(week)}.
           </Alert>
         ) : null}
         <MonthView month={month} day={asked} onOpenDay={openDay} onRequest={(cell) => setAsking(cell)}
