@@ -15,6 +15,7 @@ from app.audit import record
 from app.authz import APPROVER_SQL, acts_as_delegate, is_assignee, load_project, manages
 from app.ctx import Ctx
 from app.db import query, query_one, transaction
+from app.features.milestones.service import _latest_percent, display_status
 from app.features.projects.service import project_consumed
 from app.features.time.flags import person_week_flags
 from app.http import ApiError
@@ -44,6 +45,31 @@ def _today() -> date:
 
 def week_start(d: date) -> date:
     return d - timedelta(days=d.weekday())
+
+
+MONTH_TEXT = re.compile(r"\d{4}-\d{2}")  # a calendar month as the URL carries it: 2026-10
+
+
+def _invalid_month() -> ApiError:
+    return ApiError(400, "VALIDATION_ERROR", "Pick a month as YYYY-MM, like 2026-10", {"month": "invalid_month"})
+
+
+def calendar_range(month: str | None) -> tuple[str, date, date]:
+    """(month as YYYY-MM, first day, last day) of the grid the Month view draws: whole Monday-to-Sunday weeks, from the
+    Monday on or before the 1st to the Sunday on or after the month's last day (4 to 6 weeks). No month = this one."""
+    if month is None:
+        today = _today()
+        year, number = today.year, today.month
+    else:
+        if not MONTH_TEXT.fullmatch(month):
+            raise _invalid_month()
+        year, number = int(month[:4]), int(month[5:])
+    try:
+        first = date(year, number, 1)
+        last = (date(year + (number == 12), number % 12 + 1, 1)) - timedelta(days=1)
+        return f"{year:04d}-{number:02d}", week_start(first), last + timedelta(days=6 - last.weekday())
+    except (ValueError, OverflowError):  # month 00 or 13, year 0000 or past the calendar's end
+        raise _invalid_month()
 
 
 def _name(row: dict, prefix: str = "") -> str:
@@ -120,20 +146,26 @@ def _live(e: dict, overtime: set[str]) -> dict:
 
 # ---------- reading a week ----------
 
+def _reader_scope(conn, ctx: Ctx, user_id: str) -> tuple[dict, str, dict]:
+    """(the person being read, SQL filter, its args) for a timesheet read: you always see your own; an admin sees
+    anyone's; a manager sees someone else's on the projects they manage only (p = the project's alias); anyone else
+    gets 403. An unknown person is 404."""
+    user = query_one(conn, "SELECT * FROM users WHERE id = CAST(:i AS uuid)", i=user_id)
+    if not user:
+        raise ApiError(404, "NOT_FOUND", "Not found")
+    if user_id != ctx.user_id and not ctx.is_admin:
+        if ctx.role != "manager":
+            raise ApiError(403, "FORBIDDEN", "You can only see your own timesheet")
+        return user, " AND p.manager_id = CAST(:me AS uuid)", {"me": ctx.user_id}  # their own projects only
+    return user, "", {}
+
+
 def get_week(conn, ctx: Ctx, params: dict) -> dict:
     user_id = params.get("user") or ctx.user_id
     as_uuid(user_id, "user")
     start = week_start(as_date(params["week"], "week") if params.get("week") else _today())
     end = start + timedelta(days=6)
-    user = query_one(conn, "SELECT * FROM users WHERE id = CAST(:i AS uuid)", i=user_id)
-    if not user:
-        raise ApiError(404, "NOT_FOUND", "Not found")
-    project_filter, args = "", {}
-    if user_id != ctx.user_id and not ctx.is_admin:
-        if ctx.role != "manager":
-            raise ApiError(403, "FORBIDDEN", "You can only see your own timesheet")
-        project_filter = " AND p.manager_id = CAST(:me AS uuid)"  # managers see their own projects only
-        args["me"] = ctx.user_id
+    user, project_filter, args = _reader_scope(conn, ctx, user_id)
     rows = query(conn, f"""
         SELECT m.id AS milestone_id, m.name AS milestone_name, m.status AS milestone_status, p.id AS project_id,
                p.name AS project_name, p.status AS project_status, a.role
@@ -166,6 +198,57 @@ def get_week(conn, ctx: Ctx, params: dict) -> dict:
                    for (mid, d), v in sorted(drafts.items(), key=lambda kv: (kv[0][1], kv[0][0]))],
         # Cells holding timer hours (draft or submitted): their hours change only through a change request.
         "locks": _locks(conn, user_id, entries, drafts),
+    }
+
+
+def get_month(conn, ctx: Ctx, params: dict) -> dict:
+    """The Month view's data (view only): the person's milestones around the month's grid, their entries in it (every
+    status) and their timer drafts. Never an hourly rate: the grid has no use for one."""
+    user_id = params.get("user") or ctx.user_id
+    as_uuid(user_id, "user")
+    month, start, end = calendar_range(params.get("month"))
+    user, project_filter, args = _reader_scope(conn, ctx, user_id)
+    # Milestones the person is assigned to that touch the grid, plus any other one they logged hours on in it.
+    rows = query(conn, f"""
+        SELECT m.id, m.name, m.start_date, m.end_date, m.status, p.id AS project_id, p.name AS project_name,
+               p.status AS project_status, a.role
+        FROM milestones m JOIN projects p ON p.id = m.project_id
+        LEFT JOIN milestone_assignees a ON a.milestone_id = m.id AND a.user_id = CAST(:u AS uuid)
+        WHERE NOT m.is_archived AND NOT p.is_archived{project_filter}
+          AND ((a.user_id IS NOT NULL AND m.start_date <= :b AND m.end_date >= :a)
+               OR EXISTS (SELECT 1 FROM time_entries t WHERE t.milestone_id = m.id
+                          AND t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b))
+        ORDER BY m.start_date, lower(m.name), m.id""", u=user_id, a=start, b=end, **args)
+    entries = query(conn, f"""
+        SELECT t.* FROM time_entries t JOIN projects p ON p.id = t.project_id AND NOT p.is_archived
+        JOIN milestones m ON m.id = t.milestone_id AND NOT m.is_archived
+        WHERE t.user_id = CAST(:u AS uuid) AND t.work_date BETWEEN :a AND :b{project_filter}
+        ORDER BY t.work_date, t.milestone_id""", u=user_id, a=start, b=end, **args)
+    ids = [str(r["id"]) for r in rows]
+    waiting = {str(r["milestone_id"]) for r in query(conn, """
+        SELECT DISTINCT d.milestone_id FROM milestone_dependencies d JOIN milestones pre ON pre.id = d.depends_on_id
+        WHERE d.milestone_id = ANY(CAST(:ids AS uuid[])) AND NOT pre.is_archived AND pre.status <> 'completed'""",
+                                                  ids=ids)} if ids else set()
+    percents = _latest_percent(conn, ids)
+    overtime: set[str] = set()
+    for week in range(0, (end - start).days + 1, 7):  # the 40h mark is per week, so each week of the grid on its own
+        overtime |= _overtime(conn, user_id, start + timedelta(days=week))
+    updates = _proof_updates(conn, user_id, start, end)
+    entries = [_settled(_live(e, overtime), updates) for e in entries]
+    drafts = drafts_by_cell(conn, user_id, start, end=end, project_filter=project_filter, **args)
+    name = _name(user)
+    return {
+        "month": month,
+        "range": {"start": start, "end": end},
+        "user": {"id": user["id"], "name": name},
+        "milestones": [{"id": r["id"], "name": r["name"], "start_date": r["start_date"], "end_date": r["end_date"],
+                        "status": r["status"], "display_status": display_status(r["status"], str(r["id"]) in waiting),
+                        "progress_percent": percents.get(str(r["id"])),
+                        "project": {"id": r["project_id"], "name": r["project_name"], "status": r["project_status"]},
+                        "role": r["role"]} for r in rows],
+        "entries": [_entry_view(e, name, show_rate=False) for e in entries],
+        "drafts": [{"milestone_id": mid, "work_date": d, "hours": v["hours"]}
+                   for (mid, d), v in sorted(drafts.items(), key=lambda kv: (kv[0][1], kv[0][0]))],
     }
 
 

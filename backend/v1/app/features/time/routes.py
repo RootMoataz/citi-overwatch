@@ -9,6 +9,12 @@ def get_week(req, ctx, conn):
     return json_response(200, service.get_week(conn, ctx, req.query))
 
 
+# Registered before /time-entries/{id}/... so "calendar" isn't taken as an id.
+@router.route("GET", "/time-entries/calendar")
+def get_month(req, ctx, conn):
+    return json_response(200, service.get_month(conn, ctx, req.query))
+
+
 @router.route("PUT", "/time-entries")
 def save_week(req, ctx, conn):
     return json_response(200, service.save_week(conn, ctx, req.json()))
