@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { describe, expect, test } from 'vitest'
 import RequireAuth from '../auth/RequireAuth.jsx'
@@ -53,8 +53,9 @@ describe('route guard', () => {
     '%s opening %s lands on their home with a message', async (role, path) => {
       renderGuarded(users[role], path)
       expect(await screen.findByText(NO_ACCESS)).toBeInTheDocument()
+      // The toast shows at once; the move home is a router transition that can land a moment later.
+      expect(await screen.findByText('Home page')).toBeInTheDocument()
       expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
-      expect(screen.getByText('Home page')).toBeInTheDocument()
       expect(screen.queryByText('Guarded page')).not.toBeInTheDocument()
     })
 
@@ -93,32 +94,36 @@ describe('route guard', () => {
   test("an address that doesn't exist goes home and says so", async () => {
     renderGuarded(users.employee, '/no-such-page')
     expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument()
+    expect(await screen.findByText('Home page')).toBeInTheDocument()
     expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
   })
 })
 
 const apiError = (status, code) => HttpResponse.json({ error: { code, message: code } }, { status })
+// The toast and the move home start together, but React Router runs the move as a transition, which can commit after the
+// toast under load: wait for the location itself.
+const landsHome = () => waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/))
 
 describe("a page whose main data is refused or gone", () => {
   test('a project the viewer may not open (403) goes home with the no-access message', async () => {
     server.use(http.get(`${API}/projects/p1`, () => apiError(403, 'FORBIDDEN')))
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1', path: '/projects/:id' })
     expect(await screen.findByText(NO_ACCESS)).toBeInTheDocument()
-    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+    await landsHome()
   })
 
   test("a deleted project (404) goes home saying the page doesn't exist", async () => {
     server.use(http.get(`${API}/projects/gone`, () => apiError(404, 'NOT_FOUND')))
     renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/gone', path: '/projects/:id' })
     expect(await screen.findByText(NOT_FOUND)).toBeInTheDocument()
-    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+    await landsHome()
   })
 
   test("a profile the server hides (404 means not allowed there) goes home with the no-access message", async () => {
     server.use(http.get(`${API}/users/u-ada/profile`, () => apiError(404, 'NOT_FOUND')))
     renderAsUser(<PersonProfilePage />, { user: users.employee, route: '/people/u-ada/profile', path: '/people/:id/profile' })
     expect(await screen.findByText(NO_ACCESS)).toBeInTheDocument()
-    expect(screen.getByTestId('location')).toHaveTextContent(/^\/$/)
+    await landsHome()
   })
 
   test('other failures stay on the page with a retry', async () => {

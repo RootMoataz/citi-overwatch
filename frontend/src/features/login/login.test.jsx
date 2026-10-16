@@ -143,17 +143,38 @@ describe('login page brand and demo', () => {
   const demoUser = (msLeft) => ({ ...users.employee, username: 'demo.admin', must_change_password: false,
     is_public_demo: true, session_expires_at: new Date(Date.now() + msLeft).toISOString() })
 
+  // The session timer runs on a controlled clock, so the end comes from advancing time, not from how fast the test runs.
+  const controlledClock = () => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'], shouldAdvanceTime: true })
+  const runOut = () => act(async () => { vi.advanceTimersByTime(61_000) })
+
   test('when the demo session runs out the app signs out and says why', async () => {
+    controlledClock()
     let loggedOut = false
-    server.use(noSession(), dashboardStub(), loginReturns(demoUser(1500)),
+    server.use(noSession(), dashboardStub(), loginReturns(demoUser(60_000)),
       http.post(`${API}/auth/logout`, () => { loggedOut = true; return new HttpResponse(null, { status: 204 }) }))
     renderWithProviders(<App />, { route: '/login' })
     const demo = await screen.findByRole('group', { name: /try the demo/i })
     await userEvent.click(within(demo).getByRole('button', { name: 'Admin' }))
     expect(await screen.findByRole('dialog', { name: /public demo admin/i })).toBeInTheDocument()
-    expect(await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })).toBeInTheDocument()
+    expect(screen.queryByText('Your 5-minute demo session has ended.')).not.toBeInTheDocument()
+    await runOut()
+    expect(await screen.findByText('Your 5-minute demo session has ended.')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /sign in/i })).toBeInTheDocument()
     expect(loggedOut).toBe(true)
+  })
+
+  test('the demo-ended message stays when a late expiry arrives after the demo sign-out', async () => {
+    controlledClock()
+    server.use(noSession(), dashboardStub(), loginReturns(demoUser(60_000)),
+      http.post(`${API}/auth/logout`, () => new HttpResponse(null, { status: 204 })))
+    renderWithProviders(<App />, { route: '/login' })
+    await userEvent.click(within(await screen.findByRole('group', { name: /try the demo/i })).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('button', { name: /got it/i }))
+    await runOut()
+    expect(await screen.findByText('Your 5-minute demo session has ended.')).toBeInTheDocument()
+    // A request still in flight comes back refused: its failed refresh reports an ordinary expiry.
+    await act(async () => { await api.refresh().catch(() => {}) })
+    expect(screen.getByText('Your 5-minute demo session has ended.')).toBeInTheDocument()
   })
 
   test('a refresh the server refuses because the demo ended shows the same message', async () => {
@@ -164,12 +185,15 @@ describe('login page brand and demo', () => {
   })
 
   test('the message goes away on the next sign-in', async () => {
-    server.use(noSession(), dashboardStub(), loginReturns(demoUser(1500)),
+    controlledClock()
+    server.use(noSession(), dashboardStub(), loginReturns(demoUser(60_000)),
       http.post(`${API}/auth/logout`, () => new HttpResponse(null, { status: 204 })))
     renderWithProviders(<App />, { route: '/login' })
     await userEvent.click(within(await screen.findByRole('group', { name: /try the demo/i }))
       .getByRole('button', { name: 'Admin' }))
-    await screen.findByText('Your 5-minute demo session has ended.', {}, { timeout: 4000 })
+    await userEvent.click(await screen.findByRole('button', { name: /got it/i }))
+    await runOut()
+    await screen.findByText('Your 5-minute demo session has ended.')
     server.use(loginReturns({ ...users.employee, must_change_password: false }))
     await userEvent.click(within(screen.getByRole('group', { name: /try the demo/i })).getByRole('button', { name: 'Employee' }))
     expect(await screen.findByRole('navigation', { name: /main/i })).toBeInTheDocument()
