@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,090 backend (364 unit · 726 integration, 97% coverage) · 831 frontend component (66 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,090 backend (364 unit · 726 integration, 97% coverage) · 853 frontend component (68 files) · 6 end-to-end (3 journeys × desktop + mobile), all passing on 15 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -74,8 +74,8 @@ Screenshots from the live site with the demo data (light mode unless noted).
 | **Live now**: running timers tick here, with Warning/Over chips and **Stop timer** | **Change requests**: approve or reject a change to locked timer hours |
 | ![Beacon Mobile App planning board with Backlog, Ready and Scheduled columns of milestone cards](docs/images/planning-board.png) | ![Finalize the plan dialog listing six plan checks, two of them needing fixes](docs/images/finalize-checklist.png) |
 | **Planning board** for a planned project | **Finalize** checks before the project goes active |
-| ![Apollo Data Migration milestone Schema Mapping expanded: priority and difficulty chips, the people on it, the done-when checklist, required skills and pending hours](docs/images/milestones.png) | ![Apollo Data Migration Budget tab: planned, consumed and remaining budget, a forecast marker and cost by milestone](docs/images/budget.png) |
-| **Milestones** with priority, difficulty, people and details | **Budget**: consumed vs planned, forecast, cost per milestone |
+| ![Apollo Data Migration Milestones tab: a state bar of milestones done, then a month-axis timeline with a date range and state on every bar](docs/images/milestones.png) | ![Apollo Data Migration Budget tab: planned, consumed and remaining budget, a forecast marker and cost by milestone with bars compared against the costliest milestone](docs/images/budget.png) |
+| **Milestones**: a state bar and a readable timeline above the list | **Budget**: consumed vs planned, forecast, cost per milestone (the costliest fills its bar) |
 | ![Messages: the Schema Mapping discussion thread with Ana and Ben](docs/images/messages.png) | ![Puppy assistant Summary tab: what needs you, a tip and the top insight](docs/images/puppy.png) |
 | **Messages**: one-to-one and milestone discussions | **Puppy**: a rule-based summary of what needs you |
 
@@ -167,7 +167,7 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 
 ```bash
 cd backend/v1 && python -m pytest --cov=app              # 1,090 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 831 component tests (Vitest + Testing Library)
+cd frontend && npm test                                  # 853 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
 cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit)
 cd frontend && npm run lint

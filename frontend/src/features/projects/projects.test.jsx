@@ -304,6 +304,39 @@ describe('ProjectDetailPage', () => {
     expect(within(row).getByRole('meter', { name: /schema mapping share of budget/i })).toHaveAttribute('aria-valuenow', '12')
   })
 
+  describe('cost by milestone bars', () => {
+    const fillWidth = (meter) => parseFloat(getComputedStyle(meter.firstChild).width)
+
+    async function costTable() {
+      server.use(...detailHandlers())
+      renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1?tab=budget', path: '/projects/:id' })
+      return screen.findByRole('table', { name: /cost by milestone/i })
+    }
+
+    test("the most expensive milestone's bar is full and the others are relative", async () => {
+      const table = await costTable()
+      const big = within(table).getByRole('meter', { name: /schema mapping share of budget/i })
+      const small = within(table).getByRole('meter', { name: /cutover share of budget/i })
+      expect(big).toHaveAttribute('aria-valuemax', '12')
+      expect(small).toHaveAttribute('aria-valuemax', '12')
+      expect(fillWidth(big)).toBeCloseTo(100, 1)
+      expect(fillWidth(small)).toBeCloseTo((8 / 12) * 100, 1)
+    })
+
+    test('the percent text is the share of the budget', async () => {
+      const table = await costTable()
+      const small = within(table).getByRole('meter', { name: /cutover share of budget/i })
+      expect(small).toHaveAttribute('aria-valuenow', '8')
+      expect(small).toHaveAttribute('aria-valuetext', '8%')
+      expect(within(small.closest('tr')).getByText('8%')).toBeInTheDocument()
+    })
+
+    test('the caption explains the bars', async () => {
+      await costTable()
+      expect(screen.getByText(/the most expensive milestone fills its bar/i)).toBeInTheDocument()
+    })
+  })
+
   test('budget tab hides milestone hours from employees but keeps the costs', async () => {
     server.use(...detailHandlers(project(), milestoneCosts(false)))
     renderAsUser(<ProjectDetailPage />, { user: users.employee, route: '/projects/p1?tab=budget', path: '/projects/:id' })

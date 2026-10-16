@@ -12,10 +12,10 @@ The tests are built for **debugging**, not only for a green tick:
 | Rules (unit) | pytest | part of 364 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 364 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
 | API (integration) | pytest + real PostgreSQL 17 | 726 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 831 (66 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Frontend (component) | Vitest + React Testing Library + MSW | 853 (68 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices | The pieces don't fit together in a real browser: real API, real database, real cookies |
 
-Counts as of 2026-10-15: **1,090 backend** (364 unit, 726 integration, 97% coverage) and **831 frontend** in 66 files, plus **6 end-to-end**, all passing. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-15); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-15: **1,090 backend** (364 unit, 726 integration, 97% coverage) and **853 frontend** in 68 files, plus **6 end-to-end**, all passing. Four date-dependent backend tests fail when the suite is run after 8 pm New York time (see [Known issue](#known-issue-date-dependent-backend-tests)). Results are under [Current results](#current-results-2026-10-15); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -95,8 +95,8 @@ tests/unit:        364 tests
 tests/integration: 726 tests
 
 # frontend: npx vitest run
- Test Files  66 passed (66)
-      Tests  831 passed (831)
+ Test Files  68 passed (68)
+      Tests  853 passed (853)
 
 # frontend: npm run lint && npm run build
 no problems; built in 9.68s

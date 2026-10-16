@@ -265,7 +265,7 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,090 backend tests at 97% coverage, 831 frontend component tests, and 6 end-to-end runs on desktop and
+> Tests: 1,090 backend tests at 97% coverage, 853 frontend component tests, and 6 end-to-end runs on desktop and
 > iPhone, all passing on 15 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
@@ -306,7 +306,7 @@ One open kickback per milestone and one running timer per person are enforced by
 submissions keep a frozen copy of each payroll CSV.
 
 **Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (364 unit tests).
-726 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 831 component tests use Vitest
+726 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 853 component tests use Vitest
 and MSW, where an unhandled request fails the test. 6 Playwright runs cover 3 journeys on desktop Chrome and iPhone
 13, all passing on 15 October. Two fail-closed tests walk every write route for the executive and demo-admin guards.
 

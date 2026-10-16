@@ -33,6 +33,7 @@ export default function MilestoneCostTable({ project }) {
   const { items, total, hours_visible: showHours } = costs.data
   if (!items.length) return null
   const bold = { fontWeight: 700 }
+  const maxPct = Math.max(0.1, ...items.map((r) => Number(r.budget_pct ?? 0)))   // the costliest milestone fills its bar
   return (
     <TableContainer component={Paper} variant="outlined">
       <Stack direction="row" sx={{ px: 2, pt: 2, gap: 1, justifyContent: 'space-between', alignItems: 'center' }}>
@@ -55,7 +56,7 @@ export default function MilestoneCostTable({ project }) {
               {showHours ? <><TableCell align="right">{formatHours(r.approved_hours)}</TableCell>
                 <TableCell align="right">{formatHours(r.pending_hours)}</TableCell></> : null}
               <TableCell align="right">{formatMoney(r.approved_cost)}</TableCell>
-              <TableCell align="right"><DataBar value={r.budget_pct} label={`${r.milestone.name} share of budget`} /></TableCell>
+              <TableCell align="right"><DataBar value={r.budget_pct} max={maxPct} label={`${r.milestone.name} share of budget`} /></TableCell>
             </TableRow>
           ))}
           <TableRow data-total-row sx={{ '& th, & td': { borderTop: 2, borderColor: 'divider', borderBottom: 0 } }}>
@@ -69,6 +70,7 @@ export default function MilestoneCostTable({ project }) {
       </Table>
       <Typography variant="caption" component="p" sx={{ color: 'text.secondary', px: 2, py: 1 }}>
         Approved cost uses each person's rate when their hours were approved. Pending hours cost nothing until approved.
+        Bars compare milestones: the most expensive milestone fills its bar, and the percent is its share of the project budget.
         {showHours ? null : ' Only the project’s manager and admins see the hours.'}
       </Typography>
     </TableContainer>

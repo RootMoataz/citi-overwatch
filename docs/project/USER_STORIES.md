@@ -172,7 +172,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
 
 - **Success:**
   - The Budget tab shows the planned budget, the consumed amount (approved hours only, at each person's hourly rate when approved), the remaining amount and the percentage used, plus a bar chart.
-  - A "Cost by milestone" table lists each milestone's approved cost and share of the budget. Its total row is the Consumed figure, so the two always agree. The project's manager and admins also see approved and pending hours; nobody sees an hourly rate.
+  - A "Cost by milestone" table lists each milestone's approved cost and share of the budget, with a bar scaled to the costliest milestone. Its total row is the Consumed figure, so the two always agree. The project's manager and admins also see approved and pending hours; nobody sees an hourly rate.
   - Admins set the budget, and the project's manager can adjust it. Every change is audited.
 - **Failure:** a negative budget is rejected on the field.
 
@@ -205,7 +205,8 @@ Each panel is titled with the question it answers, and the panels are labelled r
 **As** anyone on the project, **I want** a timeline **so that** I can see what waits on what.
 
 - **Success:**
-  - Horizontal date bars appear in dependency order, with a "Today" marker.
+  - A bar above the timeline shows the milestones by state, headed "<done> of <total> milestones done".
+  - Horizontal date bars appear in dependency order on a month axis, with a "Today" marker. Every bar reads "<Mon D> – <Mon D> · <state>", shows its progress, marks an overdue milestone and tags your own with "You"; clicking one opens it.
   - Each milestone lists what it waits on, with a "Waiting on: …" tooltip on its disabled Start button.
 - **Empty:** "No milestones yet", with **Add milestone** for managers.
 
