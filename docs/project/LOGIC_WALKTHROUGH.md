@@ -879,7 +879,7 @@ tinted pill in the top bar, "Demo session · 4:32" (the timer icon and "4:32" al
 desktop with the sidebar open, where the bar is short of room), counting down to `session_expires_at`; it turns red
 under 1:00 and opens a popover ("Public demo admin. Some actions are disabled, and you'll be signed out when the timer
 ends.", then "Time left: 4:32", because an open popover hides the page and its live region from screen readers). Its
-name carries the time left and starts with what the pill shows, so speech-control users can say it ("Demo session,
+name carries the time left and starts with what the pill shows, so speech-control users can say it ("Demo session · 4:32,
 signed out in 4 minutes 32 seconds"; on the compact pill "4:32 left in the demo session, signed out in 4 minutes 32
 seconds"), and it holds still while the pill has focus, so it isn't re-read every second; a polite live region says "1 minute left in
 the demo session" once, at 1:00. The pill's and notices' amber text reaches 4.5:1 on its tint in light and dark

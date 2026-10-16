@@ -197,7 +197,7 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
           <Box sx={{ flexShrink: 0, ml: 'auto', mr: { xs: 0, sm: 1 } }}><PaletteButton /></Box>
           {topBarExtras}
           <DemoPill notice={demo} />
-          <IconButton ref={avatarRef} aria-label="Account menu" aria-haspopup="menu" aria-expanded={openedFrom === 'header'}
+          <IconButton ref={avatarRef} aria-label="Account menu" aria-haspopup="menu" aria-expanded={openedFrom === 'header' || Boolean(narrow && dockedPuppy?.expanded)}
             aria-controls={openedFrom === 'header' ? menuId : undefined} onClick={(e) => openMenu(e, 'below', 'header')}
             sx={{ p: 0.5, flexShrink: 0 }}>
             <UserAvatar userId={user?.id} name={fullName(user)} size={AVATAR_SIZE.header} />

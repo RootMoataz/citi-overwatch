@@ -350,7 +350,7 @@ describe('top bar order', () => {
     renderLayout(user, () => {}, { extras })
     const names = within(screen.getByRole('banner')).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(names).toEqual(['Search (Ctrl+K)', 'Timer', 'Puppy', 'Notifications',
-      expect.stringMatching(/^Demo session, signed out in 4 minutes \d+ seconds$/), 'Account menu'])
+      expect.stringMatching(/^Demo session · 4:\d{2}, signed out in 4 minutes \d+ seconds$/), 'Account menu'])
   })
 
   test('Search is named "Search (Ctrl+K)" and opens the palette', async () => {
@@ -369,6 +369,23 @@ describe('top bar order', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Puppy assistant' }))
     expect(await screen.findByRole('dialog', { name: 'Puppy assistant' })).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+  })
+
+  test("under 375 px the avatar reports Puppy's docked panel as expanded while it is open", async () => {
+    serveForPuppy()
+    setViewport(320)
+    renderAsUser(<Layout user={users.manager} onLogout={() => {}} topBarExtras={<Puppy />} />, { user: users.manager })
+    const avatar = within(screen.getByRole('banner')).getByRole('button', { name: 'Account menu' })
+    expect(avatar).toHaveAttribute('aria-expanded', 'false')
+    await userEvent.click(avatar)
+    expect(avatar).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Puppy assistant' }))
+    await screen.findByRole('dialog', { name: 'Puppy assistant' })
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
+    expect(avatar).toHaveAttribute('aria-expanded', 'true')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Puppy assistant' })).not.toBeInTheDocument())
+    expect(avatar).toHaveAttribute('aria-expanded', 'false')
   })
 
   test('from 375 px Puppy stays in the bar and the account menu has no Puppy item', async () => {

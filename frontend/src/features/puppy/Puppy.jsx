@@ -44,9 +44,9 @@ export default function Puppy() {
   const openAt = useCallback((el) => setAnchor(el), [])
   useEffect(() => {
     if (!docked) return undefined
-    dock({ open: openAt, icon: <PuppyFace size={24} perked={perked} /> })
+    dock({ open: openAt, icon: <PuppyFace size={24} perked={perked} />, expanded: Boolean(anchor) })
     return () => dock(null)
-  }, [docked, dock, openAt, perked])
+  }, [docked, dock, openAt, perked, anchor])
   return (
     <>
       {docked ? null : (

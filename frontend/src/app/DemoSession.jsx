@@ -51,9 +51,9 @@ export function DemoPill({ notice }) {
   }, [announcement])
   if (!notice.active) return null
   // The name holds what the pill shows (label in name, for speech control): "Demo session…" on the full pill, the m:ss
-  // first on the compact one.
+  // first on the compact one (both start with their visible text).
   const name = left == null ? 'Demo session'
-    : wide ? `Demo session, signed out in ${spoken(left)}`
+    : wide ? `Demo session · ${notice.clock}, signed out in ${spoken(left)}`
       : `${notice.clock} left in the demo session, signed out in ${spoken(left)}`
   // One run of text: split over two flex items, the space after "·" would collapse.
   const label = wide ? `Demo session · ${notice.clock}` : notice.clock
