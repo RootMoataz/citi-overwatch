@@ -8,7 +8,7 @@ import {
 } from '@mui/material'
 import { useRef, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
-import { Link as RouterLink, useSearchParams } from 'react-router-dom'
+import { Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom'
 import { useApprovals, useMembers, useMilestones, useProfile } from '../../api/queries.js'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -52,6 +52,7 @@ export default function MilestonesTab({ project, user, view }) {
   const listRef = useRef(null)
   const { current, panel, setPanel, open, close, returnFocus, archiveStarted, archiveFailed } = useMilestonePanelUrl(milestones, listRef)
   const [params, setParams] = useSearchParams()
+  const location = useLocation()
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const wide = useMediaQuery(WIDE_QUERY)
   const [remembered, setRemembered] = useState(readView)
@@ -86,7 +87,9 @@ export default function MilestonesTab({ project, user, view }) {
   const changeMode = (next) => {
     storeView(next)
     setRemembered(next)
-    setParams((p) => { if (next === 'timeline') p.set('view', 'timeline'); else p.delete('view'); return p }, { replace: true })
+    // Keep the entry's state: an open panel's panelPushed mark is what lets Close undo the open (useMilestonePanelUrl).
+    setParams((p) => { if (next === 'timeline') p.set('view', 'timeline'); else p.delete('view'); return p },
+      { replace: true, state: location.state })
   }
   const clearFilters = () => { setSearch(''); setState('') }
 

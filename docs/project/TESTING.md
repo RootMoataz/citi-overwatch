@@ -12,10 +12,10 @@ The tests are built for **debugging**, not only for a green tick:
 | Rules (unit) | pytest | part of 399 unit tests | A business rule is wrong: at-risk, over-40, cycles, the capacity cap, usernames, milestone status, priority, routing, claims, planning checks, messaging permissions, insights, reminders, timers and rounding, timer drafts and locks, over-limit thresholds, proof of work, red flags, the PNG sanitiser, or the password policy. No database is involved |
 | Core (unit) | pytest | part of 399 unit tests | The HTTP envelope, router guards, request IDs, hashing and tokens, or the SES fail-fast behaviour |
 | API (integration) | pytest + real PostgreSQL 17 | 851 | An endpoint is wrong: permissions (401/403/404), the executive and public demo guards, validation, archiving, an audit row, a race-safe update, or what one role can see vs another |
-| Frontend (component) | Vitest + React Testing Library + MSW | 1,315 (87 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
+| Frontend (component) | Vitest + React Testing Library + MSW | 1,316 (87 files) | A screen is wrong: form gating, loading/empty/error states, role-based hiding, or the payload sent to the API |
 | End-to-end | Playwright | 3 journeys × 2 devices + 17 layout checks | The pieces don't fit together in a real browser (real API, real database, real cookies), or the layout breaks where jsdom can't see it: overlapping top-bar controls, crumbs under the search field, a page wider than the window |
 
-Counts as of 2026-10-16, after phase 2 of the redesign (the project page and the Projects list) and its final fix wave: **1,254 backend** (399 unit, 855 integration, collected; 97% coverage at the last full run) and **1,315 frontend** in 87 files, plus **23 end-to-end** (6 journey runs and 17 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)), and so are the two that failed on a few dates because of Delta's demo budget (see [Delta's spend](#deltas-spend-on-some-dates-fixed-16-october)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
+Counts as of 2026-10-16, after phase 2 of the redesign (the project page and the Projects list) and its final fix wave: **1,255 backend** (399 unit, 856 integration, collected; 97% coverage at the last full run) and **1,316 frontend** in 87 files, plus **23 end-to-end** (6 journey runs and 17 layout checks); all three suites pass. The four backend tests that failed whenever the UTC date was a Friday, Saturday or Sunday are fixed (see [Weekday-dependent backend tests](#weekday-dependent-backend-tests-fixed-16-october)), and so are the two that failed on a few dates because of Delta's demo budget (see [Delta's spend](#deltas-spend-on-some-dates-fixed-16-october)). Results are under [Current results](#current-results-2026-10-16); older dated results further down are snapshots taken at the time.
 
 **Fail-closed guard tests.** Two integration tests walk every registered write route (66 of 114 routes): [`test_public_demo.py`](../../backend/v1/tests/integration/test_public_demo.py) fails while any write route is neither allowed nor denied for the public demo admin, and [`test_executive.py`](../../backend/v1/tests/integration/test_executive.py) fails if the set of routes that let an executive write differs from the expected list, and checks that no executive response carries `salary` or `hourly_rate`. A new endpoint can't ship without a decision for both.
 
@@ -85,7 +85,7 @@ Each journey runs on **desktop Chrome (1280×800)** and on an **iPhone 13 profil
 
 ## Current results (2026-10-16)
 
-Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The latest figures come from phase 2 of the redesign (Task 12 of the project-page plan, 16 October): backend 1,250 passed (399 unit, 851 integration; the additions are the `sort`, `dir` and `counts` options on `GET /projects`), frontend 1,290 passed in 86 files twice in a row, lint clean, and end-to-end 23 passed (6.6 minutes, run alone). Phase 2's final fix wave then had backend 1,254 passed (399 unit, 855 integration; the four new integration tests pin the New York date in the at-risk check, an upper-case department id and an employee's `archived=true`), frontend 1,315 passed in 87 files twice in a row, lint clean, and end-to-end 23 passed (6.7 minutes, run alone). The release run at `bc663bf`, just before the 16 October deploy, had backend 1,227, frontend 1,016 (twice in a row), lint clean and end-to-end 23 passed (5.4 minutes, run alone).
+Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit, 840 integration): 110 more than before the Month view, then 27 more with the weekday fix below. The full plain run on 16 October is the weekday fix's; the coverage run comes from `323ea89` (the timer workflow), which had 1,087 tests. The plain run at `3e61cd3` was on Thursday evening in New York, when the UTC date was already Friday, so it shows the four weekday-dependent tests fixed below. The latest figures come from phase 2 of the redesign (Task 12 of the project-page plan, 16 October): backend 1,250 passed (399 unit, 851 integration; the additions are the `sort`, `dir` and `counts` options on `GET /projects`), frontend 1,290 passed in 86 files twice in a row, lint clean, and end-to-end 23 passed (6.6 minutes, run alone). Phase 2's final fix wave then had backend 1,254 passed (399 unit, 855 integration; the four new integration tests pin the New York date in the at-risk check, an upper-case department id and an employee's `archived=true`), frontend 1,315 passed in 87 files twice in a row, lint clean, and end-to-end 23 passed (6.7 minutes, run alone). Its follow-up (the dashboard's milestone lists on the New York date, and the List/Timeline toggle keeping Back working) added one test each: backend 1,255 passed (856 integration), frontend 1,316 passed in 87 files, lint clean; end-to-end was not re-run for it. The release run at `bc663bf`, just before the 16 October deploy, had backend 1,227, frontend 1,016 (twice in a row), lint clean and end-to-end 23 passed (5.4 minutes, run alone).
 
 ```
 # backend/v1: OVERWATCH_TEST_DB=overwatch_test_docs2 python -m pytest -o addopts="" -q
@@ -96,6 +96,7 @@ Windows 11, PostgreSQL 17, Node 24, Python 3.12. Backend: 1,227 tests (387 unit,
 1227 passed in 312.50s (0:05:12)                  # 16 Oct, 09:04 UTC, at bc663bf: the release run before the deploy
 1250 passed in 212.65s (0:03:32)                  # 16 Oct, phase 2 (Task 12): the project page and the Projects list
 1254 passed in 210.65s (0:03:30)                  # 16 Oct, phase 2's final fix wave
+1255 passed in 211.80s (0:03:31)                  # 16 Oct, its follow-up
 
 # backend/v1: same, with --cov=app (at 323ea89)
 app\features\time\timers.py                240      9    96%
@@ -105,10 +106,11 @@ TOTAL                                     6456    175    97%
 
 # collected per layer
 tests/unit:        399 tests
-tests/integration: 855 tests
+tests/integration: 856 tests
 
 # frontend: npx vitest run (two runs in a row, each the same)
  Test Files  87 passed (87)
+      Tests  1316 passed (1316)      # the final fix wave's follow-up (109.0 s)
       Tests  1315 passed (1315)      # phase 2's final fix wave, both runs (106.2 s, 107.7 s)
       Tests  1290 passed (1290)      # phase 2 (Task 12), both runs, 86 files; 73 files and 1016 tests at bc663bf
 

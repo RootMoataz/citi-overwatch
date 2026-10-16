@@ -525,6 +525,21 @@ describe('Milestones tab: opening a milestone', () => {
     expect(location()).toHaveTextContent(/^\/before$/)
   })
 
+  test('switching to Timeline with the panel open keeps Back working: Close, then Back leaves the tab', async () => {
+    renderWithBack()
+    await table()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Discovery' }))
+    await panel('Discovery')
+    await user.click(screen.getByRole('button', { name: 'Timeline' }))
+    expect(location()).toHaveTextContent('/m?milestone=m1&view=timeline')
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await gone()
+    expect(location()).toHaveTextContent(/^\/m$/)   // the open is undone; the view choice is remembered per browser
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(location()).toHaveTextContent(/^\/before$/)
+  })
+
   test('the history does not grow with each open and close (Close, Esc or Back)', async () => {
     renderWithBack()
     await table()

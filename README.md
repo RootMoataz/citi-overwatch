@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,254 backend (399 unit · 855 integration; 97% coverage at the last full run) · 1,315 frontend component (87 files) · 23 end-to-end (3 journeys × desktop + mobile, and 17 layout checks: the phone top bar from 320 px, the desktop crumbs, no sideways scroll at 375 px or between 900 and 1024 px); backend, frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,255 backend (399 unit · 856 integration; 97% coverage at the last full run) · 1,316 frontend component (87 files) · 23 end-to-end (3 journeys × desktop + mobile, and 17 layout checks: the phone top bar from 320 px, the desktop crumbs, no sideways scroll at 375 px or between 900 and 1024 px); backend, frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does

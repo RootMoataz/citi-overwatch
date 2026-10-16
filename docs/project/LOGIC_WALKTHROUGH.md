@@ -230,7 +230,7 @@ flowchart LR
 ```
 
 - **Code:** [`app/rules/at_risk.py`](../../backend/v1/app/rules/at_risk.py), a pure function of dates and numbers.
-- **"Today" is the New York date**, the business day the timesheets use (`risk_today()` in [`projects/service.py`](../../backend/v1/app/features/projects/service.py), from `ny_date`). A project ending today in New York isn't *Past due* in the New York evening after the UTC date has rolled over, and a milestone ending today isn't overdue yet; both are from New York's midnight. Every caller goes through `decorate`, so the Projects list, the `at_risk=true` filter, its count and the dashboard agree, and they agree with the client's due lines ("Due today").
+- **"Today" is the New York date**, the business day the timesheets use (`risk_today()` in [`projects/service.py`](../../backend/v1/app/features/projects/service.py), from `ny_date`). A project ending today in New York isn't *Past due* in the New York evening after the UTC date has rolled over, and a milestone ending today isn't overdue yet; both are from New York's midnight. Every caller goes through `decorate`, so the Projects list, the `at_risk=true` filter, its count and the dashboard's at-risk list agree; the dashboard's overdue and due-soon milestone lists compare against `risk_today()` too, so a milestone ending today is "due soon" there until New York's midnight. All of them agree with the client's due lines ("Due today").
 - **The inputs** (milestone counts, consumed budget) are gathered in one query by [`app/features/insights/`](../../backend/v1/app/features/insights/) and [`projects/`](../../backend/v1/app/features/projects/).
 - **Completed % is weighted by difficulty** (easy 1, medium 2, hard 3), the same figure as the project's progress.
 - **A project with no milestones** counts as 0% complete, so spending on it can flag burn.
@@ -644,7 +644,7 @@ participant gets `404` for the conversation, so ids reveal nothing. Replying to 
 been archived is refused; the screen shows that thread read-only.
 
 One-to-one conversations are unique per pair (`pair_key`): starting one again posts into the existing one. A
-milestone's **Discuss** thread is a group with its active assignees, the project's manager and whoever opened it
+milestone's discussion (the milestone panel's **Discussion** tab) is a group with its active assignees, the project's manager and whoever opened it
 (the project's manager or an admin), subject "*Milestone* · *Project*"; opening it again adds anyone assigned since.
 Everyone in it reads and writes it in the milestone panel's **Discussion** tab (managers also reach it with "Open
 discussion" in the row's "⋯"); assignees can't start it ("No discussion yet. Your manager can start one.").
@@ -763,8 +763,10 @@ person-hours a milestone should take; the project's manager or an admin sets it,
 `duration_days` (calendar days, both ends included), `working_days` (Monday to Friday) and `estimate_used_pct`
 (counted hours, pending and approved, ÷ estimate). A project adds up its non-archived milestones:
 `total_estimated_hours`, `logged_hours`, its own `duration_days`/`working_days`, and `estimate_used_pct` over the
-milestones that have an estimate. Milestone cards read "Est. 120h · 30 days (22 working days)" and, once hours
-exist, "86h logged · 72% of estimate", amber above 90% ("nearly used") and red above 100% ("over estimate"). The
+milestones that have an estimate. The Milestones list's **Effort** column reads "118h / 264h" ("114h estimate" before
+any hours, "+0.5h over estimate" past it), the panel's facts "118h logged / 264h estimated", and its Details tab "Est.
+120h · 30 days (22 working days)" and, once hours exist, "86h logged · 72% of estimate", amber above 90% ("nearly
+used") and red above 100% ("over estimate"). The
 project overview has an **Estimated effort** tile.
 
 `demo_curate` fills in estimates only where there are none: a completed milestone's estimate lands within 15% of

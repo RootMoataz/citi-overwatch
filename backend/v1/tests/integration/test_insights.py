@@ -108,3 +108,23 @@ def test_audit_log_can_leave_sign_ins_out(client, conn):
     assert "login" not in kept and "create" in kept and total == len(kept)
     # Asking for sign-ins explicitly wins over hiding them.
     assert actions("action=login&exclude_action=login")[0] == {"login"}
+
+
+def test_dashboard_milestone_lists_use_the_new_york_date_like_the_at_risk_check(client, conn, monkeypatch):
+    """A milestone ending Oct 15 is due soon until midnight in New York, then overdue, as the at-risk numbers say."""
+    from app.features.projects import service as projects_service
+    admin, mgr = make_user(conn, role="admin"), make_user(conn, role="manager")
+    project = make_project(conn, mgr, name="Due Oct 15", start=datetime(2026, 9, 1).date(), end=datetime(2026, 12, 31).date())
+    make_milestone(conn, project, name="Ends Oct 15", start=datetime(2026, 9, 1).date(), end=datetime(2026, 10, 15).date())
+    token = token_for(conn, admin)
+
+    def lists(moment):
+        monkeypatch.setattr(projects_service, "_now", lambda: moment)
+        body = client.request("GET", "/dashboard", token=token)[1]
+        names = {key: [m["name"] for m in body["milestones"][key]] for key in ("overdue", "due_soon")}
+        return names, [p["reasons"] for p in body["at_risk"]]
+
+    names, risky = lists(datetime(2026, 10, 16, 2, 0, tzinfo=timezone.utc))   # 22:00 on Oct 15 in New York
+    assert names == {"overdue": [], "due_soon": ["Ends Oct 15"]} and risky == []
+    names, risky = lists(datetime(2026, 10, 16, 5, 0, tzinfo=timezone.utc))   # 01:00 on Oct 16 in New York
+    assert names == {"overdue": ["Ends Oct 15"], "due_soon": []} and risky == [["OVERDUE_MILESTONE"]]

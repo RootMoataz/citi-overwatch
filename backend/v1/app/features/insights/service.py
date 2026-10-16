@@ -8,7 +8,7 @@ from app.authz import APPROVER_SQL
 from app.ctx import Ctx
 from app.db import query, query_one
 from app.features.activity.service import summarize
-from app.features.projects.service import decorated, visible_projects
+from app.features.projects.service import decorated, risk_today, visible_projects
 from app.features.time.service import _today, _weekly_costs, week_start
 from app.rules.overtime import WEEKLY_CAP, forecast_total
 from app.rules.priority import priority_rank
@@ -58,6 +58,7 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
         counts[item["status"]] += 1
 
     overdue, due_soon, blocked = [], [], []
+    day = risk_today()   # the New York date, as the at-risk check counts overdue milestones
     if ids:
         milestones = query(conn, """SELECT id, project_id, name, end_date, status, difficulty, priority FROM milestones
                                     WHERE project_id = ANY(CAST(:ids AS uuid[])) AND NOT is_archived
@@ -68,9 +69,9 @@ def dashboard(conn, ctx: Ctx, params: dict | None = None) -> dict:
                      "project": {"id": m["project_id"], "name": by_id[str(m["project_id"])]["name"]}}
             if m["status"] == "blocked":
                 blocked.append(entry)
-            if m["end_date"] < today:
+            if m["end_date"] < day:
                 overdue.append(entry)
-            elif m["end_date"] <= today + timedelta(days=DUE_SOON_DAYS):
+            elif m["end_date"] <= day + timedelta(days=DUE_SOON_DAYS):
                 due_soon.append(entry)
         # Within each list the most important come first, then the earliest due (the query's order).
         overdue.sort(key=lambda e: priority_rank(e["priority"]))
