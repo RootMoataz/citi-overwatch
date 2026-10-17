@@ -7,8 +7,9 @@ import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { STATUS, statusColor } from '../../app/theme.js'
 import Critical from '../../components/Critical.jsx'
-import { formatDayFull, formatHours } from '../../lib/format.js'
+import { formatDayFull, formatDayLabel, formatHours } from '../../lib/format.js'
 import { EntryStatusChip } from './EntryStatus.jsx'
+import { ManualActions, reasonLabel } from './ManualCell.jsx'
 import { closedLabel } from './useTimesheetWeek.js'
 import { KIND, daySummary, isOverdue, kindText, milestoneHref, num, shortDate, sourceOf } from './monthText.js'
 
@@ -27,6 +28,7 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
   // Neither action works on a milestone the person has left: a request is refused and the Day view has no row for it.
   const unassigned = Boolean(milestone) && milestone.role == null
   const draft = line.kind === 'draft'
+  const manual = line.entry?.manual
   const editInDay = (
     <Button variant="outlined" size="small" sx={{ mt: 1.5 }} aria-label={`Edit in Day view, ${name}`} onClick={() => onOpenDay(date)}>Edit in Day view</Button>
   )
@@ -50,7 +52,22 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
         <Box component="dt" sx={term}>Timer-linked entry</Box>
         <Box component="dd" sx={value}><LinkIcon sx={{ fontSize: 18, color: 'text.secondary' }} />{lock ? 'Yes' : 'No'}</Box>
         <Box component="dt" sx={term}>Source</Box>
-        <Box component="dd" sx={value}>{sourceOf(line)}</Box>
+        <Box component="dd" sx={value}>{manual ? 'Manual request' : sourceOf(line)}</Box>
+        {manual ? (
+          <>
+            <Box component="dt" sx={term}>Why not the timer?</Box>
+            <Box component="dd" sx={{ ...value, display: 'block' }}>
+              {reasonLabel(manual.reason)}
+              {manual.details ? <Typography variant="body2" component="span" sx={{ display: 'block', color: 'text.secondary', fontWeight: 400, overflowWrap: 'anywhere' }}>{manual.details}</Typography> : null}
+            </Box>
+            {line.entry.note ? (
+              <>
+                <Box component="dt" sx={term}>Work note</Box>
+                <Box component="dd" sx={{ ...value, fontWeight: 400, overflowWrap: 'anywhere' }}>{line.entry.note}</Box>
+              </>
+            ) : null}
+          </>
+        ) : null}
       </Box>
       {shared ? <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1 }}>Locked with this cell's timer hours</Typography> : null}
       {reason ? (
@@ -60,6 +77,11 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
       ) : null}
       {unassigned ? (
         <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>You're no longer assigned to this milestone</Typography>
+      ) : manual && milestone ? (
+        <Box sx={{ mt: 1.5 }}>
+          <ManualActions entry={line.entry} row={{ milestone, project: milestone.project }} label={`${name}, ${formatDayLabel(date)}`}
+            closed={Boolean(closed)} withdraw />
+        </Box>
       ) : draft ? (
         <>
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>Not submitted yet — submit it in the Day view</Typography>

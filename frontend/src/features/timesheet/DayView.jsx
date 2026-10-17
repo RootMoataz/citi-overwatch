@@ -7,6 +7,7 @@ import { inWindow } from '../timer/manualHours.js'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
+import { ManualActions, ManualBox } from './ManualCell.jsx'
 import { CellStatus } from './EntryStatus.jsx'
 import { entryParam } from './useEntryPanelUrl.js'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
@@ -19,13 +20,14 @@ const COMPLETED = 'Milestone completed — hours logged after it was completed a
 /** One milestone on the open day: hours, a work note that is always there, and the saved entry's status with Details.
  * closed: why nothing can be changed (project closed or on hold), or null. A completed milestone stays editable. */
 function DayRow({ state, row, day, closed, showProject, showTimer, showManual, onRequest, onOpenEntry }) {
-  const { valueOf, noteOf, locks, entries, overDays, attention, isDraft, setHours, setNote } = state
+  const { valueOf, noteOf, locks, entries, overDays, attention, isDraft, isManual, setHours, setNote } = state
   const k = key(row.milestone.id, day)
   const value = valueOf(k)
   const label = `${row.milestone.name}, ${formatDayLabel(day)}`
   const note = noteOf(k)
   const short = note.trim().length > 0 && !isProofNote(note)
   const completed = row.milestone.status === 'completed'
+  const manual = isManual(k)
   const needed = !closed && attention(k)
   // A note is saved with hours; on a row with neither hours nor an entry it just waits.
   const waiting = note.trim().length > 0 && num(value) <= 0 && !entries[k]
@@ -52,7 +54,7 @@ function DayRow({ state, row, day, closed, showProject, showTimer, showManual, o
         ) : null}
       </Box>
       <Box>
-        {locks[k] ? (
+        {manual ? <ManualBox entry={entries[k]} label={label} /> : locks[k] ? (
           <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
             onRequest={() => onRequest({ milestoneId: row.milestone.id, date: day, hours: locks[k].hours, label })} />
         ) : <HoursField value={value} label={label} caption="Hours" onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
@@ -60,17 +62,20 @@ function DayRow({ state, row, day, closed, showProject, showTimer, showManual, o
         <CellStatus entry={entries[k]} cellLabel={label} resubmitting={isDraft(k)} closed={Boolean(closed)}
           onResubmit={() => setHours(k, String(entries[k].hours))}
           after={(
-            <Button size="small" onClick={() => onOpenEntry(row.milestone.id, day)} aria-label={`Details for ${label}`}
-              data-entry-details={entryParam(row.milestone.id, day)} sx={{ minWidth: 44, minHeight: 44, px: 0.5 }}>
-              Details
-            </Button>
+            <>
+              {manual ? <ManualActions entry={entries[k]} row={row} label={label} closed={Boolean(closed)} /> : null}
+              <Button size="small" onClick={() => onOpenEntry(row.milestone.id, day)} aria-label={`Details for ${label}`}
+                data-entry-details={entryParam(row.milestone.id, day)} sx={{ minWidth: 44, minHeight: 44, px: 0.5 }}>
+                Details
+              </Button>
+            </>
           )} />
       </Box>
       <TextField label="Work note" multiline minRows={2} fullWidth size="small" value={note} disabled={Boolean(closed)}
         onChange={(e) => setNote(k, e.target.value.slice(0, NOTE_MAX))}
-        onBlur={() => { if (note !== note.trim()) setNote(k, note.trim()) }}
-        error={short} helperText={`${hint} · ${note.trim().length}/${NOTE_MAX}`}
-        slotProps={{ htmlInput: { 'aria-label': `Work note, ${row.milestone.name}`, maxLength: NOTE_MAX },
+        onBlur={() => { if (!manual && note !== note.trim()) setNote(k, note.trim()) }}
+        error={!manual && short} helperText={manual ? `${note.trim().length}/${NOTE_MAX}` : `${hint} · ${note.trim().length}/${NOTE_MAX}`}
+        slotProps={{ htmlInput: { 'aria-label': `Work note, ${row.milestone.name}`, maxLength: NOTE_MAX, readOnly: manual || undefined },
           formHelperText: { sx: needed && !short ? { color: 'warning.main' } : undefined } }} />
     </Box>
   )

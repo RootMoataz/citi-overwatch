@@ -13,6 +13,7 @@ import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import { StatusDot, StatusLine } from './EntryStatus.jsx'
 import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
+import ManualCell from './ManualCell.jsx'
 import { entryParam } from './useEntryPanelUrl.js'
 import { DAY_CAP, key, num, tooLow } from './useTimesheetWeek.js'
 import SupportingChip from '../../components/SupportingChip.jsx'
@@ -154,7 +155,7 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
 }
 
 function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry, dayCellSx, edgeSx, narrow }) {
-  const { rowTotal, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, setHours, setNote, closedLabel } = state
+  const { rowTotal, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, isManual, setHours, setNote, closedLabel } = state
   return (
     <>
       {/* The project band is one cell across the row; its name runs on one line along it (it isn't held to the first
@@ -193,7 +194,9 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
               const label = `${r.milestone.name}, ${formatDayLabel(d)}`
               return (
                 <TableCell key={d} align="center" sx={[{ verticalAlign: 'top' }, dayCellSx, dayTint(d, today)]}>
-                  {locks[k] ? (
+                  {isManual(k) ? (
+                    <ManualCell entry={entries[k]} label={label} row={r} closed={Boolean(closed)} />
+                  ) : locks[k] ? (
                     <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
                       onRequest={() => onRequest({ milestoneId: r.milestone.id, date: d, hours: locks[k].hours, label })} />
                   ) : <HoursField value={value} label={label} onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
@@ -203,7 +206,7 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
                     <StatusLine entry={entries[k]} cellLabel={label} entryParam={entryParam(r.milestone.id, d)}
                       onOpen={() => onOpenEntry(r.milestone.id, d)} />
                   ) : null}
-                  {num(value) > 0 || entries[k] ? (
+                  {!isManual(k) && (num(value) > 0 || entries[k]) ? (
                     <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'center', mt: 0.25, gap: 0.5 }}>
                       <NoteButton cellLabel={label} note={noteOf(k)} disabled={Boolean(closed)}
                         attention={!closed && attention(k)} onChange={(v) => setNote(k, v)} />

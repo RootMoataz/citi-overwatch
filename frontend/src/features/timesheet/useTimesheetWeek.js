@@ -53,7 +53,9 @@ export function useTimesheetWeek(week, { userId } = {}) {
   // Cells holding timer hours are locked at saved hours + unsubmitted timer hours (the server refuses anything else).
   const locks = useMemo(() => Object.fromEntries((sheet.data?.locks ?? []).map((l) => [key(l.milestone_id, l.work_date), l])), [sheet.data])
   const timerNotes = useMemo(() => Object.fromEntries((sheet.data?.drafts ?? []).map((d) => [key(d.milestone_id, d.work_date), d.note])), [sheet.data])
-  const valueOf = (k) => (locks[k] ? String(locks[k].hours) : k in drafts ? drafts[k] : entries[k] ? String(entries[k].hours) : '')
+  const valueOf = (k) => (isManual(k) ? String(entries[k].hours) : locks[k] ? String(locks[k].hours) : k in drafts ? drafts[k] : entries[k] ? String(entries[k].hours) : '')
+  // A manual request's cell is read-only here: the server refuses a grid save that touches it (MANUAL_HOURS_LOCKED).
+  const isManual = (k) => Boolean(entries[k]?.manual)
   const hasDraft = (k) => Number(locks[k]?.draft_hours ?? 0) > 0
   const isDraft = (k) => k in drafts
 
@@ -73,7 +75,7 @@ export function useTimesheetWeek(week, { userId } = {}) {
     const stored = typed ? null : readUnsaved(userId, week)
     const open = (k) => {
       const row = rows.find((r) => String(r.milestone.id) === k.split('|')[0])
-      return Boolean(row) && !closedLabel(row)
+      return Boolean(row) && !closedLabel(row) && !isManual(k)
     }
     const back = { drafts: only(stored?.drafts ?? {}, open), notes: only(stored?.notes ?? {}, open) }
     if (Object.keys(back.drafts).length) setDrafts((d) => ({ ...d, ...back.drafts }))
@@ -91,10 +93,10 @@ export function useTimesheetWeek(week, { userId } = {}) {
 
   const closedKeys = new Set(rows.filter((r) => closedLabel(r)).flatMap((r) => allDays.map((d) => key(r.milestone.id, d))))
   const cellKeys = rows.flatMap((r) => allDays.map((d) => key(r.milestone.id, d)))
-  // The cells Submit may send: this week's, on rows the sheet lists as open, and none while the week loads. Typing on
+  // The cells Submit may send: this week's, on rows the sheet lists as open, never a manual request's, and none while the week loads. Typing on
   // a row unassigned or put on hold since (a refetch, or a restore from cached data) stays in memory, but it neither
   // counts nor goes out.
-  const openKeys = new Set(loading ? [] : cellKeys.filter((k) => !closedKeys.has(k)))
+  const openKeys = new Set(loading ? [] : cellKeys.filter((k) => !closedKeys.has(k) && !isManual(k)))
   const typed = (k) => k in drafts && openKeys.has(k)
   // What a cell adds to the totals, as the server counts it: its pending or approved hours, a timer draft, or the hours
   // typed into it; rejected hours are left out unless re-typed.
@@ -116,10 +118,10 @@ export function useTimesheetWeek(week, { userId } = {}) {
   // A stop's note pre-fills a cell that has none.
   const noteOf = (k) => (k in notes ? notes[k] : entries[k]?.note || (hasDraft(k) ? timerNotes[k] ?? '' : ''))
   // A locked cell changes only by its timer draft, or by resubmitting it unchanged after a rejection.
-  const hoursChanged = (k) => hasDraft(k) || (Boolean(locks[k]) && k in drafts && entries[k]?.status === 'rejected')
+  const hoursChanged = (k) => !isManual(k) && (hasDraft(k) || (Boolean(locks[k]) && k in drafts && entries[k]?.status === 'rejected')
     || (!locks[k] && k in drafts && (num(drafts[k]) !== num(entries[k]?.hours ?? 0)
-    || (!entries[k] && drafts[k] !== '') || (entries[k]?.status === 'rejected' && num(drafts[k]) > 0)))
-  const noteChanged = (k) => k in notes && notes[k] !== (entries[k]?.note ?? '')
+    || (!entries[k] && drafts[k] !== '') || (entries[k]?.status === 'rejected' && num(drafts[k]) > 0))))
+  const noteChanged = (k) => !isManual(k) && k in notes && notes[k] !== (entries[k]?.note ?? '')
   // A note alone on an empty cell has nothing to save; it goes with the hours once they're typed.
   // Only this week's cells count: edits made in another week stay in memory until the person is back in that week.
   // And only the cells Submit may send (openKeys): Submit never sends a cell the sheet doesn't list as open.
@@ -129,7 +131,7 @@ export function useTimesheetWeek(week, { userId } = {}) {
     .filter(wouldChange)
   // Typing this week that Submit won't send: its row was closed or unassigned after it was typed.
   const heldBack = loading ? [] : [...new Set([...Object.keys(drafts), ...Object.keys(notes)])]
-    .filter((k) => inWeek(k) && !openKeys.has(k))
+    .filter((k) => inWeek(k) && !openKeys.has(k) && !isManual(k))
     .filter(wouldChange)
   // Typing in this week before its own rows are in: Submit can't send it yet (it counts once they are), but leaving
   // the week or the page must still ask first, or it would go without a word.
@@ -208,7 +210,7 @@ export function useTimesheetWeek(week, { userId } = {}) {
 
   return {
     week, sheet, loading, rows, groups, allDays, entries, locks,
-    valueOf, noteOf, hasDraft, isDraft, attention, timerNeedsNote, dayTotal, rowTotal, savedOthers,
+    valueOf, noteOf, hasDraft, isDraft, isManual, attention, timerNeedsNote, dayTotal, rowTotal, savedOthers,
     total, figures, overDays, tooMany, tooFew, tooFewKeys, changed, heldBack, typedWhileLoading,
     failure, setFailure, setHours, setNote, onSave, saving: save.isPending, saveCell, savingCell: saveOne.isPending, discard,
     restored, dismissRestored, nameOf, closedLabel,

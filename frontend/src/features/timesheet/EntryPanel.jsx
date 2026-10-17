@@ -9,6 +9,7 @@ import { formatDayLabel, formatDayLong, formatHours } from '../../lib/format.js'
 import { EntryStatusChip, entryKind } from './EntryStatus.jsx'
 import HoursField from './HoursField.jsx'
 import { LOCK_HINT } from './LockedCell.jsx'
+import { ManualActions, reasonLabel } from './ManualCell.jsx'
 import { kindColor, kindText, sourceOf } from './monthText.js'
 import { DAY_CAP, num, tooLow } from './useTimesheetWeek.js'
 
@@ -47,6 +48,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
   const { entries, locks, rows, valueOf, noteOf, setHours, setNote, changed, overDays, isDraft, closedLabel, saveCell, savingCell,
     saving, savedOthers } = state
   const feedbackId = useId()
+  const whyId = useId()
   const [error, setError] = useState(null)
   // The panel shows one cell (the page keys it by cell): a resubmit that ends after another entry was opened is
   // done for a panel no longer on screen, and must not close the one that is.
@@ -68,7 +70,8 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
   const note = noteOf(cellKey)
   const shortNote = note.trim().length > 0 && !isProofNote(note)
   const tracked = num(entry.tracked_hours)
-  const resubmittable = entry.status === 'rejected' && !closed
+  const manual = entry.manual
+  const resubmittable = entry.status === 'rejected' && !closed && !manual
   // The day as this panel's own save would send it. Save & resubmit sends this cell alone, so the server adds it to the
   // day's saved hours on other cells (unsaved typing elsewhere doesn't count). Done leaves it for Submit, which sends
   // all the week's typing: the week's overDays.
@@ -96,7 +99,9 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
       {closed ? <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>{closed}</Typography> : null}
 
       <Box sx={SECTION}>
-        {lock ? (
+        {manual ? (
+          <TextField label="Hours" value={String(entry.hours)} sx={[{ width: 120 }, READ_ONLY]} slotProps={{ input: { readOnly: true } }} />
+        ) : lock ? (
           <LockedHours lock={lock} closed={Boolean(closed)}
             onRequest={() => onRequest({ milestoneId, date, hours: lock.hours, label: `${name}, ${formatDayLabel(date)}` })} />
         ) : (
@@ -105,12 +110,25 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
         )}
       </Box>
 
-      <TextField label="Work note" multiline minRows={3} fullWidth value={note} disabled={Boolean(closed)} sx={SECTION}
-        onChange={(e) => setNote(cellKey, e.target.value.slice(0, NOTE_MAX))}
-        onBlur={() => { if (note !== note.trim()) setNote(cellKey, note.trim()) }}
-        error={shortNote}
-        helperText={`${shortNote ? `At least ${NOTE_MIN} characters` : `${NOTE_MIN}-${NOTE_MAX} characters`} · ${note.trim().length}/${NOTE_MAX}`}
-        slotProps={{ htmlInput: { maxLength: NOTE_MAX } }} />
+      {manual ? (
+        <Box role="group" aria-labelledby={whyId} sx={SECTION}>
+          <Typography id={whyId} variant="subtitle2" component="p">Why not the timer?</Typography>
+          <Typography variant="body2" sx={{ mt: 0.5 }}>{reasonLabel(manual.reason)}</Typography>
+          {manual.details ? <Typography variant="body2" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>{manual.details}</Typography> : null}
+        </Box>
+      ) : null}
+
+      {manual ? (
+        <TextField label="Work note" multiline minRows={3} fullWidth value={entry.note ?? ''} sx={[SECTION, READ_ONLY]}
+          slotProps={{ input: { readOnly: true } }} />
+      ) : (
+        <TextField label="Work note" multiline minRows={3} fullWidth value={note} disabled={Boolean(closed)} sx={SECTION}
+          onChange={(e) => setNote(cellKey, e.target.value.slice(0, NOTE_MAX))}
+          onBlur={() => { if (note !== note.trim()) setNote(cellKey, note.trim()) }}
+          error={shortNote}
+          helperText={`${shortNote ? `At least ${NOTE_MIN} characters` : `${NOTE_MIN}-${NOTE_MAX} characters`} · ${note.trim().length}/${NOTE_MAX}`}
+          slotProps={{ htmlInput: { maxLength: NOTE_MAX } }} />
+      )}
 
       {entry.status === 'rejected' ? (
         <Box role="group" aria-labelledby={feedbackId} sx={{ ...SECTION, px: 2, py: 1.5, borderRadius: 1, border: 1,
@@ -122,7 +140,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
         </Box>
       ) : null}
 
-      <TextField label="Source" value={sourceOf({ kind, entry, hours: entry.hours })} fullWidth sx={[SECTION, READ_ONLY]}
+      <TextField label="Source" value={manual ? 'Manual request' : sourceOf({ kind, entry, hours: entry.hours })} fullWidth sx={[SECTION, READ_ONLY]}
         helperText={tracked > 0 ? `${formatHours(tracked)} from a timer` : undefined}
         slotProps={{ input: { readOnly: true } }} />
 
@@ -131,6 +149,11 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
       ) : null}
       <ErrorAlert error={error} sx={SECTION} />
 
+      {manual ? (
+        <Box sx={{ ...SECTION, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <ManualActions entry={entry} row={row} label={`${name}, ${formatDayLabel(date)}`} closed={Boolean(closed)} withdraw onWithdrawn={onClose} />
+        </Box>
+      ) : null}
       {resubmittable ? (
         <Button variant="contained" fullWidth onClick={resubmit} disabled={savingCell || saving || invalid} sx={{ ...SECTION, minHeight: 44 }}>
           Save &amp; resubmit

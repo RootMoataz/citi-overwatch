@@ -1,6 +1,7 @@
 import { Box, Button, Chip, Tooltip, Typography } from '@mui/material'
 import Critical from '../../components/Critical.jsx'
 import SourceChip from '../timer/SourceChip.jsx'
+import { ManualRequestChip } from './ManualCell.jsx'
 import { KIND, KIND_ICON, chipSx, kindColor, kindText } from './monthText.js'
 
 /** A saved entry's approval kind, for the words and colours the Month view uses. */
@@ -76,8 +77,9 @@ export function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed,
         mt: 0.5 }}>
         <StatusWords entry={entry} inline />
         {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ height: 18 }} /> : null}
-        <SourceChip source={entry.source} hours={entry.hours} trackedHours={entry.tracked_hours} />
-        {entry.status === 'rejected' && !resubmitting && !closed ? (
+        {entry.manual ? <ManualRequestChip manual={entry.manual} />
+          : <SourceChip source={entry.source} hours={entry.hours} trackedHours={entry.tracked_hours} />}
+        {entry.status === 'rejected' && !resubmitting && !closed && !entry.manual ? (
           <Button size="small" onClick={onResubmit} aria-label={`Resubmit ${cellLabel}`} sx={{ minWidth: 0, px: 0.5 }}>
             Resubmit
           </Button>
