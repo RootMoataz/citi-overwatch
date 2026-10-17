@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { setViewport } from '../../test/setup.js'
 import AllocationPage from '../allocation/AllocationPage.jsx'
 import DashboardPage from './DashboardPage.jsx'
 
@@ -191,6 +192,21 @@ describe('AllocationPage', () => {
     expect(screen.getByRole('region', { name: /logged hours by project/i })).toBeInTheDocument()
     const grid = screen.getByRole('table', { name: /allocation by person and project/i })
     expect(within(grid).getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
+  })
+
+  test("project names are plain text, never links: a column can be a project the viewer can't open", async () => {
+    // W-4: Eli is also on Atlas, which another manager runs. His week counts it, but Allocation offers no way into a
+    // project (the project page would answer 404 and send the viewer home), on the table or on the phone cards.
+    server.use(http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    const { unmount } = renderAsUser(<AllocationPage />, { user: users.manager, route: '/allocation', path: '/allocation' })
+    const grid = await screen.findByRole('table', { name: /allocation by person and project/i })
+    expect(within(grid).getByRole('columnheader', { name: 'Atlas' })).toBeInTheDocument()
+    expect(within(grid).getAllByRole('link').map((a) => a.textContent)).toEqual(['Eli Employee'])
+    unmount()
+    setViewport(375)
+    renderAsUser(<AllocationPage />, { user: users.manager, route: '/allocation', path: '/allocation' })
+    expect(await screen.findByText('Atlas: 10h planned · 0h logged')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Atlas|Apollo/ })).not.toBeInTheDocument()
   })
 
   test('chart note says when nobody is over 40h', async () => {

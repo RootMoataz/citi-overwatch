@@ -219,8 +219,11 @@ def rank(insights: list[dict]) -> list[dict]:
 
 
 def smart_insights(*, today: date, projects: list[dict], milestones: list[dict], people: list[dict],
-                   pending_dates: list[date], rejections: list[dict]) -> list[dict]:
-    return rank(blocked_milestones(milestones) + budget_overrun(projects) + milestone_deadlines(milestones, today=today)
+                   pending_dates: list[date], rejections: list[dict], milestone_day: date | None = None) -> list[dict]:
+    """`milestone_day` is the day the milestone rules (deadlines, gone quiet) count from: the New York date, as My week
+    and the dashboard's milestone lists do. `today` when not given."""
+    day = milestone_day or today
+    return rank(blocked_milestones(milestones) + budget_overrun(projects) + milestone_deadlines(milestones, today=day)
                 + over_allocation(people)
                 + budget_burn_gap(projects) + approval_backlog(pending_dates, today=today)
-                + idle_milestones(milestones, today=today) + rejection_patterns(rejections, today=today))
+                + idle_milestones(milestones, today=day) + rejection_patterns(rejections, today=today))

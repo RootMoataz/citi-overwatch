@@ -67,9 +67,14 @@ function serve({ milestones = base, comingUp = [cutover, reporting], discussion 
     http.get(`${API}/projects`, () => HttpResponse.json({ items: [pull], total: 1 })),
     http.get(`${API}/projects/p2/milestones`, () => HttpResponse.json(claim)),
     http.get(`${API}/time-entries`, () => HttpResponse.json(week(rows))),
-    http.get(`${API}/milestones/:id/discussion`, ({ params }) => (discussion === 200
-      ? HttpResponse.json({ id: 'conv-1', kind: 'milestone', milestone: { id: params.id, name: 'Build' }, members: [] })
-      : notFound())),
+    // Whether Build has a discussion is read from the viewer's own conversations (always a 200); asking the milestone
+    // for it would answer 404 for every milestone without one.
+    http.get(`${API}/conversations`, () => HttpResponse.json({ items: discussion === 200
+      ? [{ id: 'conv-1', subject: 'Build · Atlas Customer Portal', is_group: true,
+        milestone: { id: 'm1', name: 'Build', project: { id: 'p3', name: 'Atlas Customer Portal' } } }]
+      : [{ id: 'conv-2', subject: null, is_group: false, milestone: null },
+        { id: 'conv-3', subject: 'Hypercare · Apollo', is_group: true, milestone: { id: 'm2', name: 'Hypercare' } }] })),
+    http.get(`${API}/milestones/:id/discussion`, () => notFound()),
   )
 }
 
@@ -111,14 +116,16 @@ describe('Your focus', () => {
       .toHaveAttribute('href', '/projects/p3?tab=milestones&milestone=m1&panel=discussion')
   })
 
-  test('no Discuss while the milestone has no discussion (404)', async () => {
-    const answered = []
-    server.events.on('response:mocked', ({ request }) => answered.push(new URL(request.url).pathname))
+  test('no Discuss while the milestone has no discussion, and no request that answers 404 to say so', async () => {
+    const asked = []
+    server.events.on('request:start', ({ request }) => asked.push(new URL(request.url).pathname))
     serve()
     const focus = await openPage()
-    await waitFor(() => expect(answered).toContain(`${API}/milestones/m1/discussion`))
+    await waitFor(() => expect(asked).toContain(`${API}/conversations`))
     await new Promise((resolve) => { setTimeout(resolve, 20) })
     expect(within(focus).queryByRole('link', { name: 'Discuss' })).not.toBeInTheDocument()
+    // Another milestone's discussion (Hypercare) doesn't count for Build.
+    expect(asked.filter((path) => path.endsWith('/discussion'))).toEqual([])
   })
 
   test('Next is the first Upcoming milestone, with its label and a chevron to its panel', async () => {
@@ -463,7 +470,7 @@ describe('privacy', () => {
     serve({ discussion: 200 })
     await openPage()
     await screen.findByRole('heading', { level: 2, name: 'Available to claim · 1' })
-    await waitFor(() => expect(seen.some((u) => u.pathname === `${API}/milestones/m1/discussion`)).toBe(true))
+    await waitFor(() => expect(seen.some((u) => u.pathname === `${API}/conversations`)).toBe(true))
     await waitFor(() => expect(seen.some((u) => u.pathname === `${API}/time-entries`)).toBe(true))
     const paths = seen.map((u) => u.pathname.replace(API, ''))
     for (const path of paths.filter((p) => p.startsWith('/users/'))) expect(path.split('/')[2]).toBe('u-emp')

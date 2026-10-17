@@ -176,3 +176,22 @@ def test_department_filter_narrows_insights_like_the_dashboard(client, conn):
     emp_token = token_for(conn, teams["tech"][1])
     status, body, _, _ = client.request("GET", "/insights/smart?department=nope", token=emp_token)
     assert (status, body["error"]["details"]) == (400, {"department": "invalid_id"})
+
+
+def test_milestone_deadlines_count_from_the_new_york_date_like_my_week(client, conn, monkeypatch):
+    """W-3: at 22:00 on Oct 16 in New York the UTC date is already Oct 17. A milestone that ended Oct 8 is 8 days
+    overdue on My week (the New York date); Smart insights said "9 days ago" (the UTC date). And one ending Oct 16 is
+    due today, not a day late."""
+    from datetime import date
+
+    from app.features.insights import smart as smart_module
+    from app.features.projects import service as projects_service
+    monkeypatch.setattr(projects_service, "_now", lambda: datetime(2026, 10, 17, 2, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(smart_module, "_today", lambda: date(2026, 10, 17))   # the UTC date at that moment
+    mgr = make_user(conn, role="manager")
+    project = make_project(conn, mgr, name="Apollo", start=date(2026, 9, 1), end=date(2026, 12, 31))
+    make_milestone(conn, project, name="Build", start=date(2026, 9, 1), end=date(2026, 10, 8), status="in_progress")
+    make_milestone(conn, project, name="Launch", start=date(2026, 9, 1), end=date(2026, 10, 16), status="in_progress")
+    details = {i["title"]: i["detail"] for i in smart(client, conn, mgr)}
+    assert details["Build is overdue"] == "Build (Apollo) was due 8 days ago and is still in progress."
+    assert details["Launch is due soon"] == "Launch (Apollo) is due today and is still in progress."

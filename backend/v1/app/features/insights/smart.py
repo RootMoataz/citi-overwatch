@@ -14,7 +14,7 @@ from app.ctx import Ctx
 from app.db import query
 from app.features.insights.service import _people_scope
 from app.features.milestones.workflow import CATEGORY_LABELS
-from app.features.projects.service import decorated, visible_projects
+from app.features.projects.service import decorated, risk_today, visible_projects
 from app.features.time.service import _today, _weekly_costs, week_start
 from app.rules.insights import REJECTION_WINDOW_DAYS, smart_insights
 from app.rules.overtime import forecast_total
@@ -125,6 +125,8 @@ def smart(conn, ctx: Ctx, params: dict | None = None) -> list[dict]:
     if ctx.is_manager or ctx.is_executive:
         rows = visible_projects(conn, ctx, department=department)
         projects, milestones = _projects(conn, rows, today), _milestones(conn, rows)
+    # Milestone deadlines count from the New York date, like My week ("8 days overdue") and the dashboard's lists, so
+    # the New York evening after the UTC date has rolled over doesn't read a day later here.
     return smart_insights(today=today, projects=projects, milestones=milestones,
                           people=_people(conn, people, today), pending_dates=_pending_dates(conn, ctx, department),
-                          rejections=_rejections(conn, people, today))
+                          rejections=_rejections(conn, people, today), milestone_day=risk_today())

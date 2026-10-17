@@ -102,6 +102,14 @@ export const useMarkConversationRead = () => useMessagesMutation((id) => api.pos
 /** Open (or, for the project's manager or an admin, start) a milestone's discussion → the conversation. */
 export const useOpenDiscussion = () => useMessagesMutation((milestoneId) => api.post(`/milestones/${milestoneId}/discussion`))
 
+/** Is the viewer in a milestone's discussion? Read from their own conversations (always a 200), so a page that only needs
+ * yes or no never asks the milestone and gets a 404 (a console error) for every milestone without one. */
+export const useInDiscussion = (milestoneId, enabled = true) => useQuery({
+  queryKey: messageKeys.conversations, queryFn: () => api.get('/conversations'),
+  enabled: enabled && Boolean(milestoneId), refetchInterval: false,
+  select: (data) => (data?.items ?? []).some((c) => c.milestone && String(c.milestone.id) === String(milestoneId)),
+})
+
 /** A milestone's discussion conversation, or a 404 error until one exists (not retried: the 404 is the answer). */
 export const useMilestoneDiscussion = (milestoneId, enabled = true) => useQuery({
   queryKey: messageKeys.discussion(milestoneId), queryFn: () => api.get(`/milestones/${milestoneId}/discussion`),

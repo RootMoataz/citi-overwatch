@@ -5,7 +5,7 @@ import { Box, Button, Link, Stack, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { useMilestoneDiscussion } from '../../api/messages.js'
+import { useInDiscussion } from '../../api/messages.js'
 import Critical, { CriticalIn } from '../../components/Critical.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
@@ -46,7 +46,7 @@ function PriorityFlag({ priority }) {
 /** The milestone to work on now: a highlighted inner card, with an error-coloured left edge when overdue. */
 function NowCard({ m, today, loggable }) {
   const due = dueLine(m, today)
-  const discussion = useMilestoneDiscussion(m.id)
+  const inDiscussion = useInDiscussion(m.id)
   const href = milestoneHref(m)
   return (
     <Box sx={(t) => ({
@@ -68,7 +68,7 @@ function NowCard({ m, today, loggable }) {
       </Stack>
       <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center', mt: 2 }}>
         <Button variant="outlined" component={RouterLink} to={href} sx={{ minHeight: 44 }}>View milestone</Button>
-        {discussion.data ? (
+        {inDiscussion.data ? (
           <Button component={RouterLink} to={`${href}&panel=discussion`} startIcon={<ChatOutlined />} sx={{ minHeight: 44 }}>
             Discuss
           </Button>
