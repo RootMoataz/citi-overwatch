@@ -65,7 +65,9 @@ describe('header and week picker', () => {
     await hoursCard()
     expect(within(picker()).getByText('Oct 12 – 18, 2026')).toBeInTheDocument()
     expect(within(picker()).getByRole('button', { name: 'Next week' })).toBeDisabled()
-    expect(within(picker()).getByRole('button', { name: 'This week' })).toBeDisabled()
+    // Already on this week: plain text, not a disabled button (which nearly vanishes in dark mode).
+    expect(within(picker()).queryByRole('button', { name: 'This week' })).not.toBeInTheDocument()
+    expect(within(picker()).getByText('This week')).toBeInTheDocument()
     expect(within(picker()).getByRole('button', { name: 'Previous week' })).toBeEnabled()
   })
 
@@ -76,7 +78,8 @@ describe('header and week picker', () => {
     const previous = within(picker()).getByRole('button', { name: 'Previous week' })
     expect(getComputedStyle(previous).borderStyle).toBe('solid')
     expect(getComputedStyle(within(picker()).getByText('Oct 12 – 18, 2026').parentElement).borderStyle).toBe('solid')
-    expect(within(picker()).getByRole('button', { name: 'This week' })).toHaveClass('MuiButton-text')
+    await userEvent.click(within(picker()).getByRole('button', { name: 'Previous week' }))
+    expect(await within(picker()).findByRole('button', { name: 'This week' })).toHaveClass('MuiButton-text')
   })
 
   test('Previous week sets ?week=, asks for that week alone, retitles the card and points the timesheet link at it', async () => {
@@ -151,6 +154,16 @@ describe('header and week picker', () => {
 })
 
 describe("This week's hours", () => {
+  test('planned 40: the marker label replaces the 40h scale label, so one label is visible', async () => {
+    serve({ profile: full(thisWeek({ planned: 40 })) })
+    render()
+    const card = await hoursCard()
+    expect(within(card).getByText('40h planned')).toBeInTheDocument()
+    // The only other "40h" is the Planned figure; the scale caption is gone.
+    expect(within(card).getAllByText('40h').map((el) => el.tagName)).toEqual(['P'])
+    expect(within(card).getByText('0h')).toBeInTheDocument()
+  })
+
   test('the figures, the scale, the caption and the way into the timesheet', async () => {
     serve()
     render()
@@ -165,6 +178,7 @@ describe("This week's hours", () => {
       expect(within(card).getByText(text)).toBeInTheDocument()
     }
     expect(within(card).getByText('Logged hours include pending and approved entries.')).toBeInTheDocument()
+    expect(within(card).getAllByText('40h')).toHaveLength(1)
     expect(within(card).getByRole('link', { name: 'Open my timesheet' })).toHaveAttribute('href', '/timesheet?week=2026-10-12')
     expect(within(card).queryByText(/over 40h/)).not.toBeInTheDocument()
   })

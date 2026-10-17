@@ -115,6 +115,21 @@ describe('Month view grid', () => {
     expect(within(box).getByText('26h')).toHaveStyle('color: rgb(179, 38, 30)')
   })
 
+  test("today has its filled date badge only; the outline belongs to the selected day", async () => {
+    server.use(calendar({ entries: [entry({ hours: 1 })] }))
+    render()
+    const today = await dayBox('Wed 14 Oct, today, 1 hour, Schema Mapping 1 hour pending')
+    const outlined = (el) => getComputedStyle(el).boxShadow.includes('inset')
+    expect(outlined(today)).toBe(true) // selected on arrival
+    await userEvent.setup().click(screen.getByRole('button', { name: /^Tue 13 Oct/ }))
+    expect(screen.getByRole('button', { name: /^Tue 13 Oct/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(today).toHaveAttribute('aria-pressed', 'false')
+    expect(outlined(today)).toBe(false)
+    expect(outlined(screen.getByRole('button', { name: /^Tue 13 Oct/ }))).toBe(true)
+    expect(getComputedStyle(within(today).getByText('14'))).toHaveProperty('backgroundColor', expect.not.stringMatching(/^$|transparent/))
+    expect(today).toHaveAccessibleName(/, today,/)
+  })
+
   test("only today's box says today, and 1 hour is singular", async () => {
     server.use(calendar({ entries: [entry({ hours: 1 })] }))
     render()

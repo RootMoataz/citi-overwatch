@@ -327,9 +327,24 @@ describe('My history: final review fixes', () => {
     for (const name of [/^Planned dates/, /^Hours logged/, /^Hours approved/]) {
       expect(within(table).getByRole('columnheader', { name })).toHaveStyle({ whiteSpace: 'normal' })
     }
-    // The read-only note closes the column, under the card.
-    expect(card.compareDocumentPosition(within(column).getByText('Read-only history. Edit eligible hours in My timesheet.'))
-      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The read-only note is the card's footer, inside it, after the table.
+    const note = within(card).getByText('Read-only history. Edit eligible hours in My timesheet.')
+    expect(card).toContainElement(note)
+    expect(table.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  test('milestone names are plain text; a "View milestone" chevron per openable row is the way in', async () => {
+    ownPage()
+    const table = await screen.findByRole('table')
+    const first = within(table).getAllByRole('rowheader')[0]
+    expect(first).toHaveTextContent('Hypercare')
+    expect(within(first).queryByRole('link', { name: 'Hypercare' })).not.toBeInTheDocument()
+    const openable = within(table).getAllByRole('link', { name: /^View milestone / })
+    expect(openable.length).toBeGreaterThan(0)
+    for (const link of openable) expect(link.getAttribute('href')).toMatch(/^\/projects\/[^/]+\?tab=milestones&milestone=/)
+    expect(within(table).getByRole('link', { name: 'View milestone Schema Mapping' })).toBeInTheDocument()
+    // Project names stay links where the viewer may open the project.
+    expect(within(table).getAllByRole('link', { name: 'Apollo Data Migration' })[0]).toHaveAttribute('href', '/projects/p1?tab=milestones')
   })
 
   test('a salary of null reads as a dash once Employment details is opened, never $0', async () => {

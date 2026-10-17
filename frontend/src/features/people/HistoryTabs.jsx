@@ -1,4 +1,5 @@
-import { Box, Checkbox, Chip, FormControlLabel, Link, MenuItem, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
+import ChevronRight from '@mui/icons-material/ChevronRight'
+import { Box, Checkbox, Chip, FormControlLabel, IconButton, Link, MenuItem, Paper, Stack, Tab, Tabs, TextField, Typography } from '@mui/material'
 import { visuallyHidden } from '@mui/utils'
 import { useId, useMemo, useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
@@ -24,17 +25,32 @@ const projectName = (project, canOpen, tab) => (canOpen
   ? <Link component={RouterLink} to={`/projects/${project.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{project.name}</Link>
   : project.name)
 
+const milestonePath = (m) => `/projects/${m.project.id}?tab=milestones&milestone=${m.id}`
+
+/** A milestone's name is plain text here (the project beside it is the link); this chevron opens it, named for it. */
+function OpenMilestone({ milestone }) {
+  if (!milestone.can_open) return null
+  return (
+    <IconButton component={RouterLink} to={milestonePath(milestone)} aria-label={`View milestone ${milestone.name}`}
+      sx={{ width: { xs: 44, md: 28 }, height: { xs: 44, md: 28 }, color: 'text.secondary' }}>
+      <ChevronRight />
+    </IconButton>
+  )
+}
+
 const MILESTONE_COLUMNS = [
   { key: 'name', header: 'Milestone', rowHeader: true, sortable: true, sortValue: (m) => m.name,
     render: (m) => (
-      <>
-        {m.can_open
-          ? <Link component={RouterLink} to={`/projects/${m.project.id}?tab=milestones&milestone=${m.id}`} underline="hover">{m.name}</Link>
-          : m.name}
-        {m.role === 'supporting' ? <SupportingChip /> : null}
-        {m.role == null ? <Typography variant="caption" component="span" sx={{ color: 'text.secondary', ml: 0.75 }}>No longer assigned</Typography> : null}
-        {m.is_archived ? chip('Archived') : null}
-      </>
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'flex-start', gap: 0.5, maxWidth: '100%' }}>
+        <Box component="span" sx={{ minWidth: 0 }}>
+          {m.name}
+          {m.role === 'supporting' ? <SupportingChip /> : null}
+          {m.role == null ? <Typography variant="caption" component="span" sx={{ color: 'text.secondary', ml: 0.75 }}>No longer assigned</Typography> : null}
+          {m.is_archived ? chip('Archived') : null}
+        </Box>
+        {/* From md the chevron sits beside the name; on phones the card carries it (renderCardActions). */}
+        <Box component="span" sx={{ display: { xs: 'none', md: 'inline-flex' }, flexShrink: 0, mt: -0.25 }}><OpenMilestone milestone={m} /></Box>
+      </Box>
     ) },
   { key: 'project', header: 'Project', sortable: true, sortValue: (m) => m.project?.name,
     render: (m) => (
@@ -84,8 +100,9 @@ function TabLabel({ label, count }) {
 /** Projects and Milestones as tabs (?tab=projects, else Milestones), in a card named "Work history" (an H2 kept for
  * screen readers; the tabs say the rest). Archived rows are hidden unless the viewer may see them (`canSeeArchived`) and
  * ticks Include archived, which sits beside the tabs so it counts for both. Wider than the card, a table scrolls inside
- * it with a fade at the edge (DataTable's scrollHint). */
-export default function HistoryTabs({ projects = NONE, milestones = NONE, canSeeArchived = false }) {
+ * it with a fade at the edge (DataTable's scrollHint). `footer` closes the card (the read-only note). A milestone's name is
+ * plain text; a "View milestone <name>" chevron on each openable row is the way in. */
+export default function HistoryTabs({ projects = NONE, milestones = NONE, canSeeArchived = false, footer = null }) {
   const [params, setParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [projectId, setProjectId] = useState('')
@@ -152,12 +169,14 @@ export default function HistoryTabs({ projects = NONE, milestones = NONE, canSee
             </FilterBar>
             <Box sx={[{ mt: 1.5 }, TABLE_SX]}>
               <DataTable ariaLabel="Milestones" columns={MILESTONE_COLUMNS} rows={rows} defaultSort={{ key: 'dates', dir: 'desc' }} scrollHint
+                renderCardActions={(m) => (m.can_open ? <OpenMilestone milestone={m} /> : null)}
                 empty={<Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   {shownMilestones.length ? 'No milestones match.' : 'No milestones yet.'}</Typography>} />
             </Box>
           </>
         ) : null}
       </Box>
+      {footer ? <Box sx={{ px: 2, pb: 2, mt: -0.5 }}>{footer}</Box> : null}
     </Paper>
   )
 }

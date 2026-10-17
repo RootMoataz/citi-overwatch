@@ -183,8 +183,13 @@ export default function TimesheetPage() {
   return (
     <>
       <PageHeader title="My timesheet" subtitle="Review your week. Submit with confidence."
-        actions={<Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
-          {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>} />
+        actions={(
+          <>
+            {toggle}
+            <Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
+              {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>
+          </>
+        )} />
       <WeekTotals figures={figures} cap={CAP} loading={loading} />
       {restored && n > 0 ? (
         <Alert severity="info" role="status" onClose={dismissRestored} sx={{ mb: 2 }}>Unsaved changes restored. Submit to send them.</Alert>
@@ -276,7 +281,6 @@ export default function TimesheetPage() {
                   <ThisWeekButton onClick={goThisWeek} />
                 </Stack>
                 <Box sx={{ flexGrow: 1 }} />
-                {toggle}
                 {!desktop && !inDayView ? <FormControlLabel control={<Switch checked={showWeekend} onChange={(e) => setShowWeekend(e.target.checked)} />} label="Weekend" /> : null}
               </Stack>
               {rows.length && inDayView ? (

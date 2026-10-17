@@ -1,9 +1,11 @@
 import PersonAdd from '@mui/icons-material/PersonAddAlt'
 import MoreHoriz from '@mui/icons-material/MoreHoriz'
+import PeopleAltOutlined from '@mui/icons-material/PeopleAltOutlined'
 import {
   Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Menu, MenuItem, Paper, Stack, TextField,
   Typography,
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useId, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
@@ -171,34 +173,40 @@ export default function TeamTab({ project, user, view }) {
   const empty = members.isSuccess && all.length === 0
   return (
     <Stack sx={{ gap: 2 }}>
-      <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
+      <Paper variant="outlined" component="section" aria-labelledby="team-summary" sx={{ p: 2, minWidth: 0 }}>
         <Stack sx={{ flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { sm: 'center' }, gap: 1.5 }}>
-          <Box>
-            <Typography variant="h3" component="h2">{`${all.length} team ${all.length === 1 ? 'member' : 'members'}`}</Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {`On this project · ${formatHours(planned)} planned per week`}
-            </Typography>
-          </Box>
+          <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+            <Box aria-hidden sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, flexShrink: 0,
+              borderRadius: '50%', color: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, t.palette.mode === 'dark' ? 0.2 : 0.1) }}>
+              <PeopleAltOutlined />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography id="team-summary" variant="h3" component="h2">{`${all.length} team ${all.length === 1 ? 'member' : 'members'}`}</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {`On this project · ${formatHours(planned)} planned per week`}
+              </Typography>
+            </Box>
+          </Stack>
           {addButton}
         </Stack>
         <ErrorAlert error={members.error} onRetry={() => members.refetch()} />
-        {empty ? (
-          <EmptyState title="Nobody on this project yet" description={manage ? 'Add people and plan their weekly hours.' : undefined} />
-        ) : (
-          <>
-            <Box sx={{ mt: 2 }}>
-              <FilterBar search={{ label: 'Search team members', placeholder: 'Search team members…', value: search, onChange: setSearch }} />
-            </Box>
-            <Box sx={{ mt: 2 }}>
-              <DataTable ariaLabel="Team members" columns={columns} rows={shown} getRowId={(m) => String(m.user.id)}
-                defaultSort={{ key: 'person', dir: 'asc' }} renderCard={renderCard} renderCardActions={menuFor}
-                loading={members.isLoading}
-                empty={<EmptyState title="No team members match" description="Try a different name, job title or skill." />} />
-            </Box>
-            <FootNote note="Planned hours are project allocations, not hours already worked." end={`As of ${formatDate(nyTodayIso())}`} />
-          </>
-        )}
       </Paper>
+      {empty ? (
+        <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
+          <EmptyState title="Nobody on this project yet" description={manage ? 'Add people and plan their weekly hours.' : undefined} />
+        </Paper>
+      ) : (
+        <Paper variant="outlined" component="section" aria-label="Team list" sx={{ p: 2, minWidth: 0 }}>
+          <FilterBar search={{ label: 'Search team members', placeholder: 'Search team members…', value: search, onChange: setSearch }} />
+          <Box sx={{ mt: 2 }}>
+            <DataTable ariaLabel="Team members" columns={columns} rows={shown} getRowId={(m) => String(m.user.id)}
+              defaultSort={{ key: 'person', dir: 'asc' }} renderCard={renderCard} renderCardActions={menuFor}
+              loading={members.isLoading}
+              empty={<EmptyState title="No team members match" description="Try a different name, job title or skill." />} />
+          </Box>
+          <FootNote note="Planned hours are project allocations, not hours already worked." end={`As of ${formatDate(nyTodayIso())}`} />
+        </Paper>
+      )}
       {dialog ? <MemberDialog projectId={project.id} member={dialog.member} people={available} onClose={() => setDialog(null)} /> : null}
       <ConfirmDialog open={Boolean(removing)} title={removing ? `Remove ${nameOf(removing)} from ${project.name}?` : ''}
         confirmLabel="Remove" busy={remove.isPending} body="They're also taken off its milestones."

@@ -1,7 +1,7 @@
 import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
 import ChevronLeft from '@mui/icons-material/ChevronLeft'
 import ChevronRight from '@mui/icons-material/ChevronRight'
-import { Box, Button, IconButton } from '@mui/material'
+import { Box, Button, IconButton, Typography } from '@mui/material'
 
 // The week pickers' one look, from the mockups (My week, My timesheet, a project's Hours): bordered chevrons around the
 // date, which sits in a bordered box after a calendar icon, then "This week" as a text button. 40 px from md, 44 px
@@ -36,7 +36,15 @@ export function WeekRange({ children, onPick }) {
   )
 }
 
-/** "This week", a text button. */
+/** "This week": a text button that jumps back, or, when the current week is already shown, plain text (a disabled button
+ * all but vanishes in dark mode, and there is nothing to press). */
 export function ThisWeekButton({ onClick, disabled }) {
-  return <Button onClick={onClick} disabled={disabled} sx={{ minHeight: SIZE, px: 1.5, whiteSpace: 'nowrap' }}>This week</Button>
+  if (disabled) {
+    return (
+      <Typography variant="body2" component="span" sx={{ color: 'text.secondary', fontWeight: 600, px: 1.5, whiteSpace: 'nowrap' }}>
+        This week
+      </Typography>
+    )
+  }
+  return <Button onClick={onClick} sx={{ minHeight: SIZE, px: 1.5, whiteSpace: 'nowrap' }}>This week</Button>
 }

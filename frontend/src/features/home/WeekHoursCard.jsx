@@ -22,6 +22,8 @@ export function WeekMeter({ logged, planned, over, label = 'Hours logged this we
   const max = Math.max(WEEKLY_CAP, logged, planned)
   const pct = (v) => Math.min((v / max) * 100, 100)
   const at = (v) => `${pct(v)}%`
+  // The planned marker's label replaces the 40h scale label when it sits on it (planned at, or within a hair of, 40).
+  const coversCap = planned > 0 && Math.abs(pct(planned) - pct(WEEKLY_CAP)) < 8
   return (
     <Box sx={{ my: 1.5 }}>
       <Box role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} data-over={over ? 'true' : 'false'}
@@ -39,8 +41,10 @@ export function WeekMeter({ logged, planned, over, label = 'Hours logged this we
       </Box>
       <Box aria-hidden sx={{ position: 'relative', height: 40, mt: 0.5 }}>
         <Typography variant="caption" sx={{ position: 'absolute', left: 0, top: 0, color: 'text.secondary' }}>0h</Typography>
-        <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: at(WEEKLY_CAP), transform: anchor(pct(WEEKLY_CAP)),
-          color: 'text.secondary', whiteSpace: 'nowrap' }}>{WEEKLY_CAP}h</Typography>
+        {coversCap ? null : (
+          <Typography variant="caption" sx={{ position: 'absolute', top: 0, left: at(WEEKLY_CAP), transform: anchor(pct(WEEKLY_CAP)),
+            color: 'text.secondary', whiteSpace: 'nowrap' }}>{WEEKLY_CAP}h</Typography>
+        )}
         {planned > 0 ? (
           <Typography variant="caption" sx={{ position: 'absolute', top: 20, left: at(planned), transform: anchor(pct(planned)),
             color: 'text.primary', fontWeight: 600, whiteSpace: 'nowrap' }}>{`${formatHours(planned)} planned`}</Typography>

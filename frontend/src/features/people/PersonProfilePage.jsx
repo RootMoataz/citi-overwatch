@@ -68,10 +68,8 @@ export default function PersonProfilePage() {
               { key: 'logged', label: 'Total hours logged', value: formatHours(total.logged), hint: 'All time' },
               { key: 'approved', label: 'Total hours approved', value: formatHours(total.approved), hint: 'All time' },
             ]} />
-            <div>
-              <HistoryTabs key={p.id} projects={projects} milestones={milestones} canSeeArchived={canSeeArchived} />
-              {own ? <FootNote icon={<LockOutlined fontSize="inherit" />} note="Read-only history. Edit eligible hours in My timesheet." /> : null}
-            </div>
+            <HistoryTabs key={p.id} projects={projects} milestones={milestones} canSeeArchived={canSeeArchived}
+              footer={own ? <FootNote icon={<LockOutlined fontSize="inherit" />} note="Read-only history. Edit eligible hours in My timesheet." /> : null} />
           </Stack>
         </Grid>
       </Grid>

@@ -86,7 +86,8 @@ export function DayBox({ date, info, names, deadlines, overtime, inMonth, weeken
       sx={(t) => ({ display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-start', gap: 0.5,
         width: '100%', height: '100%', minWidth: 0, minHeight: phone ? 64 : 112, p: phone ? 0.5 : 1, overflow: 'hidden', textAlign: 'left',
         bgcolor: selected ? alpha(t.palette.primary.main, 0.08) : weekend ? alpha(t.palette.text.primary, 0.035) : 'transparent',
-        boxShadow: selected ? `inset 0 0 0 2px ${t.palette.primary.main}` : isToday ? `inset 0 0 0 1px ${t.palette.primary.main}` : 'none',
+        // Only the selected day is outlined; today is marked by its filled date badge alone.
+        boxShadow: selected ? `inset 0 0 0 2px ${t.palette.primary.main}` : 'none',
         '&:hover': { bgcolor: selected ? alpha(t.palette.primary.main, 0.12) : 'action.hover' },
         '&.Mui-focusVisible': { outline: `2px solid ${t.palette.primary.main}`, outlineOffset: -4 } })}>
       <Box component="span" sx={{ display: 'flex', flexDirection: phone ? 'column' : 'row', justifyContent: 'space-between',

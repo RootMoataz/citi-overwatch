@@ -378,7 +378,7 @@ export default function ApprovalsTab({ milestone }) {
   const tooMany = count > IMPACT_MAX
   const impact = (
     <Button startIcon={<InfoOutlined />} disabled={!count || tooMany || busy} onClick={() => setDialog('impact')}
-      sx={{ minHeight: 44 }}>
+      sx={{ minHeight: 44, whiteSpace: 'nowrap', px: 1, '& .MuiButton-startIcon': { mr: 0.5, display: { md: 'none', xs: 'inherit' } } }}>
       View budget impact
     </Button>
   )
@@ -405,17 +405,17 @@ export default function ApprovalsTab({ milestone }) {
         sx={{ position: 'sticky', bottom: desktop ? 0 : (t) => t.spacing(-2), zIndex: 1, mx: -2, px: 2, py: 1, gap: 1,
           flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', bgcolor: 'background.paper', borderTop: 1,
           borderColor: 'divider' }}>
-        <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Typography variant="body2" role="status" sx={{ fontWeight: count ? 600 : 400 }}>
-            {count ? `${count} selected · ${formatHours(hours)}` : 'Select entries to review'}
-          </Typography>
+        <Typography variant="body2" role="status" sx={{ fontWeight: count ? 600 : 400, flex: '1 1 6rem', minWidth: 0 }}>
+          {count ? `${count} selected · ${formatHours(hours)}` : 'Select entries to review'}
+        </Typography>
+        {/* One row at the panel's desktop width: the selection on the left, the three actions on the right; the phone
+            sheet (narrower) lets the actions drop under the text. */}
+        <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: { xs: 'wrap', md: 'nowrap' }, alignItems: 'center', justifyContent: 'flex-end', flex: '0 0 auto' }}>
           {tooMany ? <Tooltip title="Select 20 entries or fewer to see the budget impact"><span>{impact}</span></Tooltip> : impact}
-        </Stack>
-        <Stack direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap' }}>
-          <Button variant="outlined" disabled={!count || busy} onClick={() => setDialog('reject')} sx={{ minHeight: 44 }}>
+          <Button variant="outlined" disabled={!count || busy} onClick={() => setDialog('reject')} sx={{ minHeight: 44, whiteSpace: 'nowrap', px: 1.5 }}>
             Request changes
           </Button>
-          <Button variant="contained" disabled={!count || busy} onClick={approve} sx={{ minHeight: 44 }}>
+          <Button variant="contained" disabled={!count || busy} onClick={approve} sx={{ minHeight: 44, whiteSpace: 'nowrap', px: 1.5 }}>
             {count ? `Approve ${formatHours(hours)}` : 'Approve'}
           </Button>
         </Stack>

@@ -47,6 +47,20 @@ describe('TeamTab', () => {
     expect(screen.getByRole('button', { name: 'Add member' })).toBeInTheDocument()
   })
 
+  test('the summary and the search + table are two separate cards', async () => {
+    render(users.manager)
+    const summary = await screen.findByRole('region', { name: '5 team members' })
+    const list = screen.getByRole('region', { name: 'Team list' })
+    expect(summary).not.toBe(list)
+    expect(summary).not.toContainElement(list)
+    expect(within(summary).getByText('On this project · 115h planned per week')).toBeInTheDocument()
+    expect(within(summary).getByRole('button', { name: 'Add member' })).toBeInTheDocument()
+    expect(within(summary).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(list).getByRole('textbox', { name: 'Search team members' })).toBeInTheDocument()
+    expect(within(list).getByRole('table', { name: 'Team members' })).toBeInTheDocument()
+    expect(getComputedStyle(list).borderStyle).toBe('solid')
+  })
+
   test('the cap error still shows its message', async () => {
     render(users.manager, [http.post(`${API}/projects/p1/members`, () => HttpResponse.json({ error: { code: 'PLANNED_HOURS_EXCEEDED',
       message: 'x', details: { current_total: 30, requested: 12, cap: 40 } } }, { status: 400 }))])

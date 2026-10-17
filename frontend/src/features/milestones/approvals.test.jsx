@@ -337,6 +337,16 @@ describe('Approvals tab: footer and approving', () => {
     const footer = screen.getByRole('group', { name: 'Review selected entries' })
     expect(getComputedStyle(footer).position).toBe('sticky')
     expect(getComputedStyle(footer).bottom).toBe('0px')
+    // One row: the selection text first, then all three actions together in one group on its right.
+    const status = within(footer).getByRole('status')
+    const actions = footerButton('Approve').parentElement
+    expect(getComputedStyle(footer).flexDirection).toBe('row')
+    expect(getComputedStyle(footer).justifyContent).toBe('space-between')
+    expect(footer).toContainElement(status)
+    expect(status.parentElement).toBe(footer)
+    expect(actions.parentElement).toBe(footer)
+    expect(status.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    for (const name of ['View budget impact', 'Request changes', 'Approve']) expect(footerButton(name).parentElement).toBe(actions)
     await userEvent.click(box('Oct 6, 2026, 8.5h'))
     await userEvent.click(box('Oct 7, 2026, 8.5h'))
     expect(screen.getByText('2 selected · 17h')).toBeInTheDocument()

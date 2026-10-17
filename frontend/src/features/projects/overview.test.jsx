@@ -159,7 +159,7 @@ describe('Overview schedule and next milestones', () => {
     const user = userEvent.setup()
     const table = await screen.findByRole('table', { name: 'Next milestones' })
     const rows = within(table).getAllByRole('row').slice(1)
-    expect(rows.map((r) => within(r).getByRole('link').textContent)).toEqual(['Rework', 'Testing', 'Go-live'])
+    expect(rows.map((r) => within(r).getAllByRole('link')[0].textContent)).toEqual(['Rework', 'Testing', 'Go-live'])
     expect(within(rows[0]).getByText('Sep 1 – Oct 10, 2026')).toBeInTheDocument()
     expect(within(rows[2]).getByText('Oct 24 – Dec 12, 2026')).toBeInTheDocument()
     expect(within(rows[0]).getByText('Blocked – needs review')).toBeInTheDocument()
@@ -168,6 +168,29 @@ describe('Overview schedule and next milestones', () => {
     expect(within(rows[2]).getByText('Eli Employee')).toBeInTheDocument()
     await user.click(within(rows[2]).getByText('Oct 24 – Dec 12, 2026'))
     expect(location()).toHaveTextContent('/projects/p1?tab=milestones&milestone=m7')
+  })
+
+  test("Next milestones' Owner and Team this week show an avatar and a profile link when the viewer may open it", async () => {
+    server.use(...handlers())
+    open()
+    const table = await screen.findByRole('table', { name: 'Next milestones' })
+    const rework = within(table).getByText('Rework').closest('tr')
+    expect(within(rework).getByRole('link', { name: 'Ada Lovelace' })).toHaveAttribute('href', '/people/u-ada/profile')
+    expect(within(rework).getByText('AL')).toBeInTheDocument() // the avatar's initials, beside the name
+    const card = (await screen.findByRole('heading', { name: 'Team this week' })).closest('section')
+    const row = (await within(card).findByRole('link', { name: 'Ada Lovelace' })).closest('tr')
+    expect(within(row).getByText('AL')).toBeInTheDocument()
+    expect(within(card).getByRole('link', { name: 'Bo Peep' })).toHaveAttribute('href', '/people/u-bo/profile')
+  })
+
+  test('an employee sees the owner names as plain text, with their avatars', async () => {
+    server.use(...handlers())
+    open(users.employee)
+    const table = await screen.findByRole('table', { name: 'Next milestones' })
+    const rework = within(table).getByText('Rework').closest('tr')
+    expect(within(rework).getByText('Ada Lovelace')).toBeInTheDocument()
+    expect(within(rework).queryByRole('link', { name: 'Ada Lovelace' })).not.toBeInTheDocument()
+    expect(within(rework).getByText('AL')).toBeInTheDocument()
   })
 
   test('an unowned milestone reads Unassigned, and the card is hidden when nothing is left', async () => {

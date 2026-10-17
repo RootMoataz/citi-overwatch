@@ -4,7 +4,6 @@ import { useMediaQuery } from 'react-responsive'
 import { useSearchParams } from 'react-router-dom'
 import { useProfile, useProfileWeek } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
-import Reveal from '../../components/Reveal.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import { mondayOfIso, nyMondayIso, nyTodayIso } from '../../lib/format.js'
@@ -66,17 +65,13 @@ export default function MyWeekPage() {
   const showPrediction = (id) => reveal(`${COMING_ID}-${id}`, (row) => row)
 
   const focus = data ? (
-    <Reveal>
-      <YourFocusCard groups={groups} comingUp={comingUp} today={today} sections={sections}
-        onShowComing={showComing} onShowPrediction={showPrediction} />
-    </Reveal>
+    <YourFocusCard groups={groups} comingUp={comingUp} today={today} sections={sections}
+      onShowComing={showComing} onShowPrediction={showPrediction} />
   ) : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null
   const groupList = data ? <MilestoneGroups groups={groups} comingUp={comingUp} today={today} sections={sections} /> : null
   const hours = data ? (
-    <Reveal index={1}>
-      <WeekHoursCard week={week} current={current} data={hoursData} loading={hoursLoading} error={hoursError}
-        onRetry={() => weekly.refetch()} open={sections.isOpen('week')} onToggle={() => sections.toggle('week')} />
-    </Reveal>
+    <WeekHoursCard week={week} current={current} data={hoursData} loading={hoursLoading} error={hoursError}
+      onRetry={() => weekly.refetch()} open={sections.isOpen('week')} onToggle={() => sections.toggle('week')} />
   ) : profile.isLoading ? <Skeleton variant="rounded" height={240} /> : null
   const manager = data?.user?.manager
     ? <YourManagerCard manager={data.user.manager} collapsible stacked={wide} open={sections.isOpen('manager')}

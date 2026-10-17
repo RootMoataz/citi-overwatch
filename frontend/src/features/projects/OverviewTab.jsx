@@ -9,8 +9,11 @@ import Critical from '../../components/Critical.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
+import PersonLink from '../../components/PersonLink.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import Timeline from '../../components/Timeline.jsx'
+import UserAvatar from '../../components/UserAvatar.jsx'
+import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 import { can } from '../../lib/permissions.js'
 import { projectEffort } from '../../lib/estimates.js'
 import { daysBetween, formatDate, formatDateRange, formatHours, formatMoney, formatPct, mondayOfIso, nyTodayIso, plural } from '../../lib/format.js'
@@ -39,6 +42,18 @@ function Card({ id, title, aside, children }) {
 const panelPath = (id) => `?tab=milestones&milestone=${id}`
 const primaryOwner = (m) => (m.assignees ?? []).find((a) => !(m.supporting_ids ?? []).map(String).includes(String(a.id)))
 const byStart = (a, b) => String(a.start_date).localeCompare(String(b.start_date)) || String(a.end_date).localeCompare(String(b.end_date))
+
+/** A person as the Team tab shows them: avatar, then the name, which opens their profile when the viewer may see it. */
+function Who({ person, project, size = AVATAR_SIZE.row }) {
+  return (
+    <Stack direction="row" sx={{ alignItems: 'center', gap: 1, minWidth: 0 }}>
+      <UserAvatar userId={person.id} name={person.name} size={size} />
+      <Typography variant="body2" component="span" sx={{ fontWeight: 600, minWidth: 0, overflowWrap: 'break-word' }}>
+        <PersonLink person={person} context={{ project }} />
+      </Typography>
+    </Stack>
+  )
+}
 
 function Kpis({ project, summary, today }) {
   const s = summary.data
@@ -102,7 +117,7 @@ function Schedule({ project, milestones, planning }) {
   )
 }
 
-function NextMilestones({ milestones }) {
+function NextMilestones({ project, milestones }) {
   const navigate = useNavigate()
   const next = milestones.filter((m) => m.status !== 'completed').sort(byStart).slice(0, 3)
   if (!next.length) return null
@@ -113,7 +128,10 @@ function NextMilestones({ milestones }) {
         <StatusChip status={m.display_status ?? m.status} />
       </Stack>) },
     { key: 'dates', header: 'Dates', render: (m) => formatDateRange(m.start_date, m.end_date) },
-    { key: 'owner', header: 'Owner', render: (m) => primaryOwner(m)?.name ?? 'Unassigned' },
+    { key: 'owner', header: 'Owner', render: (m) => {
+      const owner = primaryOwner(m)
+      return owner ? <Who person={owner} project={project} /> : 'Unassigned'
+    } },
   ]
   return (
     <Card id="ov-next" title="Next milestones">
@@ -183,7 +201,7 @@ function TeamThisWeek({ project, week }) {
     .filter((p) => String(p.id) === String(project.id))
     .map((p) => ({ id: person.user.id, name: person.user.name, planned: Number(p.planned), logged: Number(p.logged) })))
   const columns = [
-    { key: 'name', header: 'Name', rowHeader: true, render: (r) => <Typography variant="body2" sx={{ fontWeight: 600 }}>{r.name}</Typography> },
+    { key: 'name', header: 'Name', rowHeader: true, render: (r) => <Who person={r} project={project} size={AVATAR_SIZE.inline} /> },
     { key: 'planned', header: 'Planned', align: 'right', render: (r) => formatHours(r.planned) },
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => (
       <Stack direction="row" sx={{ gap: 0.75, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -293,7 +311,7 @@ export default function OverviewTab({ project, user, view }) {
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 2fr) minmax(0, 1fr)' }, alignItems: 'start' }}>
         <Stack sx={{ gap: 2, minWidth: 0 }}>
           <Schedule project={project} milestones={live} planning={planning} />
-          <NextMilestones milestones={live} />
+          <NextMilestones project={project} milestones={live} />
         </Stack>
         <Stack sx={{ gap: 2, minWidth: 0 }}>
           {desktop ? attention : null}

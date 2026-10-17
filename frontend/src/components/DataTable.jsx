@@ -57,6 +57,7 @@ function CardLine({ label, value, main = false }) {
  * A table on MUI `Table`; stacked cards (via `CardList`) below 900 px. Sorts on the client unless `serverSort`
  * (then the caller owns the order). `pagination.page` is zero-based, as in `TablePagination`. On phones,
  * `renderCardActions(row)` puts a row's actions (a "⋯") beside its card's tap area; the Total card gets none.
+ * A `tableOnly` column (an icon link whose card twin is in `renderCardActions`) is left out of the phone cards.
  * A column with `rowHeader: true` (the record's name) renders its body cells as `<th scope="row">`, so screen readers
  * announce each row by it. A column's `minWidth` (e.g. 220) keeps its cells from narrowing past it, and `wrapHeader` lets a
  * long header ("Hours approved") take two lines in a narrow card. `scrollHint`: when the
@@ -94,7 +95,7 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
             : <CardLine key={c.key} label={c.cardLabel ?? c.header} value={totalRow[c.key]} />
         })
       }
-      return renderCard ? renderCard(row) : shown.map((c, i) => (
+      return renderCard ? renderCard(row) : shown.filter((c) => !c.tableOnly).map((c, i) => (
         <CardLine key={c.key} label={c.cardLabel ?? c.header} value={c.render(row)} main={i === 0} />))
     }
     return (

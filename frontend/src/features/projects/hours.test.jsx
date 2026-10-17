@@ -71,7 +71,8 @@ describe('HoursTab week bar', () => {
     expect(getComputedStyle(range).borderStyle).toBe('solid')
     expect(range).toContainElement(screen.getByRole('button', { name: 'Pick a week' }))
     expect(getComputedStyle(screen.getByRole('button', { name: 'Next week' })).borderStyle).toBe('solid')
-    expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('MuiButton-text')
+    expect(screen.queryByRole('button', { name: 'This week' })).not.toBeInTheDocument()
+    expect(screen.getByText('This week')).toBeInTheDocument()
   })
 
   test("picking any day in a week sets that week's Monday", async () => {
