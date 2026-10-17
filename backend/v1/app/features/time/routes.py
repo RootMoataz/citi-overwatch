@@ -130,3 +130,19 @@ def edit_manual(req, ctx, conn):
 @router.route("DELETE", "/manual-hours/{id}")
 def withdraw_manual(req, ctx, conn):
     return json_response(200, manual.withdraw(conn, ctx, req.path_params["id"]))
+
+
+# The review side: the Manual hours list, and one decision per request (who may decide is checked per entry).
+@router.route("GET", "/manual-hours", roles={"admin", "manager"})
+def list_manual(req, ctx, conn):
+    return json_response(200, manual.list_pending(conn, ctx, req.query))
+
+
+@router.route("POST", "/manual-hours/{id}/approve")
+def approve_manual(req, ctx, conn):
+    return json_response(200, manual.approve(conn, ctx, req.path_params["id"], req.json()))
+
+
+@router.route("POST", "/manual-hours/{id}/request-changes")
+def request_manual_changes(req, ctx, conn):
+    return json_response(200, manual.request_changes(conn, ctx, req.path_params["id"], req.json()))

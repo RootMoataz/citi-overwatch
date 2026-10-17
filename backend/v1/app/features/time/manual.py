@@ -17,8 +17,17 @@ stays 0 and needs_note false: no timer stands behind it, and its work note (10-5
 Only the entry's owner may edit or withdraw it: anyone else, and any id that isn't one of their manual entries, gets
 the same 404. Submit and edit run in one transaction under the person's lock (service.lock_person), and edit and
 withdraw re-read the entry FOR UPDATE inside it, so a decision landing meanwhile is never overwritten unmarked.
+
+The review side. The people who decide the person's hours (the project's manager, its active delegate, any admin;
+never the person themselves) see the pending requests in the Manual hours list and decide each on its own: approve,
+or request changes with a reason (a rejection). Each decision names the version it saw (expected_hours and
+expected_updated_at) and applies only to that version. To review, Approve week and the single approve and reject
+refuse manual requests (service.MANUAL_ONLY), so nothing decides them unseen. Bells: the reviewers hear of every new
+request and every resubmission (an edit of a decided one), not of edits while pending; the employee hears of the
+decision. Every bell is stored with no week_start, so the one-per-person-week key never swallows one.
 """
 
+import json
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -32,9 +41,12 @@ from app.features.time import changes, service, timers
 from app.http import ApiError
 from app.rules.manual_hours import DETAILS_MAX, REASONS, clean_details, details_error, in_window, is_quarter
 from app.rules.time_tracking import NOTE_MAX, NOTE_MIN, ny_date
-from app.validation import as_date, as_uuid, require
+from app.validation import as_date, as_str, as_uuid, require
 
 MIN_HOURS, MAX_HOURS = Decimal("0.25"), Decimal(24)
+REASON_MAX = 1000  # a request-changes reason, as for any rejection
+SUBMITTED = "MANUAL_HOURS_SUBMITTED"
+APPROVED = "MANUAL_HOURS_APPROVED"
 SELECT_OWN = """SELECT * FROM time_entries WHERE id = CAST(:i AS uuid) AND user_id = CAST(:u AS uuid)
                 AND manual_reason IS NOT NULL"""
 
@@ -112,11 +124,50 @@ def _has_hours(ms: dict, day: date, existing: dict) -> ApiError:
                     "Change them on your timesheet.", {"entry_id": str(existing["id"])})
 
 
+def _row(conn, entry_id) -> dict:
+    return query_one(conn, "SELECT * FROM time_entries WHERE id = CAST(:i AS uuid)", i=str(entry_id))
+
+
 def _view(conn, me: dict, entry_id) -> dict:
     """The entry as the week shows it to its owner, with its live overtime flag."""
-    row = query_one(conn, "SELECT * FROM time_entries WHERE id = CAST(:i AS uuid)", i=str(entry_id))
+    row = _row(conn, entry_id)
     row = service._live(row, service._overtime(conn, row["user_id"], service.week_start(row["work_date"])))
     return service._entry_view(row, service._name(me), show_rate=True)
+
+
+# ---------- bells ----------
+
+def _person(conn, user_id) -> dict:
+    return query_one(conn, "SELECT id, first_name, last_name FROM users WHERE id = CAST(:i AS uuid)", i=str(user_id))
+
+
+def _payload(entry: dict, milestone: dict, project: dict, by: dict, *, resubmitted: bool) -> str:
+    """One shape for every manual-hours bell. by: who acted (the employee who sent it, or the reviewer)."""
+    return json.dumps({"entry_id": str(entry["id"]), "work_date": str(entry["work_date"]),
+                       "week_start": str(service.week_start(entry["work_date"])), "hours": float(entry["hours"]),
+                       "reason": entry["manual_reason"], "resubmitted": resubmitted,
+                       "milestone": {"id": str(milestone["id"]), "name": milestone["name"]},
+                       "project": {"id": str(project["id"]), "name": project["name"]},
+                       "by": {"id": str(by["id"]), "first_name": by["first_name"],
+                              "name": f"{by['first_name']} {by['last_name']}"}})
+
+
+def _bell(conn, recipient: str, kind: str, subject: str, payload: str) -> None:
+    """week_start stays NULL: the unique key is one per person-week, and every request and decision gets its own
+    bell (the week travels in the payload)."""
+    conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
+                VALUES (CAST(:r AS uuid), :t, CAST(:s AS uuid), CAST(:p AS jsonb))""",
+             r=recipient, t=kind, s=subject, p=payload)
+
+
+def _notify_submitted(conn, ctx: Ctx, entry: dict, ms: dict, *, resubmitted: bool) -> None:
+    """Tell the people who decide these hours that a request needs a decision: the project's manager and its active
+    delegate, or the first admin when that's only the sender (a manager's own hours). Run inside the write."""
+    project = query_one(conn, """SELECT id, name, manager_id AS p_manager_id, delegate_approver_id, delegate_until
+                                 FROM projects WHERE id = :p""", p=ms["project_id"])
+    payload = _payload(entry, ms, project, _person(conn, ctx.user_id), resubmitted=resubmitted)
+    for recipient in changes._recipients(conn, project, ctx.user_id):
+        _bell(conn, recipient, SUBMITTED, ctx.user_id, payload)
 
 
 # ---------- routes ----------
@@ -152,6 +203,7 @@ def submit(conn, ctx: Ctx, body: dict) -> dict:
             entry_id = service.write_entry(conn, ctx, me, start, ms, day, hours, note, None, tracked=Decimal(0),
                                            needs_note=False, manual=(reason, details))
             service._sync_stored_flags(conn, ctx.user_id, start)
+            _notify_submitted(conn, ctx, _row(conn, entry_id), ms, resubmitted=False)
     except DatabaseError as err:
         info = err.args[0] if err.args and isinstance(err.args[0], dict) else {}
         existing = service.existing_entry(conn, ctx, ms["id"], day) if info.get("C") == "23505" else None
@@ -183,6 +235,8 @@ def edit(conn, ctx: Ctx, entry_id: str, body: dict) -> dict:
         service.write_entry(conn, ctx, me, start, ms, day, hours, note, existing, tracked=Decimal(0),
                             manual=(reason, details))
         service._sync_stored_flags(conn, ctx.user_id, start)
+        if existing["status"] in ("rejected", "approved"):  # back in the queue, needing a decision again
+            _notify_submitted(conn, ctx, _row(conn, existing["id"]), ms, resubmitted=True)
     return {"entry": _view(conn, me, existing["id"])}
 
 
@@ -204,3 +258,48 @@ def withdraw(conn, ctx: Ctx, entry_id: str) -> dict:
                        "milestone_id": str(entry["milestone_id"]), "manual_reason": entry["manual_reason"]})
         service._sync_stored_flags(conn, ctx.user_id, service.week_start(entry["work_date"]))
     return {"withdrawn": str(entry["id"])}
+
+
+# ---------- the review side ----------
+
+def list_pending(conn, ctx: Ctx, params: dict) -> list[dict]:
+    """The Manual hours list: pending manual requests the caller may decide (?user=&project=&milestone=), oldest work
+    date first, in To review's item shape."""
+    return service._pending_items(conn, ctx, params, manual=True)
+
+
+def _version(value) -> datetime:
+    """expected_updated_at: the entry's updated_at as the reviewer loaded it, an ISO timestamp with its zone."""
+    try:
+        seen = datetime.fromisoformat(value.strip()) if isinstance(value, str) else None
+    except ValueError:
+        seen = None
+    if seen is None or seen.tzinfo is None:
+        raise ApiError(400, "VALIDATION_ERROR", "expected_updated_at: invalid_datetime",
+                       {"expected_updated_at": "invalid_datetime"})
+    return seen
+
+
+def approve(conn, ctx: Ctx, entry_id: str, body: dict) -> dict:
+    """Approve one manual request at the version the reviewer saw; the employee gets a bell."""
+    require(body, "expected_hours", "expected_updated_at")
+    seen = _version(body["expected_updated_at"])
+    entry, project = service._decidable(conn, ctx, entry_id, body["expected_hours"], manual=True, expected_at=seen)
+    with transaction(conn):
+        service._apply_decision(conn, ctx, entry, project, approve=True, reason=None, expected_at=seen)
+        ms = query_one(conn, "SELECT id, name FROM milestones WHERE id = :m", m=entry["milestone_id"])
+        _bell(conn, str(entry["user_id"]), APPROVED, ctx.user_id,
+              _payload(entry, ms, project, _person(conn, ctx.user_id), resubmitted=False))
+    return service._decided_view(conn, ctx, entry)
+
+
+def request_changes(conn, ctx: Ctx, entry_id: str, body: dict) -> dict:
+    """Send one manual request back with a reason (a rejection: the employee fixes and resubmits it), at the version
+    the reviewer saw. The employee gets ENTRY_REJECTED, marked manual."""
+    require(body, "reason", "expected_hours", "expected_updated_at")
+    seen = _version(body["expected_updated_at"])
+    reason = as_str(body["reason"], "reason", max_len=REASON_MAX)
+    entry, project = service._decidable(conn, ctx, entry_id, body["expected_hours"], manual=True, expected_at=seen)
+    with transaction(conn):
+        service._apply_decision(conn, ctx, entry, project, approve=False, reason=reason, expected_at=seen)
+    return service._decided_view(conn, ctx, entry)

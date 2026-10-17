@@ -19,6 +19,7 @@ from app.features.milestones.service import _latest_percent, display_status, ope
 from app.features.projects.service import project_consumed
 from app.features.time.flags import person_week_flags
 from app.http import ApiError
+from app.rules.manual_hours import REASONS
 from app.rules.overtime import approval_breakdown, forecast_total, hourly_rate, overtime_ids, week_flags
 from app.rules.time_tracking import (
     NOTE_MAX, NOTE_MIN, clean_note, entry_source, is_locked, is_proof_note, timer_cell, tracked_after_edit,
@@ -347,6 +348,28 @@ def locked_error(bad: list[dict]) -> ApiError:
                     f"Timer hours can't be edited — request a change instead: {names}", {"cells": bad})
 
 
+def _manual_cells(conn, ctx: Ctx, cells: list[dict]) -> tuple[list[dict], list[dict]]:
+    """(the cells to save, the cells that would change a manual request). A cell holding hours logged manually changes
+    only through Edit (spec 2026-10-17 decision 3). Re-sent unchanged, it's dropped: nothing is written, so a request
+    that was sent back isn't resubmitted from the grid. Anything else, hours 0 included, is collected."""
+    kept, locked = [], []
+    for c in cells:
+        existing = existing_entry(conn, ctx, c["milestone"]["id"], c["work_date"])
+        if not existing or existing["manual_reason"] is None:
+            kept.append(c)
+        elif not _same_cell(existing, c["hours"], c["note"]):
+            locked.append({"milestone_id": str(c["milestone"]["id"]), "milestone": c["milestone"]["name"],
+                           "work_date": str(c["work_date"])})
+    return kept, locked
+
+
+def manual_locked_error(cells: list[dict]) -> ApiError:
+    cells = sorted(cells, key=lambda c: (c["work_date"], c["milestone"].lower()))
+    names = ", ".join(f"{c['milestone']} on {short_day(c['work_date'])}" for c in cells)
+    return ApiError(409, "MANUAL_HOURS_LOCKED", f"Hours logged manually change only with Edit: {names}",
+                    {"cells": cells})
+
+
 # ---------- saving a week ----------
 
 def _hours(value, work_date: date) -> Decimal:
@@ -381,14 +404,21 @@ def _closed_reason(ms: dict) -> str | None:
     return None
 
 
+def _same_cell(existing: dict, hours: Decimal, note) -> bool:
+    """The cell sent back as it's saved: the same hours, and the same note or none."""
+    return existing["hours"] == hours and (note is None or note == existing["note"])
+
+
 def _changes_something(conn, ctx: Ctx, ms: dict, work_date: date, hours: Decimal, note) -> bool:
-    """Would saving this cell write anything? (Re-sending an unchanged cell is a no-op, not a change.)"""
-    existing = query_one(conn, """SELECT hours, note, status FROM time_entries WHERE user_id = CAST(:u AS uuid)
-                                  AND milestone_id = :m AND work_date = :d""", u=ctx.user_id, m=ms["id"], d=work_date)
+    """Would saving this cell write anything? (Re-sending an unchanged cell is a no-op, not a change.) Re-saving a
+    rejected cell resubmits it, except a manual request's: only Edit resubmits those (spec 2026-10-17 decision 3)."""
+    existing = query_one(conn, """SELECT hours, note, status, manual_reason FROM time_entries
+                                  WHERE user_id = CAST(:u AS uuid) AND milestone_id = :m AND work_date = :d""",
+                         u=ctx.user_id, m=ms["id"], d=work_date)
     if not existing:
         return hours != 0
-    return (existing["hours"] != hours or (note is not None and note != existing["note"])
-            or existing["status"] == "rejected")  # re-saving a rejected cell resubmits it
+    resubmits = existing["status"] == "rejected" and existing["manual_reason"] is None
+    return not _same_cell(existing, hours, note) or resubmits
 
 
 def work_note(value) -> str:
@@ -581,6 +611,9 @@ def save_week(conn, ctx: Ctx, body: dict) -> dict:
     cells.sort(key=lambda c: (c["work_date"], str(c["milestone"]["id"])))
     with transaction(conn):
         me = lock_person(conn, ctx)
+        cells, manual = _manual_cells(conn, ctx, cells)
+        if manual:
+            raise manual_locked_error(manual)
         bad, states = _lock_violations(conn, ctx, cells)
         if bad:
             raise locked_error(bad)
@@ -640,9 +673,18 @@ def _load_entry(conn, ctx: Ctx, entry_id: str) -> tuple[dict, dict]:
 
 
 def list_approvals(conn, ctx: Ctx, params: dict) -> list[dict]:
+    """To review: pending hours the caller may decide. Manual requests are left out: each is decided on its own in
+    the Manual hours list (app.features.time.manual, spec 2026-10-17 decision 11)."""
+    return _pending_items(conn, ctx, params, manual=False)
+
+
+def _pending_items(conn, ctx: Ctx, params: dict, *, manual: bool) -> list[dict]:
     """Pending hours the caller may decide: everything for admins, otherwise the projects they manage and those
-    delegated to them while the delegation runs. Delegated items say whose queue they come from."""
-    where = ["t.status = 'pending'", "t.user_id <> CAST(:me AS uuid)", "NOT p.is_archived", "NOT m.is_archived"]
+    delegated to them while the delegation runs; never their own, nothing on archived work. manual: the manual
+    requests only (the Manual hours list), or every other entry (To review). Delegated items say whose queue they
+    come from."""
+    where = ["t.status = 'pending'", "t.user_id <> CAST(:me AS uuid)", "NOT p.is_archived", "NOT m.is_archived",
+             "t.manual_reason IS NOT NULL" if manual else "t.manual_reason IS NULL"]
     today = _today()
     args = {"me": ctx.user_id, "today": today}
     if not ctx.is_admin:
@@ -733,50 +775,68 @@ def breakdown(conn, ctx: Ctx, entry_id: str) -> dict:
 
 
 STALE = ApiError(409, "STALE_ENTRY", "These hours changed since you loaded them. Refresh and check again.")
+MANUAL_ONLY = ApiError(409, "MANUAL_REVIEW_ONLY",
+                       "Manual hours are reviewed one at a time in Timesheets → Manual hours.")
+NOT_MANUAL = ApiError(400, "NOT_MANUAL", "These hours weren't logged manually. Review them in To review.")
 
 
 def _alert_rejected(conn, entry: dict, project: dict, reason: str) -> None:
     """Tell the employee their hours were rejected. week_start stays NULL so every rejection gets its own alert
-    (the unique key is one-per-person-week, meant for OVER_40H); the week travels in the payload instead."""
+    (the unique key is one-per-person-week, meant for OVER_40H); the week travels in the payload instead.
+    manual: true marks a manual request sent back for changes (the bell words it that way)."""
     ms = query_one(conn, "SELECT name FROM milestones WHERE id = :m", m=entry["milestone_id"])
-    payload = json.dumps({"entry_id": str(entry["id"]), "work_date": str(entry["work_date"]),
-                          "week_start": str(week_start(entry["work_date"])), "hours": float(entry["hours"]),
-                          "reason": reason, "milestone": {"id": str(entry["milestone_id"]), "name": ms["name"]},
-                          "project": {"id": str(project["id"]), "name": project["name"]}})
+    payload = {"entry_id": str(entry["id"]), "work_date": str(entry["work_date"]),
+               "week_start": str(week_start(entry["work_date"])), "hours": float(entry["hours"]),
+               "reason": reason, "milestone": {"id": str(entry["milestone_id"]), "name": ms["name"]},
+               "project": {"id": str(project["id"]), "name": project["name"]}}
+    if entry["manual_reason"]:
+        payload["manual"] = True
     conn.run("""INSERT INTO notifications (recipient_id, type, subject_user_id, payload)
                 VALUES (CAST(:u AS uuid), 'ENTRY_REJECTED', CAST(:u AS uuid), CAST(:p AS jsonb))""",
-             u=str(entry["user_id"]), p=payload)
+             u=str(entry["user_id"]), p=json.dumps(payload))
 
 
-def _decidable(conn, ctx: Ctx, entry_id: str, expected_hours=None) -> tuple[dict, dict]:
-    """The entry and its project, once it's certain the caller may decide it now: not their own, still pending,
-    and (when the caller says what they saw) still the hours they saw."""
+def _decidable(conn, ctx: Ctx, entry_id: str, expected_hours=None, *, manual: bool = False,
+               expected_at: datetime | None = None) -> tuple[dict, dict]:
+    """The entry and its project, once it's certain the caller may decide it now: not their own, decided from the
+    right list, still pending, and (when the caller says what they saw) still the hours and version they saw.
+    manual: the decision comes from the Manual hours list, the only place manual requests are decided and the only
+    thing it decides (spec 2026-10-17 decision 11). expected_at: the entry's updated_at as the reviewer loaded it."""
     entry, project = _load_entry(conn, ctx, entry_id)
     if str(entry["user_id"]) == ctx.user_id:
         raise ApiError(403, "SELF_APPROVAL", "You can't approve or reject your own hours")
+    is_manual = entry["manual_reason"] is not None
+    if is_manual and not manual:
+        raise MANUAL_ONLY
+    if manual and not is_manual:
+        raise NOT_MANUAL
     if entry["status"] != "pending":
         raise ApiError(400, "NOT_PENDING", f"This entry is already {entry['status']}")
     expected = None if expected_hours is None else as_decimal(expected_hours, "expected_hours")
-    if expected is not None and expected != entry["hours"]:
+    if (expected is not None and expected != entry["hours"]) or \
+            (expected_at is not None and expected_at != entry["updated_at"]):
         raise STALE
     return entry, project
 
 
-def _apply_decision(conn, ctx: Ctx, entry: dict, project: dict, *, approve: bool, reason: str | None) -> None:
-    """Write one decision; the caller holds the transaction."""
+def _apply_decision(conn, ctx: Ctx, entry: dict, project: dict, *, approve: bool, reason: str | None,
+                    expected_at: datetime | None = None) -> None:
+    """Write one decision; the caller holds the transaction. expected_at: also require that version (updated_at)."""
     # The guard lives in the UPDATE itself: a decision that lost a race (or an entry edited since it was
     # read) matches no row, so it can never overwrite someone else's decision or approve unseen hours.
-    guard = "WHERE id = :i AND status = 'pending' AND hours = :h RETURNING id"
+    version = "" if expected_at is None else " AND updated_at = :ua"
+    guard = f"WHERE id = :i AND status = 'pending' AND hours = :h{version} RETURNING id"
+    seen = {} if expected_at is None else {"ua": expected_at}
     if approve:
         done = query_one(conn, f"""UPDATE time_entries SET status = 'approved', hourly_rate = :r,
                     decided_by = CAST(:me AS uuid), decided_at = now(), rejection_reason = NULL,
                     updated_at = now() {guard}""",
-                         r=hourly_rate(entry["salary"]), me=ctx.user_id, i=entry["id"], h=entry["hours"])
+                         r=hourly_rate(entry["salary"]), me=ctx.user_id, i=entry["id"], h=entry["hours"], **seen)
     else:
         done = query_one(conn, f"""UPDATE time_entries SET status = 'rejected', rejection_reason = :reason,
                     hourly_rate = NULL, decided_by = CAST(:me AS uuid), decided_at = now(),
                     updated_at = now() {guard}""",
-                         reason=reason, me=ctx.user_id, i=entry["id"], h=entry["hours"])
+                         reason=reason, me=ctx.user_id, i=entry["id"], h=entry["hours"], **seen)
     if not done:
         raise STALE
     after = {"status": "approved" if approve else "rejected", "reason": reason}
@@ -793,6 +853,11 @@ def _decide(conn, ctx: Ctx, entry_id: str, *, approve: bool, reason: str | None,
     entry, project = _decidable(conn, ctx, entry_id, expected_hours)
     with transaction(conn):
         _apply_decision(conn, ctx, entry, project, approve=approve, reason=reason)
+    return _decided_view(conn, ctx, entry)
+
+
+def _decided_view(conn, ctx: Ctx, entry: dict) -> dict:
+    """The entry as it is after a decision, for the reviewer (the rate for admins only)."""
     row = query_one(conn, "SELECT * FROM time_entries WHERE id = :i", i=entry["id"])
     row = _live(row, _overtime(conn, row["user_id"], week_start(row["work_date"])))
     return _entry_view(row, _name(entry), show_rate=ctx.is_admin)
@@ -899,8 +964,20 @@ def _clip(text: str, limit: int = 140) -> str:
 def _message(r: dict, who: str) -> str:
     p = r["payload"] or {}
     if r["type"] == "ENTRY_REJECTED":
+        if p.get("manual"):
+            return (f"Your {hours_text(p['hours'])}h of manual hours on {p['milestone']['name']} "
+                    f"({short_day(p['work_date'])}) need changes: {p['reason']}")
         return (f"Your {p['hours']:g}h on {p['milestone']['name']} ({short_day(p['work_date'])}) "
                 f"was rejected: {p['reason']}")
+    if r["type"] == "MANUAL_HOURS_SUBMITTED":
+        hours, where = hours_text(p["hours"]), f"{p['milestone']['name']} ({short_day(p['work_date'])})"
+        if p["resubmitted"]:
+            return f"{p['by']['first_name']} resubmitted {hours}h of manual hours on {where}"
+        return (f"{p['by']['first_name']} logged {hours}h on {where} without the timer: "
+                f"{REASONS.get(p['reason'], p['reason'])}")
+    if r["type"] == "MANUAL_HOURS_APPROVED":
+        return (f"{p['by']['first_name']} approved your {hours_text(p['hours'])}h of manual hours on "
+                f"{p['milestone']['name']} ({short_day(p['work_date'])})")
     if r["type"] == "SUPPORT_ASSIGNED":
         return (f"You've been added as support on {p['milestone']['name']} ({p['project']['name']}), "
                 f"due {short_day(p['end_date'])}")

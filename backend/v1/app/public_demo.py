@@ -116,6 +116,8 @@ ALLOWED = {
     ("POST", "/approvals/approve-week"): "approving a person's week of hours",
     ("POST", "/time-edit-requests/{id}/approve"): "approving a change to timer hours (the demo workflow)",
     ("POST", "/time-edit-requests/{id}/reject"): "rejecting a change to timer hours",
+    ("POST", "/manual-hours/{id}/approve"): "approving manual hours",
+    ("POST", "/manual-hours/{id}/request-changes"): "sending manual hours back for changes",
 }
 
 

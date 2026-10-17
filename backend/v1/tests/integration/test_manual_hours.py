@@ -1,5 +1,7 @@
-"""Manual hours, the employee's side (spec 2026-10-17 §8, §9): POST /manual-hours sends hours logged without the timer
-for review, PUT edits or resubmits them and DELETE withdraws them, under every timesheet rule."""
+"""Manual hours (spec 2026-10-17 §7-§10). The employee's side: POST /manual-hours sends hours logged without the timer
+for review, PUT edits or resubmits them and DELETE withdraws them, under every timesheet rule. The review side:
+GET /manual-hours lists them for the people who decide them, each is approved or sent back on its own at the version the
+reviewer saw, week approval, the grid and Start timer refuse them, and every step rings the right bell."""
 
 import uuid
 from datetime import date, datetime, time, timedelta, timezone
@@ -9,9 +11,12 @@ import pytest
 from pg8000.exceptions import DatabaseError
 
 from app import public_demo
+from app.ctx import Ctx
 from app.db import query, query_one
 from app.features.time import manual, service, timers
+from app.http import ApiError
 from app.features.time.service import short_day, week_start
+from app.rules.overtime import hourly_rate
 from app.rules.time_tracking import _to_utc, ny_date
 from tests.helpers import add_member, log_entry, login, make_milestone, make_project, make_user, token_for
 
@@ -616,3 +621,520 @@ def test_public_demo_may_not_submit_edit_or_withdraw(client, conn, clock):
     for method, pattern in (("POST", "/manual-hours"), ("PUT", "/manual-hours/{id}"), ("DELETE", "/manual-hours/{id}")):
         assert not public_demo.is_allowed(method, pattern)
     assert row(conn, entry["id"])["hours"] == Decimal("2.5") and len(entries(conn, emp)) == 1
+
+
+# ---------- the review side: the list, decisions, the guards and the bells ----------
+
+ITEM_KEYS = {"entry", "label", "delegated_from", "user", "milestone", "project", "week_logged_total",
+             "progress_update", "flags"}
+PAYLOAD_KEYS = {"entry_id", "work_date", "week_start", "hours", "reason", "resubmitted", "milestone", "project", "by"}
+MANUAL_ONLY = "Manual hours are reviewed one at a time in Timesheets → Manual hours."
+NOT_MANUAL = "These hours weren't logged manually. Review them in To review."
+STALE = (409, "STALE_ENTRY", "These hours changed since you loaded them. Refresh and check again.")
+TIMER_ON_MANUAL = "You logged today's hours here manually. Edit that request instead."
+SPLIT = "Split these between Mapping and Cutover"
+
+
+def pending(client, conn, user, query=""):
+    status, body, _, _ = call(client, conn, user, "GET", f"/manual-hours{query}")
+    assert status == 200, body
+    return body
+
+
+def ids(items) -> list[str]:
+    return [i["entry"]["id"] for i in items]
+
+
+def decision(entry, **fields) -> dict:
+    """What the Manual hours tab sends: the version of the entry it showed. Each keyword replaces one field; None
+    leaves it out."""
+    body = {"expected_hours": entry["hours"], "expected_updated_at": entry["updated_at"]} | fields
+    return {k: v for k, v in body.items() if v is not None}
+
+
+def decide(client, conn, user, entry, action="approve", **fields):
+    return call(client, conn, user, "POST", f"/manual-hours/{entry['id']}/{action}", decision(entry, **fields))
+
+
+def send_back(client, conn, user, entry, reason=SPLIT, **fields):
+    return decide(client, conn, user, entry, "request-changes", reason=reason, **fields)
+
+
+def delegate(conn, project, user, until=None):
+    conn.run("UPDATE projects SET delegate_approver_id = :d, delegate_until = :u WHERE id = :i",
+             d=user["id"] if user else None, u=until, i=project["id"])
+
+
+def as_seen(entry_row) -> dict:
+    """A typed entry as a reviewer's tab would hold it (to send one where only manual hours belong)."""
+    return {"id": str(entry_row["id"]), "hours": float(entry_row["hours"]),
+            "updated_at": entry_row["updated_at"].isoformat()}
+
+
+def test_reviewers_list_their_pending_manual_hours(client, conn, clock):
+    mgr, emp, project, ms, other = world(conn)
+    dlg = make_user(conn, role="manager", first_name="Dee", last_name="Legate")
+    stranger = make_user(conn, role="manager", first_name="Sam", last_name="Stone")
+    admin = make_user(conn, role="admin", first_name="Avery", last_name="Admin")
+    exe = make_user(conn, role="executive")
+    delegate(conn, project, dlg)  # no end date: active until removed
+    entry = logged(client, conn, emp, ms)
+    log_entry(conn, emp, other, YESTERDAY, 3, status="pending")  # typed hours belong in To review, not here
+    items = pending(client, conn, mgr)
+    assert ids(items) == [entry["id"]]
+    item = items[0]
+    assert set(item) == ITEM_KEYS
+    assert item["entry"]["manual"] == {"reason": "forgot_timer", "details": None}
+    assert (item["entry"]["updated_at"], item["entry"]["note"]) == (entry["updated_at"], NOTE)
+    assert (item["user"], item["milestone"], item["project"]) == (
+        {"id": str(emp["id"]), "name": "Eli Park"}, {"id": str(ms["id"]), "name": "Schema Mapping"},
+        {"id": str(project["id"]), "name": "Apollo"})
+    assert (item["label"], item["delegated_from"], item["week_logged_total"]) == ("Pending approval", None, 5.5)
+    assert isinstance(item["flags"], list) and "hourly_rate" not in item["entry"]
+    as_delegate = pending(client, conn, dlg)
+    assert ids(as_delegate) == [entry["id"]]
+    assert as_delegate[0]["delegated_from"] == {"id": str(mgr["id"]), "name": "Morgan Reyes"}
+    assert pending(client, conn, stranger) == []
+    assert ids(pending(client, conn, admin)) == [entry["id"]]
+    for person in (emp, exe):
+        assert refused(call(client, conn, person, "GET", "/manual-hours"))[:2] == (403, "FORBIDDEN")
+    # Filters narrow the list, oldest work date first.
+    ben = make_user(conn, first_name="Ben", last_name="Okafor")
+    add_member(conn, project, ben)
+    assign(conn, other, ben)
+    bens = logged(client, conn, ben, other, TODAY - timedelta(days=2))
+    borealis = make_project(conn, mgr, name="Borealis", start=MONDAY - timedelta(days=60),
+                            end=MONDAY + timedelta(days=60))
+    kickoff = make_milestone(conn, borealis, name="Kickoff", status="in_progress")
+    assign(conn, kickoff, emp)
+    far = logged(client, conn, emp, kickoff, TODAY - timedelta(days=3))
+    assert ids(pending(client, conn, mgr)) == [far["id"], bens["id"], entry["id"]]
+    assert ids(pending(client, conn, mgr, f"?user={ben['id']}")) == [bens["id"]]
+    assert ids(pending(client, conn, mgr, f"?project={borealis['id']}")) == [far["id"]]
+    assert ids(pending(client, conn, mgr, f"?milestone={ms['id']}")) == [entry["id"]]
+    assert ids(pending(client, conn, mgr, f"?user={emp['id']}&project={project['id']}")) == [entry["id"]]
+    # Only pending requests: decided ones leave the list.
+    approve_sql(conn, far["id"], mgr)
+    assert ids(pending(client, conn, mgr)) == [bens["id"], entry["id"]]
+    # A manager who tracks their own hours never sees their own request; an admin does.
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=mgr["id"])
+    assign(conn, ms, mgr)
+    own = logged(client, conn, mgr, ms, TODAY - timedelta(days=4))
+    assert own["id"] not in ids(pending(client, conn, mgr))
+    assert own["id"] in ids(pending(client, conn, admin))
+    # Nothing on archived work.
+    conn.run("UPDATE milestones SET is_archived = true, archived_at = now() WHERE id = :i", i=other["id"])
+    for person in (mgr, admin):
+        assert bens["id"] not in ids(pending(client, conn, person))
+
+
+def test_approvals_leave_manual_hours_out(client, conn, clock):
+    mgr, emp, _, ms, other = world(conn)
+    admin = make_user(conn, role="admin")
+    logged(client, conn, emp, ms)
+    typed = log_entry(conn, emp, other, YESTERDAY, 3, status="pending")
+    for person in (mgr, admin):
+        listed = call(client, conn, person, "GET", "/approvals")[1]
+        assert ids(listed) == [str(typed["id"])]
+        assert call(client, conn, person, "GET", f"/approvals?milestone={ms['id']}")[1] == []
+
+
+def test_the_queue_guard(client, conn, clock):
+    """Review Focus 4: hours logged manually are decided only from the Manual hours list (decision 11)."""
+    mgr, emp, _, ms, other = world(conn)
+    admin = make_user(conn, role="admin")
+    entry = logged(client, conn, emp, ms)
+    typed = log_entry(conn, emp, other, YESTERDAY, 3, status="pending")
+    week = [{"id": str(typed["id"]), "expected_hours": 3}, {"id": entry["id"], "expected_hours": 2.5}]
+    for person in (mgr, admin):
+        for batch in (week, week[::-1]):
+            resp = call(client, conn, person, "POST", "/approvals/approve-week", {"entries": batch})
+            assert refused(resp) == (409, "MANUAL_REVIEW_ONLY", MANUAL_ONLY)
+        for body in ({"expected_hours": 2.5}, {}):
+            resp = call(client, conn, person, "POST", f"/time-entries/{entry['id']}/approve", body)
+            assert refused(resp) == (409, "MANUAL_REVIEW_ONLY", MANUAL_ONLY)
+        resp = call(client, conn, person, "POST", f"/time-entries/{entry['id']}/reject", {"reason": "Wrong milestone"})
+        assert refused(resp) == (409, "MANUAL_REVIEW_ONLY", MANUAL_ONLY)
+    assert (row(conn, entry["id"])["status"], row(conn, typed["id"])["status"]) == ("pending", "pending")
+    assert query(conn, "SELECT id FROM audit_log WHERE action IN ('approve', 'reject')") == []
+    assert query(conn, "SELECT id FROM notifications WHERE type = 'ENTRY_REJECTED'") == []
+    # The typed entry on its own still goes through.
+    status, body, _, _ = call(client, conn, mgr, "POST", "/approvals/approve-week", {"entries": week[:1]})
+    assert (status, body["approved"]) == (200, 1), body
+    assert row(conn, entry["id"])["status"] == "pending"
+
+
+def test_approve(client, conn, clock):
+    mgr, emp, project, ms, other = world(conn)
+    entry = logged(client, conn, emp, ms)
+    status, body, _, _ = decide(client, conn, mgr, entry)
+    assert status == 200, body
+    assert (body["id"], body["status"], body["hours"], body["label"]) == (entry["id"], "approved", 2.5, "Approved")
+    assert body["manual"] == {"reason": "forgot_timer", "details": None} and "hourly_rate" not in body
+    stored = row(conn, entry["id"])
+    assert (stored["status"], stored["decided_by"], stored["hourly_rate"]) == \
+        ("approved", mgr["id"], hourly_rate(emp["salary"]))
+    assert datetime.fromisoformat(body["updated_at"]) == stored["updated_at"]
+    assert stored["updated_at"] > datetime.fromisoformat(entry["updated_at"])
+    assert query(conn, "SELECT actor_id FROM audit_log WHERE action = 'approve' AND entity_id = :i",
+                 i=entry["id"]) == [{"actor_id": mgr["id"]}]
+    bells = bell(client, conn, emp, "MANUAL_HOURS_APPROVED")
+    assert [b["message"] for b in bells] == \
+        [f"Morgan approved your 2.5h of manual hours on Schema Mapping ({short_day(YESTERDAY)})"]
+    assert set(bells[0]["payload"]) == PAYLOAD_KEYS
+    assert bells[0]["payload"] == {
+        "entry_id": entry["id"], "work_date": str(YESTERDAY), "week_start": str(week_start(YESTERDAY)), "hours": 2.5,
+        "reason": "forgot_timer", "resubmitted": False, "milestone": {"id": str(ms["id"]), "name": "Schema Mapping"},
+        "project": {"id": str(project["id"]), "name": "Apollo"},
+        "by": {"id": str(mgr["id"]), "first_name": "Morgan", "name": "Morgan Reyes"}}
+    assert bells[0]["subject_user"] == {"id": str(mgr["id"]), "name": "Morgan Reyes"}
+    assert bells[0]["week_start"] == str(week_start(YESTERDAY))  # from the payload: the row's own stays NULL
+    assert query(conn, "SELECT week_start, subject_user_id FROM notifications WHERE type = 'MANUAL_HOURS_APPROVED'") \
+        == [{"week_start": None, "subject_user_id": mgr["id"]}]
+    assert bell(client, conn, mgr, "MANUAL_HOURS_APPROVED") == []
+    assert pending(client, conn, mgr) == []
+    # The active delegate decides too, recorded as on the manager's behalf.
+    dlg = make_user(conn, role="manager", first_name="Dee", last_name="Legate")
+    delegate(conn, project, dlg)
+    second = logged(client, conn, emp, other)
+    status, body, _, _ = decide(client, conn, dlg, second)
+    assert (status, body["status"]) == (200, "approved"), body
+    audit = query_one(conn, "SELECT changes FROM audit_log WHERE action = 'approve' AND entity_id = :i", i=second["id"])
+    assert audit["changes"]["after"]["as_delegate_for"] == str(mgr["id"])
+    assert bell(client, conn, emp, "MANUAL_HOURS_APPROVED")[0]["message"] == \
+        f"Dee approved your 2.5h of manual hours on Cutover ({short_day(YESTERDAY)})"
+
+
+def test_request_changes(client, conn, clock):
+    mgr, emp, _, ms, other = world(conn)
+    entry = logged(client, conn, emp, ms)
+    for reason, details in ((None, {"reason": "required"}), ("   ", {"reason": "required"}),
+                            ("x" * 1001, {"reason": "max_length:1000"})):
+        status, body, _, _ = send_back(client, conn, mgr, entry, reason=reason)
+        assert (status, body["error"]["code"], body["error"]["details"]) == (400, "VALIDATION_ERROR", details), reason
+    assert row(conn, entry["id"])["status"] == "pending"
+    status, body, _, _ = send_back(client, conn, mgr, entry, reason=f"  {SPLIT}  ")
+    assert status == 200, body
+    assert (body["id"], body["status"], body["rejection_reason"], body["label"]) == \
+        (entry["id"], "rejected", SPLIT, "Rejected")
+    assert "hourly_rate" not in body and body["manual"] == {"reason": "forgot_timer", "details": None}
+    stored = row(conn, entry["id"])
+    assert (stored["status"], stored["rejection_reason"], stored["decided_by"]) == ("rejected", SPLIT, mgr["id"])
+    alerts = bell(client, conn, emp, "ENTRY_REJECTED")
+    assert len(alerts) == 1 and alerts[0]["payload"]["manual"] is True
+    assert alerts[0]["message"] == \
+        f"Your 2.5h of manual hours on Schema Mapping ({short_day(YESTERDAY)}) need changes: {SPLIT}"
+    assert alerts[0]["week_start"] == str(week_start(YESTERDAY))
+    assert query(conn, "SELECT week_start FROM notifications WHERE type = 'ENTRY_REJECTED'") == [{"week_start": None}]
+    assert bell(client, conn, emp, "MANUAL_HOURS_APPROVED") == []
+    assert pending(client, conn, mgr) == []
+    # 1000 characters are fine.
+    second = logged(client, conn, emp, other)
+    assert send_back(client, conn, mgr, second, reason="y" * 1000)[0] == 200
+    # A typed entry's rejection reads as before and isn't marked manual.
+    typed = log_entry(conn, emp, ms, TODAY - timedelta(days=2), 8, status="pending")
+    resp = call(client, conn, mgr, "POST", f"/time-entries/{typed['id']}/reject", {"reason": "Wrong milestone"})
+    assert resp[0] == 200, resp[1]
+    plain = next(a for a in bell(client, conn, emp, "ENTRY_REJECTED") if a["payload"]["entry_id"] == str(typed["id"]))
+    assert "manual" not in plain["payload"]
+    assert plain["message"] == \
+        f"Your 8h on Schema Mapping ({short_day(TODAY - timedelta(days=2))}) was rejected: Wrong milestone"
+
+
+def test_stale_and_vanished(client, conn, clock):
+    """Review Focus 4: a decision applies only to the version the reviewer saw (decision 14)."""
+    mgr, emp, _, ms, _ = world(conn)
+    entry = logged(client, conn, emp, ms)
+    assert refused(decide(client, conn, mgr, entry, expected_hours="2")) == STALE
+    assert refused(send_back(client, conn, mgr, entry, expected_hours="2")) == STALE
+    # Eli changes only the note: the same hours, a new version.
+    assert edit(client, conn, emp, entry["id"], note="Mapped the legacy address and phone fields")[0] == 200
+    assert refused(decide(client, conn, mgr, entry)) == STALE
+    assert refused(send_back(client, conn, mgr, entry)) == STALE
+    stored = row(conn, entry["id"])
+    assert (stored["status"], stored["decided_by"], stored["rejection_reason"]) == ("pending", None, None)
+    assert bell(client, conn, emp, "MANUAL_HOURS_APPROVED") == bell(client, conn, emp, "ENTRY_REJECTED") == []
+    fresh = pending(client, conn, mgr)[0]["entry"]
+    # Both fields are required, and the version is a timestamp with its zone, as the API sent it.
+    for action, extra in (("approve", {}), ("request-changes", {"reason": SPLIT})):
+        for field in ("expected_hours", "expected_updated_at"):
+            body = decision(fresh, **extra)
+            del body[field]
+            status, resp, _, _ = call(client, conn, mgr, "POST", f"/manual-hours/{fresh['id']}/{action}", body)
+            assert (status, resp["error"]["code"], resp["error"]["details"]) == \
+                (400, "VALIDATION_ERROR", {field: "required"}), (action, field)
+        for bad in ("yesterday", "2026-10-16", "2026-10-16T09:00:00", 12345, ["2026-10-16T09:00:00+00:00"]):
+            status, resp, _, _ = decide(client, conn, mgr, fresh, action, expected_updated_at=bad, **extra)
+            assert (status, resp["error"]["code"], resp["error"]["details"]) == \
+                (400, "VALIDATION_ERROR", {"expected_updated_at": "invalid_datetime"}), (action, bad)
+        status, resp, _, _ = decide(client, conn, mgr, fresh, action, expected_hours="abc", **extra)
+        assert (status, resp["error"]["details"]) == (400, {"expected_hours": "invalid_number"}), action
+    assert row(conn, entry["id"])["status"] == "pending"
+    # Withdrawn meanwhile: gone.
+    other_day = logged(client, conn, emp, ms, TODAY - timedelta(days=2))
+    assert withdraw(client, conn, emp, fresh["id"])[0] == 200
+    assert refused(decide(client, conn, mgr, fresh))[:2] == (404, "NOT_FOUND")
+    assert refused(send_back(client, conn, mgr, fresh))[:2] == (404, "NOT_FOUND")
+    # The version may come back written in another zone: the same instant is the same version.
+    in_utc = datetime.fromisoformat(other_day["updated_at"]).astimezone(timezone.utc)
+    seen = other_day | {"updated_at": in_utc.isoformat()}
+    assert seen["updated_at"] != other_day["updated_at"]
+    assert decide(client, conn, mgr, seen)[0] == 200
+    # Decided already: a second decision is refused, and the first one stands.
+    assert refused(decide(client, conn, mgr, seen)) == (400, "NOT_PENDING", "This entry is already approved")
+    assert refused(send_back(client, conn, mgr, seen))[:2] == (400, "NOT_PENDING")
+    assert row(conn, other_day["id"])["status"] == "approved"
+
+
+def test_an_edit_landing_mid_decision_is_stale(client, conn, clock, monkeypatch):
+    """Review Focus 4: the version guard lives in the UPDATE itself. An edit landing between the checks and the write
+    (here only the note, so the hours and the status still match) leaves the decision no row to write."""
+    mgr, emp, _, ms, _ = world(conn)
+    entry = logged(client, conn, emp, ms)
+    real = service._decidable
+
+    def edited_meanwhile(*args, **kwargs):
+        found = real(*args, **kwargs)
+        conn.run("""UPDATE time_entries SET note = 'Mapped the legacy phone fields',
+                    updated_at = updated_at + interval '1 second' WHERE id = CAST(:i AS uuid)""", i=entry["id"])
+        return found
+    monkeypatch.setattr(service, "_decidable", edited_meanwhile)
+    for action, extra in (("approve", {}), ("request-changes", {"reason": SPLIT})):
+        assert refused(decide(client, conn, mgr, entry, action, **extra)) == STALE, action
+    stored = row(conn, entry["id"])
+    assert (stored["status"], stored["decided_by"], stored["hourly_rate"]) == ("pending", None, None)
+    assert query(conn, """SELECT id FROM notifications
+                          WHERE type IN ('MANUAL_HOURS_APPROVED', 'ENTRY_REJECTED')""") == []
+
+
+def test_decision_errors(client, conn, clock):
+    mgr, emp, project, ms, other = world(conn)
+    admin = make_user(conn, role="admin", first_name="Avery", last_name="Admin")
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=admin["id"])
+    assign(conn, ms, admin)
+    own = logged(client, conn, admin, ms)
+    assert refused(decide(client, conn, admin, own)) == \
+        (403, "SELF_APPROVAL", "You can't approve or reject your own hours")
+    assert refused(send_back(client, conn, admin, own))[:2] == (403, "SELF_APPROVAL")
+    entry = logged(client, conn, emp, ms, TODAY - timedelta(days=2))
+    typed = log_entry(conn, emp, other, YESTERDAY, 3, status="pending")
+    assert refused(decide(client, conn, mgr, as_seen(typed))) == (400, "NOT_MANUAL", NOT_MANUAL)
+    assert refused(send_back(client, conn, mgr, as_seen(typed))) == (400, "NOT_MANUAL", NOT_MANUAL)
+    assert row(conn, typed["id"])["status"] == "pending"
+    stranger = make_user(conn, role="manager")
+    peer = make_user(conn, first_name="Pat", last_name="Lee")
+    add_member(conn, project, peer)
+    for person, expected in ((stranger, (404, "NOT_FOUND")), (peer, (403, "FORBIDDEN")), (emp, (403, "FORBIDDEN"))):
+        assert refused(decide(client, conn, person, entry))[:2] == expected, person["first_name"]
+        assert refused(send_back(client, conn, person, entry))[:2] == expected, person["first_name"]
+    ghost = {"id": str(uuid.uuid4()), "hours": 2.5, "updated_at": entry["updated_at"]}
+    assert refused(decide(client, conn, mgr, ghost))[:2] == (404, "NOT_FOUND")
+    exe = make_user(conn, role="executive")
+    assert refused(decide(client, conn, exe, entry)) == (403, "READ_ONLY", "Executive access is read-only")
+    assert refused(send_back(client, conn, exe, entry))[:2] == (403, "READ_ONLY")
+    # A delegation that ended yesterday reaches nothing.
+    dlg = make_user(conn, role="manager", first_name="Dee", last_name="Legate")
+    delegate(conn, project, dlg, until=TODAY - timedelta(days=1))
+    assert pending(client, conn, dlg) == []
+    load_entry_answer = call(client, conn, dlg, "GET", f"/time-entries/{entry['id']}/breakdown")[0]
+    assert decide(client, conn, dlg, entry)[0] == send_back(client, conn, dlg, entry)[0] == load_entry_answer == 404
+    stored = row(conn, entry["id"])
+    assert (stored["status"], stored["decided_by"]) == ("pending", None)
+
+
+def test_the_order_of_the_decision_checks(client, conn, clock):
+    """_decidable: who may decide (404/403), not your own, the right list, still pending, then the version."""
+    mgr, emp, _, ms, other = world(conn)
+    admin = make_user(conn, role="admin")
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=admin["id"])
+    for m in (ms, other):
+        assign(conn, m, admin)
+    own_manual = logged(client, conn, admin, ms)
+    own_typed = log_entry(conn, admin, other, YESTERDAY, 3, status="pending")
+    # Your own hours come before the wrong list.
+    assert refused(call(client, conn, admin, "POST", f"/time-entries/{own_manual['id']}/approve", {}))[:2] == \
+        (403, "SELF_APPROVAL")
+    assert refused(decide(client, conn, admin, as_seen(own_typed)))[:2] == (403, "SELF_APPROVAL")
+    # The wrong list comes before "already decided".
+    sent_back = logged(client, conn, emp, ms, TODAY - timedelta(days=2))
+    reject_sql(conn, sent_back["id"], mgr)
+    assert refused(call(client, conn, mgr, "POST", f"/time-entries/{sent_back['id']}/approve", {}))[:2] == \
+        (409, "MANUAL_REVIEW_ONLY")
+    approved = log_entry(conn, emp, other, TODAY - timedelta(days=2), 3, status="approved")
+    assert refused(decide(client, conn, mgr, as_seen(approved)))[:2] == (400, "NOT_MANUAL")
+    # "Already decided" comes before a stale version (a decision changes the version too).
+    assert refused(decide(client, conn, mgr, sent_back))[:2] == (400, "NOT_PENDING")
+
+
+def test_decidable_checks_the_version_before_the_write(client, conn, clock):
+    """The version is checked twice: by _decidable, before anything is written, and by the UPDATE's guard (the race,
+    test_an_edit_landing_mid_decision_is_stale). Over HTTP the two answer alike, so this pins the first directly."""
+    mgr, emp, _, ms, _ = world(conn)
+    entry = logged(client, conn, emp, ms)
+    ctx = Ctx(user_id=str(mgr["id"]), role="manager", restricted=False, request_id="test")
+    seen = datetime.fromisoformat(entry["updated_at"])
+    found, _ = service._decidable(conn, ctx, entry["id"], "2.5", manual=True, expected_at=seen)
+    assert str(found["id"]) == entry["id"]
+    for later in (seen + timedelta(microseconds=1), seen - timedelta(seconds=1)):
+        with pytest.raises(ApiError) as refusal:
+            service._decidable(conn, ctx, entry["id"], "2.5", manual=True, expected_at=later)
+        assert refusal.value.code == "STALE_ENTRY"
+    with pytest.raises(ApiError) as refusal:
+        service._decidable(conn, ctx, entry["id"], "2.25", manual=True, expected_at=seen)
+    assert refusal.value.code == "STALE_ENTRY"
+
+
+def test_bells_for_reviewers(client, conn, clock):
+    mgr, emp, project, ms, other = world(conn)
+    dlg = make_user(conn, role="manager", first_name="Dee", last_name="Legate")
+    admin = make_user(conn, role="admin", first_name="Avery", last_name="Admin")
+    delegate(conn, project, dlg)
+    entry = logged(client, conn, emp, ms)
+    day = short_day(YESTERDAY)
+    first = f"Eli logged 2.5h on Schema Mapping ({day}) without the timer: Forgot to start the timer"
+    for person in (mgr, dlg):
+        bells = bell(client, conn, person, "MANUAL_HOURS_SUBMITTED")
+        assert [b["message"] for b in bells] == [first]
+        assert set(bells[0]["payload"]) == PAYLOAD_KEYS
+        assert bells[0]["payload"] == {
+            "entry_id": entry["id"], "work_date": str(YESTERDAY), "week_start": str(week_start(YESTERDAY)),
+            "hours": 2.5, "reason": "forgot_timer", "resubmitted": False,
+            "milestone": {"id": str(ms["id"]), "name": "Schema Mapping"},
+            "project": {"id": str(project["id"]), "name": "Apollo"},
+            "by": {"id": str(emp["id"]), "first_name": "Eli", "name": "Eli Park"}}
+        assert bells[0]["subject_user"]["id"] == str(emp["id"])
+        assert bells[0]["week_start"] == str(week_start(YESTERDAY))
+    for person in (emp, admin):
+        assert bell(client, conn, person, "MANUAL_HOURS_SUBMITTED") == []
+    # An edit while pending rings nothing.
+    assert edit(client, conn, emp, entry["id"], hours="2.75")[0] == 200
+    assert len(bell(client, conn, mgr, "MANUAL_HOURS_SUBMITTED")) == 1
+    # Sent back, then fixed and resubmitted with 3h: one more, as a resubmission.
+    assert send_back(client, conn, mgr, pending(client, conn, mgr)[0]["entry"])[0] == 200
+    assert edit(client, conn, emp, entry["id"], hours="3")[0] == 200
+    resubmitted = f"Eli resubmitted 3h of manual hours on Schema Mapping ({day})"
+    for person in (mgr, dlg):
+        bells = bell(client, conn, person, "MANUAL_HOURS_SUBMITTED")  # newest first
+        assert [b["message"] for b in bells] == [resubmitted, first]
+        assert (bells[0]["payload"]["resubmitted"], bells[0]["payload"]["hours"]) == (True, 3)
+    # Approved hours changed later go back for review: that's a resubmission too.
+    assert decide(client, conn, mgr, pending(client, conn, mgr)[0]["entry"])[0] == 200
+    assert edit(client, conn, emp, entry["id"], hours="3.25")[0] == 200
+    assert bell(client, conn, mgr, "MANUAL_HOURS_SUBMITTED")[0]["message"] == \
+        f"Eli resubmitted 3.25h of manual hours on Schema Mapping ({day})"
+    # A second request the same week gets its own bell: they're stored with no week, so the one-per-week key never
+    # swallows one.
+    logged(client, conn, emp, other, reason="meeting_or_call")
+    bells = bell(client, conn, mgr, "MANUAL_HOURS_SUBMITTED")
+    assert len(bells) == 4
+    assert bells[0]["message"] == f"Eli logged 2.5h on Cutover ({day}) without the timer: Meeting or call"
+    assert query(conn, "SELECT DISTINCT week_start FROM notifications WHERE type = 'MANUAL_HOURS_SUBMITTED'") == \
+        [{"week_start": None}]
+    # A manager's own request on their own project goes to the first admin (with no delegate set).
+    delegate(conn, project, None)
+    conn.run("UPDATE users SET tracks_own_hours = true WHERE id = :i", i=mgr["id"])
+    assign(conn, ms, mgr)
+    logged(client, conn, mgr, ms, TODAY - timedelta(days=2), reason="timer_problem")
+    assert [b["message"] for b in bell(client, conn, admin, "MANUAL_HOURS_SUBMITTED")] == \
+        [f"Morgan logged 2.5h on Schema Mapping ({short_day(TODAY - timedelta(days=2))}) without the timer: "
+         "Timer problem"]
+    assert len(bell(client, conn, mgr, "MANUAL_HOURS_SUBMITTED")) == 4
+
+
+def test_the_grid_cannot_change_manual_hours(client, conn, clock):
+    """Review Focus 5: a manual request changes only through Edit (decision 3)."""
+    mgr, emp, project, ms, other = world(conn)
+    reporting = make_milestone(conn, project, name="Reporting", status="in_progress")
+    assign(conn, reporting, emp)
+    entry = logged(client, conn, emp, ms)
+    week = week_start(YESTERDAY)
+    locked = f"Hours logged manually change only with Edit: Schema Mapping on {short_day(YESTERDAY)}"
+    cells = [{"milestone_id": str(ms["id"]), "milestone": "Schema Mapping", "work_date": str(YESTERDAY)}]
+    for sent in (cell(ms, YESTERDAY, 3), cell(ms, YESTERDAY, 0), cell(ms, YESTERDAY, "2.5", "Mapped something else")):
+        resp = save(client, conn, emp, [sent], week=week)
+        assert refused(resp) == (409, "MANUAL_HOURS_LOCKED", locked), sent
+        assert resp[1]["error"]["details"] == {"cells": cells}
+    # All or nothing: a typed cell sent alongside isn't saved either; every manual cell is named.
+    second = logged(client, conn, emp, reporting)
+    resp = save(client, conn, emp, [cell(other, YESTERDAY, 4, NOTE), cell(ms, YESTERDAY, 3),
+                                    cell(reporting, YESTERDAY, 1)], week=week)
+    assert refused(resp) == (409, "MANUAL_HOURS_LOCKED", "Hours logged manually change only with Edit: "
+                             f"Reporting on {short_day(YESTERDAY)}, Schema Mapping on {short_day(YESTERDAY)}")
+    assert sorted(str(e["id"]) for e in entries(conn, emp)) == sorted([entry["id"], second["id"]])
+    stored = row(conn, entry["id"])
+    assert (stored["hours"], stored["status"], stored["note"]) == (Decimal("2.5"), "pending", NOTE)
+    # An unchanged re-send (with its note or none) writes nothing, and the cells around it save.
+    for sent in (cell(ms, YESTERDAY, "2.5"), cell(ms, YESTERDAY, 2.5, NOTE), cell(ms, YESTERDAY, "2.50", f" {NOTE} ")):
+        status, body, _, _ = save(client, conn, emp, [sent, cell(other, YESTERDAY, 4, NOTE)], week=week)
+        assert status == 200, body
+        assert row(conn, entry["id"]) == stored, sent
+    assert query_one(conn, "SELECT hours FROM time_entries WHERE milestone_id = :m", m=other["id"])["hours"] == 4
+    # A request that was sent back, re-sent unchanged, stays sent back: only Edit resubmits it.
+    reject_sql(conn, entry["id"], mgr)
+    rejected = row(conn, entry["id"])
+    status, body, _, _ = save(client, conn, emp, [cell(ms, YESTERDAY, "2.5", NOTE)], week=week)
+    assert status == 200, body
+    assert row(conn, entry["id"]) == rejected
+    assert next(e for e in body["entries"] if e["id"] == entry["id"])["status"] == "rejected"
+    # The same on a project put on hold, where a resubmission would be refused as closed work.
+    conn.run("UPDATE projects SET status = 'on_hold' WHERE id = :i", i=project["id"])
+    status, body, _, _ = save(client, conn, emp, [cell(ms, YESTERDAY, "2.5", NOTE)], week=week)
+    assert status == 200, body
+    assert row(conn, entry["id"]) == rejected
+    # A change there is still a change: closed work refuses it first.
+    assert refused(save(client, conn, emp, [cell(ms, YESTERDAY, 3, NOTE)], week=week))[:2] == (409, "PROJECT_NOT_OPEN")
+    assert row(conn, entry["id"]) == rejected
+
+
+def test_start_timer_waits_on_todays_manual_hours(client, conn, clock):
+    mgr, emp, _, ms, other = world(conn)
+    today = logged(client, conn, emp, ms, TODAY)
+    clock.set(ny(TODAY, 9))
+    start = {"milestone_id": str(ms["id"])}
+    assert refused(call(client, conn, emp, "POST", "/timers", start)) == (409, "MANUAL_HOURS_LOCKED", TIMER_ON_MANUAL)
+    # Decided either way, it's still the request's cell.
+    for decided in (reject_sql, approve_sql):
+        decided(conn, today["id"], mgr)
+        assert refused(call(client, conn, emp, "POST", "/timers", start))[:2] == (409, "MANUAL_HOURS_LOCKED")
+    assert query(conn, "SELECT id FROM time_timers") == []
+    # Another milestone starts, typed hours there or not.
+    log_entry(conn, emp, other, TODAY, 1, status="pending")
+    start_timer(client, conn, clock, emp, other)
+    # With a timer running, the running timer is what's refused first.
+    assert refused(call(client, conn, emp, "POST", "/timers", start))[:2] == (409, "TIMER_RUNNING")
+    assert call(client, conn, emp, "POST", "/timers/stop", {})[0] == 200
+    # Manual hours on another day don't touch today's timer.
+    conn.run("DELETE FROM time_entries")
+    logged(client, conn, emp, ms, YESTERDAY)
+    timer = start_timer(client, conn, clock, emp, ms)
+    assert (timer["milestone"]["id"], timer["work_date"]) == (str(ms["id"]), str(TODAY))
+
+
+def test_a_manual_cell_is_not_timer_locked(client, conn, clock):
+    _, emp, _, ms, _ = world(conn)
+    logged(client, conn, emp, ms)
+    body = {"milestone_id": str(ms["id"]), "work_date": str(YESTERDAY), "requested_hours": "3",
+            "reason": "Forgot to add the review call"}
+    resp = call(client, conn, emp, "POST", "/time-edit-requests", body)
+    assert refused(resp) == (400, "NOT_LOCKED", "These hours aren't from a timer — change them on your timesheet")
+    assert query(conn, "SELECT id FROM time_edit_requests") == []
+
+
+def test_public_demo_may_review(client, conn, clock):
+    _, emp, _, ms, other = world(conn)
+    demo = make_user(conn, role="admin", username="demo.admin", password="Demo123!", first_name="Dana",
+                     last_name="Demo-Admin")
+    conn.run("UPDATE users SET is_public_demo = true WHERE id = :i", i=demo["id"])
+    tok = login(client, "demo.admin", "Demo123!")
+    first, second = logged(client, conn, emp, ms), logged(client, conn, emp, other)
+    status, listed, _, _ = client.request("GET", "/manual-hours", token=tok)
+    assert status == 200 and sorted(ids(listed)) == sorted([first["id"], second["id"]]), listed
+    status, body, _, _ = client.request("POST", f"/manual-hours/{first['id']}/approve", token=tok,
+                                        json=decision(first))
+    assert (status, body["status"]) == (200, "approved"), body
+    assert Decimal(str(body["hourly_rate"])) == hourly_rate(emp["salary"])  # an admin sees the rate
+    status, body, _, _ = client.request("POST", f"/manual-hours/{second['id']}/request-changes", token=tok,
+                                        json=decision(second, reason=SPLIT))
+    assert (status, body["status"], body["rejection_reason"]) == (200, "rejected", SPLIT), body
+    for pattern in ("/manual-hours/{id}/approve", "/manual-hours/{id}/request-changes"):
+        assert public_demo.is_allowed("POST", pattern)

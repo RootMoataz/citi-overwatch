@@ -2,7 +2,8 @@
 
 One running timer per person. Starting one follows the same rules as typing hours into the timesheet: someone who
 keeps a timesheet, assigned to the milestone, its project open (planned or active) and today inside the project's
-dates. The timer belongs to the New York date it started on.
+dates; and today's cell there mustn't hold a manual request (app.features.time.manual). The timer belongs to the New
+York date it started on.
 
 Stopping never submits hours. The elapsed time, rounded to the nearest quarter hour (under 7.5 minutes: nothing), is
 kept on the timer as a draft of that day's cell, never taking the day past 24h; the timesheet shows the cell pre-filled
@@ -320,6 +321,12 @@ def start(conn, ctx: Ctx, body: dict) -> dict:
         if running:
             raise ApiError(409, "TIMER_RUNNING", f"Your timer on {running['milestone_name']} is still running. "
                            "Stop it before starting another.", {"timer_id": str(running["id"])})
+        # Today's cell holds a manual request: the timer's draft would merge into it at Save week (spec 2026-10-17
+        # decision 4). Read under the person's lock, so a submission can't land between this check and the start.
+        existing = service.existing_entry(conn, ctx, milestone["id"], work_date)
+        if existing and existing["manual_reason"] is not None:
+            raise ApiError(409, "MANUAL_HOURS_LOCKED",
+                           "You logged today's hours here manually. Edit that request instead.")
         row = query_one(conn, """INSERT INTO time_timers (user_id, milestone_id, work_date, started_at)
                                  VALUES (CAST(:u AS uuid), CAST(:m AS uuid), :d, :s) RETURNING id""",
                         u=ctx.user_id, m=milestone_id, d=work_date, s=now)
