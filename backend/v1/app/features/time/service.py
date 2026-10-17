@@ -87,12 +87,16 @@ def label(entry: dict, full_name: str) -> str:
 def _entry_view(e: dict, full_name: str, *, show_rate: bool) -> dict:
     """show_rate: an hourly rate reveals a salary, so only admins and the entry's owner get it.
     source: how the hours got there (tracked by a timer, typed by hand, or mixed). needs_note: timer hours still
-    waiting for a work note (a progress update that day settles it too; see _proof_updates)."""
+    waiting for a work note (a progress update that day settles it too; see _proof_updates).
+    manual: the reason and details of hours sent through "Log hours manually" (None for any other entry).
+    updated_at: the version a reviewer saw, for the stale-entry guard."""
     fields = ["id", "user_id", "milestone_id", "project_id", "work_date", "hours", "status", "over_40",
               "edited_after_decision", "rejection_reason", "note", "decided_at", "hr_submitted_at",
-              "changed_after_hr_submission", "hr_changed_at", "tracked_hours", "needs_note", "created_at"]         + (["hourly_rate"] if show_rate else [])
+              "changed_after_hr_submission", "hr_changed_at", "tracked_hours", "needs_note", "created_at",
+              "updated_at"] + (["hourly_rate"] if show_rate else [])
+    manual = None if e["manual_reason"] is None else {"reason": e["manual_reason"], "details": e["manual_details"]}
     return {k: e[k] for k in fields} | {"label": label(e, full_name),
-                                        "source": entry_source(e["hours"], e["tracked_hours"])}
+                                        "source": entry_source(e["hours"], e["tracked_hours"]), "manual": manual}
 
 
 def _proof_updates(conn, user_id, start: date, end: date) -> dict[tuple[str, date], dict]:
@@ -419,9 +423,10 @@ def _validate_cell(conn, ctx: Ctx, cell: dict, start: date) -> dict:
     return {"milestone": ms, "work_date": work_date, "hours": hours, "note": note, "closed": bool(closed)}
 
 
-def _check_daily_cap(conn, ctx: Ctx, cells: list[dict]) -> None:
+def _check_daily_cap(conn, ctx: Ctx, cells: list[dict], *, with_drafts: bool = False) -> None:
     """No day may go over 24h across all of the person's milestones: their saved pending/approved hours on
-    live work, with each cell in this save replacing whatever that cell held before."""
+    live work, with each cell in this save replacing whatever that cell held before. with_drafts (manual hours only,
+    spec 2026-10-17 decision 20): the day's timer hours not submitted yet count too, on the cells not in this save."""
     for work_date in sorted({c["work_date"] for c in cells}):
         mine = {str(c["milestone"]["id"]): c["hours"] for c in cells if c["work_date"] == work_date}
         saved = query(conn, """SELECT t.milestone_id, t.hours FROM time_entries t
@@ -430,6 +435,9 @@ def _check_daily_cap(conn, ctx: Ctx, cells: list[dict]) -> None:
                                WHERE t.user_id = CAST(:u AS uuid) AND t.work_date = :d
                                  AND t.status IN ('pending', 'approved')""", u=ctx.user_id, d=work_date)
         total = sum((r["hours"] for r in saved if str(r["milestone_id"]) not in mine), Decimal(0)) + sum(mine.values())
+        if with_drafts:
+            drafts = drafts_by_cell(conn, ctx.user_id, work_date, end=work_date)
+            total += sum((v["hours"] for (mid, _), v in drafts.items() if mid not in mine), Decimal(0))
         if total > MAX_HOURS:
             raise ApiError(400, "DAY_OVER_24H",
                            f"More than 24h on {short_day(work_date)} ({total.normalize():f}h across your milestones). "
@@ -509,11 +517,13 @@ def proof_error(missing: list[dict]) -> ApiError:
 
 def write_entry(conn, ctx: Ctx, me: dict, start: date, ms: dict, work_date: date, hours: Decimal, note: str,
                 existing: dict | None, *, tracked: Decimal | None = None, needs_note: bool = False,
-                audit_as: tuple[Ctx, str] | None = None) -> str:
+                audit_as: tuple[Ctx, str] | None = None, manual: tuple[str, str | None] | None = None) -> str:
     """Write one person's hours on a milestone and day (new or changed; the caller has validated and locked), the
     way every save does: back to pending, overtime flag and the one-time 40h alert, HR-changed flag, audit.
     ctx is the hours' owner. tracked: the hours that now came from timers; None for a hand edit, which keeps at most
-    the new hours. audit_as: (who, action) when someone else writes them (an approved change request)."""
+    the new hours. audit_as: (who, action) when someone else writes them (an approved change request).
+    manual: (reason, details) of hours sent through "Log hours manually", written to manual_reason and
+    manual_details; None leaves both columns as they are."""
     before = _week_logged(conn, ctx.user_id, start)
     counted_before = existing["hours"] if existing and existing["status"] in COUNTED else Decimal(0)
     after = before - counted_before + hours
@@ -521,28 +531,33 @@ def write_entry(conn, ctx: Ctx, me: dict, start: date, ms: dict, work_date: date
     decided = bool(existing) and (existing["status"] != "pending" or existing["edited_after_decision"])
     if tracked is None:
         tracked = tracked_after_edit(existing["tracked_hours"], hours) if existing else Decimal(0)
+    manual_args = {} if manual is None else {"mr": manual[0], "md": manual[1]}
     if existing:
         # Hours already sent to HR may still change; they're flagged until an admin re-sends them.
-        conn.run("""UPDATE time_entries SET hours = :h, note = :n, status = 'pending', over_40 = :o,
+        set_manual = "" if manual is None else ", manual_reason = :mr, manual_details = :md"
+        conn.run(f"""UPDATE time_entries SET hours = :h, note = :n, status = 'pending', over_40 = :o,
                     edited_after_decision = :e, hourly_rate = NULL, decided_by = NULL, decided_at = NULL,
                     rejection_reason = NULL, updated_at = now(), tracked_hours = :t, needs_note = :nn,
                     changed_after_hr_submission = (hr_submission_id IS NOT NULL),
                     hr_changed_at = CASE WHEN hr_submission_id IS NOT NULL THEN now() ELSE hr_changed_at END
+                    {set_manual}
                     WHERE id = :i""",
-                 h=hours, n=note, o=over_40, e=decided, t=tracked, nn=needs_note, i=existing["id"])
+                 h=hours, n=note, o=over_40, e=decided, t=tracked, nn=needs_note, i=existing["id"], **manual_args)
         entry_id = existing["id"]
     else:
-        entry_id = query_one(conn, """
+        columns, values = ("", "") if manual is None else (", manual_reason, manual_details", ", :mr, :md")
+        entry_id = query_one(conn, f"""
             INSERT INTO time_entries (user_id, milestone_id, project_id, work_date, hours, note, over_40,
-                                      tracked_hours, needs_note)
-            VALUES (CAST(:u AS uuid), :m, :p, :d, :h, :n, :o, :t, :nn) RETURNING id""",
+                                      tracked_hours, needs_note{columns})
+            VALUES (CAST(:u AS uuid), :m, :p, :d, :h, :n, :o, :t, :nn{values}) RETURNING id""",
             u=ctx.user_id, m=ms["id"], p=ms["project_id"], d=work_date, h=hours, n=note, o=over_40, t=tracked,
-            nn=needs_note)["id"]
+            nn=needs_note, **manual_args)["id"]
     actor, action = audit_as or (ctx, "log" if not existing else "edit")
     record(conn, actor, action, "time_entry", str(entry_id),
            before={"hours": existing["hours"], "status": existing["status"]} if existing else None,
            after={"hours": hours, "over_40": over_40, "tracked_hours": tracked}
-           | ({"user_id": ctx.user_id} if audit_as else {}))
+           | ({"user_id": ctx.user_id} if audit_as else {})
+           | ({"manual_reason": manual[0]} if manual is not None else {}))
     if crossed:
         recipient = _alert_recipient(conn, ctx, ms["manager_id"])
         if recipient:

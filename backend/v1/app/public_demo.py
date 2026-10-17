@@ -67,6 +67,10 @@ DENIED = {
     ("POST", "/timers/{id}/stop-remote"): "stopping someone's timer with a message",
     # Asking to change locked timer hours is an employee's action on their own timesheet; the demo admin keeps none.
     ("POST", "/time-edit-requests"): "asking to change timer hours",
+    # Manual hours: logging, editing or withdrawing the demo account's own manual hours (it keeps no timesheet).
+    ("POST", "/manual-hours"): "logging the demo account's own manual hours (it keeps no timesheet)",
+    ("PUT", "/manual-hours/{id}"): "editing the demo account's own manual hours (it keeps no timesheet)",
+    ("DELETE", "/manual-hours/{id}"): "withdrawing the demo account's own manual hours (it keeps no timesheet)",
     # Payroll: sending approved hours to HR (also refused by name).
     ("POST", "/hr-submissions"): "submitting approved hours to HR",
 }

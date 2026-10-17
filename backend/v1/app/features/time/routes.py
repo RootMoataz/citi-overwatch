@@ -1,5 +1,5 @@
 from app.features.reminders import service as reminders
-from app.features.time import changes, service, timers
+from app.features.time import changes, manual, service, timers
 from app.http import json_response
 from app.router import router
 
@@ -114,3 +114,19 @@ def approve_edit(req, ctx, conn):
 @router.route("POST", "/time-edit-requests/{id}/reject", roles={"admin", "manager"})
 def reject_edit(req, ctx, conn):
     return json_response(200, changes.decide(conn, ctx, req.path_params["id"], req.json(), approve=False))
+
+
+# Manual hours: hours logged without the timer, sent for review one by one (app.features.time.manual).
+@router.route("POST", "/manual-hours")
+def submit_manual(req, ctx, conn):
+    return json_response(201, manual.submit(conn, ctx, req.json()))
+
+
+@router.route("PUT", "/manual-hours/{id}")
+def edit_manual(req, ctx, conn):
+    return json_response(200, manual.edit(conn, ctx, req.path_params["id"], req.json()))
+
+
+@router.route("DELETE", "/manual-hours/{id}")
+def withdraw_manual(req, ctx, conn):
+    return json_response(200, manual.withdraw(conn, ctx, req.path_params["id"]))

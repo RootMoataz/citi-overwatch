@@ -74,7 +74,9 @@ Operations, `Demo123!`), behind the sign-in page's Admin button. The real `admin
     `PUT /departments/{id}`, `DELETE /departments/{id}`, `POST /departments/{id}/restore`, `POST /timers`,
     `POST /timers/stop` (the demo admin keeps no timesheet, and a running timer would record hours for the next
     visitor), `POST /timers/{id}/stop-remote` (it messages a real person and changes their hours),
-    `POST /time-edit-requests` (an employee's request on their own timesheet); and any write route whose
+    `POST /time-edit-requests` (an employee's request on their own timesheet), `POST /manual-hours`,
+    `PUT /manual-hours/{id}` and `DELETE /manual-hours/{id}` (logging, editing or withdrawing the demo account's own
+    manual hours: it keeps no timesheet); and any write route whose
     path mentions `password`, `credential` or an `hr` segment (for example a future
     `/timesheets/{id}/submit-to-hr`), whatever the lists say.
   - **Allowed:** every read, and notifications, messages and milestone discussions; creating and editing projects;
@@ -363,7 +365,7 @@ Who logs hours: employees always; managers and admins only when `tracks_own_hour
 | POST | `/approvals/approve-week` | Admins and managers. `{entries: [{id, expected_hours}]}`: approves one person's week in one step, all or nothing (at most 100 entries). Each entry gets the same checks as a single approval (`403 SELF_APPROVAL`, `404`, `400 NOT_PENDING`, `409 STALE_ENTRY`); entries of more than one person or week are `400 MIXED_WEEKS` → `{approved, user_id, week_start}` |
 | GET | `/timesheets/approved?from=&to=` | Admins and managers. Approved hours per person and week (default: the last 8 weeks; at most a year): admins everyone, managers the projects they manage plus anything they approved themselves. Each row: `user {id, name, username}`, `week_start`, `entry_count`, `hours`, `tracked_hours` (of those, the hours that came from timers), `projects`, `hr_submitted` (every entry sent to HR and unchanged since), `hr_submitted_count`, `hr_submitted_at`, `hr_changed_count` (entries changed after they were sent), and `cost` for admins only (cost ÷ hours would reveal a rate) |
 
-Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)), `created_at`, and from migration 014: `note` (the work note), `tracked_hours` (the hours that came from timers), `source` (`tracked` when all of them did, `manual` when none, `mixed`), and `needs_note` (timer hours saved without proof of work; `false` once a note or a progress update that day covers them). The week also carries `totals.draft` (timer hours not submitted yet; they're not in `logged` or `approved`), `drafts` (`[{milestone_id, work_date, hours, note}]`: per cell, the stopped timers' hours waiting for Submit and the latest stop note) and `locks` (`[{milestone_id, work_date, hours, draft_hours, tracked_hours, request}]`: cells with timer hours, `hours` = saved + draft, `request` = the pending change request or `null`). Managers viewing someone's week see these for their own projects only.
+Entries also carry `hr_submitted_at`, `changed_after_hr_submission` and `hr_changed_at` (see [HR submissions](#hr-submissions)), `created_at`, and from migration 014: `note` (the work note), `tracked_hours` (the hours that came from timers), `source` (`tracked` when all of them did, `manual` when none, `mixed`), and `needs_note` (timer hours saved without proof of work; `false` once a note or a progress update that day covers them). From migration 016 every entry view (week, month, approvals) also has `updated_at` (the entry's version: it changes on every save and decision) and `manual`: `null`, or `{reason, details}` for hours sent through Log hours manually (see [Manual hours](#manual-hours)). The week also carries `totals.draft` (timer hours not submitted yet; they're not in `logged` or `approved`), `drafts` (`[{milestone_id, work_date, hours, note}]`: per cell, the stopped timers' hours waiting for Submit and the latest stop note) and `locks` (`[{milestone_id, work_date, hours, draft_hours, tracked_hours, request}]`: cells with timer hours, `hours` = saved + draft, `request` = the pending change request or `null`). Managers viewing someone's week see these for their own projects only.
 
 ```http
 GET /api/v1/time-entries          (as employee.demo, this week)
@@ -458,6 +460,59 @@ As an admin (managers get the same without `hourly_rate`):
  "budget": 250000.0, "consumed": 13465.92, "remaining": 236534.08,
  "remaining_before": 236534.08, "remaining_after": 236084.08, "pct_of_remaining": 0.2,
  "forecast": 50497.2, "forecast_over_budget": false, "weeks_remaining": 11}
+```
+
+### Manual hours
+
+Hours logged without the timer through **Log hours manually** (spec
+[2026-10-17](../superpowers/specs/2026-10-17-manual-hours-design.md)). A manual request is an ordinary entry, pending
+from the start, whose `manual` is `{reason, details}`: the 24h day, the 40h week (live `over_40`, the label
+"Pending (Overtime requested from …)" and the one-time `OVER_40H` alert), budgets once approved, red flags and HR count
+it like any other hours. Its `source` is `manual`, `tracked_hours` 0 and `needs_note` `false`.
+
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/manual-hours` | Whoever keeps a timesheet (`403 TIMESHEET_DISABLED` otherwise). `{milestone_id, work_date, hours, reason, details, note}` → `201 {entry, week_start}` (`entry` in the week's entry view). Fills only an empty cell, on today or one of the 7 days before (New York dates) |
+| PUT | `/manual-hours/{id}` | The entry's owner only: any other id (someone else's entry, your own typed hours, an id that isn't an entry) is `404 NOT_FOUND`. `{hours, reason, details, note}` → `200 {entry}`. The milestone and day stay, and the 7-day window doesn't apply. A pending entry stays `pending`; a rejected or approved one goes back to `pending` with `edited_after_decision: true` (and `rejection_reason: null`). `400 NO_CHANGE` ("Nothing changed") when all four fields equal the stored ones (text compared trimmed) and the entry is pending or approved; a rejected entry sent back unchanged is resubmitted. The cell rules below apply (not the window or the empty-cell refusals), and `403 TIMESHEET_DISABLED` if the owner no longer keeps a timesheet |
+| DELETE | `/manual-hours/{id}` | The entry's owner only (`404 NOT_FOUND` otherwise). Withdraws (deletes) the entry while it's `pending` and was never decided → `200 {withdrawn: id}`. Otherwise `400 CANNOT_CLEAR_DECIDED`: "These hours were already reviewed, so they can't be withdrawn. Edit them instead." `409 PROJECT_NOT_OPEN` on closed work or a completed milestone. Audited as `withdraw_manual` |
+
+**Fields** (POST and PUT). `400 VALIDATION_ERROR` with `details` naming the first field that fails, in this order.
+`milestone_id`, `work_date`, `hours` and `reason` are required on POST, `hours` and `reason` on PUT (`{field: "required"}`).
+
+| Field | Rule | `details` | Message |
+|---|---|---|---|
+| `hours` | A JSON number, or text of digits and one decimal point (spaces around it are fine: `" 2.5 "` and `"2.50"` are 2.5h). `"2,5"`, `"1e1"`, booleans and lists are refused | `invalid_number` | "Enter the hours as a number, like 2.5" |
+| | 0.25 to 24 | `min:0.25` / `max:24` | "Between 0.25 and 24 hours" |
+| | Quarter hours | `quarter` | "Use quarter hours: .25, .5 or .75" |
+| `reason` | One of `forgot_timer` (Forgot to start the timer), `away_from_computer` (Worked away from the computer), `meeting_or_call` (Meeting or call), `timer_problem` (Timer problem), `other` (Other) | `invalid` | "Pick a reason" |
+| `details` | Text, trimmed; blank is stored as `null`. Optional (at most 500 characters) for the four fixed reasons; required (10-500) for `other` | `min_length:10` / `max_length:500` | "Say what happened (at least 10 characters)" |
+| `note` | The work note, always required: 10-500 characters once trimmed (a progress update that day doesn't replace it) | `min_length:10` / `max_length:500` | |
+
+**Refusals**, checked in this order once the fields are valid:
+
+| Error | When |
+|---|---|
+| `400 OUTSIDE_WINDOW` | POST: the day isn't today or one of the 7 days before, on the New York date ("Pick today or one of the 7 days before"). At 23:30 in New York, when UTC is already tomorrow, today is still today |
+| `400 NOT_ASSIGNED`, `400 OUT_OF_PROJECT_RANGE` | POST and PUT: the grid's cell checks (assigned to the milestone; the day inside the project's dates) |
+| `409 PROJECT_NOT_OPEN` | POST, PUT and DELETE: the project on hold, completed or archived, or the milestone archived (the grid's messages), or the milestone completed ("Schema Mapping is completed, so its hours can't be logged manually"; on PUT and DELETE "… so its manual hours can't be changed") |
+| `409 TIMER_RUNNING` | POST: your timer is running on that milestone that day ("Your timer on Schema Mapping is running. Stop it first.", `details.timer_id`). A timer on another milestone or day doesn't block |
+| `409 TIMER_HOURS_LOCKED` | POST: the cell holds timer hours, a draft or submitted ("Fri 16 Oct has timer hours on Schema Mapping. Use Request a change to add time.") |
+| `409 CELL_HAS_HOURS` | POST: the cell already has an entry of any status ("Fri 16 Oct already has 3h on Schema Mapping. Change them on your timesheet.", `details: {entry_id}`), also when two sends for one cell race |
+| `400 DAY_OVER_24H` | POST and PUT: the day's saved pending and approved hours, plus its timer drafts (stopped, not submitted) on the other cells, plus these hours pass 24 (`details: {work_date, hours}`). The grid's own 24h check doesn't count drafts |
+
+The public demo account gets `403 DEMO_RESTRICTED` on all three; executives get `403 READ_ONLY`.
+
+```http
+POST /api/v1/manual-hours
+{"milestone_id": "202d87b5-…", "work_date": "2026-10-16", "hours": "2.5", "reason": "forgot_timer", "details": null,
+ "note": "Mapped the legacy address fields"}
+```
+```json
+{"entry": {"id": "5f0c…", "milestone_id": "202d87b5-…", "work_date": "2026-10-16", "hours": 2.5, "status": "pending",
+           "over_40": false, "edited_after_decision": false, "rejection_reason": null, "note": "Mapped the legacy address fields",
+           "tracked_hours": 0.0, "needs_note": false, "source": "manual", "label": "Pending approval",
+           "manual": {"reason": "forgot_timer", "details": null}, "updated_at": "2026-10-17T14:02:11.530000+00:00", "…": "…"},
+ "week_start": "2026-10-12"}
 ```
 
 ## HR submissions
