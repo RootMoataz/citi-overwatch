@@ -29,10 +29,10 @@ const body = ({ rows = [mapping], entries = [entry()] } = {}) => ({ week_start: 
 const sheet = (options) => http.get(`${API}/time-entries`, () => HttpResponse.json(body(options)))
 const calendarMilestone = { id: 'm1', name: 'Schema Mapping', start_date: '2026-10-01', end_date: '2026-12-18', status: 'in_progress',
   display_status: 'in_progress', progress_percent: 40, project, role: 'primary' }
-const calendar = (entries = [entry()]) => http.get(`${API}/time-entries/calendar`, ({ request }) => {
+const calendar = (entries = [entry()], milestone = calendarMilestone) => http.get(`${API}/time-entries/calendar`, ({ request }) => {
   const month = new URL(request.url).searchParams.get('month')
   return HttpResponse.json({ month, range: { start: '2026-09-28', end: '2026-11-01' },
-    user: { id: users.employee.id, name: 'Eli Employee' }, milestones: [calendarMilestone], entries, drafts: [], locks: [] })
+    user: { id: users.employee.id, name: 'Eli Employee' }, milestones: [milestone], entries, drafts: [], locks: [] })
 })
 const saveManual = () => http.put(`${API}/manual-hours/e1`, () => HttpResponse.json({ entry: entry({ hours: 3 }) }))
 
@@ -186,6 +186,46 @@ describe('Month view', () => {
     expect(within(region).getByText(NOTE)).toBeInTheDocument()
     expect(within(region).getByText('Manual request')).toBeInTheDocument()
     expect(within(region).queryByRole('button', { name: 'Edit in Day view, Schema Mapping' })).not.toBeInTheDocument()
+  })
+})
+
+describe('Unassigned and closed', () => {
+  const noEdit = (scope) => expect(within(scope).queryByRole('button', { name: /^Edit manual hours/ })).not.toBeInTheDocument()
+
+  test('Month: an unassigned employee keeps the note and Withdraw, with no Edit', async () => {
+    localStorage.setItem(VIEW_KEY, 'month')
+    server.use(sheet(), calendar([entry()], { ...calendarMilestone, role: null }))
+    render(`/timesheet?week=${WEEK}&month=2026-10&day=${WED}`)
+    const region = await screen.findByRole('region', { name: 'Wednesday, October 14, 2026' })
+    expect(await within(region).findByRole('button', { name: `Withdraw, ${CELL}` })).toBeInTheDocument()
+    expect(within(region).getByText("You're no longer assigned to this milestone")).toBeInTheDocument()
+    noEdit(region)
+  })
+
+  test('Entry details: an unassigned employee can still withdraw but not edit', async () => {
+    server.use(sheet({ rows: [{ ...mapping, role: null }] }))
+    render(`/timesheet?week=${WEEK}&entry=m1:${WED}`)
+    const p = await screen.findByRole('complementary', { name: 'Entry details' })
+    expect(within(p).getByRole('button', { name: `Withdraw, ${CELL}` })).toBeInTheDocument()
+    noEdit(p)
+  })
+
+  test('Month: a closed project row shows the manual line with no actions', async () => {
+    localStorage.setItem(VIEW_KEY, 'month')
+    server.use(sheet(), calendar([entry()], { ...calendarMilestone, project: { ...project, status: 'on_hold' } }))
+    render(`/timesheet?week=${WEEK}&month=2026-10&day=${WED}`)
+    const region = await screen.findByRole('region', { name: 'Wednesday, October 14, 2026' })
+    expect(await within(region).findByText('Forgot to start the timer')).toBeInTheDocument()
+    expect(within(region).queryByRole('button', { name: /^(Edit|Withdraw|Fix)/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('Day view note', () => {
+  test("a stored note for a manual cell never replaces the request's note", async () => {
+    sessionStorage.setItem(STORE_KEY, JSON.stringify({ drafts: {}, notes: { 'm1|2026-10-14': 'A stale note typed earlier' } }))
+    server.use(sheet())
+    asDay(`/timesheet?week=${WEEK}&day=${WED}`)
+    expect(await screen.findByRole('textbox', { name: 'Work note, Schema Mapping' })).toHaveValue(NOTE)
   })
 })
 

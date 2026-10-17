@@ -151,7 +151,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
 
       {manual ? (
         <Box sx={{ ...SECTION, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <ManualActions entry={entry} row={row} label={`${name}, ${formatDayLabel(date)}`} closed={Boolean(closed)} withdraw onWithdrawn={onClose} />
+          <ManualActions entry={entry} row={row} label={`${name}, ${formatDayLabel(date)}`} closed={Boolean(closed)} unassigned={row.role === null} withdraw onWithdrawn={onClose} />
         </Box>
       ) : null}
       {resubmittable ? (

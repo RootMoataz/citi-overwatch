@@ -76,7 +76,15 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
         </Typography>
       ) : null}
       {unassigned ? (
-        <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>You're no longer assigned to this milestone</Typography>
+        <>
+          <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.5 }}>You're no longer assigned to this milestone</Typography>
+          {manual && milestone ? (
+            <Box sx={{ mt: 1 }}>
+              <ManualActions entry={line.entry} row={{ milestone, project: milestone.project }} label={`${name}, ${formatDayLabel(date)}`}
+                closed={Boolean(closed)} unassigned withdraw />
+            </Box>
+          ) : null}
+        </>
       ) : manual && milestone ? (
         <Box sx={{ mt: 1.5 }}>
           <ManualActions entry={line.entry} row={{ milestone, project: milestone.project }} label={`${name}, ${formatDayLabel(date)}`}

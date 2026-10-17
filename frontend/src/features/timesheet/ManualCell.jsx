@@ -24,9 +24,12 @@ export function ManualRequestChip({ manual }) {
   )
 }
 
+// Below md a small button is 44 px tall (the theme); keep it 44 px wide too.
+const ACTION = (t) => ({ px: 0.5, minWidth: 0, [t.breakpoints.down('md')]: { minWidth: 44 } })
+
 /** What can be done to a manual request: Edit (pending or approved) or Fix and resubmit (rejected), and with `withdraw`
- * Withdraw while it is pending and unedited since a decision. Nothing on a closed row. `row` = { milestone, project }. */
-export function ManualActions({ entry, row, label, closed, withdraw = false, onWithdrawn }) {
+ * Withdraw while it is pending and unedited since a decision. Nothing on a closed row; `unassigned` (the person left the milestone) hides the edit, which the server refuses, and keeps Withdraw. `row` = { milestone, project }. */
+export function ManualActions({ entry, row, label, closed, unassigned = false, withdraw = false, onWithdrawn }) {
   const [dialog, setDialog] = useState(null)   // 'edit' | 'withdraw' | null
   const [failure, setFailure] = useState(null)
   const remove = useWithdrawManualHours()
@@ -44,23 +47,25 @@ export function ManualActions({ entry, row, label, closed, withdraw = false, onW
   return (
     <>
       <Stack direction="row" useFlexGap sx={{ gap: 0.5, flexWrap: 'wrap', justifyContent: 'inherit' }}>
-        <Button size="small" onClick={() => setDialog('edit')} sx={{ minWidth: 0, px: 0.5 }}
-          aria-label={`${rejected ? 'Fix and resubmit' : 'Edit manual hours'}, ${label}`}>
-          {rejected ? 'Fix and resubmit' : 'Edit'}
-        </Button>
+        {unassigned ? null : (
+          <Button size="small" onClick={() => setDialog('edit')} sx={ACTION}
+            aria-label={`${rejected ? 'Fix and resubmit' : 'Edit manual hours'}, ${label}`}>
+            {rejected ? 'Fix and resubmit' : 'Edit'}
+          </Button>
+        )}
         {canWithdraw ? (
-          <Button size="small" color="error" onClick={() => { setFailure(null); setDialog('withdraw') }} sx={{ minWidth: 0, px: 0.5 }}
+          <Button size="small" color="error" onClick={() => { setFailure(null); setDialog('withdraw') }} sx={ACTION}
             aria-label={`Withdraw, ${label}`}>
             Withdraw
           </Button>
         ) : null}
       </Stack>
-      {dialog === 'edit' ? (
+      {dialog === 'edit' && !unassigned ? (
         <ManualHoursDialog milestone={row.milestone} project={row.project} day={entry.work_date} entry={entry}
           onClose={() => setDialog(null)} />
       ) : null}
-      {canWithdraw ? (
-        <ConfirmDialog open={dialog === 'withdraw'} title="Withdraw these hours?" confirmLabel="Withdraw" busy={remove.isPending}
+      {canWithdraw && dialog === 'withdraw' ? (
+        <ConfirmDialog open title="Withdraw these hours?" confirmLabel="Withdraw" busy={remove.isPending}
           body={`${formatHours(entry.hours)} on ${row.milestone.name}, ${formatDayShort(entry.work_date)}, are removed and your manager won't see them.`}
           onConfirm={confirm} onClose={() => setDialog(null)}>
           <ErrorAlert error={failure} sx={{ mt: 2 }} />
@@ -88,7 +93,7 @@ export default function ManualCell({ entry, label, row, closed }) {
     <Box>
       <ManualBox entry={entry} label={label} />
       <Box sx={{ mt: 0.5 }}><ManualRequestChip manual={entry.manual} /></Box>
-      <ManualActions entry={entry} row={row} label={label} closed={closed} />
+      <ManualActions entry={entry} row={row} label={label} closed={closed} unassigned={row.role === null} />
       {entry.status === 'rejected' && entry.rejection_reason ? (
         <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', lineHeight: 1.2, mt: 0.25 }}>
           Reason: {entry.rejection_reason}

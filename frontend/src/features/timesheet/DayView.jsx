@@ -24,10 +24,11 @@ function DayRow({ state, row, day, closed, showProject, showTimer, showManual, o
   const k = key(row.milestone.id, day)
   const value = valueOf(k)
   const label = `${row.milestone.name}, ${formatDayLabel(day)}`
-  const note = noteOf(k)
+  const manual = isManual(k)
+  // A manual request's note is the request's own; typing in memory never replaces it.
+  const note = manual ? entries[k].note ?? '' : noteOf(k)
   const short = note.trim().length > 0 && !isProofNote(note)
   const completed = row.milestone.status === 'completed'
-  const manual = isManual(k)
   const needed = !closed && attention(k)
   // A note is saved with hours; on a row with neither hours nor an entry it just waits.
   const waiting = note.trim().length > 0 && num(value) <= 0 && !entries[k]
@@ -63,7 +64,7 @@ function DayRow({ state, row, day, closed, showProject, showTimer, showManual, o
           onResubmit={() => setHours(k, String(entries[k].hours))}
           after={(
             <>
-              {manual ? <ManualActions entry={entries[k]} row={row} label={label} closed={Boolean(closed)} /> : null}
+              {manual ? <ManualActions entry={entries[k]} row={row} label={label} closed={Boolean(closed)} unassigned={row.role === null} /> : null}
               <Button size="small" onClick={() => onOpenEntry(row.milestone.id, day)} aria-label={`Details for ${label}`}
                 data-entry-details={entryParam(row.milestone.id, day)} sx={{ minWidth: 44, minHeight: 44, px: 0.5 }}>
                 Details
