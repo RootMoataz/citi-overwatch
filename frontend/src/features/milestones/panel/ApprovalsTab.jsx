@@ -3,12 +3,13 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined'
 import WarningAmber from '@mui/icons-material/WarningAmberOutlined'
 import {
   Box, Button, Checkbox, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Skeleton, Stack, Table, TableBody, TableCell,
-  TableHead, TableRow, TextField, Tooltip, Typography,
+  TableHead, TableRow, TextField, Tooltip, Typography, Link,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useId, useState } from 'react'
+import { Link as RouterLink } from 'react-router-dom'
 import { useMediaQuery } from 'react-responsive'
-import { useApprovals, useApproveWeek, useBreakdowns, useRejectEntry } from '../../../api/queries.js'
+import { useApprovals, useApproveWeek, useBreakdowns, useManualHours, useRejectEntry } from '../../../api/queries.js'
 import { useToast } from '../../../app/toast.js'
 import Critical from '../../../components/Critical.jsx'
 import EmptyState from '../../../components/EmptyState.jsx'
@@ -25,6 +26,18 @@ import { SOURCE_LABEL, shareText, weekSource } from '../../timer/timerClock.js'
 
 const IMPACT_MAX = 20     // "up to 20 at a time": one breakdown request per selected entry
 const REASON_MAX = 1000   // the server's limit on a rejection reason
+
+/** Manual-hours requests on the milestone are decided in Timesheets, one at a time; this says how many wait. */
+function ManualNote({ milestoneId }) {
+  const n = useManualHours({ milestone: milestoneId }).data?.length ?? 0
+  if (!n) return null
+  return (
+    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+      {`${n} manual-hours ${n === 1 ? 'request on this milestone is' : 'requests on this milestone are'} reviewed separately. `}
+      <Link component={RouterLink} to={`/timesheets?tab=manual&milestone=${milestoneId}`}>Review manual hours</Link>
+    </Typography>
+  )
+}
 
 const idOf = (item) => String(item.entry.id)
 const exact = (value) => formatMoney(value, { exact: true })
@@ -370,6 +383,7 @@ export default function ApprovalsTab({ milestone }) {
       <>
         {failures.map((f) => <ErrorAlert key={f.key} error={f.error} title={f.title} sx={{ mb: 1 }} />)}
         <EmptyState title="Nothing waiting" />
+        <ManualNote milestoneId={milestone.id} />
         {rejectDialog}
       </>
     )
@@ -393,6 +407,7 @@ export default function ApprovalsTab({ milestone }) {
           <WarningAmber aria-hidden="true" fontSize="small" sx={{ color: 'warning.main' }} />
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>Milestone completion does not approve time entries.</Typography>
         </Stack>
+        <ManualNote milestoneId={milestone.id} />
       </Box>
       {failures.map((f) => <ErrorAlert key={f.key} error={f.error} title={f.title} />)}
       {approvals.error ? <ErrorAlert error={approvals.error} onRetry={() => approvals.refetch()} /> : null}

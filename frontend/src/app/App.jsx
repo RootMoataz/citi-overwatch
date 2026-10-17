@@ -23,7 +23,7 @@ import MessagesPage from '../features/messages/MessagesPage.jsx'
 import NotificationBell from '../components/NotificationBell.jsx'
 import Puppy from '../features/puppy/Puppy.jsx'
 import TimerChip from '../features/timer/TimerChip.jsx'
-import { useApprovals } from '../api/queries.js'
+import { useWaitingCount } from '../api/queries.js'
 import { useUnreadMessages } from '../api/messages.js'
 import { can } from '../lib/permissions.js'
 import { ROUTE_CHECKS, ROUTE_ROLES } from './access.js'
@@ -33,8 +33,7 @@ import NotFound from './NotFound.jsx'
 function Shell() {
   const { user, logout } = useSession()
   const approver = can(user, 'approvals.view')
-  const approvals = useApprovals({}, approver)
-  const waiting = approvals.data?.length ?? 0
+  const waiting = useWaitingCount(approver)
   // Unread messages refresh every few seconds while Messages is open, at the normal pace elsewhere.
   const onMessages = useLocation().pathname.startsWith('/messages')
   const unread = useUnreadMessages({ fast: onMessages }).data?.unread ?? 0

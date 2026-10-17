@@ -29,6 +29,8 @@ const TARGETS = {
   NO_QUALIFIED_PERSON: (n) => [milestoneLink(n), 'Open the milestone to assign someone'],
   MILESTONE_UPDATE: (n) => [milestoneLink(n), 'Open the work log'],
   KICKBACK_RAISED: (n) => [milestoneLink(n), 'Review the kickback'],
+  MANUAL_HOURS_SUBMITTED: (n) => [`/timesheets?tab=manual&user=${n.subject_user.id}`, 'Review it in Manual hours'],
+  MANUAL_HOURS_APPROVED: (n) => [`/timesheet?week=${n.week_start}`, 'Open your timesheet for that week'],
   KICKBACK_RESOLVED: (n) => [milestoneLink(n), 'Open the milestone'],
 }
 const target = (n) => (TARGETS[n.type] ?? TARGETS.OVER_40H)(n)

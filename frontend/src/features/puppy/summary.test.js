@@ -253,4 +253,22 @@ describe('the critical words of each sentence', () => {
       live: [liveTimer('Eli Employee', 'warning', 'milestone'), liveTimer('Ada Lovelace', 'over')] })
     expect(strongs(several)[1]).toEqual(['2 timers are at or over their limits', 'at or over their limits'])
   })
+
+  test('manual hours: a manager hears what waits, an employee what was approved, with no generic sentence', () => {
+    const submitted = (id) => note(id, 'MANUAL_HOURS_SUBMITTED', { week_start: '2026-10-12' })
+    const one = buildSummary({ user: users.manager, today: TODAY, notifications: [submitted('s1')] })
+    expect(texts(one)).toEqual(['1 manual-hours request is waiting for your review'])
+    expect(one[0].to).toBe('/timesheets?tab=manual')
+    const many = buildSummary({ user: users.manager, today: TODAY, notifications: [submitted('s1'), submitted('s2')] })
+    expect(texts(many)).toEqual(['2 manual-hours requests are waiting for your review'])
+
+    const approved = (id) => note(id, 'MANUAL_HOURS_APPROVED', { week_start: '2026-10-12',
+      payload: { milestone: { id: 'm1', name: 'Schema Mapping' } } })
+    const mine = buildSummary({ user: users.employee, today: TODAY, notifications: [approved('a1')] })
+    expect(texts(mine)).toEqual(['Your manual hours on Schema Mapping were approved'])
+    expect(mine[0].to).toBe('/timesheet?week=2026-10-12')
+    const several = buildSummary({ user: users.employee, today: TODAY, notifications: [approved('a1'), approved('a2')] })
+    expect(texts(several)).toEqual(['2 of your manual-hours requests were approved'])
+    for (const sentence of [...one, ...many, ...mine, ...several]) expect(sentence.text).not.toMatch(/notification/i)
+  })
 })

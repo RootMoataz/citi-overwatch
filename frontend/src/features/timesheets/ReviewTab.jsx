@@ -1,6 +1,7 @@
-import { Box, Button, Chip, FormControlLabel, Paper, Skeleton, Stack, Switch, Typography } from '@mui/material'
+import { Box, Button, Chip, FormControlLabel, Link, Paper, Skeleton, Stack, Switch, Typography } from '@mui/material'
 import { useId, useState } from 'react'
-import { useApprovals, useApproveWeek } from '../../api/queries.js'
+import { Link as RouterLink } from 'react-router-dom'
+import { useApprovals, useApproveWeek, useManualHours } from '../../api/queries.js'
 import Critical from '../../components/Critical.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -8,7 +9,7 @@ import ExportCsvButton from '../../components/ExportCsvButton.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { num } from '../../lib/csv.js'
-import { formatDate, formatHours } from '../../lib/format.js'
+import { formatDate, formatHours, mondayOfIso } from '../../lib/format.js'
 import { groupByPersonWeek } from '../../lib/personWeeks.js'
 import ApprovalRow from '../approvals/ApprovalRow.jsx'
 import { FLAG_LABEL, SOURCE_LABEL, shareText } from '../timer/timerClock.js'
@@ -40,6 +41,10 @@ function PersonWeek({ group }) {
   const count = group.items.length
   const flags = group.items.reduce((sum, i) => sum + (i.flags?.length ?? 0), 0)
   const share = shareText(group.items.map((i) => i.entry))
+  // Manual requests from the same person and week are decided in their own tab; say how many hours wait there.
+  const manualHours = (useManualHours({}).data ?? [])
+    .filter((m) => m.user.id === group.user.id && mondayOfIso(m.entry.work_date) === group.week)
+    .reduce((sum, m) => sum + Number(m.entry.hours), 0)
   return (
     <Paper component="section" variant="outlined" aria-labelledby={titleId} sx={{ px: 2, pt: 2, pb: 0.5 }}>
       <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' }, mb: 1 }}>
@@ -52,6 +57,14 @@ function PersonWeek({ group }) {
             <Critical>{`${count} ${count === 1 ? 'entry' : 'entries'} · ${formatHours(waiting)} waiting`}</Critical>
             {` · ${formatHours(group.items[0].week_logged_total)} logged that week`}
             {share ? ` · ${share}` : ''}
+            {manualHours > 0 ? (
+              <>
+                {' · '}
+                <Link component={RouterLink} to={`/timesheets?tab=manual&user=${group.user.id}`}>
+                  {formatHours(manualHours)} more in Manual hours
+                </Link>
+              </>
+            ) : null}
           </Typography>
         </Box>
         {flags ? (

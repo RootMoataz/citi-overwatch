@@ -179,7 +179,7 @@ describe('Timesheets tabs by role', () => {
     open(users.manager)
     const user = userEvent.setup()
     await screen.findByRole('region', { name: /eli employee, week of oct 12/i })
-    expect(tabNames()).toEqual(['To review', 'Approved'])
+    await waitFor(() => expect(tabNames()).toEqual(['To review', 'Manual hours 0', 'Approved']))
     await user.click(screen.getByRole('tab', { name: 'Approved' }))
     const table = await screen.findByRole('table', { name: /approved weeks/i })
     expect(within(table).getByText('Submitted to HR')).toBeInTheDocument()
@@ -193,7 +193,7 @@ describe('Timesheets tabs by role', () => {
     open(users.admin, '/timesheets?tab=hr')
     const user = userEvent.setup()
     expect(await screen.findByRole('tab', { name: /HR submission/ })).toHaveAttribute('aria-selected', 'true')
-    expect(tabNames()).toEqual(['To review', 'Approved', 'HR submission'])
+    await waitFor(() => expect(tabNames()).toEqual(['To review', 'Manual hours 0', 'Approved', 'HR submission']))
     expect(await screen.findByText(/12 approved entries · 90h · \$4,500 · 4 people/)).toBeInTheDocument()
     expect(screen.getByText(/2 entries in this period still wait for approval/)).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: /include 1 changed entry ready to re-send/i })).toBeChecked()
@@ -232,7 +232,8 @@ describe('Timesheets tabs by role', () => {
   test('executives only read the HR submissions: no review, no submit, no payroll download', async () => {
     let asked = false
     api()
-    server.use(http.get(`${API}/approvals`, () => { asked = true; return HttpResponse.json([]) }))
+    server.use(http.get(`${API}/approvals`, () => { asked = true; return HttpResponse.json([]) }),
+      http.get(`${API}/manual-hours`, () => { asked = true; return HttpResponse.json([]) }))
     open(users.executive)
     const table = await screen.findByRole('table', { name: /hr submissions/i })
     expect(tabNames()).toEqual(['HR submissions'])

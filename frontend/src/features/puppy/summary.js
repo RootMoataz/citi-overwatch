@@ -64,6 +64,24 @@ function flagsSentence(approvals) {
     text: `${n} ${plural(n, 'entry has', 'entries have')} red flags worth a second look` }
 }
 
+/** Manual-hours requests waiting for the viewer (a bell for each, so the notifications are the count). */
+function manualSubmitted(items) {
+  const n = items.length
+  return { id: 'MANUAL_HOURS_SUBMITTED', to: '/timesheets?tab=manual',
+    text: `${n} manual-hours ${plural(n, 'request is', 'requests are')} waiting for your review` }
+}
+
+/** The viewer's own manual hours approved: the milestone for one, a count for several. */
+function manualApproved(items) {
+  const week = latest(items)
+  const to = week ? `/timesheet?week=${week}` : '/timesheet'
+  if (items.length > 1) {
+    return { id: 'MANUAL_HOURS_APPROVED', to, text: `${items.length} of your manual-hours requests were approved` }
+  }
+  return { id: 'MANUAL_HOURS_APPROVED', to,
+    text: `Your manual hours on ${items[0].payload?.milestone?.name ?? 'a milestone'} were approved` }
+}
+
 function emptyTimesheet(items, today) {
   const week = latest(items)
   if (items.length > 1) {
@@ -241,7 +259,7 @@ function unknown(type, items) {
 }
 
 // TIME_EDIT_REQUESTED and TIMER_OVER_LIMIT are told from the change requests and the live feed instead.
-const KNOWN = new Set(['TIMESHEET_EMPTY', 'ENTRY_REJECTED', 'MESSAGE_RECEIVED', 'OVER_40H', 'SUPPORT_ASSIGNED',
+const KNOWN = new Set(['MANUAL_HOURS_SUBMITTED', 'MANUAL_HOURS_APPROVED', 'TIMESHEET_EMPTY', 'ENTRY_REJECTED', 'MESSAGE_RECEIVED', 'OVER_40H', 'SUPPORT_ASSIGNED',
   'SUPPORT_ROUTED', 'MILESTONE_CLAIMED', 'DELEGATE_ASSIGNED', 'TIMER_STOPPED_BY_MANAGER', 'TIME_EDIT_APPROVED',
   'TIME_EDIT_REJECTED', 'TIME_EDIT_REQUESTED', 'TIMER_OVER_LIMIT', ...WORKFLOW.map(([type]) => type)])
 
@@ -265,6 +283,8 @@ export function buildSummary({ user, today = new Date().toISOString().slice(0, 1
     can(user, 'approvals.view') ? flagsSentence(approvals ?? []) : null,
     when(of('TIMESHEET_EMPTY'), (items) => emptyTimesheet(items, today)),
     when(of('ENTRY_REJECTED'), rejected),
+    when(of('MANUAL_HOURS_SUBMITTED'), manualSubmitted),
+    when(of('MANUAL_HOURS_APPROVED'), manualApproved),
     messages(of('MESSAGE_RECEIVED'), unreadMessages),
     when(of('OVER_40H'), (items) => overtime(items, today)),
     manages ? missingSentence(missing, today) : null,

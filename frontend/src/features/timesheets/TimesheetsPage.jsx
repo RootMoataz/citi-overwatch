@@ -1,5 +1,6 @@
 import { Box, Tab, Tabs } from '@mui/material'
 import { useSearchParams } from 'react-router-dom'
+import { useManualHours } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import PageHeader from '../../components/PageHeader.jsx'
 import { can } from '../../lib/permissions.js'
@@ -7,15 +8,20 @@ import LiveTimersCard from '../timer/LiveTimersCard.jsx'
 import ApprovedTab from './ApprovedTab.jsx'
 import ChangeRequests from './ChangeRequests.jsx'
 import HrTab from './HrTab.jsx'
+import ManualTab from './ManualTab.jsx'
 import ReviewTab from './ReviewTab.jsx'
 
 const FILTERS = ['user', 'project', 'milestone']
 
 /** Which tabs the viewer gets: managers review and see approved weeks; admins also submit to HR; executives only
  * read the HR submissions. */
-function tabsFor(user) {
+function tabsFor(user, manualCount) {
   const tabs = []
-  if (can(user, 'approvals.view')) tabs.push({ value: 'review', label: 'To review' }, { value: 'approved', label: 'Approved' })
+  if (can(user, 'approvals.view')) {
+    tabs.push({ value: 'review', label: 'To review' },
+      { value: 'manual', label: manualCount == null ? 'Manual hours' : `Manual hours ${manualCount}` },
+      { value: 'approved', label: 'Approved' })
+  }
   if (can(user, 'hr.submit')) tabs.push({ value: 'hr', label: 'HR submission' })
   else if (can(user, 'hr.view')) tabs.push({ value: 'hr', label: 'HR submissions' })
   return tabs
@@ -32,7 +38,8 @@ const SUBTITLE = {
 export default function TimesheetsPage() {
   const { user } = useSession()
   const [params, setParams] = useSearchParams()
-  const tabs = tabsFor(user)
+  const manual = useManualHours({}, can(user, 'approvals.view'))
+  const tabs = tabsFor(user, manual.data?.length)
   const asked = params.get('tab')
   const tab = tabs.some((t) => t.value === asked) ? asked : tabs[0]?.value
   const filters = Object.fromEntries(FILTERS.map((k) => [k, params.get(k)]).filter(([, v]) => v))
@@ -46,6 +53,7 @@ export default function TimesheetsPage() {
         {tabs.map((t) => <Tab key={t.value} value={t.value} label={t.label} />)}
       </Tabs>
       {tab === 'review' ? <ReviewTab filters={filters} onClearFilters={() => setParams({})} /> : null}
+      {tab === 'manual' ? <ManualTab filters={filters} onClearFilters={() => setParams({ tab: 'manual' })} /> : null}
       {tab === 'approved' ? <ApprovedTab /> : null}
       {tab === 'hr' ? <HrTab /> : null}
     </>

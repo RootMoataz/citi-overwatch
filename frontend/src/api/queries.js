@@ -200,6 +200,13 @@ export const useApprovedWeeks = (range, enabled = true) => useQuery({
 // Admins and managers: the manual requests they may decide (employees never call this).
 export const useManualHours = (filters = {}, enabled = true) =>
   useQuery({ queryKey: ['manual-hours', filters], enabled, queryFn: () => api.get('/manual-hours', filters) })
+// What waits for the viewer's decision: pending hours plus manual requests. The sidebar's Timesheets badge. Both lists
+// are the ones the tabs use, so this adds no request. `enabled` is false for people who don't review.
+export function useWaitingCount(enabled = true) {
+  const approvals = useApprovals({}, enabled)
+  const manual = useManualHours({}, enabled)
+  return (approvals.data?.length ?? 0) + (manual.data?.length ?? 0)
+}
 const sentToast = (d, v) => `Sent ${formatHours(d.entry.hours)} on ${v.name} (${formatDayShort(d.entry.work_date)}) for review`
 export const useLogManualHours = () => useApiMutation(({ body }) => api.post('/manual-hours', body),
   { invalidate: timeKeys, success: sentToast })

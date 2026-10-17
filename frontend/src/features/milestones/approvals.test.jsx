@@ -132,6 +132,25 @@ describe('Approvals tab: heading, tab count and groups', () => {
     expect(within(c).queryByText(/awaiting approval/)).not.toBeInTheDocument()
   })
 
+  test('manual hours on the milestone are reviewed separately, and the line says so under the heading and when empty', async () => {
+    api()
+    server.use(http.get(`${API}/manual-hours`, () => HttpResponse.json([{ entry: { id: 'x1' } }, { entry: { id: 'x2' } }])))
+    renderPanel()
+    const c = await panel()
+    expect(await within(c).findByText('2 manual-hours requests on this milestone are reviewed separately.')).toBeInTheDocument()
+    expect(within(c).getByRole('link', { name: 'Review manual hours' })).toHaveAttribute('href', '/timesheets?tab=manual&milestone=m2')
+  })
+
+  test('the manual-hours line also shows with nothing to approve, and reads in the singular', async () => {
+    api({ list: [] })
+    server.use(http.get(`${API}/manual-hours`, () => HttpResponse.json([{ entry: { id: 'x1' } }])))
+    renderPanel()
+    const c = await panel()
+    expect(await within(c).findByText('Nothing waiting')).toBeInTheDocument()
+    expect(await within(c).findByText('1 manual-hours request on this milestone is reviewed separately.')).toBeInTheDocument()
+    expect(within(c).getByRole('link', { name: 'Review manual hours' })).toBeInTheDocument()
+  })
+
   test('one group per person and week, oldest week first, each with its source share', async () => {
     api()
     renderPanel()
