@@ -28,12 +28,20 @@ export function ManualRequestChip({ manual }) {
 const ACTION = (t) => ({ px: 0.5, minWidth: 0, [t.breakpoints.down('md')]: { minWidth: 44 } })
 
 /** What can be done to a manual request: Edit (pending or approved) or Fix and resubmit (rejected), and with `withdraw`
- * Withdraw while it is pending and unedited since a decision. Nothing on a closed row; `unassigned` (the person left the milestone) hides the edit, which the server refuses, and keeps Withdraw. `row` = { milestone, project }. */
+ * Withdraw while it is pending and unedited since a decision. Nothing on a closed row; a completed milestone shows a line instead (the server refuses every change); `unassigned` (the person left the milestone) hides the edit, which the server refuses, and keeps Withdraw. `row` = { milestone, project }. */
 export function ManualActions({ entry, row, label, closed, unassigned = false, withdraw = false, onWithdrawn }) {
   const [dialog, setDialog] = useState(null)   // 'edit' | 'withdraw' | null
   const [failure, setFailure] = useState(null)
   const remove = useWithdrawManualHours()
   if (closed) return null
+  // The server refuses edit, resubmit and withdraw once the milestone is completed; the hours stay, read-only.
+  if (row.milestone.status === 'completed') {
+    return (
+      <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 0.5 }}>
+        {`${row.milestone.name} is completed, so its manual hours can't be changed.`}
+      </Typography>
+    )
+  }
   const rejected = entry.status === 'rejected'
   const canWithdraw = withdraw && entry.status === 'pending' && !entry.edited_after_decision
   const confirm = async () => {

@@ -220,6 +220,46 @@ describe('Unassigned and closed', () => {
   })
 })
 
+describe('A completed milestone', () => {
+  const done = { ...mapping, milestone: { ...mapping.milestone, status: 'completed' } }
+  const LINE = "Schema Mapping is completed, so its manual hours can't be changed."
+  const none = (scope) => expect(within(scope).queryByRole('button', { name: /^(Edit|Withdraw|Fix)/ })).not.toBeInTheDocument()
+
+  test('Week grid: the hours stay, the actions go and the line says why', async () => {
+    server.use(sheet({ rows: [done], entries: [entry({ status: 'rejected', rejection_reason: 'Wrong day' })] }))
+    render()
+    expect(await screen.findByRole('group', { name: `${CELL}: 2h, manual request` })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Manual request: Forgot to start the timer' })).toBeInTheDocument()
+    expect(screen.getByText(LINE)).toBeInTheDocument()
+    none(document.body)
+  })
+
+  test('Day view: no Edit or Withdraw, with the line', async () => {
+    server.use(sheet({ rows: [done] }))
+    asDay(`/timesheet?week=${WEEK}&day=${WED}`)
+    await userEvent.setup().click(await screen.findByRole('button', { name: 'Show 1 closed milestone' }))   // completed rows are tucked away
+    expect(await screen.findByText(LINE)).toBeInTheDocument()
+    none(document.body)
+  })
+
+  test('Entry details: no Edit or Withdraw, with the line', async () => {
+    server.use(sheet({ rows: [done] }))
+    render(`/timesheet?week=${WEEK}&entry=m1:${WED}`)
+    const p = await screen.findByRole('complementary', { name: 'Entry details' })
+    expect(within(p).getByText(LINE)).toBeInTheDocument()
+    none(p)
+  })
+
+  test('Month: no Edit or Withdraw, with the line', async () => {
+    localStorage.setItem(VIEW_KEY, 'month')
+    server.use(sheet(), calendar([entry()], { ...calendarMilestone, status: 'completed', display_status: 'completed' }))
+    render(`/timesheet?week=${WEEK}&month=2026-10&day=${WED}`)
+    const region = await screen.findByRole('region', { name: 'Wednesday, October 14, 2026' })
+    expect(await within(region).findByText(LINE)).toBeInTheDocument()
+    none(region)
+  })
+})
+
 describe('Day view note', () => {
   test("a stored note for a manual cell never replaces the request's note", async () => {
     sessionStorage.setItem(STORE_KEY, JSON.stringify({ drafts: {}, notes: { 'm1|2026-10-14': 'A stale note typed earlier' } }))

@@ -127,6 +127,22 @@ describe('the Manual hours tab', () => {
     expect(await screen.findByText('Sent back to Ben Okafor')).toBeInTheDocument()
   })
 
+  test('a stale answer to Request changes keeps the dialog open with the typed reason', async () => {
+    api({ request: () => HttpResponse.json({ error: { code: 'STALE_ENTRY', message: 'These hours changed since you loaded them.' } },
+      { status: 409 }) })
+    open()
+    const user = userEvent.setup()
+    await user.click((await screen.findAllByRole('button', { name: /^Request changes/ }))[0])
+    const dialog = await screen.findByRole('dialog', { name: 'Request changes' })
+    await user.type(within(dialog).getByRole('textbox', { name: /Reason/ }), 'Wrong day')
+    await user.click(within(dialog).getByRole('button', { name: 'Request changes' }))
+    await waitFor(() => expect(posts).toHaveLength(1))
+    expect(await screen.findAllByText('These hours changed since you loaded them.')).not.toHaveLength(0)
+    expect(screen.getByRole('dialog', { name: 'Request changes' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /Reason/ })).toHaveValue('Wrong day')
+    await waitFor(() => expect(asked.length).toBeGreaterThan(1))
+  })
+
   test('Budget impact opens the breakdown under the row', async () => {
     api()
     open()

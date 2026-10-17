@@ -32,13 +32,13 @@ describe('the manual hours rules', () => {
   })
 
   test('hoursProblem refuses anything outside the range or the format', () => {
-    for (const bad of ['', '0.2', '24.25', '1e1', '2,5', '25', '0', '100', '1.234', 'abc', ' ']) {
+    for (const bad of ['', '0.2', '24.25', '1e1', '2,5', '25', '0', '100', 'abc', ' ']) {
       expect(hoursProblem(bad), JSON.stringify(bad)).toBe(HOURS)
     }
   })
 
   test('hoursProblem asks for quarter hours', () => {
-    for (const bad of ['2.1', '0.3', '1.55', '3.33']) expect(hoursProblem(bad), bad).toBe(QUARTERS)
+    for (const bad of ['2.1', '0.3', '1.55', '3.33', '1.234', '2.125', '0.251', '12.3456']) expect(hoursProblem(bad), bad).toBe(QUARTERS)
   })
 
   test('detailsProblem: Other needs 10 trimmed characters, the other reasons need nothing', () => {

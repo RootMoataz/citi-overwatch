@@ -46,8 +46,8 @@ function RequestChangesDialog({ item, busy, onSubmit, onClose }) {
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={busy}>Cancel</Button>
-        <Button variant="contained" onClick={send} disabled={busy}>Request changes</Button>
+        <Button onClick={onClose} disabled={busy} sx={{ minHeight: 44 }}>Cancel</Button>
+        <Button variant="contained" onClick={send} disabled={busy} sx={{ minHeight: 44 }}>Request changes</Button>
       </DialogActions>
     </Dialog>
   )
@@ -194,15 +194,17 @@ export default function ManualTab({ filters, onClearFilters }) {
     setFailures((all) => all.filter((f) => f.id !== id))
     try {
       await run()
+      return true
     } catch (error) {
       setFailures((all) => [...all.filter((f) => f.id !== id), { id, error, title: `${item.user.name} · ${dayOf(item)}` }])
       manual.refetch()
+      return false
     }
   }
   const decide = (item) => attempt(item, () => approve.mutateAsync({ item }))
-  const sendBack = (item, reason) => {
-    setAsking(null)
-    return attempt(item, () => requestChanges.mutateAsync({ item, reason }))
+  const sendBack = async (item, reason) => {
+    // Close only once the server accepted it; on a failure the dialog keeps the typed reason.
+    if (await attempt(item, () => requestChanges.mutateAsync({ item, reason }))) setAsking(null)
   }
   const toggle = (id) => setOpened((prev) => { const next = new Set(prev); if (!next.delete(id)) next.add(id); return next })
 

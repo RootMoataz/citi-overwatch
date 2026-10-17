@@ -9,7 +9,7 @@ export const WINDOW_DAYS = 7
 export const DETAILS_MIN = 10
 export const DETAILS_MAX = 500
 
-const HOURS_TEXT = /^(\d{1,2}(\.\d{1,2})?|\.\d{1,2})$/
+const HOURS_TEXT = /^(\d{1,2}(\.\d+)?|\.\d+)$/
 
 /** Today and the 7 days before, newest first: [{ value: '2026-10-15', label: 'Today, Thu 15 Oct' }, ...]. */
 export function dayOptions(today) {

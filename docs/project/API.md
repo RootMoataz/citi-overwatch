@@ -506,8 +506,10 @@ employee gets `ENTRY_REJECTED` (with `manual: true`) or `MANUAL_HOURS_APPROVED` 
 | Error | When |
 |---|---|
 | `400 OUTSIDE_WINDOW` | POST: the day isn't today or one of the 7 days before, on the New York date ("Pick today or one of the 7 days before"). At 23:30 in New York, when UTC is already tomorrow, today is still today |
-| `400 NOT_ASSIGNED`, `400 OUT_OF_PROJECT_RANGE` | POST and PUT: the grid's cell checks (assigned to the milestone; the day inside the project's dates) |
-| `409 PROJECT_NOT_OPEN` | POST, PUT and DELETE: the project on hold, completed or archived, or the milestone archived (the grid's messages), or the milestone completed ("Schema Mapping is completed, so its hours can't be logged manually"; on PUT and DELETE "… so its manual hours can't be changed") |
+| `400 NOT_ASSIGNED` | POST and PUT: you aren't assigned to the milestone (the grid's cell check) |
+| `409 PROJECT_NOT_OPEN` | POST, PUT and DELETE: the project on hold, completed or archived, or the milestone archived (the grid's messages). DELETE skips the checks around this one and runs only this and the completed-milestone refusal below |
+| `400 OUT_OF_PROJECT_RANGE` | POST and PUT: the day is outside the project's dates (the grid's cell check) |
+| `409 PROJECT_NOT_OPEN` | POST, PUT and DELETE: the milestone is completed ("Schema Mapping is completed, so its hours can't be logged manually"; on PUT and DELETE "… so its manual hours can't be changed"). The screens hide Edit, Fix and resubmit and Withdraw on a completed milestone |
 | `409 TIMER_RUNNING` | POST: your timer is running on that milestone that day ("Your timer on Schema Mapping is running. Stop it first.", `details.timer_id`). A timer on another milestone or day doesn't block |
 | `409 TIMER_HOURS_LOCKED` | POST: the cell holds timer hours, a draft or submitted ("Fri 16 Oct has timer hours on Schema Mapping. Use Request a change to add time.") |
 | `409 CELL_HAS_HOURS` | POST: the cell already has an entry of any status ("Fri 16 Oct already has 3h on Schema Mapping. Change them on your timesheet.", `details: {entry_id}`), also when two sends for one cell race |
