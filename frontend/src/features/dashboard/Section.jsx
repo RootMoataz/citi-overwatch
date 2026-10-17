@@ -1,6 +1,7 @@
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { Box, ButtonBase, Paper, Stack, Typography } from '@mui/material'
 import { useId } from 'react'
+import { tonalFill } from '../../app/theme.js'
 
 /**
  * A dashboard panel titled with the business question it answers (a labelled region for screen readers).
@@ -22,10 +23,11 @@ export default function Section({
               aria-expanded={open}
               aria-controls={bodyId}
               aria-label={buttonLabel ?? question}
-              sx={{
+              sx={(theme) => ({
+                ...tonalFill(theme, theme.palette.primary.main),
                 font: 'inherit', color: 'inherit', textAlign: 'left', minHeight: 44, gap: 0.5,
-                alignItems: 'center', justifyContent: 'flex-start', borderRadius: 1, width: '100%',
-              }}
+                alignItems: 'center', justifyContent: 'flex-start', borderRadius: 1, width: '100%', px: 1,
+              })}
             >
               <ExpandMoreIcon
                 aria-hidden="true"

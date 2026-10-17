@@ -33,6 +33,16 @@ export function statusColor(meta, themeOrMode) {
 
 // Chart colours (series, ok / warning / alert, tracks and markers) live in chartColors.js.
 
+/** The always-on soft background for text-only buttons and card titles: rest / hover / pressed, per mode. */
+export function tonalFill(theme, main) {
+  const dark = theme.palette.mode === 'dark'
+  return {
+    backgroundColor: alpha(main, dark ? 0.10 : 0.06),
+    '&:hover': { backgroundColor: alpha(main, dark ? 0.14 : 0.10) },
+    '&:active': { backgroundColor: alpha(main, dark ? 0.18 : 0.14) },
+  }
+}
+
 export function buildTheme(mode = 'light') {
   const dark = mode === 'dark'
   const primary = dark ? '#5AA2F0' : BRAND
@@ -96,7 +106,11 @@ export function buildTheme(mode = 'light') {
           // Below md (touch) a small button is still a 44 px target: This week, This month, Start timer, Message, Print…
           sizeSmall: { '@media (max-width: 899.95px)': { minHeight: 44 } },
           outlined: { '&:active': { backgroundColor: alpha(primary, 0.14) } },
-          text: { '&:active': { backgroundColor: alpha(primary, 0.14) } },
+          // Text buttons always show a soft tint (no border until clicked felt like plain text); disabled ones stay bare.
+          text: ({ ownerState, theme }) => {
+            const main = ownerState.color === 'inherit' ? text.primary : (theme.palette[ownerState.color]?.main ?? primary)
+            return { '&:not(.Mui-disabled)': tonalFill(theme, main) }
+          },
         },
       },
       MuiIconButton: { styleOverrides: { root: { '&:active': { backgroundColor: alpha(primary, 0.16) } } } },
