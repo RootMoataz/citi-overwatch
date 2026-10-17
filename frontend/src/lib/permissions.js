@@ -30,9 +30,10 @@ export const DEMO_DISABLED = 'Disabled in the public demo'
  * or restoring projects (milestones stay fine). departments.manage: every department change. profile.edit and
  * avatar.own: the demo account's own name, email and photo, so the next visitor finds it as published.
  * skills.manage and skills.edit: the skills catalogue and people's skills. hr.submit: sending hours to HR.
- * timer.use: start/stop timers (a timer left running would log hours for the next visitor). */
+ * timer.use: start/stop timers (a timer left running would log hours for the next visitor).
+ * hours.manual: Log hours manually (the demo account keeps no timesheet). */
 export const DEMO_BLOCKED = new Set(['user.manage', 'project.archive', 'departments.manage', 'profile.edit', 'avatar.own',
-  'skills.manage', 'skills.edit', 'hr.submit', 'timer.use'])
+  'skills.manage', 'skills.edit', 'hr.submit', 'timer.use', 'hours.manual'])
 
 export function demoBlocks(user, action) {
   return isPublicDemo(user) && DEMO_BLOCKED.has(action)
@@ -58,6 +59,7 @@ export function can(user, action, resource = {}) {
       return true // every role; who they may write to is the server's contact list (backend rules/messaging.py)
     case 'timer.use': // start/stop timers: whoever keeps a timesheet (backend app/features/time/timers.py)
     case 'timesheet.use':
+    case 'hours.manual': // Log hours manually: the same rule
       // Employees log hours; managers and admins only when an admin turned on "Tracks own hours" for them
       // (backend app/rules/timesheets.py). Executives never: they're read-only.
       return user.role === 'employee' || ((isAdmin(user) || isManager(user)) && Boolean(user.tracks_own_hours))

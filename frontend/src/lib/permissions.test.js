@@ -11,8 +11,8 @@ describe('public demo admin (mirrors backend app/public_demo.py)', () => {
   })
 
   test('blocks people, departments, project archiving, skills, HR submissions, timers and its own account', () => {
-    expect([...DEMO_BLOCKED].sort()).toEqual(['avatar.own', 'departments.manage', 'hr.submit', 'profile.edit',
-      'project.archive', 'skills.edit', 'skills.manage', 'timer.use', 'user.manage'])
+    expect([...DEMO_BLOCKED].sort()).toEqual(['avatar.own', 'departments.manage', 'hours.manual',
+      'hr.submit', 'profile.edit', 'project.archive', 'skills.edit', 'skills.manage', 'timer.use', 'user.manage'])
     for (const action of DEMO_BLOCKED) {
       expect(demoBlocks(users.demoAdmin, action)).toBe(true)
       expect(demoBlocks(users.admin, action)).toBe(false)
@@ -20,6 +20,24 @@ describe('public demo admin (mirrors backend app/public_demo.py)', () => {
     expect(isPublicDemo(users.demoAdmin)).toBe(true)
     expect(isPublicDemo(users.admin)).toBe(false)
     expect(isPublicDemo(null)).toBe(false)
+  })
+})
+
+describe('manual hours follow the timesheet rule', () => {
+  test('who may log hours manually', () => {
+    expect(can(users.employee, 'hours.manual')).toBe(true)
+    expect(can(users.manager, 'hours.manual')).toBe(false)
+    expect(can({ ...users.manager, tracks_own_hours: true }, 'hours.manual')).toBe(true)
+    expect(can({ ...users.admin, tracks_own_hours: true }, 'hours.manual')).toBe(true)
+    expect(can(users.admin, 'hours.manual')).toBe(false)
+    expect(can(users.executive, 'hours.manual')).toBe(false)
+    expect(can(null, 'hours.manual')).toBe(false)
+  })
+
+  test('the public demo admin sees it disabled', () => {
+    expect(demoBlocks(users.demoAdmin, 'hours.manual')).toBe(true)
+    expect(demoBlocks(users.admin, 'hours.manual')).toBe(false)
+    expect(DEMO_BLOCKED.has('hours.manual')).toBe(true)
   })
 })
 

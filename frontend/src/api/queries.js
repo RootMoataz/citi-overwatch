@@ -2,7 +2,7 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../app/toast.js'
 import { celebrate } from '../lib/celebrate.js'
-import { nyMondayIso } from '../lib/format.js'
+import { formatDayShort, formatHours, nyMondayIso } from '../lib/format.js'
 import { statusToast } from '../lib/workflow.js'
 import { api } from './client.js'
 
@@ -151,7 +151,7 @@ export const useAddNote = (milestoneId) => useApiMutation((body) => api.post(`/m
 
 // ---------- time, approvals, notifications ----------
 const timeKeys = [['time'], ['approvals'], ['dashboard'], ['project-summary'], ['milestone-costs'], ['projects'], ['allocations'],
-  ['notifications'], ['profile'], ['timesheet-reminders'], ['approved-weeks'], ['hr']]
+  ['notifications'], ['profile'], ['timesheet-reminders'], ['approved-weeks'], ['hr'], ['manual-hours']]
 export const useWeek = (week, userId, enabled = true) => useQuery({
   queryKey: ['time', week, userId ?? 'me'], enabled, queryFn: () => api.get('/time-entries', { week, user: userId }),
   placeholderData: keepPreviousData,
@@ -195,6 +195,25 @@ export const useApprovedWeeks = (range, enabled = true) => useQuery({
   queryKey: ['approved-weeks', range], enabled, queryFn: () => api.get('/timesheets/approved', range),
   placeholderData: keepPreviousData,
 })
+
+// ---------- manual hours: logged without the timer, reviewed one by one ----------
+// Admins and managers: the manual requests they may decide (employees never call this).
+export const useManualHours = (filters = {}, enabled = true) =>
+  useQuery({ queryKey: ['manual-hours', filters], enabled, queryFn: () => api.get('/manual-hours', filters) })
+const sentToast = (d, v) => `Sent ${formatHours(d.entry.hours)} on ${v.name} (${formatDayShort(d.entry.work_date)}) for review`
+export const useLogManualHours = () => useApiMutation(({ body }) => api.post('/manual-hours', body),
+  { invalidate: timeKeys, success: sentToast })
+export const useEditManualHours = () => useApiMutation(({ id, body }) => api.put(`/manual-hours/${id}`, body),
+  { invalidate: timeKeys, success: sentToast })
+export const useWithdrawManualHours = () => useApiMutation(({ id }) => api.del(`/manual-hours/${id}`),
+  { invalidate: timeKeys, success: (_, v) => `Withdrew ${formatHours(v.hours)} on ${v.name} (${formatDayShort(v.date)})` })
+// The hours and version the reviewer saw: the server refuses (409 STALE_ENTRY) if the entry changed since.
+const seen = ({ entry }) => ({ expected_hours: entry.hours, expected_updated_at: entry.updated_at })
+export const useApproveManual = () => useApiMutation(({ item }) => api.post(`/manual-hours/${item.entry.id}/approve`, seen(item)),
+  { invalidate: timeKeys, success: (_, v) => `Approved ${formatHours(v.item.entry.hours)} for ${v.item.user.name}` })
+export const useRequestManualChanges = () => useApiMutation(({ item, reason }) =>
+  api.post(`/manual-hours/${item.entry.id}/request-changes`, { reason, ...seen(item) }),
+{ invalidate: timeKeys, success: (_, v) => `Sent back to ${v.item.user.name}` })
 
 // ---------- timers: one running per person; stopping one keeps its hours as a draft of the day's cell ----------
 // The running timer (or null) with the server's clock, its limits and the person's unsubmitted timer hours; a timer

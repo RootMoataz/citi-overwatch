@@ -32,5 +32,7 @@ export const server = setupServer(http.get(`${API}/avatars`, () => HttpResponse.
   // Nobody is running a timer that a manager oversees, and no change request waits.
   http.get(`${API}/timers/live`, () => HttpResponse.json({ now: new Date().toISOString(), items: [] })),
   http.get(`${API}/time-edit-requests`, () => HttpResponse.json([])),
+  // Nobody has manual hours waiting for review.
+  http.get(`${API}/manual-hours`, () => HttpResponse.json([])),
   http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: null, user: null, rows: [], entries: [],
     totals: { logged: 0, approved: 0 } })))
