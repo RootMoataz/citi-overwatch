@@ -28,11 +28,11 @@ describe('the manual hours rules', () => {
   })
 
   test('hoursProblem accepts quarter hours from 0.25 to 24', () => {
-    for (const ok of ['2.5', '2.50', '0.25', '24', '12.75', '0.5']) expect(hoursProblem(ok), ok).toBeNull()
+    for (const ok of ['2.5', '2.50', '0.25', '24', '12.75', '0.5', '.5', '.25', '.75']) expect(hoursProblem(ok), ok).toBeNull()
   })
 
   test('hoursProblem refuses anything outside the range or the format', () => {
-    for (const bad of ['', '0.2', '24.25', '1e1', '2,5', '25', '0', '100', '1.234', 'abc', ' ', '.5']) {
+    for (const bad of ['', '0.2', '24.25', '1e1', '2,5', '25', '0', '100', '1.234', 'abc', ' ']) {
       expect(hoursProblem(bad), JSON.stringify(bad)).toBe(HOURS)
     }
   })

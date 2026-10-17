@@ -10,6 +10,7 @@ import { DETAILS_MAX, REASONS, dayOptions, detailsProblem, hoursProblem, inWindo
 import { NOTE_MAX } from './timerClock.js'
 
 const COUNTED = new Set(['pending', 'approved'])
+const phoneTarget = (t) => ({ [t.breakpoints.down('md')]: { minHeight: 44 } })
 const OVERTIME = 'This takes your week over 40h, so it goes to your manager as overtime.'
 
 /** What the person already has that day (pending and approved entries, timer drafts) and that week, leaving out the
@@ -51,6 +52,7 @@ export default function ManualHoursDialog({ milestone, project, day: dayProp, en
   const detailsError = detailsProblem(reason, details)
   const noteError = noteProblem(note)
   const valid = !hoursError && Boolean(reason) && !detailsError && !noteError
+  const reasonError = Boolean(touched.reason && !reason)
   const touch = (field) => () => setTouched((t) => ({ ...t, [field]: true }))
   const overtime = hints && !hoursError && hints.week + Number(hours) > 40
 
@@ -58,7 +60,7 @@ export default function ManualHoursDialog({ milestone, project, day: dayProp, en
     if (!valid || sending.current) return
     sending.current = true
     setFailure(null)
-    const fields = { hours: hours.trim(), reason, details: details.trim() || null, note: note.trim() }
+    const fields = { hours: hours.trim().replace(/^\./, '0.'), reason, details: details.trim() || null, note: note.trim() }
     try {
       if (editing) await edit.mutateAsync({ id: entry.id, body: fields, name: milestone.name })
       else await log.mutateAsync({ body: { milestone_id: milestone.id, work_date: day, ...fields }, name: milestone.name })
@@ -95,13 +97,15 @@ export default function ManualHoursDialog({ milestone, project, day: dayProp, en
             onChange={(e) => setHours(e.target.value.replace(/[^\d.]/g, '').slice(0, 5))} onBlur={touch('hours')}
             error={Boolean(touched.hours && hoursError)} helperText={touched.hours && hoursError ? hoursError : ' '}
             slotProps={{ htmlInput: { inputMode: 'decimal' } }} />
-          <FormControl component="fieldset" error={Boolean(touched.reason && !reason)} disabled={pending}>
+          <FormControl component="fieldset" error={reasonError} disabled={pending}>
             <FormLabel component="legend">Why not the timer?</FormLabel>
-            <RadioGroup value={reason} onChange={(e) => setReason(e.target.value)}
+            <RadioGroup value={reason} aria-invalid={reasonError || undefined}
+              aria-describedby={reasonError ? 'manual-reason-error' : undefined} onChange={(e) => setReason(e.target.value)}
               onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) touch('reason')() }}>
-              {REASONS.map(([code, label]) => <FormControlLabel key={code} value={code} control={<Radio />} label={label} />)}
+              {REASONS.map(([code, label]) => <FormControlLabel key={code} value={code} control={<Radio />} label={label}
+                sx={(t) => ({ [t.breakpoints.down('md')]: { minHeight: 44 } })} />)}
             </RadioGroup>
-            {touched.reason && !reason ? <FormHelperText>Pick a reason</FormHelperText> : null}
+            {reasonError ? <FormHelperText id="manual-reason-error">Pick a reason</FormHelperText> : null}
           </FormControl>
           <TextField label="Details (required for Other)" multiline minRows={2} value={details} disabled={pending}
             onChange={(e) => setDetails(e.target.value.slice(0, DETAILS_MAX))} onBlur={touch('details')}
@@ -125,8 +129,8 @@ export default function ManualHoursDialog({ milestone, project, day: dayProp, en
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} disabled={pending}>Cancel</Button>
-        <Button variant="contained" onClick={send} disabled={pending || !valid}>
+        <Button onClick={onClose} disabled={pending} sx={phoneTarget}>Cancel</Button>
+        <Button variant="contained" onClick={send} disabled={pending || !valid} sx={phoneTarget}>
           {pending ? 'Sending…' : submitLabel}
         </Button>
       </DialogActions>

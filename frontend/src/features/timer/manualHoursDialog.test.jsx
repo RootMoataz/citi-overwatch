@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { useState } from 'react'
 import { useManualHours } from '../../api/queries.js'
 import { setPrefersDark, setViewport } from '../../test/setup.js'
-import { API, HttpResponse, delay, http, server } from '../../test/server.js'
+import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderWithProviders } from '../../test/render.jsx'
 import ManualHoursDialog from './ManualHoursDialog.jsx'
 
@@ -180,6 +180,9 @@ describe('validation shows once a field has been left, and Send waits for all of
     expect(screen.queryByText('Pick a reason')).not.toBeInTheDocument()
     await user.tab() // out of them
     expect(screen.getByText('Pick a reason')).toBeInTheDocument()
+    const radios = screen.getByRole('radiogroup')
+    expect(radios).toHaveAccessibleDescription('Pick a reason')
+    expect(radios).toHaveAttribute('aria-invalid', 'true')
   })
 
   test('the work note counts and refuses blanks', async () => {
@@ -239,9 +242,11 @@ describe('hints', () => {
 describe('sending', () => {
   test('one POST with the exact body, and a waiting button', async () => {
     const bodies = []
+    let release
+    const gate = new Promise((r) => { release = r })
     server.use(http.post(`${API}/manual-hours`, async ({ request }) => {
       bodies.push(await request.json())
-      await delay(400)
+      await gate
       return HttpResponse.json({ entry: entry(), week_start: WEEK }, { status: 201 })
     }))
     const user = userEvent.setup()
@@ -251,9 +256,42 @@ describe('sending', () => {
     await user.dblClick(send())
     const waiting = await screen.findByRole('button', { name: 'Sending…' })
     expect(waiting).toBeDisabled()
-    await screen.findByText('closed')
+    await waitFor(() => expect(bodies).toHaveLength(1))
     expect(bodies).toEqual([{ milestone_id: 'm1', work_date: '2026-10-14', hours: '2.5', reason: 'forgot_timer',
       details: null, note: NOTE }])
+    release()
+    await screen.findByText('closed')
+    expect(bodies).toHaveLength(1)
+  })
+
+  test('.5 enables Send and goes out as 0.5', async () => {
+    let body
+    server.use(http.post(`${API}/manual-hours`, async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ entry: entry({ hours: 0.5 }), week_start: WEEK }, { status: 201 })
+    }))
+    const user = userEvent.setup()
+    open()
+    await screen.findByRole('dialog')
+    await fill(user, { hours: '.5' })
+    expect(send()).toBeEnabled()
+    await user.click(send())
+    await waitFor(() => expect(body?.hours).toBe('0.5'))
+  })
+
+  test('an edit sends .5 as 0.5 too', async () => {
+    let body
+    server.use(http.put(`${API}/manual-hours/e1`, async ({ request }) => {
+      body = await request.json()
+      return HttpResponse.json({ entry: entry({ hours: 0.5 }) })
+    }))
+    const user = userEvent.setup()
+    open({ entry: entry() })
+    await screen.findByRole('dialog', { name: 'Edit manual hours' })
+    await user.clear(hoursBox())
+    await user.type(hoursBox(), '.5')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(body?.hours).toBe('0.5'))
   })
 
   test('details and note are sent trimmed', async () => {
@@ -322,8 +360,10 @@ describe('Esc', () => {
   })
 
   test('does nothing while sending', async () => {
+    let release
+    const gate = new Promise((r) => { release = r })
     server.use(http.post(`${API}/manual-hours`, async () => {
-      await delay(700)
+      await gate
       return HttpResponse.json({ entry: entry(), week_start: WEEK }, { status: 201 })
     }))
     const onClosed = vi.fn()
@@ -334,8 +374,10 @@ describe('Esc', () => {
     await user.click(send())
     await screen.findByRole('button', { name: 'Sending…' })
     await user.keyboard('{Escape}')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
     expect(onClosed).not.toHaveBeenCalled()
+    release()
     await waitFor(() => expect(onClosed).toHaveBeenCalledTimes(1))
   })
 })
