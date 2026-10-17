@@ -297,7 +297,7 @@ Say:
 > salaries are stripped from every executive response; photos are rebuilt from checked pixels by a pure-Python PNG
 > sanitiser, so nothing uploaded is served as-is.
 >
-> Tests: 1,259 backend tests (97% coverage at the last full run), 1,551 frontend component tests, and 24 end-to-end tests
+> Tests: 1,262 backend tests (97% coverage at the last full run), 1,658 frontend component tests, and 27 end-to-end tests
 > (3 journeys on desktop and iPhone, plus layout checks on phones and narrow desktops); all three suites passed on 16 October.
 >
 > Next: server-side email needs an SES endpoint, which is waiting on the instructors, and the GitHub repository gets
@@ -337,9 +337,9 @@ Nothing is deleted, only archived. The hourly rate (salary ÷ 2,080) is frozen o
 One open kickback per milestone and one running timer per person are enforced by partial unique indexes. HR
 submissions keep a frozen copy of each payroll CSV.
 
-**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (399 unit tests).
-860 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,551 component tests use Vitest
-and MSW, where an unhandled request fails the test. 24 Playwright tests cover 3 journeys on desktop Chrome and iPhone
+**Testing strategy?** Test-first. Business rules are pure functions with exhaustive edge cases (400 unit tests).
+862 integration tests run against a real PostgreSQL 17, because mocks hide SQL bugs. 1,658 component tests use Vitest
+and MSW, where an unhandled request fails the test. 27 Playwright tests cover 3 journeys on desktop Chrome and iPhone
 13 and 18 layout checks (the top bar never overlaps from 320 px phones to 1440 px desktops, long names never push a page
 sideways at 375 px); these and
 the component tests all passed on 16 October. Two fail-closed tests walk every write route for the executive and demo-admin guards.

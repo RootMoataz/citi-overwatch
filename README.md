@@ -12,7 +12,7 @@ Scout is a project tracking platform for ACME Inc. It gives admins, project mana
 |---|---|
 | **Live site** | https://d3ucnz03j0sngl.cloudfront.net |
 | **Stack** | React 19 · Material UI 9 · React Responsive · Python 3 on AWS Lambda · Aurora PostgreSQL 17 |
-| **Tests** | 1,259 backend (399 unit · 860 integration; 97% coverage at the last full run) · 1,551 frontend component (101 files) · 24 end-to-end (3 journeys × desktop + mobile, and 18 layout checks: the phone top bar from 320 px, the desktop crumbs, no sideways scroll at 375 px or between 900 and 1024 px, My history up to 1440 px, the phone Week grid's fixed column); backend, frontend and end-to-end all passing on 16 Oct — see [TESTING.md](docs/project/TESTING.md) |
+| **Tests** | 1,262 backend (400 unit · 862 integration; 97% coverage at the last full run) · 1,658 frontend component (104 files) · 27 end-to-end (3 journeys × desktop + mobile, and 21 layout checks: the phone top bar from 320 px, the desktop crumbs, no sideways scroll at 375 px or between 900 and 1024 px, My history up to 1440 px, the phone Week grid's fixed column); backend, frontend and end-to-end all passing on 17 Oct — see [TESTING.md](docs/project/TESTING.md) |
 | **Source** | https://github.com/RootMoataz/citi-overwatch (the repository keeps its original name for now) |
 
 ## What it does
@@ -176,10 +176,10 @@ Connection settings come from `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 ## Tests
 
 ```bash
-cd backend/v1 && python -m pytest --cov=app              # 1,259 unit + integration tests against local Postgres
-cd frontend && npm test                                  # 1,551 component tests (Vitest + Testing Library)
+cd backend/v1 && python -m pytest --cov=app              # 1,262 unit + integration tests against local Postgres
+cd frontend && npm test                                  # 1,658 component tests (Vitest + Testing Library)
 cd frontend && npx playwright install chromium webkit    # once
-cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit), plus 17 layout checks
+cd frontend && npm run e2e                               # 3 journeys × desktop Chrome and iPhone 13 (WebKit), plus 21 layout checks
 cd frontend && npm run lint
 ```
 
