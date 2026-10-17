@@ -14,7 +14,7 @@ const nameOf = (names, id) => names.get(id)?.name ?? 'Milestone'
 const caption = { fontSize: '0.75rem', lineHeight: 1.3 }
 
 /** One hours line: an icon and the name with its hours, then the status word (approved has none: its ✓ is named instead);
- * "Needs revision" is bold. */
+ * a critical status's word ("Needs revision") is bold. */
 function LineChip({ line, name }) {
   const { kind } = line
   const Icon = KIND_ICON[kind]
@@ -30,7 +30,7 @@ function LineChip({ line, name }) {
         </Box>
         {word ? (
           <Box component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: (t) => kindText(kind, t) }}>
-            {kind === 'rejected' ? <Critical>{word}</Critical> : word}
+            {KIND[kind].critical ? <Critical>{word}</Critical> : word}
           </Box>
         ) : null}
       </Box>

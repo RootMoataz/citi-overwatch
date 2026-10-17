@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../api/client.js'
-import { clearAllUnsaved } from '../features/timesheet/unsavedStore.js'
+import { clearAllUnsaved, clearOthersUnsaved } from '../features/timesheet/unsavedStore.js'
 import { SessionContext } from './sessionContext.js'
 
 const statusFor = (user) => (user ? (user.must_change_password ? 'restricted' : 'ready') : 'anon')
@@ -36,6 +36,8 @@ export default function SessionProvider({ children }) {
   const login = useCallback(async (username, password) => {
     const data = await api.post('/auth/login', { username, password })
     api.setToken(data.access_token)
+    // Typing kept from a lapsed session is only ever restored for its own person: anyone else's goes now.
+    clearOthersUnsaved(data.user.id)
     setState((s) => ({ ...s, user: data.user, status: statusFor(data.user), ended: null, signedOut: false }))
     return data.user
   }, [])

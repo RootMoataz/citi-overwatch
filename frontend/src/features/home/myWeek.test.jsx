@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import MyWeekPage from './MyWeekPage.jsx'
 
 // Thursday 15 Oct 2026, noon in New York. Only Date is faked: faking every timer makes userEvent hang.
@@ -479,8 +480,6 @@ describe('privacy', () => {
   })
 })
 
-// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
-const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
 
 describe('the critical details are bold', () => {
   test('lateness, the urgent priority and waiting: "10 days overdue", "Critical priority", "1 overdue", "Waiting on …"', async () => {
@@ -494,6 +493,20 @@ describe('the critical details are bold', () => {
     // The heads-up names an urgent prediction's priority in bold too.
     expect(bold(within(focus).getByRole('button', { name: 'Heads-up: Data cutover (High priority) may come your way' })))
       .toEqual(['High priority'])
+  })
+
+  test('a milestone due today has its due line in bold, on the Now card and its row, also late in the New York evening', async () => {
+    // 22:00 on Oct 15 in New York: the UTC date is already Oct 16, but it is still due today, not a day late.
+    vi.setSystemTime(new Date('2026-10-16T02:00:00Z'))
+    const goLive = ms('m11', 'Go-live', { status: 'in_progress', display_status: 'in_progress', priority: 'medium',
+      end_date: '2026-10-15', project: apollo })
+    serve({ milestones: [goLive, hypercare] })
+    const focus = await openPage()
+    const now = within(focus).getByRole('group', { name: 'Now' })
+    expect(within(now).getByRole('heading', { level: 3, name: 'Go-live' })).toBeInTheDocument()
+    expect(bold(now)).toEqual(['Due Oct 15, 2026'])
+    expect(bold(rowsOf(region(/^In progress/))[0])).toEqual(['Due Oct 15, 2026'])
+    expect(within(focus).queryByText(/overdue/)).not.toBeInTheDocument()
   })
 
   test('normal details stay regular: the due date alone, normal states, Ready to start and Medium priority', async () => {

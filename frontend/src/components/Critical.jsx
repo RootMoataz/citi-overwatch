@@ -15,11 +15,23 @@ export default function Critical({ children, sx }) {
   return <Box component="strong" sx={[...layout, { fontWeight: CRITICAL_WEIGHT }]}>{children}</Box>
 }
 
+/** A part the text doesn't hold is a typo that would drop the bold without a sound: tests fail on it, development warns,
+ * and production shows the plain text. */
+function missingPart(text, part) {
+  const message = `CriticalIn: "${part}" isn't in "${text}"`
+  if (import.meta.env.MODE === 'test') throw new Error(message)
+  if (import.meta.env.DEV) console.warn(message)
+}
+
 /** `text` with its critical `part` in bold, the rest as it was: "Due Oct 8, 2026 · **8 days overdue**". The last match
- * wins, since a name comes before its status ("noncritical audit is **critical**…"). With no part, or a part the text
- * doesn't hold, just the text. */
+ * wins, since a name comes before its status ("noncritical audit is **critical**…"). With no part, just the text; a part
+ * the text doesn't hold is a mistake (missingPart). */
 export function CriticalIn({ text, part }) {
-  const at = part ? text.lastIndexOf(part) : -1
-  if (at < 0) return text
+  if (!part) return text
+  const at = text.lastIndexOf(part)
+  if (at < 0) {
+    missingPart(text, part)
+    return text
+  }
   return <>{text.slice(0, at)}<Critical>{part}</Critical>{text.slice(at + part.length)}</>
 }

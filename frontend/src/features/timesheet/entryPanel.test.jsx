@@ -219,9 +219,13 @@ describe('Entry details: timer locks, closed rows and the Day view', () => {
     server.use(sheet({ locks: [{ ...thuLock, request: { id: 'r1', requested_hours: 1.5, reason: 'Ran over lunch', status: 'pending' } }] }))
     renderSheet(`/timesheet?week=${WEEK}&day=${THU}`)
     const user = userEvent.setup()
-    // The chip's words are bold (a <strong> inside the chip's label); the label is what wraps.
-    const chip = (await screen.findByText('Change requested: 1.5h')).closest('.MuiChip-label')
-    expect(chip).toHaveStyle({ whiteSpace: 'normal' })
+    // The chip is named by its tooltip. Its words are bold (a <strong>), and the element around them, the chip's label, is
+    // what wraps, so the request is never cut short; the chip grows with it.
+    const chip = await screen.findByLabelText('You asked for 1.5h: Ran over lunch')
+    const words = within(chip).getByRole('strong')
+    expect(words).toHaveTextContent('Change requested: 1.5h')
+    expect(words.parentElement).toHaveStyle({ whiteSpace: 'normal' })
+    expect(chip).toHaveStyle({ height: 'auto', maxWidth: '100%' })
     await user.click(screen.getByRole('button', { name: 'Details for Schema Mapping, Thu Oct 15' }))
     const region = await panel()
     expect(within(region).getByText('Change requested: 1.5h')).not.toHaveStyle({ whiteSpace: 'nowrap' })

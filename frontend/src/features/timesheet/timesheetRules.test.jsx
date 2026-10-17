@@ -1,8 +1,9 @@
-import { screen, within } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import TimesheetPage from './TimesheetPage.jsx'
 
 const WEEK = '2026-10-12'
@@ -57,8 +58,6 @@ describe('Timesheet rules', () => {
     const user = userEvent.setup()
     await user.type(await screen.findByLabelText('Schema Mapping, Wed Oct 14'), '14')
     await user.type(screen.getByLabelText('Build, Wed Oct 14'), '12')
-    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
     const alert = screen.getAllByRole('alert').find((a) => /More than 24h/.test(a.textContent))
     expect(bold(alert)).toEqual(['More than 24h on Wed Oct 14'])
   })

@@ -74,13 +74,16 @@ describe('labels', () => {
     expect(upNextLabel(by('Future up'), TODAY)).toBe('Starts Oct 21, 2026')
     expect(upNextLabel(by('Ready a'), TODAY)).toBe('Ready to start')
   })
-  test('dueLine', () => {
+  test('dueLine: the words, whether overdue, and the critical part to show in bold', () => {
     expect(dueLine({ status: 'in_progress', end_date: '2026-10-05' }, TODAY))
-      .toEqual({ text: 'Due Oct 5, 2026 · 10 days overdue', overdue: true })
+      .toEqual({ text: 'Due Oct 5, 2026 · 10 days overdue', overdue: true, critical: '10 days overdue' })
     expect(dueLine({ status: 'in_progress', end_date: '2026-10-14' }, TODAY))
-      .toEqual({ text: 'Due Oct 14, 2026 · 1 day overdue', overdue: true })
+      .toEqual({ text: 'Due Oct 14, 2026 · 1 day overdue', overdue: true, critical: '1 day overdue' })
+    // Due today: the whole line is the critical detail (the "Due today" of the bold rule), in the usual colour.
+    expect(dueLine({ status: 'in_progress', end_date: '2026-10-15' }, TODAY))
+      .toEqual({ text: 'Due Oct 15, 2026', overdue: false, critical: 'Due Oct 15, 2026' })
     expect(dueLine({ status: 'in_progress', end_date: '2026-10-20' }, TODAY))
-      .toEqual({ text: 'Due Oct 20, 2026', overdue: false })
+      .toEqual({ text: 'Due Oct 20, 2026', overdue: false, critical: null })
   })
   test('comingLabel: Ready now, or After the predecessors still open', () => {
     expect(comingLabel({ ready: true, after: [] })).toBe('Ready now')

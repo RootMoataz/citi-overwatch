@@ -50,3 +50,19 @@ def test_devserver_serializes_requests():
     for t in threads:
         t.join()
     assert peak[0] == 1
+
+
+def test_as_date_keeps_dates_the_app_can_do_arithmetic_with():
+    """SEC-2: a date's week, month and year around it must stay valid dates, so as_date refuses the calendar's edges."""
+    from datetime import date
+
+    import pytest
+
+    from app.http import ApiError
+    from app.validation import as_date
+    assert as_date("1900-01-01", "d") == date(1900, 1, 1)
+    assert as_date("2999-12-31", "d") == date(2999, 12, 31)
+    for value in ("1899-12-31", "3000-01-01", "9999-12-31", "0001-01-01"):
+        with pytest.raises(ApiError) as caught:
+            as_date(value, "d")
+        assert caught.value.status == 400 and caught.value.details == {"d": "invalid_date"}

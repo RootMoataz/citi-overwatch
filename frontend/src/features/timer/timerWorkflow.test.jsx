@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import ChangeRequests from '../timesheets/ChangeRequests.jsx'
 import TimesheetPage from '../timesheet/TimesheetPage.jsx'
 import LiveTimersCard from './LiveTimersCard.jsx'
@@ -211,8 +212,6 @@ describe('Live now', () => {
     renderAsUser(<LiveTimersCard />, { user: users.manager })
     const timers = await screen.findByRole('list', { name: 'Running timers' })
     await within(timers).findByText('Over: 8h day')
-    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
     const [eli, ada, bo] = within(timers).getAllByRole('listitem')
     expect(bold(eli)).toEqual(['Over: 8h day'])
     expect(bold(ada)).toEqual(['Warning: 40h week'])
@@ -278,8 +277,7 @@ describe("the employee's own warnings", () => {
     renderAsUser(<TimerLimitBanner />, { user: users.employee })
     await screen.findByText(/your timer on schema mapping is still running/i)
     const banner = screen.getAllByRole('alert').find((a) => /still running/.test(a.textContent))
-    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-    expect(within(banner).getAllByRole('strong').map((s) => s.textContent)).toEqual(["You're over your 8h for today on this timer"])
+    expect(bold(banner)).toEqual(["You're over your 8h for today on this timer"])
   })
 
   test('timer hours not submitted yet point to the timesheet', async () => {

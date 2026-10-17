@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { renderWithProviders } from '../test/render.jsx'
+import { bold } from '../test/bold.js'
 import Timeline from './Timeline.jsx'
 
 const range = { start: '2026-07-15', end: '2026-10-20' }
@@ -279,9 +280,8 @@ describe('Timeline', () => {
 })
 
 describe('Timeline: the critical details are bold', () => {
-  // Critical renders a <strong>: the `strong` role (see critical.test.jsx). A row's drawing is aria-hidden (its words are in
-  // the row's name), so the query includes hidden elements.
-  const bold = (el) => within(el).queryAllByRole('strong', { hidden: true }).map((s) => s.textContent)
+  // A row's drawing is aria-hidden (its words are in the row's name), so the bold query includes hidden elements.
+  const boldInRow = (name) => bold(row(name), { hidden: true })
   const items = [
     ms({ id: 'm1', name: 'Build', start_date: '2026-08-01', end_date: '2026-09-30', status: 'in_progress', display_status: 'in_progress' }),
     ms({ id: 'm2', name: 'Stuck', start_date: '2026-10-05', end_date: '2026-10-20', status: 'blocked', display_status: 'blocked' }),
@@ -291,16 +291,16 @@ describe('Timeline: the critical details are bold', () => {
 
   test('the overdue mark, a kicked-back state and "Waiting on …" are bold; the dates and other states are not', () => {
     renderWithProviders(<Timeline range={range} items={items} />)
-    expect(bold(row('Build'))).toEqual(['⚠ Overdue'])
-    expect(bold(row('Stuck'))).toEqual(['Blocked'])
-    expect(bold(row('Wait'))).toEqual(['Waiting on Build'])
-    expect(bold(row('Plan'))).toEqual([])
+    expect(boldInRow('Build')).toEqual(['⚠ Overdue'])
+    expect(boldInRow('Stuck')).toEqual(['Blocked'])
+    expect(boldInRow('Wait')).toEqual(['Waiting on Build'])
+    expect(boldInRow('Plan')).toEqual([])
   })
 
   test('compact: the state word under the name is bold for waiting and kicked back', () => {
     renderWithProviders(<Timeline layout="compact" range={range} items={items} />)
-    expect(bold(row('Stuck'))).toEqual(['Blocked – needs review'])
-    expect(bold(row('Wait'))).toEqual(['Waiting on dependencies'])
-    expect(bold(row('Plan'))).toEqual([])
+    expect(boldInRow('Stuck')).toEqual(['Blocked – needs review'])
+    expect(boldInRow('Wait')).toEqual(['Waiting on dependencies'])
+    expect(boldInRow('Plan')).toEqual([])
   })
 })

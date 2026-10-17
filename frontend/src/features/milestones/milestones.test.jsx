@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, delay, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import { projectView } from '../projects/viewer.js'
 import MilestonesTab from './MilestonesTab.jsx'
@@ -1142,7 +1143,7 @@ describe('Milestones tab: kept behaviour', () => {
     const mappingPanel = await panel('Schema Mapping')
     expect(within(mappingPanel).getByText((_, el) => el.textContent === usage && [...el.children].every((c) => c.textContent !== usage)))
       .toBeInTheDocument()
-    expect(within(mappingPanel).getAllByRole('strong').map((s) => s.textContent)).toContain('over estimate')
+    expect(bold(mappingPanel)).toContain('over estimate')
     await userEvent.click(screen.getByRole('button', { name: 'Cutover' }))
     const cut = await panel('Cutover')
     expect(within(cut).getByText('92 days (66 working days)')).toBeInTheDocument()
@@ -1234,8 +1235,6 @@ describe('Milestones tab: kept behaviour', () => {
 })
 
 describe('Milestones tab: the critical details are bold', () => {
-  // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-  const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
 
   test('kicked back, waiting, overdue, the pending counts and hours over the estimate; completed rows stay regular', async () => {
     server.use(...handlers())

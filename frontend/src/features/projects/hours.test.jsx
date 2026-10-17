@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import { projectView } from './viewer.js'
 import HoursTab from './HoursTab.jsx'
@@ -187,8 +188,6 @@ describe('HoursTab for an executive', () => {
 describe('HoursTab: the critical details are bold', () => {
   test('hours above the project plan and the hours awaiting approval', async () => {
     renderTab(users.manager)
-    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
     const row = (await screen.findByRole('rowheader', { name: /Ada Lovelace/ })).closest('tr')
     expect(bold(row)).toEqual(['4h above project plan'])
     expect(bold(screen.getByRole('rowheader', { name: /Cy Doe/ }).closest('tr'))).toEqual([])

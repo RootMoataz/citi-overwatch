@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import ProjectDetailPage from './ProjectDetailPage.jsx'
 import ProjectsPage from './ProjectsPage.jsx'
@@ -299,8 +300,6 @@ describe('ProjectsPage', () => {
       ])
       go(users.admin)
       await screen.findByRole('link', { name: 'Late One' })
-      // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-      const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
       const [late, fine] = rowsOf()
       expect(bold(late)).toEqual(['3 days overdue', 'Past due'])
       expect(bold(fine)).toEqual([])

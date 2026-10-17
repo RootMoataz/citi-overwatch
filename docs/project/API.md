@@ -3,7 +3,7 @@
 - **Base URL:**
   - In the cloud: `https://d3ucnz03j0sngl.cloudfront.net/api/v1`
   - Locally: `http://localhost:3001/api/v1`, or `http://localhost:3000/api/v1` through the Vite proxy
-- **Bodies are JSON.** Dates are `YYYY-MM-DD`, money and hours are numbers, and IDs are UUIDs.
+- **Bodies are JSON.** Dates are `YYYY-MM-DD`, from `1900-01-01` to `2999-12-31` (anything else is `400 VALIDATION_ERROR` with `{field: "invalid_date"}`), money and hours are numbers, and IDs are UUIDs.
 - **Authentication:**
   - Send `Authorization: Bearer <access_token>`. Tokens last 15 minutes.
   - The refresh token is an `HttpOnly; SameSite=Strict` cookie named `ow_refresh` (also `Secure` in the cloud). It's scoped to `/api/v1/auth`, so JavaScript can't read it and it isn't sent to any other endpoint.

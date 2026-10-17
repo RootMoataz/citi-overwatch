@@ -68,16 +68,15 @@ export function focusSummary(groups, today) {
     .filter(Boolean).join(' · ')
 }
 
-/** "10 days overdue" once the milestone is past its end date and unfinished, else null: the bold part of its due line. */
-export function lateWords(m, today) {
-  return isOverdue(m, today) ? `${plural(daysBetween(m.end_date, today), 'day')} overdue` : null
-}
-
+/** A due line: `text` ("Due Oct 5, 2026 · 10 days overdue"), `overdue`, and `critical`, the part shown in bold: the lateness
+ * once it is past its end date and unfinished, the whole line while it is due today, else null. */
 export function dueLine(m, today) {
   const due = `Due ${formatDate(m.end_date)}`
-  const late = lateWords(m, today)
-  if (!late) return { text: due, overdue: false }
-  return { text: `${due} · ${late}`, overdue: true }
+  if (isOverdue(m, today)) {
+    const late = `${plural(daysBetween(m.end_date, today), 'day')} overdue`
+    return { text: `${due} · ${late}`, overdue: true, critical: late }
+  }
+  return { text: due, overdue: false, critical: m.status !== 'completed' && m.end_date === today ? due : null }
 }
 
 export function skillsSentence(names) {

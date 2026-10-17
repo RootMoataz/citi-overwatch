@@ -253,9 +253,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
               <List dense disablePadding>
                 {d.over_allocated.map((o) => (
                   <ListItem key={o.user.id} disableGutters
-                    secondaryAction={(
-                      <Chip color="warning" size="small" label={<Critical>{formatHours(o.week_logged_total)}</Critical>} />
-                    )}>
+                    secondaryAction={<Chip color="warning" size="small" label={formatHours(o.week_logged_total)} />}>
                     <ListItemText primary={<PersonWithAvatar person={o.user} context={MANAGED} />} />
                   </ListItem>
                 ))}

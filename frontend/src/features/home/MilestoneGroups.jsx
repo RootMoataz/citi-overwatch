@@ -14,7 +14,7 @@ import Section from '../dashboard/Section.jsx'
 import { milestoneHref, stateKey } from '../timesheet/monthText.js'
 import TimerButton from '../timer/TimerButton.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
-import { comingLabel, dueLine, isWaiting, lateWords, skillsSentence, upNextLabel } from './myWork.js'
+import { comingLabel, dueLine, isWaiting, skillsSentence, upNextLabel } from './myWork.js'
 
 /** "See what might come your way" and the heads-up scroll to this section and its rows. */
 export const COMING_ID = 'myweek-coming'
@@ -37,14 +37,14 @@ export function ChevronLink({ name, to }) {
   )
 }
 
-/** A calendar icon and a date line, in the error colour when overdue (the words say so too). `late` ("10 days overdue"),
- * the part of `text` that says so, is bold. */
-export function DateLine({ text, overdue = false, late = null }) {
+/** A calendar icon and a date line, in the error colour when overdue (the words say so too). `critical` is bold: the
+ * part of `text` that says it is late ("10 days overdue"), or the whole line while it is due today. */
+export function DateLine({ text, overdue = false, critical = null }) {
   return (
     <Typography variant="body2" component="span"
       sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: overdue ? 'error.main' : 'text.secondary' }}>
       <CalendarToday aria-hidden="true" sx={{ fontSize: 16 }} />
-      <span><CriticalIn text={text} part={late} /></span>
+      <span><CriticalIn text={text} part={critical} /></span>
     </Typography>
   )
 }
@@ -114,7 +114,7 @@ export default function MilestoneGroups({ groups, comingUp, today, sections }) {
           {inProgress.map((m) => (
             <Row key={m.id} name={m.name} project={m.project} to={milestoneHref(m)} details={(
               <>
-                <DateLine {...dueLine(m, today)} late={lateWords(m, today)} />
+                <DateLine {...dueLine(m, today)} />
                 {m.progress_percent != null ? <Words>{`${m.progress_percent}% done`}</Words> : null}
                 <StatusChip icon status={stateKey(m)} />
                 <PriorityChip priority={m.priority} hideDefault />
@@ -132,7 +132,7 @@ export default function MilestoneGroups({ groups, comingUp, today, sections }) {
           {upNext.map((m) => (
             <Row key={m.id} name={m.name} project={m.project} to={milestoneHref(m)} details={(
               <>
-                <DateLine {...dueLine(m, today)} late={lateWords(m, today)} />
+                <DateLine {...dueLine(m, today)} />
                 <StatusChip icon status={stateKey(m)} />
                 <Words muted><UpNextWords m={m} today={today} /></Words>
                 {loggable.has(String(m.id)) ? <TimerButton milestone={m} touch /> : null}

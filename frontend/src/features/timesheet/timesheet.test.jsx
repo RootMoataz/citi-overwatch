@@ -6,6 +6,7 @@ import Layout from '../../app/Layout.jsx'
 import NotificationBell from '../../components/NotificationBell.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, renderWithProviders, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import TimesheetsPage from '../timesheets/TimesheetsPage.jsx'
 import BreakdownPanel from '../approvals/BreakdownPanel.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
@@ -607,8 +608,6 @@ describe('Week grid columns, status words and legend', () => {
   })
 })
 
-// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
-const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
 
 describe('My timesheet: the critical details are bold', () => {
   beforeEach(() => {

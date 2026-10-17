@@ -40,7 +40,7 @@ function ProfileCards({ profile, person }) {
   return (
     <>
       <YourManagerCard manager={owner?.manager} />
-      <Box sx={{ '& > section': { mb: 0 } }}><SkillsCard person={person} skills={skills ?? []} canEdit={Boolean(canEdit)} /></Box>
+      <SkillsCard person={person} skills={skills ?? []} canEdit={Boolean(canEdit)} mb={0} />
     </>
   )
 }

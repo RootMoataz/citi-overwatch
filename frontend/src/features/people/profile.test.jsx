@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import PersonProfilePage from './PersonProfilePage.jsx'
 
@@ -91,8 +92,6 @@ describe('My history: an employee on their own page', () => {
   })
 
   test('a week with overtime puts "Overtime this week" in bold; a week without stays regular', async () => {
-    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
     const { unmount } = ownPage()
     expect(bold(await screen.findByRole('group', { name: 'Week of Oct 12, 2026' }))).toEqual([])
     unmount()

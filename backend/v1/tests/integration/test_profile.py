@@ -334,3 +334,21 @@ def test_sections_this_week_keeps_the_profile_permissions(client, conn):
     status, body, _, _ = client.request("GET", f"/users/{emp['id']}{path}", token=token_for(conn, mgr))
     assert status == 200 and set(body) == {"user", "this_week"}
     assert client.request("GET", f"/users/{emp['id']}{path}", token=token_for(conn, execu))[0] == 200
+
+
+def test_a_week_at_the_edge_of_the_calendar_is_400_invalid_date_not_500(client, conn):
+    """SEC-2: 9999-12-31's week would run past the last date Python can hold (Monday + 6 overflowed into a 500).
+    Dates outside 1900-01-01..2999-12-31 are refused as invalid_date, on the full profile, the week read and the
+    timesheet; the edges themselves still work."""
+    _, emp, _, _ = _week_fixture(conn)
+    token = token_for(conn, emp)
+    for week in ("9999-12-31", "0001-01-01", "1899-12-31", "3000-01-01"):
+        for path in (f"/users/{emp['id']}/profile?week={week}", f"/users/{emp['id']}/profile?week={week}&sections=this_week",
+                     f"/time-entries?week={week}"):
+            status, body, _, _ = client.request("GET", path, token=token)
+            assert status == 400, (path, body)
+            assert body["error"]["code"] == "VALIDATION_ERROR"
+            assert body["error"]["details"] == {"week": "invalid_date"}
+    for week in ("1900-01-01", "2999-12-31"):
+        status, body, _, _ = client.request("GET", f"/users/{emp['id']}/profile?week={week}&sections=this_week", token=token)
+        assert status == 200, (week, body)

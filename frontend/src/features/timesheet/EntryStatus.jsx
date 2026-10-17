@@ -15,8 +15,6 @@ export function StatusDot({ kind }) {
   )
 }
 
-/** "Needs revision" waits on the person, so it is bold wherever a status shows it. */
-const isRevision = (kind) => kind === 'rejected'
 /** The words StatusWords shows: "Needs revision", or "Pending, Overtime" for an over-40 entry. */
 const statusText = (entry) => [KIND[entryKind(entry)].legend, entry.over_40 ? 'Overtime' : null].filter(Boolean).join(', ')
 
@@ -30,11 +28,11 @@ export function StatusWords({ entry }) {
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
         <StatusDot kind={kind} />
         <Typography variant="caption" component="span" sx={{ color: (t) => kindText(kind, t), lineHeight: 1.2, fontWeight: 600 }}>
-          {isRevision(kind) ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}
+          {KIND[kind].critical ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}
         </Typography>
       </Box>
       {entry.over_40 ? (
-        <Typography variant="caption" component="span" sx={{ color: 'warning.main', lineHeight: 1.2, fontWeight: 600 }}>
+        <Typography variant="caption" component="span" sx={{ color: 'warning.main', lineHeight: 1.2 }}>
           <Critical>Overtime</Critical>
         </Typography>
       ) : null}
@@ -61,7 +59,7 @@ export function EntryStatusChip({ kind }) {
     <Box component="span" sx={[{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.25, typography: 'caption',
       fontWeight: 600, whiteSpace: 'nowrap', color: (t) => kindText(kind, t) }, chipSx(kind)]}>
       <Icon sx={{ fontSize: 15, color: (t) => kindColor(kind, t) }} />
-      {isRevision(kind) ? <Critical>{KIND[kind].panel}</Critical> : KIND[kind].panel}
+      {KIND[kind].critical ? <Critical>{KIND[kind].panel}</Critical> : KIND[kind].panel}
     </Box>
   )
 }

@@ -30,11 +30,19 @@ def as_str(value, field: str, *, min_len: int = 1, max_len: int = 200) -> str:
     return value
 
 
+# The dates the app accepts. A date's week, month or year around it must stay a date Python can hold: 9999-12-31's
+# week ran past the calendar's end and answered 500.
+DATE_MIN, DATE_MAX = date(1900, 1, 1), date(2999, 12, 31)
+
+
 def as_date(value, field: str) -> date:
     try:
-        return date.fromisoformat(str(value))
+        parsed = date.fromisoformat(str(value))
     except (TypeError, ValueError):
         _fail(field, "invalid_date")
+    if not DATE_MIN <= parsed <= DATE_MAX:
+        _fail(field, "invalid_date")
+    return parsed
 
 
 def as_decimal(value, field: str, *, min: Decimal | None = None, max: Decimal | None = None) -> Decimal:

@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { ApprovalsRedirect } from '../../app/App.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import TimesheetsPage from './TimesheetsPage.jsx'
 
 const downloads = vi.hoisted(() => [])
@@ -251,8 +252,6 @@ test('the old /approvals address opens Timesheets with the same filters', async 
 })
 
 describe('Timesheets: the critical details are bold', () => {
-  // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-  const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
 
   test("a person-week's waiting entries and an overtime request are bold; a plain pending entry is not", async () => {
     const overtime = 'Pending (Overtime requested from Eli Employee)'

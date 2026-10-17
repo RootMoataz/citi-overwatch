@@ -54,13 +54,14 @@ function SkillsDialog({ person, skills, onClose }) {
 }
 
 /** A person's skills on their profile; admins, and managers for the employees they manage, can change them.
- * `embedded` drops the outline (the card sits inside another) and makes the title an H3. */
-export default function SkillsCard({ person, skills = [], canEdit, embedded = false }) {
+ * `embedded` drops the outline (the card sits inside another) and makes the title an H3. `mb` is the space under a
+ * standalone card (none when a stack's gap spaces it). */
+export default function SkillsCard({ person, skills = [], canEdit, embedded = false, mb = 2 }) {
   const { user } = useSession()
   const [editing, setEditing] = useState(false)
   return (
     <Paper variant={embedded ? 'elevation' : 'outlined'} elevation={0} component="section" aria-label="Skills"
-      sx={embedded ? { p: 0, bgcolor: 'transparent', backgroundImage: 'none' } : { p: 2, mb: 2 }}>
+      sx={embedded ? { p: 0, bgcolor: 'transparent', backgroundImage: 'none' } : { p: 2, mb }}>
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
         <Typography variant="subtitle1" component={embedded ? 'h3' : 'h2'}>Skills</Typography>
         {canEdit ? (

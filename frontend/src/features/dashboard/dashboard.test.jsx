@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import AllocationPage from '../allocation/AllocationPage.jsx'
 import DashboardPage from './DashboardPage.jsx'
@@ -220,8 +221,6 @@ describe('AllocationPage', () => {
 describe('Dashboard and Allocation: the critical details are bold', () => {
   beforeEach(() => server.use(http.get(`${API}/departments`, () => HttpResponse.json({ items: departments }))))
   beforeEach(() => server.use(http.get(`${API}/insights/smart`, () => HttpResponse.json([]))))
-  // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
-  const bold = (el, options) => within(el).queryAllByRole('strong', options).map((s) => s.textContent)
 
   test('the pending count, risk tiles and badges, overdue work, urgent priorities, over-40 and over-budget', async () => {
     server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),
@@ -235,7 +234,8 @@ describe('Dashboard and Allocation: the critical details are bold', () => {
     expect(bold(within(risk).getByRole('region', { name: /at risk of missing/i }))).toEqual(['Past due date', 'Overdue milestone'])
     // Overdue and the urgent priorities are bold; the In progress states and "Due in the next 14 days" are not.
     expect(bold(screen.getByRole('region', { name: /key deliverables/i }))).toEqual(['Overdue (1)', 'Critical Priority', 'High Priority'])
-    expect(bold(screen.getByRole('region', { name: /over-allocated/i }))).toEqual(['45h'])
+    // A bare "45h" chip carries no rule word (the card's title says over 40h), so it stays regular.
+    expect(bold(screen.getByRole('region', { name: /over-allocated/i }))).toEqual([])
     expect(bold(screen.getByRole('region', { name: /status of each active project/i }))).toEqual([])
     const budget = screen.getByRole('region', { name: /budget has been consumed versus planned/i })
     expect(bold(within(budget).getByRole('note'))).toEqual(['⚠ Forecast over budget'])

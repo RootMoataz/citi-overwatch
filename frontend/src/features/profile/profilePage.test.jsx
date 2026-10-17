@@ -158,6 +158,16 @@ describe('My profile', () => {
     expect(new Set(calls.profile)).toEqual(new Set(['u-emp']))
   })
 
+  test('Your manager and Skills are spaced one way: side by side in one column, its gap between them, no margin of their own', async () => {
+    serve()
+    open()
+    const manager = (await screen.findByRole('heading', { name: 'Your manager', level: 2 })).closest('section')
+    const skills = screen.getByRole('region', { name: 'Skills' })
+    // Skills sits right in the column that holds Your manager (no wrapper overriding its margin), with none of its own.
+    expect(skills.parentElement).toContainElement(manager)
+    expect(skills).toHaveStyle({ marginBottom: '0px' })
+  })
+
   test('no Your manager card when there is no manager', async () => {
     serve(ME, profileOf({ user: { id: 'u-emp', name: 'Eli Employee', manager: null } }))
     open()

@@ -17,11 +17,15 @@ export const hoursWords = (hours) => `${num(hours).toLocaleString('en-US', { max
 export const milestoneHref = (m) => `/projects/${m.project.id}?tab=milestones&milestone=${m.id}`
 
 /** A line's status: the grid chip's word (none for approved), the panel chip's word, and the word in a day's accessible name. */
+// `critical`: the status waits on the person ("Needs revision"), so its words are bold wherever a status shows them.
 export const KIND = {
-  approved: { chip: null, panel: 'Approved', legend: 'Approved', spoken: 'approved', status: STATUS.approved },
-  pending: { chip: 'Pending', panel: 'Pending approval', legend: 'Pending', spoken: 'pending', status: STATUS.pending },
-  rejected: { chip: 'Needs revision', panel: 'Needs revision', legend: 'Needs revision', spoken: 'needs revision', status: STATUS.rejected },
-  draft: { chip: 'Not submitted', panel: 'Not submitted', legend: 'Not submitted', spoken: 'not submitted', status: STATUS.planned },
+  approved: { chip: null, panel: 'Approved', legend: 'Approved', spoken: 'approved', status: STATUS.approved, critical: false },
+  pending: { chip: 'Pending', panel: 'Pending approval', legend: 'Pending', spoken: 'pending', status: STATUS.pending,
+    critical: false },
+  rejected: { chip: 'Needs revision', panel: 'Needs revision', legend: 'Needs revision', spoken: 'needs revision',
+    status: STATUS.rejected, critical: true },
+  draft: { chip: 'Not submitted', panel: 'Not submitted', legend: 'Not submitted', spoken: 'not submitted',
+    status: STATUS.planned, critical: false },
 }
 export const KINDS = ['approved', 'pending', 'rejected', 'draft']
 /** Every status has an icon as well as a colour: ✓, a clock, !, a timer. */

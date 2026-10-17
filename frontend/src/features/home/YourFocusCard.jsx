@@ -15,7 +15,7 @@ import { milestoneHref, stateKey } from '../timesheet/monthText.js'
 import TimerButton from '../timer/TimerButton.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
 import { ChevronLink, DateLine, NewChip, ProjectLink, UpNextWords } from './MilestoneGroups.jsx'
-import { dueLine, focusOverdue, focusSummary, lateWords, nowAndNext } from './myWork.js'
+import { dueLine, focusOverdue, focusSummary, nowAndNext } from './myWork.js'
 
 /** One of the card's parts ("Now", "Next"), named by its overline. */
 function Part({ label, children }) {
@@ -61,7 +61,7 @@ function NowCard({ m, today, loggable }) {
         <StatusChip icon status={stateKey(m)} />
       </Stack>
       <Stack direction="row" useFlexGap sx={{ gap: { xs: 1, sm: 2 }, flexWrap: 'wrap', alignItems: 'center', mt: 1.5 }}>
-        <DateLine text={due.text} overdue={due.overdue} late={lateWords(m, today)} />
+        <DateLine {...due} />
         <PriorityFlag priority={m.priority} />
         {DIFFICULTY[m.difficulty] ? <Words>{`${DIFFICULTY[m.difficulty]} difficulty`}</Words> : null}
         {m.progress_percent != null ? <Words>{`${m.progress_percent}% done`}</Words> : null}

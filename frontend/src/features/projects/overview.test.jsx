@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import ProjectDetailPage from './ProjectDetailPage.jsx'
 
@@ -381,8 +382,6 @@ describe('Overview on a phone', () => {
   })
 })
 
-// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
-const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
 
 describe('Overview: the critical details are bold', () => {
   test('over budget, overdue, the pending and kicked-back counts, the +Nh chip and the risk word; normal states stay regular', async () => {

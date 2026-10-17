@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import HomePage from './HomePage.jsx'
 
 const dashboard = {
@@ -165,6 +166,9 @@ describe('HomePage by role', () => {
     expect(tile(/departments/i)).toHaveAttribute('href', '/departments')
     await waitFor(() => expect(tile(/open project requests/i)).toHaveTextContent('2'))
     expect(tile(/open project requests/i)).toHaveAttribute('href', '/requests')
+    // Its hint "Waiting for a decision" isn't one of the bold rule phrases, so it stays regular with requests open.
+    expect(tile(/open project requests/i)).toHaveTextContent('Waiting for a decision')
+    expect(bold(tile(/open project requests/i))).toEqual([])
     await waitFor(() => expect(tile(/archive/i)).toHaveTextContent('3'))
     expect(tile(/audit log/i)).toHaveAttribute('href', '/audit')
     expect(await screen.findByRole('region', { name: /projects by status/i })).toBeInTheDocument()

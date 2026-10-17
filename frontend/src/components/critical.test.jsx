@@ -1,8 +1,8 @@
 // The critical details are bold app-wide: lateness, limits, waiting statuses, risk and urgent priority. They are found by
-// the `strong` role: Critical renders a <strong>, which has no other testable role or name (a documented exception to
-// the role-and-label-only queries: the role is checked, and then the element's text).
+// the `strong` role with the shared `bold` helper (test/bold.js, which says why).
 import { screen } from '@testing-library/react'
 import { describe, expect, test } from 'vitest'
+import { bold } from '../test/bold.js'
 import { renderWithProviders } from '../test/render.jsx'
 import Critical, { CriticalIn } from './Critical.jsx'
 import PriorityChip from './PriorityChip.jsx'
@@ -10,7 +10,7 @@ import RiskBadges from './RiskBadges.jsx'
 import RiskText from './RiskText.jsx'
 import StatusChip from './StatusChip.jsx'
 
-const boldTexts = () => screen.queryAllByRole('strong').map((el) => el.textContent)
+const boldTexts = () => bold(document.body)
 
 describe('Critical', () => {
   test('renders its text in a strong element at weight 700', () => {
@@ -26,12 +26,20 @@ describe('Critical', () => {
     expect(screen.getByRole('strong')).toHaveStyle({ flexShrink: '0', fontWeight: '700' })
   })
 
-  test('CriticalIn bolds only the critical part of a line, and nothing when the part is missing', () => {
+  test('CriticalIn bolds only the critical part of a line, and nothing when there is no part', () => {
     const { unmount } = renderWithProviders(<p><CriticalIn text="Due Oct 8, 2026 · 8 days overdue" part="8 days overdue" /></p>)
     expect(boldTexts()).toEqual(['8 days overdue'])
     unmount()
     renderWithProviders(<p><CriticalIn text="Due Oct 8, 2026" part={null} /></p>)
     expect(boldTexts()).toEqual([])
+  })
+
+  test("CriticalIn fails loudly in tests when the text doesn't hold the part: a typo must not drop the bold silently", () => {
+    expect(() => CriticalIn({ text: 'Due Oct 8, 2026 · 8 days overdue', part: '8 day overdue' }))
+      .toThrow(`CriticalIn: "8 day overdue" isn't in "Due Oct 8, 2026 · 8 days overdue"`)
+    // No part at all is not a mistake: the line has nothing critical.
+    expect(CriticalIn({ text: 'Due Oct 20, 2026', part: null })).toBe('Due Oct 20, 2026')
+    expect(CriticalIn({ text: 'Due Oct 20, 2026', part: '' })).toBe('Due Oct 20, 2026')
   })
 
   test('CriticalIn bolds the last match, since a name comes before the status: "noncritical audit is critical…"', () => {

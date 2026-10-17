@@ -86,3 +86,52 @@ describe('SessionProvider and unsaved timesheet typing', () => {
     expect(sessionStorage.getItem(DEMO_FLAG)).toBe('1')
   })
 })
+
+describe('signing in clears the typing kept for anyone else (SEC-1)', () => {
+  const ELI = ['overwatch.timesheet.unsaved.u-emp.2026-10-05', 'overwatch.timesheet.unsaved.u-emp.2026-10-12']
+  const MORGAN = 'overwatch.timesheet.unsaved.u-mgr.2026-10-12'
+
+  function Switcher() {
+    const { status, user, login } = useSession()
+    return (
+      <>
+        <p>{`Status: ${status}${user ? ` as ${user.id}` : ''}`}</p>
+        <button type="button" onClick={() => login('employee.demo', 'secret')}>Sign in as Eli</button>
+        <button type="button" onClick={() => login('manager.demo', 'secret')}>Sign in as Morgan</button>
+      </>
+    )
+  }
+  const signsInAs = http.post(`${API}/auth/login`, async ({ request }) => {
+    const { username } = await request.json()
+    return HttpResponse.json({ access_token: 'tok', user: username === 'manager.demo' ? users.manager : users.employee })
+  })
+  const renderSwitcher = () => renderWithProviders(<SessionProvider><Switcher /></SessionProvider>)
+  function keepEachOnesTyping() {
+    ;[...ELI, MORGAN].forEach((k) => sessionStorage.setItem(k, typing))
+    sessionStorage.setItem(DEMO_FLAG, '1')
+  }
+
+  test("someone else signing in on the tab removes the timed-out person's typing and keeps their own", async () => {
+    keepEachOnesTyping()
+    server.use(refreshRefused(), signsInAs)
+    renderSwitcher()
+    await screen.findByText('Status: anon')
+    // A lapsed session (REFRESH_INVALID, also how a demo end can look) keeps it for the same person's next sign-in.
+    expect(unsavedKeys()).toEqual([...ELI, MORGAN].sort())
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in as Morgan' }))
+    expect(await screen.findByText('Status: ready as u-mgr')).toBeInTheDocument()
+    expect(unsavedKeys()).toEqual([MORGAN])
+    expect(sessionStorage.getItem(DEMO_FLAG)).toBe('1')
+  })
+
+  test('the same person signing back in keeps their typing, so My timesheet restores it', async () => {
+    keepEachOnesTyping()
+    server.use(refreshRefused(), signsInAs)
+    renderSwitcher()
+    await screen.findByText('Status: anon')
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Sign in as Eli' }))
+    expect(await screen.findByText('Status: ready as u-emp')).toBeInTheDocument()
+    expect(unsavedKeys()).toEqual(ELI)
+    expect(JSON.parse(sessionStorage.getItem(ELI[1]))).toEqual({ drafts: { 'm1|2026-10-13': '9' }, notes: {} })
+  })
+})

@@ -5,12 +5,28 @@ import { describe, expect, test } from 'vitest'
 import { API, HttpResponse, delay, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import { setViewport } from '../../test/setup.js'
+import { bold } from '../../test/bold.js'
 import {
   RANGES, calendar, calls, chips, dayBox, entry, m1, m2, m3, m4, milestone, mixedDay, panel, renderMonth as render, setUpMonthTests,
 } from '../../test/monthCalendar.jsx'
 import MonthView from './MonthView.jsx'
+import { KIND, KINDS } from './monthText.js'
 
 setUpMonthTests()
+
+describe('which status words are bold', () => {
+  test('one flag says so: only Needs revision is critical (it waits on the person)', () => {
+    expect(KINDS.filter((kind) => KIND[kind].critical)).toEqual(['rejected'])
+  })
+
+  test("a day box bolds its Needs revision chip word, and none of the others", async () => {
+    server.use(calendar({ entries: mixedDay.entries, drafts: [{ milestone_id: 'm1', work_date: '2026-10-13', hours: 1.5 }] }))
+    render()
+    const box = await dayBox('Wed 14 Oct, today, 8 hours, Schema Mapping 6 hours approved, Build 2 hours pending, Cutover 3 hours needs revision')
+    expect(bold(box)).toEqual(['Needs revision'])
+    expect(bold(screen.getByRole('button', { name: 'Tue 13 Oct, 0 hours, Schema Mapping 1.5 hours not submitted' }))).toEqual([])
+  })
+})
 
 describe('Month view grid', () => {
   test('no milestone bars or "more milestones" buttons are drawn', async () => {

@@ -43,11 +43,20 @@ export function writeUnsaved(userId, week, { drafts = {}, notes = {} } = {}) {
   } catch { /* full or blocked: the typing stays in memory */ }
 }
 
-/** Removes every key under UNSAVED_PREFIX in this tab (a sign-out), and nothing else. */
-export function clearAllUnsaved() {
+/** Removes the keys under UNSAVED_PREFIX in this tab, except `keepUserId`'s own (none kept without one), and nothing else. */
+function clearUnsaved(keepUserId) {
   try {
     const store = window.sessionStorage
-    const keys = Array.from({ length: store.length }, (_, i) => store.key(i)).filter((k) => k?.startsWith(UNSAVED_PREFIX))
+    const own = keepUserId == null ? null : `${UNSAVED_PREFIX}${keepUserId}.`
+    const keys = Array.from({ length: store.length }, (_, i) => store.key(i))
+      .filter((k) => k?.startsWith(UNSAVED_PREFIX) && !(own && k.startsWith(own)))
     keys.forEach((k) => store.removeItem(k))
   } catch { /* blocked: what is stored can't be reached */ }
 }
+
+/** Removes every key under UNSAVED_PREFIX in this tab (a sign-out), and nothing else. */
+export const clearAllUnsaved = () => clearUnsaved(null)
+
+/** A sign-in: removes everyone else's typing (a timed-out person's hours must not stay readable after someone else signs
+ * in on the tab) and keeps the signed-in person's own, for the restore. */
+export const clearOthersUnsaved = (userId) => clearUnsaved(userId)

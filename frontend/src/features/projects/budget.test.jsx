@@ -2,6 +2,7 @@ import { screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { bold } from '../../test/bold.js'
 import { setViewport } from '../../test/setup.js'
 import ProjectDetailPage from './ProjectDetailPage.jsx'
 
@@ -203,8 +204,6 @@ describe('Budget tab', () => {
   })
 })
 
-// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
-const bold = (el, options) => within(el).queryAllByRole('strong', options).map((s) => s.textContent)
 
 describe('Budget tab: the critical details are bold', () => {
   test('the hours awaiting approval, and a forecast over budget in the strip and under the bullet', async () => {
