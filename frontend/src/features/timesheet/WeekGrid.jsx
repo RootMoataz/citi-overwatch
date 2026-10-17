@@ -8,7 +8,7 @@ import { alpha } from '@mui/material/styles'
 import { useState } from 'react'
 import ScrollHint from '../../components/ScrollHint.jsx'
 import { thinScrollbar } from '../../components/thinScrollbar.js'
-import TimerButton from '../timer/TimerButton.jsx'
+import LogTimeActions from '../timer/LogTimeActions.jsx'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import { StatusDot, StatusLine } from './EntryStatus.jsx'
 import HoursField from './HoursField.jsx'
@@ -184,7 +184,7 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
                     <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{closed}</Typography>
                   </Tooltip>
                 ) : null}
-                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><TimerButton milestone={r.milestone} /></Box> : null}
+                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><LogTimeActions milestone={r.milestone} project={group.project} /></Box> : null}
               </Box>
             </TableCell>
             {days.map((d) => {

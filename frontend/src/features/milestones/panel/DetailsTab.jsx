@@ -8,7 +8,7 @@ import EstimateLine from '../../../components/EstimateLine.jsx'
 import PriorityChip from '../../../components/PriorityChip.jsx'
 import StatusChip from '../../../components/StatusChip.jsx'
 import { statusActions } from '../../../lib/milestoneActions.js'
-import TimerButton from '../../timer/TimerButton.jsx'
+import LogTimeActions from '../../timer/LogTimeActions.jsx'
 import { useLoggable } from '../../timer/useLoggable.js'
 import KickbackDialog from '../KickbackDialog.jsx'
 import KickbackPanel from '../KickbackPanel.jsx'
@@ -77,7 +77,7 @@ export default function DetailsTab({ milestone: m, items, project, manage, onEdi
         {m.can_kick_back ? (
           <Button size="small" color="error" variant="outlined" startIcon={<PanTool />} onClick={() => setKicking(true)}>Kick back</Button>
         ) : null}
-        {loggable.has(String(m.id)) ? <TimerButton milestone={m} /> : null}
+        {loggable.has(String(m.id)) ? <LogTimeActions milestone={m} project={project} /> : null}
       </Stack>
       <MilestoneDetails milestone={m} />
       <Box>

@@ -12,7 +12,7 @@ import StatusChip from '../../components/StatusChip.jsx'
 import { DIFFICULTY, PRIORITY } from '../../lib/labels.js'
 import Section from '../dashboard/Section.jsx'
 import { milestoneHref, stateKey } from '../timesheet/monthText.js'
-import TimerButton from '../timer/TimerButton.jsx'
+import LogTimeActions from '../timer/LogTimeActions.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
 import { ChevronLink, DateLine, NewChip, ProjectLink, UpNextWords } from './MilestoneGroups.jsx'
 import { dueLine, focusOverdue, focusSummary, nowAndNext } from './myWork.js'
@@ -73,7 +73,7 @@ function NowCard({ m, today, loggable }) {
             Discuss
           </Button>
         ) : null}
-        {loggable.has(String(m.id)) ? <TimerButton milestone={m} size="medium" touch /> : null}
+        {loggable.has(String(m.id)) ? <LogTimeActions milestone={m} project={m.project} size="medium" touch /> : null}
       </Stack>
     </Box>
   )

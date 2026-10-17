@@ -12,7 +12,7 @@ import { formatDate, plural } from '../../lib/format.js'
 import Critical, { CriticalIn } from '../../components/Critical.jsx'
 import Section from '../dashboard/Section.jsx'
 import { milestoneHref, stateKey } from '../timesheet/monthText.js'
-import TimerButton from '../timer/TimerButton.jsx'
+import LogTimeActions from '../timer/LogTimeActions.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
 import { comingLabel, dueLine, isWaiting, skillsSentence, upNextLabel } from './myWork.js'
 
@@ -120,7 +120,7 @@ export default function MilestoneGroups({ groups, comingUp, today, sections }) {
                 <PriorityChip priority={m.priority} hideDefault />
                 <DifficultyChip difficulty={m.difficulty} />
                 {m.role === 'supporting' ? <SupportingChip /> : null}
-                {loggable.has(String(m.id)) ? <TimerButton milestone={m} touch /> : null}
+                {loggable.has(String(m.id)) ? <LogTimeActions milestone={m} project={m.project} touch /> : null}
               </>
             )} />
           ))}
@@ -135,7 +135,7 @@ export default function MilestoneGroups({ groups, comingUp, today, sections }) {
                 <DateLine {...dueLine(m, today)} />
                 <StatusChip icon status={stateKey(m)} />
                 <Words muted><UpNextWords m={m} today={today} /></Words>
-                {loggable.has(String(m.id)) ? <TimerButton milestone={m} touch /> : null}
+                {loggable.has(String(m.id)) ? <LogTimeActions milestone={m} project={m.project} touch /> : null}
               </>
             )} />
           ))}

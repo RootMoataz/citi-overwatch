@@ -8,7 +8,10 @@ import { useSession } from '../../auth/sessionContext.js'
 import { DEMO_DISABLED, demoBlocks } from '../../lib/permissions.js'
 import StopTimerDialog from './StopTimerDialog.jsx'
 import { formatElapsed } from './timerClock.js'
+import { useManualToday } from './useLoggable.js'
 import { useTimer } from './useTimer.js'
+
+const MANUAL_TODAY = "You logged today's hours here manually. Edit that request instead."
 
 /** Start a timer on this milestone ("Start timer"), or stop the one running on it (with its live clock).
  * Completed milestones get no Start. While a timer runs on another milestone this one can't start: one timer at a time.
@@ -18,6 +21,7 @@ export default function TimerButton({ milestone, size = 'small', touch = false }
   const { enabled, timer, elapsed } = useTimer()
   const start = useStartTimer()
   const toast = useToast()
+  const manualToday = useManualToday()
   const [stopping, setStopping] = useState(false)
   if (!enabled) return null
   const target = { minHeight: touch ? 44 : { xs: 44, md: 'auto' } }
@@ -37,7 +41,8 @@ export default function TimerButton({ milestone, size = 'small', touch = false }
   if (milestone.status === 'completed') return null // finished work: no new clock (the server refuses it too)
   const blocked = demoBlocks(user, 'timer.use')
   const busy = Boolean(timer)
-  const why = blocked ? DEMO_DISABLED : busy ? `Stop your timer on ${timer.milestone.name} first` : `Start a timer on ${milestone.name}`
+  const logged = manualToday.has(String(milestone.id))
+  const why = blocked ? DEMO_DISABLED : logged ? MANUAL_TODAY : busy ? `Stop your timer on ${timer.milestone.name} first` : `Start a timer on ${milestone.name}`
   const go = async () => {
     try { await start.mutateAsync(milestone.id) } catch (err) { toast.error(err.message) }
   }
@@ -45,7 +50,7 @@ export default function TimerButton({ milestone, size = 'small', touch = false }
     <Tooltip title={why}>
       <Box component="span" sx={{ display: 'inline-flex' }}>
         <Button size={size} variant="outlined" startIcon={<PlayArrow />} onClick={go}
-          disabled={blocked || busy || start.isPending} aria-label={`Start timer on ${milestone.name}`}
+          disabled={blocked || busy || logged || start.isPending} aria-label={`Start timer on ${milestone.name}`}
           sx={{ whiteSpace: 'nowrap', ...target }}>
           Start timer
         </Button>

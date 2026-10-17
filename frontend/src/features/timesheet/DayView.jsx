@@ -1,7 +1,9 @@
 import { Box, Button, Paper, Stack, TextField, Typography } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useId, useState } from 'react'
-import TimerButton from '../timer/TimerButton.jsx'
+import LogTimeActions from '../timer/LogTimeActions.jsx'
+import ManualHoursButton from '../timer/ManualHoursButton.jsx'
+import { inWindow } from '../timer/manualHours.js'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
 import HoursField from './HoursField.jsx'
 import LockedCell from './LockedCell.jsx'
@@ -16,7 +18,7 @@ const COMPLETED = 'Milestone completed — hours logged after it was completed a
 
 /** One milestone on the open day: hours, a work note that is always there, and the saved entry's status with Details.
  * closed: why nothing can be changed (project closed or on hold), or null. A completed milestone stays editable. */
-function DayRow({ state, row, day, closed, showProject, showTimer, onRequest, onOpenEntry }) {
+function DayRow({ state, row, day, closed, showProject, showTimer, showManual, onRequest, onOpenEntry }) {
   const { valueOf, noteOf, locks, entries, overDays, attention, isDraft, setHours, setNote } = state
   const k = key(row.milestone.id, day)
   const value = valueOf(k)
@@ -44,7 +46,10 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest, on
         </Typography>
         {showProject ? <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{row.project.name}</Typography> : null}
         {closed || completed ? <Typography variant="caption" sx={{ display: 'block' }}>{closed ?? COMPLETED}</Typography> : null}
-        {showTimer ? <Box sx={{ mt: 0.75 }}><TimerButton milestone={row.milestone} /></Box> : null}
+        {showTimer ? <Box sx={{ mt: 0.75 }}><LogTimeActions milestone={row.milestone} project={row.project} /></Box> : null}
+        {showManual && !locks[k] && !entries[k] && num(value) <= 0 ? (
+          <Box sx={{ mt: 0.75 }}><ManualHoursButton milestone={row.milestone} project={row.project} day={day} /></Box>
+        ) : null}
       </Box>
       <Box>
         {locks[k] ? (
@@ -96,7 +101,8 @@ export default function DayView({ state, day, thisWeek, onRequest, onOpenEntry }
       {rows.map((r) => {
         const closed = closedLabel(r)
         return <DayRow key={r.milestone.id} state={state} row={r} day={day} closed={closed} showProject={showProject}
-          showTimer={thisWeek && day === nyTodayIso() && !closed && r.milestone.status !== 'completed'} onRequest={onRequest}
+          showTimer={thisWeek && day === nyTodayIso() && !closed && r.milestone.status !== 'completed'}
+          showManual={day < nyTodayIso() && inWindow(day, nyTodayIso()) && !closed && r.milestone.status !== 'completed'} onRequest={onRequest}
           onOpenEntry={onOpenEntry} />
       })}
     </Box>
