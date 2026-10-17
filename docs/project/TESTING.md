@@ -143,6 +143,15 @@ Proof: the three files ran 10 times in a row next to a full suite (107/107 each 
 
 A fourth, `timesheet.test.jsx` ("notification bell shows unread count and marks read on click"), waited until the stubbed server saw the read and then read the URL at once; the bell navigates only after the read's reply comes back, so under load the URL could still be the old one. It now waits for the landing. With the reply held 50 ms after the read (a throwaway copy), the old form failed every time and the new one passed. Proof under load (the file next to `milestones.test.jsx`, 10 runs each): before the fix 10 of 10 passed (the race is rare here), after it 10 of 10.
 
+### Manual hours: the feature's own tests and a walkthrough (17 October 2026)
+
+Per the owner's rule that day, the manual-hours feature was tested by itself; no whole-suite run was made, so the whole-suite totals above are unchanged. The manual-hours feature's tests, from the final runs at its last commit:
+- frontend (Vitest, the seven manual-hours files plus `weekGridLayout.test.jsx` and `noHexColours.test.js`, `--testTimeout=20000`): 9 files, 188 tests, passed twice in a row; `npm run lint` clean;
+- backend (`tests/integration/test_manual_hours.py`, `OVERWATCH_TEST_DB=overwatch_test_mh`): 56 passed;
+- end to end (`e2e/manual-hours.spec.js`, alone, ports 3000 and 3001 free): 4 passed (the two journeys on desktop Chrome and the iPhone 13 profile).
+
+**Manual hours walkthrough.** Hands-on, headless Chrome on a local stack (a fresh `--reset --seed` API on 3001 and `npm run dev` on 3000), as ben.okafor, ana.ruiz, manager.demo, riley.chen (named Apollo's delegate through the project's edit dialog) and the public demo admin. Each of the 16 checks (E1-E7, M1-M5, D1, P1-P3) ran at 1440x900 and 375x812, in light and dark, each on a fresh seed, recording console errors, page errors, responses of 400 or more (only the stale `409` and the demo `403` expected) and, at 375 px, sideways page scroll: 16 of 16 PASS in all four combinations. The screenshots and the script are kept outside the repo. The walkthrough found one bug, fixed: opened from its button in `npm run dev` (StrictMode), the pop-up lost focus from Hours and showed the Hours error unasked; focus now starts on Hours once the dialog's focus trap has settled (`manualHoursDialog.test.jsx`, under StrictMode).
+
 ### The at-risk clock in the backend tests
 
 The at-risk check counts from the New York date (`risk_today()` in `projects/service.py`). Most integration tests build their dates from the UTC date, so `conftest.py` pins that clock (`risk_clock_midday`, autouse, like the reminder clock) to 16:00 UTC of today's UTC date, which is midday in New York on the same date; the tests then agree with the server at any hour of the run. The two New York evening tests in `test_projects.py` move it themselves: 02:00 UTC (22:00 the evening before in New York) is not yet *Past due* or overdue, 05:00 UTC is.

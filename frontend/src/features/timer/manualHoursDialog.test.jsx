@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { useState } from 'react'
+import { StrictMode, useState } from 'react'
 import { useManualHours } from '../../api/queries.js'
 import { setPrefersDark, setViewport } from '../../test/setup.js'
 import { API, HttpResponse, http, server } from '../../test/server.js'
@@ -65,11 +65,33 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('the frame', () => {
+  // Hands-on walkthrough finding: opened from its button under StrictMode (as in `npm run dev`), the focus trap's second
+  // effect run gave focus back to the button and then to the dialog box, so focus did not start on Hours.
+  test('focus starts on Hours when the pop-up opens from its button under StrictMode', async () => {
+    function Opener() {
+      const [shown, setShown] = useState(false)
+      return (
+        <>
+          <button onClick={() => setShown(true)}>Open it</button>
+          {shown ? <ManualHoursDialog milestone={milestone} project={project} onClose={() => setShown(false)} /> : null}
+        </>
+      )
+    }
+    const user = userEvent.setup()
+    renderWithProviders(<StrictMode><Opener /></StrictMode>)
+    await user.click(screen.getByRole('button', { name: 'Open it' }))
+    await screen.findByRole('dialog', { name: 'Log hours manually' })
+    await waitFor(() => expect(hoursBox()).toHaveFocus())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(hoursBox()).toHaveFocus()
+    expect(screen.queryByText('Between 0.25 and 24 hours')).not.toBeInTheDocument()
+  })
+
   test('title, subtitle, focus, the reason group and a disabled Send', async () => {
     open()
     const d = await screen.findByRole('dialog', { name: 'Log hours manually' })
     expect(within(d).getByText('Schema Mapping · Apollo Data Migration')).toBeInTheDocument()
-    expect(hoursBox()).toHaveFocus()
+    await waitFor(() => expect(hoursBox()).toHaveFocus())
     const group = within(d).getByRole('group', { name: 'Why not the timer?' })
     expect(within(group).getAllByRole('radio').map((r) => r.closest('label').textContent)).toEqual(['Forgot to start the timer',
       'Worked away from the computer', 'Meeting or call', 'Timer problem', 'Other'])

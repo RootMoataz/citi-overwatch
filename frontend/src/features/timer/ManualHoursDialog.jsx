@@ -2,7 +2,7 @@ import {
   Alert, Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel,
   FormHelperText, FormLabel, MenuItem, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material'
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useEditManualHours, useLogManualHours, useWeek } from '../../api/queries.js'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDayShort, formatHours, mondayOfIso, nyTodayIso } from '../../lib/format.js'
@@ -45,6 +45,19 @@ export default function ManualHoursDialog({ milestone, project, day: dayProp, en
   const [touched, setTouched] = useState({})
   const [failure, setFailure] = useState(null)
   const sending = useRef(false)
+  // Focus starts on Hours, once the dialog's focus trap has settled. Not `autoFocus`: under StrictMode (`npm run dev`) the
+  // trap's second run gives focus back to the button and on to the dialog box, and the Hours field would show its error
+  // from the blur it never asked for. Nothing is taken from a control the person already reached.
+  const hoursRef = useRef(null)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const now = document.activeElement
+      const inside = now?.closest('[role="dialog"]')?.contains(hoursRef.current)
+      if (inside && now.matches('input, textarea, button, [role="combobox"]')) return
+      hoursRef.current?.focus()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
   const pending = log.isPending || edit.isPending
   const hints = useHints(day, entry)
 
@@ -93,7 +106,7 @@ export default function ManualHoursDialog({ milestone, project, day: dayProp, en
               {options.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
             </TextField>
           )}
-          <TextField label="Hours" value={hours} autoFocus required disabled={pending}
+          <TextField label="Hours" value={hours} inputRef={hoursRef} required disabled={pending}
             onChange={(e) => setHours(e.target.value.replace(/[^\d.]/g, '').slice(0, 5))} onBlur={touch('hours')}
             error={Boolean(touched.hours && hoursError)} helperText={touched.hours && hoursError ? hoursError : ' '}
             slotProps={{ htmlInput: { inputMode: 'decimal' } }} />
