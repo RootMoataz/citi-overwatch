@@ -84,7 +84,7 @@ describe('Budget tab', () => {
 
   test('manager sees the pending banner linking to the timesheets', async () => {
     open()
-    expect(await screen.findByText('62h awaiting approval · Not yet included in spend.')).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('62h awaiting approval · Not yet included in spend.')
     const link = screen.getByRole('link', { name: 'Review pending hours →' })
     expect(link).toHaveAttribute('href', '/timesheets?project=p1')
     // The link sits on the message's line: the banner centres its parts and the action slot drops its top padding.
@@ -200,5 +200,21 @@ describe('Budget tab', () => {
     expect(subtitle).toBeInTheDocument()
     await screen.findByRole('table', { name: /cost by milestone/i })
     expect(screen.getByRole('tabpanel').textContent).not.toMatch(/NaN|Infinity/)
+  })
+})
+
+// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
+const bold = (el, options) => within(el).queryAllByRole('strong', options).map((s) => s.textContent)
+
+describe('Budget tab: the critical details are bold', () => {
+  test('the hours awaiting approval, and a forecast over budget in the strip and under the bullet', async () => {
+    open({ summary: { forecast: 261000 } })
+    expect(bold(await screen.findByRole('alert'))).toEqual(['62h awaiting approval'])
+    const strip = await kpis()
+    await within(strip).findByText('$261,000')
+    expect(bold(strip)).toEqual(['⚠ Over budget'])
+    // The bullet's detail line is drawn for the eye only (its words are in the row's name), so it is aria-hidden.
+    const card = screen.getByRole('region', { name: 'Spend and forecast' })
+    expect(bold(card, { hidden: true })).toEqual(['⚠ forecast over budget'])
   })
 })

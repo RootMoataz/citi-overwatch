@@ -20,6 +20,7 @@ import { useApprovals, useEditRequests, useLiveTimers, useMarkAllRead, useMissin
 import { ROUTE_ROLES } from '../../app/access.js'
 import { useColorMode } from '../../app/colorMode.js'
 import { useToast } from '../../app/toast.js'
+import { CriticalIn } from '../../components/Critical.jsx'
 import { can } from '../../lib/permissions.js'
 import usePaletteData from '../palette/usePaletteData.js'
 import { useTimer } from '../timer/useTimer.js'
@@ -92,7 +93,7 @@ function Tips({ tips, onDismiss, go }) {
           borderRadius: 2, bgcolor: alpha(theme.palette.warning.main, 0.1) })}>
           <Lightbulb fontSize="small" aria-hidden sx={{ color: 'warning.main', mt: 0.25 }} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2">{t.text}</Typography>
+            <Typography variant="body2"><CriticalIn text={t.text} part={t.strong} /></Typography>
             <Button size="small" sx={{ px: 0, minWidth: 0 }} onClick={() => go(t.action.to)}>{t.action.label}</Button>
           </Box>
           <IconButton size="small" aria-label="Dismiss tip" onClick={() => onDismiss(t.id)}><Close fontSize="small" /></IconButton>
@@ -125,11 +126,11 @@ function Summary({ user, view, unreadMessages, insightsLoading, go }) {
         <List dense disablePadding aria-label="What needs you">
           {sentences.map((s) => (s.to ? (
             <ListItemButton key={s.id} onClick={() => go(s.to)} sx={{ borderRadius: 1.5, px: 1 }}>
-              <ListItemText primary={s.text} />
+              <ListItemText primary={<CriticalIn text={s.text} part={s.strong} />} />
               <ChevronRight fontSize="small" aria-hidden sx={{ color: 'text.secondary' }} />
             </ListItemButton>
           ) : (
-            <ListItem key={s.id} sx={{ px: 1 }}><ListItemText primary={s.text} /></ListItem>
+            <ListItem key={s.id} sx={{ px: 1 }}><ListItemText primary={<CriticalIn text={s.text} part={s.strong} />} /></ListItem>
           )))}
         </List>
       ) : (

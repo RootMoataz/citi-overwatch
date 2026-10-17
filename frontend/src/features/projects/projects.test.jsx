@@ -290,6 +290,25 @@ describe('ProjectsPage', () => {
       expect(screen.getByText('81% of the budget used against 62% progress: 19 points ahead.')).toBeInTheDocument()
     })
 
+    test('the risk word, the overdue line and the at-risk count are bold; days left stays regular', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+      serve([
+        project({ id: 'p1', name: 'Late One', predicted_end_date: '2026-10-12', at_risk_reasons: ['PAST_DUE'] }),
+        project({ id: 'p2', name: 'Fine One', predicted_end_date: '2026-10-23' }),
+      ])
+      go(users.admin)
+      await screen.findByRole('link', { name: 'Late One' })
+      // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+      const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+      const [late, fine] = rowsOf()
+      expect(bold(late)).toEqual(['3 days overdue', 'Past due'])
+      expect(bold(fine)).toEqual([])
+      const strip = screen.getByRole('group', { name: 'Projects summary' })
+      await waitFor(() => expect(strip).toHaveTextContent('2at risk'))
+      expect(bold(strip)).toEqual(['at risk'])
+    })
+
     test('rows: manager, status, and the progress and budget bars', async () => {
       serve([project({ progress_pct: 33.3, budget_pct: 95 })])
       go(users.admin)

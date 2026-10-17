@@ -185,8 +185,11 @@ describe('the Puppy panel', () => {
     const panel = await screen.findByRole('dialog', { name: /puppy/i })
     expect(within(panel).getByText('Puppy · your rule-based assistant')).toBeInTheDocument()
     expect(within(panel).getByText('Puppy follows rules from your data — no AI service involved.')).toBeInTheDocument()
-    expect(await within(panel).findByText('2 timesheets are waiting for your approval')).toBeInTheDocument()
-    expect(within(panel).getByText(/Eli Employee went over 40 hours/)).toBeInTheDocument()
+    // Each sentence is a button named by its words; the critical words inside it are bold (a <strong>, the `strong` role).
+    const approvals = await within(panel).findByRole('button', { name: '2 timesheets are waiting for your approval' })
+    expect(within(approvals).getByRole('strong')).toHaveTextContent(/^waiting for your approval$/)
+    const overtime = within(panel).getByRole('button', { name: /Eli Employee went over 40 hours/ })
+    expect(within(overtime).getByRole('strong')).toHaveTextContent(/^over 40 hours$/)
     expect(within(panel).getByText('Morgan sent API back to you')).toBeInTheDocument()
     expect(await within(panel).findByText('Insight 3')).toBeInTheDocument()
     expect(within(panel).queryByText('Insight 4')).not.toBeInTheDocument()

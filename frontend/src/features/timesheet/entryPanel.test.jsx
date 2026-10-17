@@ -219,7 +219,8 @@ describe('Entry details: timer locks, closed rows and the Day view', () => {
     server.use(sheet({ locks: [{ ...thuLock, request: { id: 'r1', requested_hours: 1.5, reason: 'Ran over lunch', status: 'pending' } }] }))
     renderSheet(`/timesheet?week=${WEEK}&day=${THU}`)
     const user = userEvent.setup()
-    const chip = await screen.findByText('Change requested: 1.5h')
+    // The chip's words are bold (a <strong> inside the chip's label); the label is what wraps.
+    const chip = (await screen.findByText('Change requested: 1.5h')).closest('.MuiChip-label')
     expect(chip).toHaveStyle({ whiteSpace: 'normal' })
     await user.click(screen.getByRole('button', { name: 'Details for Schema Mapping, Thu Oct 15' }))
     const region = await panel()

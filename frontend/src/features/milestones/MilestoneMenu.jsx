@@ -4,6 +4,7 @@ import { useId, useState } from 'react'
 import { useArchiveMilestone, useMilestoneStatus } from '../../api/queries.js'
 import { useToast } from '../../app/toast.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import Critical from '../../components/Critical.jsx'
 import { statusActions } from '../../lib/milestoneActions.js'
 import MilestoneDialog from './MilestoneDialog.jsx'
 import { predecessorNames } from './milestoneOrder.js'
@@ -60,7 +61,7 @@ export default function MilestoneMenu({ milestone: m, project, items, members, m
         {moves.map((a) => (
           <MenuItem key={a.target + a.label} disabled={waiting || status.isPending} onClick={() => move(a.target)}>
             {waiting && waitingOn.length
-              ? <ListItemText primary={a.label} secondary={`Waiting on: ${waitingOn.join(', ')}`} />
+              ? <ListItemText primary={a.label} secondary={<Critical>{`Waiting on: ${waitingOn.join(', ')}`}</Critical>} />
               : a.label}
           </MenuItem>
         ))}

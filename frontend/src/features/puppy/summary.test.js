@@ -221,3 +221,36 @@ describe('timer sentences', () => {
     expect(JSON.stringify(items)).not.toContain('secret')
   })
 })
+
+describe('the critical words of each sentence', () => {
+  const liveTimer = (name, level, kind = 'daily') => ({ id: name, person: { id: name, name }, milestone: { id: 'm1', name: 'Schema Mapping' },
+    level, limits: [{ kind, level }] })
+  // `strong` is the part of `text` the panel shows in bold: waiting on someone, a limit passed, lateness or a kickback.
+  const strongs = (items) => items.map((i) => [i.text, i.strong ?? null])
+
+  test('approvals, overtime, rejected hours, timer limits, change requests and kickbacks are marked; the rest are not', () => {
+    const manager = buildSummary({ user: users.manager, today: TODAY,
+      approvals: [pending('u-a', '2026-10-12')],
+      live: [liveTimer('Eli Employee', 'over'), liveTimer('Ada Lovelace', 'ok')],
+      changeRequests: [{ id: 'r1', user: { id: 'u-emp', name: 'Eli Employee' } }],
+      notifications: [note('o1', 'OVER_40H', { week_start: '2026-10-12', subject_user: { id: 'u-eli', name: 'Eli Employee' } }),
+        note('k1', 'KICKBACK_RAISED', { message: '' }), note('k2', 'KICKBACK_RAISED', { message: '' })] })
+    expect(strongs(manager)).toEqual([
+      ['1 change request on timer hours is waiting', 'is waiting'],
+      ['2 people are running timers now', null],
+      ["Eli's timer is over the daily limit", 'over the daily limit'],
+      ['1 timesheet is waiting for your approval', 'waiting for your approval'],
+      ['Eli Employee went over 40 hours this week', 'over 40 hours'],
+      ['2 milestones were kicked back to you for review', 'kicked back'],
+    ])
+    const employee = buildSummary({ user: users.employee, today: TODAY, notifications: [note('n2', 'ENTRY_REJECTED')],
+      timerWarnings: [{ kind: 'daily', message: "You've reached your 8h for today on this timer", milestone: { name: 'Schema Mapping' } }] })
+    expect(strongs(employee)).toEqual([
+      ["You've reached your 8h for today on this timer (timer on Schema Mapping)", "You've reached your 8h for today on this timer"],
+      ['1 of your time entries was rejected', 'rejected'],
+    ])
+    const several = buildSummary({ user: users.manager, today: TODAY,
+      live: [liveTimer('Eli Employee', 'warning', 'milestone'), liveTimer('Ada Lovelace', 'over')] })
+    expect(strongs(several)[1]).toEqual(['2 timers are at or over their limits', 'at or over their limits'])
+  })
+})

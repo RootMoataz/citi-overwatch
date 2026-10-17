@@ -90,6 +90,17 @@ describe('My history: an employee on their own page', () => {
     expect(within(all).getByText('Total hours approved').parentElement).toHaveTextContent('169.25hAll time')
   })
 
+  test('a week with overtime puts "Overtime this week" in bold; a week without stays regular', async () => {
+    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+    const { unmount } = ownPage()
+    expect(bold(await screen.findByRole('group', { name: 'Week of Oct 12, 2026' }))).toEqual([])
+    unmount()
+    const over = profile({ salary: 95000 })
+    renderProfile(users.employee, { ...over, this_week: { ...over.this_week, logged: 45, overtime: 5 } })
+    expect(bold(await screen.findByRole('group', { name: 'Week of Oct 12, 2026' }))).toEqual(['Overtime this week'])
+  })
+
   test('the tabs, and ?tab=projects', async () => {
     const { unmount } = ownPage()
     const milestones = await screen.findByRole('tab', { name: 'Milestones 7' })

@@ -606,3 +606,40 @@ describe('Week grid columns, status words and legend', () => {
     expect(screen.getByRole('switch', { name: 'Weekend' })).toBeInTheDocument()
   })
 })
+
+// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
+const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+
+describe('My timesheet: the critical details are bold', () => {
+  beforeEach(() => {
+    localStorage.setItem('overwatch.timesheet.view', 'week')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-15T16:00:00Z'))
+  })
+  afterEach(() => { vi.useRealTimers() })
+
+  test('a cell that needs revision and an overtime cell say so in bold; Approved and Pending stay regular', async () => {
+    server.use(weekHandler([
+      entry({ id: 'e1', status: 'approved', label: 'Approved' }),
+      entry({ id: 'e2', work_date: '2026-10-13', over_40: true, label: 'Pending (Overtime requested from Eli Employee)' }),
+      entry({ id: 'e3', work_date: '2026-10-14', status: 'rejected', label: 'Rejected', rejection_reason: 'Wrong milestone' }),
+      entry({ id: 'e4', work_date: '2026-10-15', label: 'Pending approval' }),
+    ]))
+    renderSheet()
+    const table = await screen.findByRole('table')
+    await within(table).findByRole('button', { name: /^Needs revision, details for/ })
+    expect(bold(table)).toEqual(['Overtime', 'Needs revision'])
+    const card = screen.getByRole('group', { name: 'Week totals' })
+    expect(bold(card)).toEqual(['Needs revision'])
+  })
+
+  test('past 40h the warning puts the hours over 40h in bold', async () => {
+    server.use(mockWeek())
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Build, Sat Oct 17'), '2')
+    await user.type(screen.getByLabelText('Build, Sun Oct 18'), '20')
+    const warning = screen.getAllByRole('alert').find((a) => /overtime request/.test(a.textContent))
+    expect(bold(warning)).toEqual(['1.75h over 40h'])
+  })
+})

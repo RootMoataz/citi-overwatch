@@ -79,6 +79,8 @@ const openPage = async () => {
   return screen.findByRole('region', { name: 'Your focus' })
 }
 const region = (name) => screen.getByRole('region', { name })
+// A line whose critical part is bold is split across elements: match the innermost element holding the whole line.
+const wholeText = (text) => (_, el) => el.textContent === text && [...el.children].every((c) => c.textContent !== text)
 const rowsOf = (section) => within(section).getAllByRole('listitem')
 const names = (rows) => rows.map((r) => within(r).getByRole('heading', { level: 3 }).textContent)
 const INTRO = 'When the milestone before one of these is completed, auto-routing picks someone on the team with the right '
@@ -88,11 +90,11 @@ describe('Your focus', () => {
   test('Now is the most urgent milestone in progress: due line, priority, difficulty, progress, state and View milestone', async () => {
     serve()
     const focus = await openPage()
-    expect(within(focus).getByText('1 overdue · 1 with your manager')).toBeInTheDocument()
+    expect(within(focus).getByText(wholeText('1 overdue · 1 with your manager'))).toBeInTheDocument()
     const now = within(focus).getByRole('group', { name: 'Now' })
     expect(within(now).getByRole('heading', { level: 3, name: 'Build' })).toBeInTheDocument()
     expect(within(now).getByRole('link', { name: 'Atlas Customer Portal' })).toHaveAttribute('href', '/projects/p3?tab=milestones')
-    expect(within(now).getByText('Due Oct 5, 2026 · 10 days overdue')).toBeInTheDocument()
+    expect(within(now).getByText(wholeText('Due Oct 5, 2026 · 10 days overdue'))).toBeInTheDocument()
     expect(within(now).getByText('Critical priority')).toBeInTheDocument()
     expect(within(now).getByText('Hard difficulty')).toBeInTheDocument()
     expect(within(now).getByText('40% done')).toBeInTheDocument()
@@ -233,7 +235,7 @@ describe('the groups', () => {
     await openPage()
     const rows = rowsOf(region(/^In progress/))
     expect(names(rows)).toEqual(['Build', 'Rework'])
-    expect(within(rows[0]).getByText('Due Oct 5, 2026 · 10 days overdue')).toBeInTheDocument()
+    expect(within(rows[0]).getByText(wholeText('Due Oct 5, 2026 · 10 days overdue'))).toBeInTheDocument()
     expect(within(rows[0]).getByText('40% done')).toBeInTheDocument()
     expect(within(rows[0]).getByText('In progress')).toBeInTheDocument()
     expect(within(rows[0]).getByLabelText('Priority: Critical')).toBeInTheDocument()
@@ -262,7 +264,7 @@ describe('the groups', () => {
     await openPage()
     const rows = rowsOf(region(/^Upcoming/))
     expect(names(rows)).toEqual(['Late start', 'Hypercare'])
-    expect(within(rows[0]).getByText('Due Oct 10, 2026 · 5 days overdue')).toBeInTheDocument()
+    expect(within(rows[0]).getByText(wholeText('Due Oct 10, 2026 · 5 days overdue'))).toBeInTheDocument()
     expect(within(rows[1]).getByText('Due Dec 27, 2026')).toBeInTheDocument()
   })
 
@@ -467,5 +469,35 @@ describe('privacy', () => {
     for (const path of paths.filter((p) => p.startsWith('/users/'))) expect(path.split('/')[2]).toBe('u-emp')
     expect(paths.filter((p) => p.startsWith('/approvals') || p.startsWith('/allocations'))).toEqual([])
     for (const u of seen.filter((x) => x.pathname.startsWith(`${API}/time-entries`))) expect(u.searchParams.has('user')).toBe(false)
+  })
+})
+
+// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
+const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+
+describe('the critical details are bold', () => {
+  test('lateness, the urgent priority and waiting: "10 days overdue", "Critical priority", "1 overdue", "Waiting on …"', async () => {
+    serve()
+    const focus = await openPage()
+    expect(bold(focus)).toEqual(['1 overdue', '10 days overdue', 'Critical priority', 'High priority'])
+    const inProgress = rowsOf(region(/^In progress/))
+    expect(bold(inProgress[0])).toEqual(['10 days overdue', 'Critical Priority'])
+    const upcoming = rowsOf(region(/^Upcoming/))
+    expect(bold(upcoming[2])).toEqual(['Waiting on dependencies', 'Waiting on Load testing'])
+    // The heads-up names an urgent prediction's priority in bold too.
+    expect(bold(within(focus).getByRole('button', { name: 'Heads-up: Data cutover (High priority) may come your way' })))
+      .toEqual(['High priority'])
+  })
+
+  test('normal details stay regular: the due date alone, normal states, Ready to start and Medium priority', async () => {
+    serve()
+    await openPage()
+    const upcoming = rowsOf(region(/^Upcoming/))
+    expect(bold(upcoming[0])).toEqual([])
+    const coming = rowsOf(region(/^Might come your way/))
+    expect(within(coming[1]).getByLabelText('Priority: Medium')).toBeInTheDocument()
+    expect(bold(coming[1])).toEqual([])
+    expect(bold(coming[0])).toEqual(['High Priority'])
+    expect(bold(region(/^Completed/))).toEqual([])
   })
 })

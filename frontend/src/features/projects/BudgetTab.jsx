@@ -2,6 +2,7 @@ import { Alert, Link, Paper, Stack, Typography } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
 import { useApprovals, useProjectSummary } from '../../api/queries.js'
 import BulletChart from '../../components/BulletChart.jsx'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { PrintButton, PrintHeader } from '../../components/PrintButton.jsx'
 import { budgetRows, compactMoney, niceMax, ticksTo } from '../../lib/chartData.js'
@@ -24,7 +25,10 @@ function BudgetBullet({ name, budget, consumed, forecast }) {
   const top = Math.max(row.budget, row.consumed, row.forecast, 1)
   const step = moneyStep(top)
   const max = niceMax(top, step)
-  const note = row.tone === 'alert' ? ' · ⚠ over budget' : row.tone === 'warning' ? ' · ⚠ forecast over budget' : ''
+  const warning = row.tone === 'alert' ? '⚠ over budget' : row.tone === 'warning' ? '⚠ forecast over budget' : ''
+  const note = warning ? ` · ${warning}` : ''
+  const share = row.hasBudget ? ` (${formatPct(row.forecastPct)} of budget)` : ''
+  const forecastLine = `Forecast at completion ${formatMoney(row.forecast)}${share}`
   return (
     <BulletChart ariaLabel={`${name}: approved spend against budget`} max={max} ticks={ticksTo(max, step)} tickFormat={compactMoney}
       axisLabel="US dollars"
@@ -33,7 +37,8 @@ function BudgetBullet({ name, budget, consumed, forecast }) {
       rows={[{
         id: row.id, label: 'Approved spend', tone: row.tone, track: row.budget, value: row.consumed, marker: row.forecast,
         valueText: `${formatMoney(row.consumed)} of ${formatMoney(row.budget)}`,
-        detail: `Forecast at completion ${formatMoney(row.forecast)}${row.hasBudget ? ` (${formatPct(row.forecastPct)} of budget)` : ''}${note}`,
+        // The warning is bold in the drawn line; the text alternative (summary) stays plain words.
+        detail: warning ? <>{`${forecastLine} · `}<Critical>{warning}</Critical></> : forecastLine,
         summary: `Budget ${formatMoney(row.budget)}\nApproved spend ${formatMoney(row.consumed)} (${formatPct(row.usedPct)})\nForecast at completion ${formatMoney(row.forecast)}${note}`,
       }]} />
   )
@@ -58,7 +63,7 @@ export default function BudgetTab({ project, view }) {
       tone: remaining < 0 ? 'error' : undefined },
     { key: 'forecast', label: 'Forecast at completion', value: formatMoney(forecast),
       tone: row.hasBudget && forecast > budget ? 'warning' : undefined,
-      hint: row.hasBudget && forecast > budget ? '⚠ Over budget' : undefined },
+      hint: row.hasBudget && forecast > budget ? <Critical>⚠ Over budget</Critical> : undefined },
   ]
   return (
     <Stack sx={{ gap: 3 }}>
@@ -69,7 +74,7 @@ export default function BudgetTab({ project, view }) {
         // The link sits on the message's line (Alert puts its action higher than the text by default).
         <Alert severity="info" variant="outlined" data-print="hide" {...BANNER_PROPS}
           action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review pending hours →</Link>}>
-          {`${formatHours(pendingHours)} awaiting approval · Not yet included in spend.`}
+          <Critical>{`${formatHours(pendingHours)} awaiting approval`}</Critical>{' · Not yet included in spend.'}
         </Alert>
       ) : null}
       {summary.error ? null : (

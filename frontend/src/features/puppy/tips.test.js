@@ -25,7 +25,7 @@ describe('proactive tips', () => {
     const approvals = [old('a', '2026-10-05'), old('b', '2026-10-12'), old('c', '2026-10-14'), old('d', '2026-10-11')]
     expect(buildTips({ user: users.manager, today: TODAY, approvals })).toEqual([
       { id: 'approvals-old:2026-10-15', text: '3 entries logged 3+ days ago are still waiting — open Timesheets?',
-        action: { label: 'Open Timesheets', to: '/timesheets' } },
+        strong: 'still waiting', action: { label: 'Open Timesheets', to: '/timesheets' } },
     ])
     expect(buildTips({ user: users.employee, today: TODAY, approvals })).toEqual([])
     expect(buildTips({ user: users.executive, today: TODAY, approvals })).toEqual([])
@@ -36,6 +36,17 @@ describe('proactive tips', () => {
       critical('4', '2026-10-19'), critical('5', '2026-10-17', { status: 'completed' }), critical('6', '2026-10-16', { priority: 'high' })]
     expect(buildTips({ user: users.manager, today: TODAY, milestones }).map((t) => t.text)).toEqual([
       'M2 is critical and due today', 'M3 is critical and due tomorrow', 'M1 is critical and due in 3 days'])
+  })
+
+  test('the waiting entries and a critical milestone (with "due today") are marked to show in bold', () => {
+    const tips = buildTips({ user: users.manager, today: TODAY, approvals: [old('a', '2026-10-05')],
+      milestones: [critical('2', '2026-10-15'), critical('3', '2026-10-16')] })
+    // `strong`: the part of `text` the panel shows in bold.
+    expect(tips.map((t) => [t.text, t.strong ?? null])).toEqual([
+      ['1 entry logged 3+ days ago is still waiting — open Timesheets?', 'still waiting'],
+      ['M2 is critical and due today', 'critical and due today'],
+      ['M3 is critical and due tomorrow', 'critical'],
+    ])
   })
 
   test('never more than 3, and dismissed tips stay gone', () => {

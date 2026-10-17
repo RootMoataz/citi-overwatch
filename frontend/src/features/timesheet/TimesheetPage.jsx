@@ -21,6 +21,7 @@ import { useEntryPanelUrl } from './useEntryPanelUrl.js'
 import { DAY_CAP, MIN_HOURS, key, useTimesheetWeek } from './useTimesheetWeek.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import Critical from '../../components/Critical.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import FootNote from '../../components/FootNote.jsx'
@@ -198,19 +199,22 @@ export default function TimesheetPage() {
       ) : null}
       {!loading && figures.counted > CAP ? (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          This week is {formatHours(figures.counted)} — {formatHours(figures.counted - CAP)} over {CAP}h. Hours above {CAP} are sent to your manager as an overtime request.
+          This week is {formatHours(figures.counted)} — <Critical>{`${formatHours(figures.counted - CAP)} over ${CAP}h`}</Critical>.
+          Hours above {CAP} are sent to your manager as an overtime request.
         </Alert>
       ) : null}
       {overDays.map((d) => (
         <Alert key={d} severity="error" sx={{ mb: 1 }}>
-          <Box component="span" sx={{ fontWeight: 700 }}>More than {DAY_CAP}h on {formatDayLabel(d)}</Box>
+          <Critical>More than {DAY_CAP}h on {formatDayLabel(d)}</Critical>
           <Box component="span" sx={{ display: 'block' }}>
             That day adds up to {formatHours(dayTotal(d))} across your milestones. Lower it to save.
             {inDayView && d !== day ? <>{' '}<DayLink week={week} date={d}>Go to {formatDayLabel(d)}</DayLink></> : null}
           </Box>
         </Alert>
       ))}
-      {tooMany && !overDays.length ? <Alert severity="error" sx={{ mb: 2 }}>A cell can't hold more than {DAY_CAP} hours.</Alert> : null}
+      {tooMany && !overDays.length ? (
+        <Alert severity="error" sx={{ mb: 2 }}><Critical>A cell can&apos;t hold more than {DAY_CAP} hours.</Critical></Alert>
+      ) : null}
       {tooFew ? (
         <Alert severity="error" sx={{ mb: 2 }}>
           Log at least {MIN_HOURS} hours, or leave the cell empty.

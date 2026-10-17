@@ -1,6 +1,7 @@
 import { Box, Button, Chip, FormControlLabel, Paper, Skeleton, Stack, Switch, Typography } from '@mui/material'
 import { useId, useState } from 'react'
 import { useApprovals, useApproveWeek } from '../../api/queries.js'
+import Critical from '../../components/Critical.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import ExportCsvButton from '../../components/ExportCsvButton.jsx'
@@ -48,7 +49,8 @@ function PersonWeek({ group }) {
             <PersonLink person={group.user} context={{ managed: true }} />, week of {formatDate(group.week)}
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {count} {count === 1 ? 'entry' : 'entries'} · {formatHours(waiting)} waiting · {formatHours(group.items[0].week_logged_total)} logged that week
+            <Critical>{`${count} ${count === 1 ? 'entry' : 'entries'} · ${formatHours(waiting)} waiting`}</Critical>
+            {` · ${formatHours(group.items[0].week_logged_total)} logged that week`}
             {share ? ` · ${share}` : ''}
           </Typography>
         </Box>

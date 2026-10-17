@@ -6,8 +6,11 @@ import { Chip } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { chartPalette } from '../app/chartColors.js'
 import { PRIORITY } from '../lib/labels.js'
+import Critical from './Critical.jsx'
 
 const ICONS = { critical: Flag, high: KeyboardArrowUp, medium: Remove, low: KeyboardArrowDown }
+/** The urgent priorities: their label is bold (Critical and High; Medium and Low stay regular). */
+const URGENT = new Set(['critical', 'high'])
 
 /** Icon, border and text for each priority, from the semantic chart tokens. Critical is the alert colour (its text
  * passes 4.5:1 on both card surfaces); High keeps its label in the body colour, since amber text is too faint on
@@ -28,8 +31,10 @@ function tone(priority, t) {
 export default function PriorityChip({ priority, sx, hideDefault = false }) {
   if (!PRIORITY[priority] || (hideDefault && priority === 'medium')) return null
   const Icon = ICONS[priority]
+  const text = `${PRIORITY[priority]} Priority`
   return (
-    <Chip size="small" variant="outlined" icon={<Icon aria-hidden />} label={`${PRIORITY[priority]} Priority`}
+    <Chip size="small" variant="outlined" icon={<Icon aria-hidden />}
+      label={URGENT.has(priority) ? <Critical>{text}</Critical> : text}
       aria-label={`Priority: ${PRIORITY[priority]}`}
       sx={[(t) => {
         const [chip, icon] = tone(priority, t)

@@ -2,7 +2,9 @@
 // each with the page to open. Fixed rules, no AI. Pure, so every sentence is tested.
 //
 // buildSummary({ user, today, notifications, unreadMessages, approvals, missing, unsubmitted, timerWarnings, live,
-//               changeRequests }) → [{ id, text, to }]
+//               changeRequests }) → [{ id, text, to, strong? }]
+//   strong          the part of `text` the panel shows in bold, when it has one: waiting on someone ("waiting for your
+//                   approval"), a limit passed ("over 40 hours"), hours sent back ("rejected") or a kickback
 //   notifications   the unread list from GET /notifications
 //   unreadMessages  the unread message count from GET /messages/unread-count
 //   approvals       pending hours from GET /approvals (approvers only), cut down by privacy.pickApproval
@@ -50,7 +52,7 @@ function namesPhrase(names) {
 function approvalsSentence(approvals) {
   const timesheets = new Set(approvals.map((a) => `${a.user?.id}:${mondayOfIso(a.entry?.work_date ?? '')}`)).size
   if (!timesheets) return null
-  return { id: 'approvals', to: '/timesheets',
+  return { id: 'approvals', to: '/timesheets', strong: 'waiting for your approval',
     text: `${timesheets} ${plural(timesheets, 'timesheet is', 'timesheets are')} waiting for your approval` }
 }
 
@@ -73,7 +75,7 @@ function emptyTimesheet(items, today) {
 
 function rejected(items) {
   const week = latest(items)
-  return { id: 'ENTRY_REJECTED', to: week ? `/timesheet?week=${week}` : '/timesheet',
+  return { id: 'ENTRY_REJECTED', to: week ? `/timesheet?week=${week}` : '/timesheet', strong: 'rejected',
     text: `${items.length} of your time ${plural(items.length, 'entries was', 'entries were')} rejected` }
 }
 
@@ -92,10 +94,10 @@ function overtime(items, today) {
   if (people.size === 1) {
     const [n] = people.values()
     const when = n.week_start ? weekPhrase(n.week_start, today) : 'this week'
-    return { id: 'OVER_40H', to: `/timesheets?user=${n.subject_user?.id}`,
+    return { id: 'OVER_40H', to: `/timesheets?user=${n.subject_user?.id}`, strong: 'over 40 hours',
       text: `${n.subject_user?.name ?? 'Someone'} went over 40 hours ${when.startsWith('the week') ? `in ${when}` : when}` }
   }
-  return { id: 'OVER_40H', to: '/timesheets', text: `${people.size} people went over 40 hours` }
+  return { id: 'OVER_40H', to: '/timesheets', strong: 'over 40 hours', text: `${people.size} people went over 40 hours` }
 }
 
 function missingSentence(missing, today) {
@@ -119,7 +121,8 @@ function unsubmittedSentence(cells) {
 function timerWarningSentence(warnings) {
   if (!warnings.length) return null
   const w = warnings[0]
-  return { id: 'timer-limit', to: '/timesheet', text: `${w.message} (timer on ${w.milestone?.name ?? 'a milestone'})` }
+  return { id: 'timer-limit', to: '/timesheet', strong: w.message,
+    text: `${w.message} (timer on ${w.milestone?.name ?? 'a milestone'})` }
 }
 
 const LIMIT_PHRASE = { daily: 'the daily limit', milestone: 'its estimate', weekly: 'the weekly limit' }
@@ -133,10 +136,11 @@ function liveSentences(live) {
   if (past.length === 1) {
     const t = past[0]
     const kind = (t.limits ?? []).find((l) => l.level === t.level)?.kind ?? 'daily'
-    out.push({ id: 'timers-over', to: '/timesheets',
-      text: `${firstName(t.person?.name)}'s timer is ${t.level === 'over' ? 'over' : 'at'} ${LIMIT_PHRASE[kind]}` })
+    const limit = `${t.level === 'over' ? 'over' : 'at'} ${LIMIT_PHRASE[kind]}`
+    out.push({ id: 'timers-over', to: '/timesheets', strong: limit, text: `${firstName(t.person?.name)}'s timer is ${limit}` })
   } else if (past.length > 1) {
-    out.push({ id: 'timers-over', to: '/timesheets', text: `${past.length} timers are at or over their limits` })
+    out.push({ id: 'timers-over', to: '/timesheets', strong: 'at or over their limits',
+      text: `${past.length} timers are at or over their limits` })
   }
   return out
 }
@@ -144,8 +148,9 @@ function liveSentences(live) {
 function changeRequestsSentence(requests) {
   const n = requests.length
   if (!n) return null
-  return { id: 'change-requests', to: '/timesheets#change-requests',
-    text: `${n} change ${plural(n, 'request', 'requests')} on timer hours ${plural(n, 'is', 'are')} waiting` }
+  const waiting = `${plural(n, 'is', 'are')} waiting`
+  return { id: 'change-requests', to: '/timesheets#change-requests', strong: waiting,
+    text: `${n} change ${plural(n, 'request', 'requests')} on timer hours ${waiting}` }
 }
 
 /** "Morgan stopped your timer on Schema Mapping" (never the message itself: that's in Messages). */
@@ -209,17 +214,19 @@ const milestoneTo = (n) => {
   return milestone?.id ? `/projects/${project.id}?tab=milestones&milestone=${milestone.id}` : `/projects/${project.id}?tab=milestones`
 }
 
-/** Milestone workflow and planning alerts: the server's sentence for one, a counted sentence for several. */
-const workflow = (id, many) => (items) => ({
-  id, to: items.length === 1 ? milestoneTo(items[0]) : '/',
-  text: items.length === 1 && items[0].message ? items[0].message : many(items.length),
-})
+/** Milestone workflow and planning alerts: the server's sentence for one, a counted sentence for several. `strong`: the
+ * counted sentence's bold words (the server's own sentence is shown as it comes). */
+const workflow = (id, many, strong) => (items) => {
+  const own = items.length === 1 && items[0].message
+  return { id, to: items.length === 1 ? milestoneTo(items[0]) : '/', text: own ? items[0].message : many(items.length),
+    ...(strong && !own ? { strong } : {}) }
+}
 
 const WORKFLOW = [
   ['AUTO_ASSIGNED', (n) => `You were auto-assigned to ${n} milestones`],
   ['AUTO_ROUTED', (n) => `${n} milestones were auto-assigned on your projects`],
   ['NO_QUALIFIED_PERSON', (n) => `${n} milestones are ready but nobody free has the skills`],
-  ['KICKBACK_RAISED', (n) => `${n} milestones were kicked back to you for review`],
+  ['KICKBACK_RAISED', (n) => `${n} milestones were kicked back to you for review`, 'kicked back'],
   ['KICKBACK_RESOLVED', (n) => `${n} of your kickbacks were resolved`],
   ['MILESTONE_UPDATE', (n) => `${n} new progress updates on your milestones`],
   ['PLAN_FINALIZED', (n) => `${n} project plans were finalized`],
@@ -270,7 +277,7 @@ export function buildSummary({ user, today = new Date().toISOString().slice(0, 1
     when(of('TIMER_STOPPED_BY_MANAGER'), stoppedByManager),
     when(of('TIME_EDIT_APPROVED'), editDecided('TIME_EDIT_APPROVED', true)),
     when(of('TIME_EDIT_REJECTED'), editDecided('TIME_EDIT_REJECTED', false)),
-    ...WORKFLOW.map(([type, many]) => when(of(type), workflow(type, many))),
+    ...WORKFLOW.map(([type, many, strong]) => when(of(type), workflow(type, many, strong))),
     ...[...byType].filter(([type]) => !KNOWN.has(type)).map(([type, items]) => unknown(type, items)),
   ]
   return sentences.filter(Boolean)

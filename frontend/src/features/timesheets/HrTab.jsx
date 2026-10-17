@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { fetchHrSubmissionEntries, useHrChanges, useHrPreview, useHrSubmissions, useSubmitHr } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import ConfirmDialog from '../../components/ConfirmDialog.jsx'
+import Critical from '../../components/Critical.jsx'
 import DemoLock from '../../components/DemoLock.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -75,7 +76,12 @@ function SubmitPanel() {
             {plural(p.entry_count, 'approved entry', 'approved entries')} · {formatHours(p.total_hours)} · {formatMoney(p.total_cost)} · {plural(p.people, 'person', 'people')}
           </Typography>
           {p.pending_count ? (
-            <Alert severity="info">{plural(p.pending_count, 'entry', 'entries')} in this period still {p.pending_count === 1 ? 'waits' : 'wait'} for approval and won't be included.</Alert>
+            <Alert severity="info">
+              <Critical>
+                {`${plural(p.pending_count, 'entry', 'entries')} in this period still ${p.pending_count === 1 ? 'waits' : 'wait'} for approval`}
+              </Critical>
+              {" and won't be included."}
+            </Alert>
           ) : null}
           {p.corrections_ready ? (
             <FormControlLabel control={<Checkbox checked={includeCorrections} onChange={(e) => setIncludeCorrections(e.target.checked)} />}

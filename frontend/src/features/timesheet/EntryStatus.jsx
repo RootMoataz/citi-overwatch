@@ -1,4 +1,5 @@
 import { Box, Button, Chip, Tooltip, Typography } from '@mui/material'
+import Critical from '../../components/Critical.jsx'
 import SourceChip from '../timer/SourceChip.jsx'
 import { KIND, KIND_ICON, chipSx, kindColor, kindText } from './monthText.js'
 
@@ -14,11 +15,14 @@ export function StatusDot({ kind }) {
   )
 }
 
+/** "Needs revision" waits on the person, so it is bold wherever a status shows it. */
+const isRevision = (kind) => kind === 'rejected'
 /** The words StatusWords shows: "Needs revision", or "Pending, Overtime" for an over-40 entry. */
 const statusText = (entry) => [KIND[entryKind(entry)].legend, entry.over_40 ? 'Overtime' : null].filter(Boolean).join(', ')
 
 /** The entry's status as words: "Approved", "Pending" or "Needs revision", with "Overtime" beside it for an over-40 entry.
- * The words wrap rather than truncate in a narrow cell. Spans only, so it can sit inside a button. */
+ * "Needs revision" and "Overtime" are bold. The words wrap rather than truncate in a narrow cell. Spans only, so it can
+ * sit inside a button. */
 export function StatusWords({ entry }) {
   const kind = entryKind(entry)
   return (
@@ -26,11 +30,13 @@ export function StatusWords({ entry }) {
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
         <StatusDot kind={kind} />
         <Typography variant="caption" component="span" sx={{ color: (t) => kindText(kind, t), lineHeight: 1.2, fontWeight: 600 }}>
-          {KIND[kind].legend}
+          {isRevision(kind) ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}
         </Typography>
       </Box>
       {entry.over_40 ? (
-        <Typography variant="caption" component="span" sx={{ color: 'warning.main', lineHeight: 1.2, fontWeight: 600 }}>Overtime</Typography>
+        <Typography variant="caption" component="span" sx={{ color: 'warning.main', lineHeight: 1.2, fontWeight: 600 }}>
+          <Critical>Overtime</Critical>
+        </Typography>
       ) : null}
     </Box>
   )
@@ -48,13 +54,14 @@ export function StatusLine({ entry, cellLabel, entryParam, onOpen }) {
   )
 }
 
-/** The line's approval status as a chip: icon and word, in the status colours. */
+/** The line's approval status as a chip: icon and word, in the status colours; "Needs revision" is bold. */
 export function EntryStatusChip({ kind }) {
   const Icon = KIND_ICON[kind]
   return (
     <Box component="span" sx={[{ display: 'inline-flex', alignItems: 'center', gap: 0.5, px: 0.75, py: 0.25, typography: 'caption',
       fontWeight: 600, whiteSpace: 'nowrap', color: (t) => kindText(kind, t) }, chipSx(kind)]}>
-      <Icon sx={{ fontSize: 15, color: (t) => kindColor(kind, t) }} />{KIND[kind].panel}
+      <Icon sx={{ fontSize: 15, color: (t) => kindColor(kind, t) }} />
+      {isRevision(kind) ? <Critical>{KIND[kind].panel}</Critical> : KIND[kind].panel}
     </Box>
   )
 }

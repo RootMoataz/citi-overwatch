@@ -11,6 +11,7 @@ import { chartPalette } from '../app/chartColors.js'
 import { STATUS, statusColor } from '../app/theme.js'
 import { formatDate, formatHours, plural, todayIso } from '../lib/format.js'
 import { PRIORITY } from '../lib/labels.js'
+import Critical, { CriticalIn } from './Critical.jsx'
 import { STRIPED, stripes } from './stateStripes.js'
 import StatusChip from './StatusChip.jsx'
 
@@ -71,18 +72,23 @@ function RowTip({ view }) {
   )
 }
 
+// States waiting on someone (a predecessor, or the manager's review of a kickback): their words are bold.
+const WAITING = new Set(['waiting', 'blocked'])
+
 function StateWord({ view }) {
   const Icon = STATE_ICON[view.key] ?? RadioButtonUnchecked
   return (
     <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
       <Icon aria-hidden sx={{ fontSize: 14 }} />
-      <Typography variant="caption" component="span">{view.meta.label}</Typography>
+      <Typography variant="caption" component="span">
+        {WAITING.has(view.key) ? <Critical>{view.meta.label}</Critical> : view.meta.label}
+      </Typography>
     </Stack>
   )
 }
 
 function TimelineRow({ view, months, todayPct, onOpen, layout }) {
-  const { item, meta, key, percent, overdue, after, from, width, placement, text, label, number } = view
+  const { item, meta, key, percent, overdue, after, from, width, placement, text, critical, label, number } = view
   const compact = layout === 'compact'
   const detailed = layout === 'detailed'
   const filled = key === 'in_progress' && percent != null
@@ -154,8 +160,10 @@ function TimelineRow({ view, months, todayPct, onOpen, layout }) {
             sx={{ color: 'text.primary', display: { sm: 'flex' }, alignItems: 'baseline', whiteSpace: { xs: 'normal', sm: 'nowrap' },
               position: 'relative', zIndex: 1, bgcolor: { sm: 'background.paper' }, borderRadius: 0.5, px: { sm: 0.5 }, ...labelSx }}>
             {/* The overdue mark is its own element, so ellipsis can cut the dates but never the mark. */}
-            <Box component="span" sx={{ minWidth: 0, overflow: { sm: 'hidden' }, textOverflow: { sm: 'ellipsis' } }}>{text}</Box>
-            {overdue ? <Box component="span" sx={{ flexShrink: 0, ml: 0.75, color: 'error.main', fontWeight: 600 }}>⚠ Overdue</Box> : null}
+            <Box component="span" sx={{ minWidth: 0, overflow: { sm: 'hidden' }, textOverflow: { sm: 'ellipsis' } }}>
+              <CriticalIn text={text} part={critical} />
+            </Box>
+            {overdue ? <Critical sx={{ flexShrink: 0, ml: 0.75, color: 'error.main' }}>⚠ Overdue</Critical> : null}
           </Typography>
         </Box>
       </Box>
@@ -212,8 +220,10 @@ export default function Timeline({ items, range, onOpen, layout = 'default', all
       key !== 'completed' && percent != null ? `${percent}% done` : '', overdue ? 'overdue' : '',
       key === 'waiting' && waitingOn.length ? `waiting on ${waitingOn.join(', ')}` : '',
       PRIORITY[item.priority] ? `${PRIORITY[item.priority]} priority` : '', item.is_assignee ? 'yours' : ''].filter(Boolean).join(', ')
+    const withState = !compact && !detailed
     return { item, key, meta, percent, overdue, after: before.map((p) => p.name), waitingOn, from, width, placement,
-      text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)}${compact || detailed ? '' : ` · ${state}`}`, label,
+      text: `${shortDate(item.start_date)} – ${shortDate(item.end_date)}${withState ? ` · ${state}` : ''}`, label,
+      critical: withState && WAITING.has(key) ? state : null,
       number: numberOf[String(item.id)] }
   })
   // The key lists only the statuses on this timeline, in the order they first appear.

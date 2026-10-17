@@ -1,4 +1,5 @@
 import { Box, Paper, Skeleton, Stack, Typography } from '@mui/material'
+import Critical from '../../components/Critical.jsx'
 import FootNote from '../../components/FootNote.jsx'
 import { formatHours } from '../../lib/format.js'
 import { useCalmMotion } from '../../lib/motion.js'
@@ -6,7 +7,8 @@ import { KIND, kindColor } from './monthText.js'
 
 const FIGURES = [['approved', 'approved'], ['pending', 'pending'], ['rejected', 'needsRevision']]
 
-/** The week's totals: the counted hours against the 40h reference with a bar, then approved, pending and needs revision.
+/** The week's totals: the counted hours against the 40h reference with a bar, then approved, pending and needs revision
+ * ("Needs revision" bold while it holds any hours).
  * figures: the weekFigures result. loading: the shown week's own data isn't in yet (the previous week's may still be
  * on show), so the card is a skeleton rather than figures from two weeks mixed. */
 export default function WeekTotals({ figures, cap = 40, loading = false }) {
@@ -45,7 +47,9 @@ export default function WeekTotals({ figures, cap = 40, loading = false }) {
             <Box component="span" aria-hidden="true" sx={{ width: 8, height: 8, borderRadius: kind === 'rejected' ? '1px' : '50%', flexShrink: 0,
               alignSelf: 'center', bgcolor: (t) => kindColor(kind, t) }} />
             <Typography component="span" variant="body1" sx={{ fontWeight: 600 }}>{formatHours(figures[field])}</Typography>
-            <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}>{KIND[kind].legend}</Typography>
+            <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}>
+              {kind === 'rejected' && figures[field] > 0 ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}
+            </Typography>
           </Stack>
         ))}
       </Stack>

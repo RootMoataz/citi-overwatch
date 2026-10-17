@@ -81,7 +81,7 @@ export function buildReportHtml({ dashboard, insights = [], scope = 'All departm
   parts.push(heading(`At-risk projects (${atRisk.length})`))
   parts.push(atRisk.length
     ? table(['Project', 'Why'], atRisk.map((p) => [`<strong>${escapeHtml(p.name)}</strong>`,
-      escapeHtml((p.reasons ?? []).map((r) => RISK_LABELS[r] ?? r).join(', '))]))
+      `<strong>${escapeHtml((p.reasons ?? []).map((r) => RISK_LABELS[r] ?? r).join(', '))}</strong>`]))
     : none('Nothing is at risk. Every project is on track.'))
 
   const top = insights.slice(0, 5)

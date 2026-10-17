@@ -30,11 +30,13 @@ export function riskSentence(code, project, today) {
   return RISK_LABELS[code] ?? code
 }
 
+export const DUE_TODAY = 'Due today'
+
 /** "8 days left", "Due today" or "3 days overdue" (overdue: true); null once the project is completed. */
 export function dueLine(project, today) {
   if (project.status === 'completed' || !project.predicted_end_date) return null
   const left = daysBetween(today, project.predicted_end_date)
   if (left > 0) return { text: `${plural(left, 'day')} left`, overdue: false }
-  if (left === 0) return { text: 'Due today', overdue: false }
+  if (left === 0) return { text: DUE_TODAY, overdue: false }
   return { text: `${plural(-left, 'day')} overdue`, overdue: true }
 }

@@ -6,6 +6,7 @@ import { alpha } from '@mui/material/styles'
 import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { useMilestoneDiscussion } from '../../api/messages.js'
+import Critical, { CriticalIn } from '../../components/Critical.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import { DIFFICULTY, PRIORITY } from '../../lib/labels.js'
@@ -13,8 +14,8 @@ import Section from '../dashboard/Section.jsx'
 import { milestoneHref, stateKey } from '../timesheet/monthText.js'
 import TimerButton from '../timer/TimerButton.jsx'
 import { useLoggable } from '../timer/useLoggable.js'
-import { ChevronLink, DateLine, NewChip, ProjectLink } from './MilestoneGroups.jsx'
-import { dueLine, focusSummary, nowAndNext, upNextLabel } from './myWork.js'
+import { ChevronLink, DateLine, NewChip, ProjectLink, UpNextWords } from './MilestoneGroups.jsx'
+import { dueLine, focusOverdue, focusSummary, lateWords, nowAndNext } from './myWork.js'
 
 /** One of the card's parts ("Now", "Next"), named by its overline. */
 function Part({ label, children }) {
@@ -29,7 +30,7 @@ function Part({ label, children }) {
 
 const Words = ({ children, sx }) => <Typography variant="body2" component="span" sx={sx}>{children}</Typography>
 
-/** Only the urgent priorities earn a line on the Now card; the flag pairs with the word, never colour alone. */
+/** Only the urgent priorities earn a line on the Now card, in bold; the flag pairs with the word, never colour alone. */
 function PriorityFlag({ priority }) {
   if (priority !== 'critical' && priority !== 'high') return null
   const critical = priority === 'critical'
@@ -37,7 +38,7 @@ function PriorityFlag({ priority }) {
     <Words sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: critical ? 'error.main' : 'text.primary',
       fontWeight: critical ? 600 : 400 }}>
       <Flag aria-hidden="true" sx={{ fontSize: 16, color: critical ? 'error.main' : 'warning.main' }} />
-      {`${PRIORITY[priority]} priority`}
+      <Critical>{`${PRIORITY[priority]} priority`}</Critical>
     </Words>
   )
 }
@@ -60,7 +61,7 @@ function NowCard({ m, today, loggable }) {
         <StatusChip icon status={stateKey(m)} />
       </Stack>
       <Stack direction="row" useFlexGap sx={{ gap: { xs: 1, sm: 2 }, flexWrap: 'wrap', alignItems: 'center', mt: 1.5 }}>
-        <DateLine text={due.text} overdue={due.overdue} />
+        <DateLine text={due.text} overdue={due.overdue} late={lateWords(m, today)} />
         <PriorityFlag priority={m.priority} />
         {DIFFICULTY[m.difficulty] ? <Words>{`${DIFFICULTY[m.difficulty]} difficulty`}</Words> : null}
         {m.progress_percent != null ? <Words>{`${m.progress_percent}% done`}</Words> : null}
@@ -85,7 +86,7 @@ function NextRow({ m, today }) {
         <Typography variant="subtitle1" component="h3" sx={{ lineHeight: 1.3, overflowWrap: 'anywhere' }}>{m.name}</Typography>
         <Stack direction="row" useFlexGap sx={{ gap: 1.5, flexWrap: 'wrap' }}>
           <Words><ProjectLink project={m.project} /></Words>
-          <Words sx={{ color: 'text.secondary' }}>{upNextLabel(m, today)}</Words>
+          <Words sx={{ color: 'text.secondary' }}><UpNextWords m={m} today={today} /></Words>
         </Stack>
       </Box>
       <ChevronLink name={m.name} to={milestoneHref(m)} />
@@ -93,16 +94,20 @@ function NextRow({ m, today }) {
   )
 }
 
-/** An urgent prediction, pointing at its row in "Might come your way". */
+const URGENT = new Set(['critical', 'high'])
+
+/** An urgent prediction, pointing at its row in "Might come your way"; a Critical or High priority is bold. */
 function HeadsUp({ item, onShow }) {
   const { milestone } = item
-  const priority = PRIORITY[milestone.priority ?? item.priority] ?? PRIORITY.medium
+  const level = milestone.priority ?? item.priority
+  const priority = PRIORITY[level] ?? PRIORITY.medium
+  const words = `${priority} priority`
   return (
     <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', borderTop: 1, borderColor: 'divider', pt: 1 }}>
       <NotificationsActive aria-hidden="true" sx={{ fontSize: 18, color: 'warning.main' }} />
       <Link component="button" type="button" variant="body2" onClick={() => onShow(milestone.id)}
         sx={{ textAlign: 'left', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>
-        {`Heads-up: ${milestone.name} (${priority} priority) may come your way`}
+        {`Heads-up: ${milestone.name} (`}{URGENT.has(level) ? <Critical>{words}</Critical> : words}{') may come your way'}
       </Link>
       {item.is_new ? <NewChip /> : null}
     </Stack>
@@ -114,9 +119,10 @@ export default function YourFocusCard({ groups, comingUp, today, sections, onSho
   const loggable = useLoggable()
   const { now, next, startNext, headsUp } = nowAndNext(groups, comingUp, today)
   const nothing = !comingUp.length && Object.values(groups).every((list) => !list.length)
+  const summary = focusSummary(groups, today)
   return (
     <Section collapsible open={sections.isOpen('nowNext')} onToggle={() => sections.toggle('nowNext')} question="Your focus"
-      hint={focusSummary(groups, today)}>
+      hint={summary ? <CriticalIn text={summary} part={focusOverdue(groups, today)} /> : null}>
       {nothing ? (
         <EmptyState title="Nothing assigned to you right now"
           description="Milestones your manager gives you, or that you claim, show up here." />

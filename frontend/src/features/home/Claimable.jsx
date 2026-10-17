@@ -1,6 +1,7 @@
 import { Box, Button, Chip, Skeleton, Stack, Typography } from '@mui/material'
 import { useState } from 'react'
 import { useClaimMilestone, useMilestonesOf, useProjects } from '../../api/queries.js'
+import Critical from '../../components/Critical.jsx'
 import DifficultyChip from '../../components/DifficultyChip.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PriorityChip from '../../components/PriorityChip.jsx'
@@ -24,7 +25,7 @@ function MilestoneItem({ m, today, action }) {
           </Typography>
         </Box>
         <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
-          {isOverdue(m, today) ? <Chip size="small" color="error" variant="outlined" label="Overdue" /> : null}
+          {isOverdue(m, today) ? <Chip size="small" color="error" variant="outlined" label={<Critical>Overdue</Critical>} /> : null}
           <StatusChip status={m.status} />
           <PriorityChip priority={m.priority} hideDefault />
           <DifficultyChip difficulty={m.difficulty} />

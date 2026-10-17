@@ -3,6 +3,7 @@ import PanTool from '@mui/icons-material/PanToolOutlined'
 import Schedule from '@mui/icons-material/ScheduleOutlined'
 import { Box, Chip, Link, Stack, Tooltip, Typography } from '@mui/material'
 import AvatarStack from '../../components/AvatarStack.jsx'
+import Critical from '../../components/Critical.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import YouTag from '../../components/YouTag.jsx'
@@ -40,7 +41,9 @@ function Assignees({ milestone: m }) {
 
 function PendingChip({ pending }) {
   if (!pending?.count) return null
-  return <Chip size="small" variant="outlined" color="warning" icon={<Schedule />} label={`${pending.count} pending`} />
+  return (
+    <Chip size="small" variant="outlined" color="warning" icon={<Schedule />} label={<Critical>{`${pending.count} pending`}</Critical>} />
+  )
 }
 
 /**
@@ -70,7 +73,9 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
       <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap', color: overdue(m) ? 'error.main' : undefined }}>
         {`${formatDate(m.start_date)} – ${formatDate(m.end_date)}`}
       </Typography>
-      {overdue(m) ? <Typography variant="caption" component="div" sx={{ color: 'error.main', fontWeight: 600 }}>Overdue</Typography> : null}
+      {overdue(m) ? (
+        <Typography variant="caption" component="div" sx={{ color: 'error.main' }}><Critical>Overdue</Critical></Typography>
+      ) : null}
     </Box>
   )
   const effort = (m) => {
@@ -78,14 +83,18 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
     return (
       <Box>
         <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap' }}>{text}</Typography>
-        {over ? <Typography variant="caption" component="div" sx={{ color: 'warning.main', fontWeight: 600 }}>{over}</Typography> : null}
+        {over ? (
+          <Typography variant="caption" component="div" sx={{ color: 'warning.main' }}><Critical>{over}</Critical></Typography>
+        ) : null}
       </Box>
     )
   }
   const status = (m, withPending) => (
     <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
       <StatusChip status={stateOf(m)} icon />
-      {m.open_kickback ? <Chip size="small" variant="outlined" color="error" icon={<PanTool />} label="Kicked back" /> : null}
+      {m.open_kickback ? (
+        <Chip size="small" variant="outlined" color="error" icon={<PanTool />} label={<Critical>Kicked back</Critical>} />
+      ) : null}
       {withPending ? <PendingChip pending={pendingOf(m)} /> : null}
     </Stack>
   )

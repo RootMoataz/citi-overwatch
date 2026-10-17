@@ -5,6 +5,7 @@ import { Alert, Box, Button, IconButton, Link, Paper, Popover, Stack, TextField,
 import { useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useAllocations, useMembers, useMilestones, useWeek } from '../../api/queries.js'
+import Critical from '../../components/Critical.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -94,7 +95,9 @@ function TeamHours({ project, week }) {
           <Typography variant="body2" component="div" sx={{ fontWeight: 600 }}><PersonLink person={r.person} context={{ project }} /></Typography>
           <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{r.person.job_title || 'No title'}</Typography>
           {r.logged > r.planned ? (
-            <Typography variant="caption" component="div" sx={{ color: 'warning.main' }}>{`${formatHours(r.logged - r.planned)} above project plan`}</Typography>
+            <Typography variant="caption" component="div" sx={{ color: 'warning.main' }}>
+              <Critical>{`${formatHours(r.logged - r.planned)} above project plan`}</Critical>
+            </Typography>
           ) : null}
         </Box>
       </Stack>) },
@@ -123,7 +126,8 @@ function TeamHours({ project, week }) {
           {pending > 0 ? (
             <Alert severity="info" variant="outlined" {...BANNER_PROPS}
               action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review this week's entries →</Link>}>
-              {`${formatHours(pending)} awaiting approval this week · Pending hours do not contribute to approved project spend.`}
+              <Critical>{`${formatHours(pending)} awaiting approval`}</Critical>
+              {' this week · Pending hours do not contribute to approved project spend.'}
             </Alert>
           ) : null}
           <Paper variant="outlined" sx={{ p: { xs: 1, md: 2 } }}>

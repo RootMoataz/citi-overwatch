@@ -2,6 +2,7 @@ import { Box, Button, Chip, Collapse, Dialog, DialogActions, DialogContent, Dial
 import { useId, useState } from 'react'
 import { useApproveEntry, useRejectEntry } from '../../api/queries.js'
 import { statusColor } from '../../app/theme.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -10,7 +11,7 @@ import { HR_CHANGED } from '../../lib/labels.js'
 import FlagChips from '../timer/FlagChips.jsx'
 import SourceChip from '../timer/SourceChip.jsx'
 import BreakdownPanel from './BreakdownPanel.jsx'
-import { EDITED, isEdited, isHrChanged, labelTone, weekTotalText } from './entryCues.js'
+import { EDITED, isEdited, isHrChanged, isOvertime, labelTone, weekTotalText } from './entryCues.js'
 
 function RejectDialog({ item, onClose }) {
   const titleId = useId()
@@ -70,7 +71,9 @@ export default function ApprovalRow({ item, showContext = true }) {
             <PersonLink person={item.user} context={{ managed: true }} /> · {formatDayLabel(item.entry.work_date)} · {formatHours(item.entry.hours)}
             {showContext ? <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}> · {item.project.name} › {item.milestone.name}</Typography> : null}
           </Typography>
-          <Typography variant="caption" sx={{ color: (t) => statusColor(tone, t) }}>{item.label}</Typography>
+          <Typography variant="caption" sx={{ color: (t) => statusColor(tone, t) }}>
+            {isOvertime(item) ? <Critical>{item.label}</Critical> : item.label}
+          </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary', ml: 1 }}>{weekTotalText(item)}</Typography>
           {isEdited(item) ? <Typography variant="caption" sx={{ ml: 1 }}>· {EDITED}</Typography> : null}
           {isHrChanged(item) ? (

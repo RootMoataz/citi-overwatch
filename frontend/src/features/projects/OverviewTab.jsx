@@ -2,6 +2,7 @@ import { Box, Button, Chip, Link, Paper, Stack, Typography } from '@mui/material
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { useAllocations, useApprovals, useMembers, useMilestones, useProfile, useProjectSummary, useWeek } from '../../api/queries.js'
 import { budgetTone } from '../../lib/chartData.js'
+import Critical from '../../components/Critical.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
@@ -45,9 +46,13 @@ function Kpis({ project, summary, today }) {
   const over = forecast != null && budget > 0 && forecast > budget
   const end = project.predicted_end_date
   const left = end ? daysBetween(today, end) : null
+  // "Due today" and "N days overdue" are bold; "N days remaining" and "Completed …" are not.
   let delivery = ''
   if (project.status === 'completed') delivery = `Completed ${formatDate(project.completed_at ?? end)}`
-  else if (left != null) delivery = left > 0 ? plural(left, 'day remaining', 'days remaining') : (left === 0 ? 'Due today' : plural(-left, 'day overdue', 'days overdue'))
+  else if (left != null) {
+    delivery = left > 0 ? plural(left, 'day remaining', 'days remaining')
+      : <Critical>{left === 0 ? 'Due today' : plural(-left, 'day overdue', 'days overdue')}</Critical>
+  }
   const tone = budgetTone(budgetPct)
   const items = [
     { key: 'progress', label: 'Progress', value: formatPct(progress), hint: 'Weighted milestone completion', keepOnError: true,
@@ -57,7 +62,7 @@ function Kpis({ project, summary, today }) {
     { key: 'forecast', label: 'Forecast at finish', value: forecast == null ? '—' : formatMoney(forecast), tone: over ? 'warning' : undefined,
       hint: <>
         <span>Based on last 4 weeks</span>
-        {over ? <Box component="span" sx={{ display: 'block', color: 'warning.main', fontWeight: 600 }}>⚠ Over budget</Box> : null}
+        {over ? <Box component="span" sx={{ display: 'block', color: 'warning.main' }}><Critical>⚠ Over budget</Critical></Box> : null}
       </> },
     { key: 'delivery', label: 'Delivery', value: formatDate(end), hint: delivery,
       tone: project.status !== 'completed' && left != null && left < 0 ? 'error' : undefined },
@@ -125,15 +130,17 @@ function NeedsAttention({ project, view, milestones, today }) {
     <Card id="ov-attention" title="Needs attention">
       <Stack component="ul" sx={{ m: 0, pl: 2.5, gap: 0.75 }}>
         {pending.length ? <Row>
-          <span>{plural(pending.length, 'pending entry', 'pending entries')}</span>
+          <Critical>{plural(pending.length, 'pending entry', 'pending entries')}</Critical>
           {' · '}
-          <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>{`${formatHours(pendingHours)} awaiting approval`}</Typography>
+          <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
+            <Critical>{`${formatHours(pendingHours)} awaiting approval`}</Critical>
+          </Typography>
           {' '}
           <Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover">Review hours</Link>
         </Row> : null}
         {risks.map((code) => <Row key={code}>{riskSentence(code, project, today)}</Row>)}
-        {overdue ? <Row>{plural(overdue, 'overdue milestone', 'overdue milestones')}</Row> : null}
-        {kickedBack ? <Row>{`${kickedBack} kicked back`}</Row> : null}
+        {overdue ? <Row><Critical>{plural(overdue, 'overdue milestone', 'overdue milestones')}</Critical></Row> : null}
+        {kickedBack ? <Row><Critical>{`${kickedBack} kicked back`}</Critical></Row> : null}
       </Stack>
     </Card>
   )
@@ -150,7 +157,9 @@ function TeamThisWeek({ project, week }) {
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => (
       <Stack direction="row" sx={{ gap: 0.75, justifyContent: 'flex-end', alignItems: 'center' }}>
         <span>{formatHours(r.logged)}</span>
-        {r.logged > r.planned ? <Chip size="small" color="warning" variant="outlined" label={`+${formatHours(r.logged - r.planned)}`} /> : null}
+        {r.logged > r.planned ? (
+          <Chip size="small" color="warning" variant="outlined" label={<Critical>{`+${formatHours(r.logged - r.planned)}`}</Critical>} />
+        ) : null}
       </Stack>) },
   ]
   return (
@@ -207,7 +216,9 @@ function Details({ project, summary, members }) {
       <Typography component="span" variant="body2" sx={{ color: remaining < 0 ? 'error.main' : 'text.primary', fontWeight: 600 }}>
         {formatMoney(Math.abs(remaining))}
       </Typography>
-      <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}>{remaining < 0 ? ' over budget' : ` of ${formatMoney(budget)}`}</Typography>
+      <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}>
+        {remaining < 0 ? <>{' '}<Critical>over budget</Critical></> : ` of ${formatMoney(budget)}`}
+      </Typography>
     </>],
     ['Estimated effort', <>
       <Typography component="span" variant="body2" sx={{ fontWeight: 600 }}>{effort.value}</Typography>

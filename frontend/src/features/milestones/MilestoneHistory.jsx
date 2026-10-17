@@ -1,5 +1,6 @@
 import { Box, Chip, Paper, Skeleton, Stack, Typography } from '@mui/material'
 import { useMilestoneHistory } from '../../api/workflow.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { relativeTime } from '../../lib/relativeTime.js'
 
@@ -11,7 +12,7 @@ function Kickback({ k }) {
       <Stack direction="row" useFlexGap sx={{ gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>{k.category_label}</Typography>
         <Chip size="small" variant="outlined" color={k.resolution ? 'success' : 'error'}
-          label={k.resolution ? RESOLUTION[k.resolution] : 'Waiting for review'} />
+          label={k.resolution ? RESOLUTION[k.resolution] : <Critical>Waiting for review</Critical>} />
       </Stack>
       <Typography variant="body2" sx={{ mt: 0.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{k.reason}</Typography>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>

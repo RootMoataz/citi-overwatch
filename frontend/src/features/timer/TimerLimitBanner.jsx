@@ -1,10 +1,12 @@
 import { Alert, AlertTitle, Button } from '@mui/material'
 import { Link as RouterLink } from 'react-router-dom'
+import Critical from '../../components/Critical.jsx'
 import { formatHours } from '../../lib/format.js'
 import { useTimer } from './useTimer.js'
 
 /** The employee's own warnings, from their running timer and their timer hours not submitted yet:
- * - the running timer has reached a limit (8h today, the milestone's estimate, 40h this week): a warning banner;
+ * - the running timer has reached a limit (8h today, the milestone's estimate, 40h this week): a warning banner, the limit
+ *   in bold;
  * - timer hours wait in the timesheet: "You have 2.5h of timer time not submitted yet" with a way there
  *   (`showUnsubmitted`; the timesheet shows its own banner instead). */
 export default function TimerLimitBanner({ showUnsubmitted = false, sx }) {
@@ -15,7 +17,7 @@ export default function TimerLimitBanner({ showUnsubmitted = false, sx }) {
     <>
       {timer && reached.length ? (
         <Alert severity={level === 'over' ? 'error' : 'warning'} role="alert" sx={{ mb: 2, ...sx }}>
-          <AlertTitle>{reached[0].message}</AlertTitle>
+          <AlertTitle><Critical>{reached[0].message}</Critical></AlertTitle>
           {reached.length > 1 ? `${reached.slice(1).map((l) => l.message).join('. ')}. ` : null}
           Your timer on {timer.milestone.name} is still running — stop it if you&apos;re done, or tell your manager why
           it needs longer.

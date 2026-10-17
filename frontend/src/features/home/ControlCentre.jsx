@@ -7,9 +7,11 @@ import { Box, Card, CardActionArea, Skeleton, Stack, Typography } from '@mui/mat
 import { Link as RouterLink } from 'react-router-dom'
 import { useArchive, useDepartments, useRequests, useUsers } from '../../api/queries.js'
 import CountUp from '../../components/CountUp.jsx'
+import Critical from '../../components/Critical.jsx'
 import Reveal from '../../components/Reveal.jsx'
 
-function Tile({ to, label, icon, query, count, hint, tone, index }) {
+/** `waiting`: the hint says the count waits on someone, so it is bold while there is any. */
+function Tile({ to, label, icon, query, count, hint, tone, index, waiting = false }) {
   const number = query && !query.isLoading && !query.error ? count(query.data) : null
   const value = query ? (query.isLoading ? <Skeleton width={32} /> : query.error ? '—' : <CountUp value={number} />) : null
   return (
@@ -25,7 +27,11 @@ function Tile({ to, label, icon, query, count, hint, tone, index }) {
               {value !== null ? (
                 <Typography variant="h2" component="p" sx={{ color: tone && number ? `${tone}.main` : 'text.primary' }}>{value}</Typography>
               ) : null}
-              {hint ? <Typography variant="caption" sx={{ color: 'text.secondary' }}>{hint}</Typography> : null}
+              {hint ? (
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  {waiting && number ? <Critical>{hint}</Critical> : hint}
+                </Typography>
+              ) : null}
             </Box>
           </Stack>
         </CardActionArea>
@@ -46,7 +52,7 @@ export default function ControlCentre() {
       <Tile index={0} to="/people" label="People" icon={<Groups />} query={people} count={(d) => d.total ?? d.items.length} hint="Active accounts" />
       <Tile index={1} to="/departments" label="Departments" icon={<Apartment />} query={departments} count={(d) => d.items.length} />
       <Tile index={2} to="/requests" label="Open project requests" icon={<PostAdd />} query={requests} count={(d) => d.length}
-        tone="warning" hint="Waiting for a decision" />
+        tone="warning" hint="Waiting for a decision" waiting />
       <Tile index={3} to="/archive" label="Archive" icon={<Inventory />} query={archive} count={(d) => d.items.length} hint="Restorable items" />
       <Tile index={4} to="/audit" label="Audit log" icon={<History />} hint="Who changed what, and when" />
     </Box>

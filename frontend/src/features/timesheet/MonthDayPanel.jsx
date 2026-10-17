@@ -6,6 +6,7 @@ import { alpha } from '@mui/material/styles'
 import { useId } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { STATUS, statusColor } from '../../app/theme.js'
+import Critical from '../../components/Critical.jsx'
 import { formatDayFull, formatHours } from '../../lib/format.js'
 import { EntryStatusChip } from './EntryStatus.jsx'
 import { closedLabel } from './useTimesheetWeek.js'
@@ -70,7 +71,7 @@ function LineCard({ line, date, milestone, lock, onOpenDay, onRequest }) {
           {lock.request ? (
             <>
               <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>{`You asked for ${formatHours(lock.request.requested_hours)}`}</Typography>
-              <Button variant="outlined" size="small" disabled sx={{ mt: 1 }}>Change requested</Button>
+              <Button variant="outlined" size="small" disabled sx={{ mt: 1 }}><Critical>Change requested</Critical></Button>
             </>
           ) : closed ? <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>{closed}</Typography> : (
             <>
@@ -104,8 +105,8 @@ function MilestoneDates({ deadlines, today }) {
               <EventOutlined sx={{ fontSize: 18, color: 'text.secondary' }} />
               <Typography variant="body2" component="span">{`${m.name} · Due ${shortDate(m.end_date)}`}</Typography>
               {isOverdue(m, today) ? (
-                <Typography component="span" variant="caption" sx={{ fontWeight: 700, color: (t) => kindText('rejected', t) }}>
-                  <Box component="span" aria-hidden>⚠ </Box>Overdue
+                <Typography component="span" variant="caption" sx={{ color: (t) => kindText('rejected', t) }}>
+                  <Critical><Box component="span" aria-hidden>⚠ </Box>Overdue</Critical>
                 </Typography>
               ) : null}
             </Stack>
@@ -133,8 +134,8 @@ export default function MonthDayPanel({ date, isToday, info, names, locks, deadl
       </Stack>
       <Typography variant="subtitle1" component="p" sx={{ color: 'text.secondary', mb: 2 }}>{daySummary(lines, info?.total)}</Typography>
       {overtime ? (
-        <Typography variant="body2" component="p" sx={{ fontWeight: 600, mt: -1.5, mb: 2, color: (t) => kindText('pending', t) }}>
-          <Box component="span" aria-hidden>⚠ </Box>Over 40h this week
+        <Typography variant="body2" component="p" sx={{ mt: -1.5, mb: 2, color: (t) => kindText('pending', t) }}>
+          <Critical><Box component="span" aria-hidden>⚠ </Box>Over 40h this week</Critical>
         </Typography>
       ) : null}
       {lines.length ? (

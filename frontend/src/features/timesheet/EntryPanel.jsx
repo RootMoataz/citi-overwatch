@@ -3,6 +3,7 @@ import { Alert, Box, Button, Chip, InputAdornment, Stack, TextField, Typography 
 import { alpha } from '@mui/material/styles'
 import { useEffect, useId, useRef, useState } from 'react'
 import { NOTE_MAX, NOTE_MIN, isProofNote } from '../timer/timerClock.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDayLabel, formatDayLong, formatHours } from '../../lib/format.js'
 import { EntryStatusChip, entryKind } from './EntryStatus.jsx'
@@ -26,8 +27,8 @@ function LockedHours({ lock, closed, onRequest }) {
         ) }, htmlInput: { 'aria-describedby': hintId } }} />
       <Typography id={hintId} variant="caption" sx={{ color: 'text.secondary' }}>{LOCK_HINT}</Typography>
       {lock.request ? (
-        <Typography variant="body2" sx={{ fontWeight: 600, color: (t) => kindText('pending', t), overflowWrap: 'anywhere' }}>
-          {`Change requested: ${formatHours(lock.request.requested_hours)}`}
+        <Typography variant="body2" sx={{ color: (t) => kindText('pending', t), overflowWrap: 'anywhere' }}>
+          <Critical>{`Change requested: ${formatHours(lock.request.requested_hours)}`}</Critical>
         </Typography>
       ) : !closed ? (
         <Button variant="outlined" onClick={onRequest} sx={{ minHeight: 44 }}>Request a change</Button>
@@ -90,7 +91,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
         <Typography component="h3" variant="h6" sx={{ fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>{name}</Typography>
         <EntryStatusChip kind={kind} />
         {entry.edited_after_decision ? <Chip size="small" variant="outlined" label="Edited" /> : null}
-        {entry.over_40 ? <Chip size="small" variant="outlined" label="Overtime" /> : null}
+        {entry.over_40 ? <Chip size="small" variant="outlined" label={<Critical>Overtime</Critical>} /> : null}
       </Stack>
       {closed ? <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>{closed}</Typography> : null}
 

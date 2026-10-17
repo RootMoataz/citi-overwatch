@@ -12,6 +12,8 @@ const ms = (overrides) => ({
   logged_hours: 0, estimated_hours: null, working_days: null, completed_at: null, ...overrides,
 })
 const row = (name) => screen.getByRole('listitem', { name: new RegExp(`^${name},`) })
+// A bar label whose waiting or kicked-back state is bold spans two elements: match the innermost one holding all of it.
+const wholeText = (text) => (_, el) => el.textContent === text && [...el.children].every((c) => c.textContent !== text)
 
 // "Today" is Thursday 15 Oct 2026; only Date is faked, because faking every timer makes userEvent hang.
 beforeEach(() => {
@@ -49,7 +51,7 @@ describe('Timeline', () => {
     expect(screen.getByText('Sep 1 – Oct 18 · In progress')).toBeInTheDocument()
     expect(screen.getByText('Sep 10 – Oct 19 · Ready for review')).toBeInTheDocument()
     expect(screen.getByText('Oct 1 – Oct 20 · Not started')).toBeInTheDocument()
-    expect(screen.getByText('Oct 5 – Oct 20 · Blocked')).toBeInTheDocument()
+    expect(screen.getByText(wholeText('Oct 5 – Oct 20 · Blocked'))).toBeInTheDocument()
     expect(row('Build')).toHaveAccessibleName('Build, Aug 15, 2026 to Oct 23, 2026, In progress, 60% done, Medium priority')
     expect(row('Plan')).toHaveAccessibleName('Plan, Jul 20, 2026 to Aug 10, 2026, Completed, Medium priority')
   })
@@ -96,7 +98,7 @@ describe('Timeline', () => {
       ms({ id: 'm3', name: 'Cutover', start_date: '2026-09-01', end_date: '2026-10-19', display_status: 'waiting', predecessors: ['m1', 'm2'] }),
     ]} />)
     // Mapping is done, so only Discovery is still holding Cutover up; the caption under the name lists both.
-    expect(screen.getByText('Sep 1 – Oct 19 · Waiting on Discovery')).toBeInTheDocument()
+    expect(screen.getByText(wholeText('Sep 1 – Oct 19 · Waiting on Discovery'))).toBeInTheDocument()
     expect(within(row('Cutover')).getByText('after Discovery, Mapping')).toBeInTheDocument()
     expect(row('Cutover')).toHaveAccessibleName(/Waiting on dependencies/)
   })
@@ -108,7 +110,7 @@ describe('Timeline', () => {
       ms({ id: 'm2', name: 'Mapping', status: 'in_progress', display_status: 'in_progress' }),
       ms({ id: 'm3', name: 'Cutover', start_date: '2026-09-01', end_date: '2026-10-19', display_status: 'waiting', predecessors: ['m1', 'm2'] }),
     ]} />)
-    expect(screen.getByText('Sep 1 – Oct 19 · Waiting on Discovery +1')).toBeInTheDocument()
+    expect(screen.getByText(wholeText('Sep 1 – Oct 19 · Waiting on Discovery +1'))).toBeInTheDocument()
     expect(row('Cutover')).toHaveAccessibleName(/Waiting on dependencies, waiting on Discovery, Mapping/)
     await user.hover(row('Cutover'))
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Waiting on Discovery, Mapping')
@@ -273,5 +275,32 @@ describe('Timeline', () => {
     ]} />)
     expect(screen.getByRole('list', { name: 'Status colours' })).toBeInTheDocument()
     expect(screen.getByText('after Plan')).toBeInTheDocument()
+  })
+})
+
+describe('Timeline: the critical details are bold', () => {
+  // Critical renders a <strong>: the `strong` role (see critical.test.jsx). A row's drawing is aria-hidden (its words are in
+  // the row's name), so the query includes hidden elements.
+  const bold = (el) => within(el).queryAllByRole('strong', { hidden: true }).map((s) => s.textContent)
+  const items = [
+    ms({ id: 'm1', name: 'Build', start_date: '2026-08-01', end_date: '2026-09-30', status: 'in_progress', display_status: 'in_progress' }),
+    ms({ id: 'm2', name: 'Stuck', start_date: '2026-10-05', end_date: '2026-10-20', status: 'blocked', display_status: 'blocked' }),
+    ms({ id: 'm3', name: 'Wait', start_date: '2026-10-01', end_date: '2026-10-20', display_status: 'waiting', predecessors: ['m1'] }),
+    ms({ id: 'm4', name: 'Plan', start_date: '2026-07-20', end_date: '2026-08-10', status: 'completed', display_status: 'completed' }),
+  ]
+
+  test('the overdue mark, a kicked-back state and "Waiting on …" are bold; the dates and other states are not', () => {
+    renderWithProviders(<Timeline range={range} items={items} />)
+    expect(bold(row('Build'))).toEqual(['⚠ Overdue'])
+    expect(bold(row('Stuck'))).toEqual(['Blocked'])
+    expect(bold(row('Wait'))).toEqual(['Waiting on Build'])
+    expect(bold(row('Plan'))).toEqual([])
+  })
+
+  test('compact: the state word under the name is bold for waiting and kicked back', () => {
+    renderWithProviders(<Timeline layout="compact" range={range} items={items} />)
+    expect(bold(row('Stuck'))).toEqual(['Blocked – needs review'])
+    expect(bold(row('Wait'))).toEqual(['Waiting on dependencies'])
+    expect(bold(row('Plan'))).toEqual([])
   })
 })

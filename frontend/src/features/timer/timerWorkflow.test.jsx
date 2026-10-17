@@ -202,6 +202,23 @@ describe('Live now', () => {
     expect(screen.getByText('Warning: Estimate')).toBeInTheDocument()
   })
 
+  test('the limit chips are bold; a timer within its limits has none', async () => {
+    const past = new Date(Date.now() - 1000).toISOString()
+    server.use(live([liveItem({ limits: [{ kind: 'daily', limit_hours: 8, warn_at: past, over_at: past }] }),
+      liveItem({ id: 't2', person: { id: 'u-2', name: 'Ada Lovelace', first_name: 'Ada' },
+        limits: [{ kind: 'weekly', limit_hours: 40, warn_at: past, over_at: new Date(Date.now() + 60_000).toISOString() }] }),
+      liveItem({ id: 't3', person: { id: 'u-3', name: 'Bo Peep', first_name: 'Bo' } })]))
+    renderAsUser(<LiveTimersCard />, { user: users.manager })
+    const timers = await screen.findByRole('list', { name: 'Running timers' })
+    await within(timers).findByText('Over: 8h day')
+    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+    const [eli, ada, bo] = within(timers).getAllByRole('listitem')
+    expect(bold(eli)).toEqual(['Over: 8h day'])
+    expect(bold(ada)).toEqual(['Warning: 40h week'])
+    expect(bold(bo)).toEqual([])
+  })
+
   test('a manager stops a timer with a required message', async () => {
     let posted = null
     server.use(live([liveItem()]), http.post(`${API}/timers/t1/stop-remote`, async ({ request }) => {
@@ -250,6 +267,19 @@ describe("the employee's own warnings", () => {
     await waitFor(() => expect(screen.getAllByText("You've reached your 8h for today on this timer")).toHaveLength(2))
     await act(async () => { await new Promise((r) => setTimeout(r, 1200)) })
     expect(screen.getAllByText("You've reached your 8h for today on this timer")).toHaveLength(2) // the toast once
+  })
+
+  test("the limit reached is the banner's bold title; the advice under it is regular", async () => {
+    const past = new Date(Date.now() - 1000).toISOString()
+    server.use(http.get(`${API}/timers/current`, () => HttpResponse.json({ timer: myTimer, now: new Date().toISOString(),
+      stopped: null, level: 'over', unsubmitted: [],
+      limits: [{ kind: 'daily', limit_hours: 8, warn_at: past, over_at: past, level: 'over',
+        message: "You're over your 8h for today on this timer" }] })))
+    renderAsUser(<TimerLimitBanner />, { user: users.employee })
+    await screen.findByText(/your timer on schema mapping is still running/i)
+    const banner = screen.getAllByRole('alert').find((a) => /still running/.test(a.textContent))
+    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+    expect(within(banner).getAllByRole('strong').map((s) => s.textContent)).toEqual(["You're over your 8h for today on this timer"])
   })
 
   test('timer hours not submitted yet point to the timesheet', async () => {

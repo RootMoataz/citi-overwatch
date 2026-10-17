@@ -1137,7 +1137,12 @@ describe('Milestones tab: kept behaviour', () => {
     expect(cells('Schema Mapping')[5]).toHaveTextContent(/^130h \/ 100h\+30h over estimate$/)
     expect(cells('Cutover')[5]).toHaveTextContent(/^—$/)
     await userEvent.click(screen.getByRole('button', { name: 'Schema Mapping' }))
-    expect(within(await panel('Schema Mapping')).getByText('130h logged · 130% of estimate · over estimate')).toBeInTheDocument()
+    // "over estimate" is bold, so the usage line spans two elements; the bold part is the limit passed.
+    const usage = '130h logged · 130% of estimate · over estimate'
+    const mappingPanel = await panel('Schema Mapping')
+    expect(within(mappingPanel).getByText((_, el) => el.textContent === usage && [...el.children].every((c) => c.textContent !== usage)))
+      .toBeInTheDocument()
+    expect(within(mappingPanel).getAllByRole('strong').map((s) => s.textContent)).toContain('over estimate')
     await userEvent.click(screen.getByRole('button', { name: 'Cutover' }))
     const cut = await panel('Cutover')
     expect(within(cut).getByText('92 days (66 working days)')).toBeInTheDocument()
@@ -1225,5 +1230,23 @@ describe('Milestones tab: kept behaviour', () => {
     const alert = await screen.findByText('Cutover starts before one of the milestones it depends on ends.')
     const summary = screen.getByRole('region', { name: '0 of 3 milestones complete' })
     expect(summary.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+})
+
+describe('Milestones tab: the critical details are bold', () => {
+  // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+  const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+
+  test('kicked back, waiting, overdue, the pending counts and hours over the estimate; completed rows stay regular', async () => {
+    server.use(...handlers())
+    renderTab(users.manager)
+    await table()
+    expect(bold(await screen.findByRole('link', { name: '8 pending entries · 62h' }))).toEqual(['8 pending entries · 62h'])
+    await within(cells('Build: frontend')[6]).findByText('2 pending')
+    expect(bold(row('QA & user acceptance testing'))).toEqual(['Blocked – needs review', 'Kicked back', 'Overdue'])
+    expect(bold(row('Hypercare'))).toEqual(['Waiting on dependencies'])
+    expect(bold(row('Solution architecture'))).toEqual(['+0.5h over estimate'])
+    expect(bold(row('Build: frontend'))).toEqual(['2 pending'])
+    expect(bold(row('Discovery'))).toEqual([])
   })
 })

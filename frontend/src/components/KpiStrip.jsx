@@ -3,6 +3,7 @@ import { Box, ButtonBase, LinearProgress, Paper, Skeleton, Tooltip, Typography }
 import { useMediaQuery } from 'react-responsive'
 import { formatPct } from '../lib/format.js'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
+import Critical from './Critical.jsx'
 import ErrorAlert from './ErrorAlert.jsx'
 
 const BAR_COLOUR = { ok: 'primary', warning: 'warning', alert: 'error', error: 'error' }
@@ -11,7 +12,7 @@ function Item({ item, layout, divider }) {
   const toneColour = item.tone ? `${item.tone}.main` : 'text.primary'
   const label = (
     <Typography variant="body2" component="span" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block' }}>
-      {item.label}
+      {item.critical ? <Critical>{item.label}</Critical> : item.label}
       {item.info && !item.onClick ? (
         <Tooltip title={item.info}>
           <Box component="span" tabIndex={0} role="img" aria-label={item.info} sx={{ ml: 0.5, cursor: 'help' }}>ⓘ</Box>
@@ -56,8 +57,9 @@ function Item({ item, layout, divider }) {
 
 /**
  * One outlined card of figures with dividers between them. An item with `onClick` is a button named "<value> <label>";
- * `bar` adds a determinate bar; `error` replaces the figures with an alert and Retry. `title` puts an H2 inside the card
- * above the figures and names the group by it (in place of `ariaLabel`).
+ * `critical` makes its label bold (a count at risk, overtime); `bar` adds a determinate bar; `error` replaces the figures
+ * with an alert and Retry. `title` puts an H2 inside the card above the figures and names the group by it (in place of
+ * `ariaLabel`).
  */
 export default function KpiStrip({ ariaLabel, title, items, layout = 'label-first', phoneColumns = 2, loading = false, error, onRetry }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)

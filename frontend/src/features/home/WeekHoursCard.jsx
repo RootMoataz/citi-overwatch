@@ -3,6 +3,7 @@ import { Box, Button, Skeleton, Stack, Typography } from '@mui/material'
 import { useTheme } from '@mui/material/styles'
 import { Link as RouterLink } from 'react-router-dom'
 import { chartPalette } from '../../app/chartColors.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatDate, formatHours } from '../../lib/format.js'
 import { useCalmMotion } from '../../lib/motion.js'
@@ -88,7 +89,8 @@ export default function WeekHoursCard({ week, current, data, loading, error, onR
           </Typography>
           {over ? (
             <Typography variant="body2" component="p" sx={{ color: 'error.main', mt: 0.5 }}>
-              {`${formatHours(overtime > 0 ? overtime : logged - WEEKLY_CAP)} over 40h (sent to your manager as overtime)`}
+              <Critical>{`${formatHours(overtime > 0 ? overtime : logged - WEEKLY_CAP)} over 40h`}</Critical>
+              {' (sent to your manager as overtime)'}
             </Typography>
           ) : null}
         </>

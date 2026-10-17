@@ -3,12 +3,14 @@ import WarningAmber from '@mui/icons-material/WarningAmber'
 import { Box, Chip, Stack, Tooltip, Typography } from '@mui/material'
 import { RISK_SHORT } from '../lib/labels.js'
 import { orderedRisks, riskSentence } from '../lib/risk.js'
+import Critical from './Critical.jsx'
 
 /**
  * A project's risk in words. `cell`: a warning icon and the first reason ("—", named "No risk", when there is none).
  * `chip`: a warning chip with the first reason, or a success "On track" chip. Both share one tooltip with a sentence
- * per reason and the name "Risk: <word>, <word>". `today` is the New York date. `focusable={false}` drops the tab stop
- * for a place that is itself one control, such as a phone card: the reasons are still in its name and on hover.
+ * per reason and the name "Risk: <word>, <word>". The risk word is bold. `today` is the New York date. `focusable={false}`
+ * drops the tab stop for a place that is itself one control, such as a phone card: the reasons are still in its name and
+ * on hover.
  */
 export default function RiskText({ project, today, variant = 'cell', focusable = true }) {
   const codes = orderedRisks(project.at_risk_reasons)
@@ -29,12 +31,13 @@ export default function RiskText({ project, today, variant = 'cell', focusable =
   return (
     <Tooltip title={tip}>
       {variant === 'chip'
-        ? <Chip size="small" icon={<WarningAmber />} label={words[0]} color="warning" variant="outlined" tabIndex={tabIndex} role="img" aria-label={name} />
+        ? <Chip size="small" icon={<WarningAmber />} label={<Critical>{words[0]}</Critical>} color="warning" variant="outlined"
+          tabIndex={tabIndex} role="img" aria-label={name} />
         : (
           <Box component="span" tabIndex={tabIndex} role="img" aria-label={name}
             sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'warning.main', minWidth: 0 }}>
             <WarningAmber fontSize="small" aria-hidden />
-            <Typography variant="body2" component="span" sx={{ color: 'text.primary' }}>{words[0]}</Typography>
+            <Typography variant="body2" component="span" sx={{ color: 'text.primary' }}><Critical>{words[0]}</Critical></Typography>
           </Box>
         )}
     </Tooltip>

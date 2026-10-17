@@ -41,6 +41,8 @@ describe('report html', () => {
     expect(html).toContain('Overdue milestone, Budget burning faster than progress')
     expect(html).toContain('$120,000 (over budget)')
     expect(html).not.toContain('$40,000 (over budget)')
+    // The risk words are bold, as on screen.
+    expect(html).toContain('<strong>Overdue milestone, Budget burning faster than progress</strong>')
     expect(html).toContain('60%')  // Apollo's share used
     expect(html).toContain('Insight 3')
     expect(html).not.toContain('Insight 4')  // top five only

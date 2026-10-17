@@ -2,6 +2,7 @@ import EventOutlined from '@mui/icons-material/EventOutlined'
 import { Box, ButtonBase } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { STATUS, statusColor } from '../../app/theme.js'
+import Critical from '../../components/Critical.jsx'
 import { formatDayShort, formatHours } from '../../lib/format.js'
 import { DAY_CAP } from './useTimesheetWeek.js'
 import { KIND, KIND_ICON, chipSx, deadlineWords, hoursWords, kindColor, kindText, num } from './monthText.js'
@@ -12,7 +13,8 @@ const amber = (t) => kindText('pending', t)
 const nameOf = (names, id) => names.get(id)?.name ?? 'Milestone'
 const caption = { fontSize: '0.75rem', lineHeight: 1.3 }
 
-/** One hours line: an icon and the name with its hours, then the status word (approved has none: its ✓ is named instead). */
+/** One hours line: an icon and the name with its hours, then the status word (approved has none: its ✓ is named instead);
+ * "Needs revision" is bold. */
 function LineChip({ line, name }) {
   const { kind } = line
   const Icon = KIND_ICON[kind]
@@ -26,7 +28,11 @@ function LineChip({ line, name }) {
           <Box component="span" data-clamp sx={{ minWidth: 0, flex: '0 1 auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{name}</Box>{' '}
           <Box component={kind === 'rejected' ? 's' : 'span'} sx={{ flexShrink: 0 }}>{formatHours(line.hours)}</Box>
         </Box>
-        {word ? <Box component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: (t) => kindText(kind, t) }}>{word}</Box> : null}
+        {word ? (
+          <Box component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: (t) => kindText(kind, t) }}>
+            {kind === 'rejected' ? <Critical>{word}</Critical> : word}
+          </Box>
+        ) : null}
       </Box>
     </Box>
   )
@@ -69,7 +75,7 @@ export function DayBox({ date, info, names, deadlines, overtime, inMonth, weeken
   ) : null
   const overtimeMark = overtime ? (
     <Box component="span" sx={{ ...caption, fontWeight: 600, color: amber }}>
-      <Box component="span" aria-hidden>⚠</Box>{phone ? null : ' Over 40h'}
+      <Box component="span" aria-hidden>⚠</Box>{phone ? null : <>{' '}<Critical>Over 40h</Critical></>}
     </Box>
   ) : null
   return (

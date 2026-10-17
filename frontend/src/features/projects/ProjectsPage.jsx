@@ -9,6 +9,7 @@ import { useCreateProject, useDepartments, useManagers, useProjects } from '../.
 import { useToast } from '../../app/toast.js'
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
+import Critical from '../../components/Critical.jsx'
 import DataBar from '../../components/DataBar.jsx'
 import DataTable from '../../components/DataTable.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
@@ -25,7 +26,7 @@ import { csvFilename, downloadCsv, num, toCsv } from '../../lib/csv.js'
 import { formatDate, formatLongDate, nyTodayIso } from '../../lib/format.js'
 import { RISK_LABELS } from '../../lib/labels.js'
 import { can } from '../../lib/permissions.js'
-import { dueLine } from '../../lib/risk.js'
+import { DUE_TODAY, dueLine } from '../../lib/risk.js'
 import ProjectForm from './ProjectForm.jsx'
 
 const FILTERS = ['q', 'status', 'manager', 'at_risk', 'department', 'archived']
@@ -52,12 +53,13 @@ const CSV_COLUMNS = [
 const FOOT_NOTE = "Progress is milestone completion weighted by difficulty. Budget used is approved spend against the budget. "
   + "The due date is the project's planned end."
 
+/** "8 days left", or in bold "Due today" and "3 days overdue". */
 function DueLine({ project, today }) {
   const line = dueLine(project, today)
   if (!line) return null
   return (
     <Typography variant="caption" component="div" sx={{ color: line.overdue ? 'error.main' : 'text.secondary' }}>
-      {line.text}
+      {line.overdue || line.text === DUE_TODAY ? <Critical>{line.text}</Critical> : line.text}
     </Typography>
   )
 }
@@ -227,7 +229,7 @@ export default function ProjectsPage() {
   const kpis = [
     { key: 'total', label: counts?.total === 1 ? 'project' : 'projects', value: figure(counts?.total) },
     { key: 'active', label: 'active', value: figure(counts?.active) },
-    { key: 'at_risk', label: 'at risk', value: figure(counts?.at_risk), tone: atRisk > 0 ? 'warning' : undefined,
+    { key: 'at_risk', label: 'at risk', value: figure(counts?.at_risk), tone: atRisk > 0 ? 'warning' : undefined, critical: atRisk > 0,
       icon: atRisk > 0 ? <WarningAmber /> : undefined, onClick: () => setFilter('at_risk', 'true') },
   ]
 

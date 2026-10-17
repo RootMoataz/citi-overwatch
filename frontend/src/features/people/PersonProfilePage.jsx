@@ -62,7 +62,7 @@ export default function PersonProfilePage() {
               { key: 'logged', label: 'Logged this week', value: formatHours(week.logged), hint: 'Pending and approved' },
               { key: 'planned', label: 'Planned this week', value: formatHours(week.planned) },
               { key: 'overtime', label: 'Overtime this week', value: formatHours(week.overtime), tone: overtime ? 'warning' : undefined,
-                hint: 'Above 40h' },
+                critical: overtime, hint: 'Above 40h' },
             ]} />
             <KpiStrip title="All time summary" items={[
               { key: 'logged', label: 'Total hours logged', value: formatHours(total.logged), hint: 'All time' },

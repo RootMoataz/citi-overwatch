@@ -7,6 +7,7 @@ import {
 import { alpha } from '@mui/material/styles'
 import { useId, useState } from 'react'
 import { useRequestEdit } from '../../api/queries.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatHours } from '../../lib/format.js'
 
@@ -90,7 +91,8 @@ export default function LockedCell({ lock, label, onRequest, closed }) {
       ) : null}
       {pending ? (
         <Tooltip title={`You asked for ${formatHours(pending.requested_hours)}: ${pending.reason}`}>
-          <Chip size="small" color="warning" variant="outlined" label={`Change requested: ${formatHours(pending.requested_hours)}`}
+          <Chip size="small" color="warning" variant="outlined"
+            label={<Critical>{`Change requested: ${formatHours(pending.requested_hours)}`}</Critical>}
             sx={{ mt: 0.5, height: 'auto', minHeight: 20, maxWidth: '100%',
               '& .MuiChip-label': { whiteSpace: 'normal', textAlign: 'center', lineHeight: 1.2, py: 0.25 } }} />
         </Tooltip>

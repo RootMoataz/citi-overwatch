@@ -10,6 +10,7 @@ import { useId, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { useApprovals, useApproveWeek, useBreakdowns, useRejectEntry } from '../../../api/queries.js'
 import { useToast } from '../../../app/toast.js'
+import Critical from '../../../components/Critical.jsx'
 import EmptyState from '../../../components/EmptyState.jsx'
 import ErrorAlert from '../../../components/ErrorAlert.jsx'
 import { formatDate, formatHours, formatMoney, plural } from '../../../lib/format.js'
@@ -384,7 +385,7 @@ export default function ApprovalsTab({ milestone }) {
     <Stack sx={{ gap: 2 }}>
       <Box>
         <Typography variant="subtitle1" component="h3" sx={{ fontWeight: 600 }}>
-          {`${plural(items.length, 'entry', 'entries')} · ${formatHours(hoursOf(items))} awaiting approval`}
+          <Critical>{`${plural(items.length, 'entry', 'entries')} · ${formatHours(hoursOf(items))} awaiting approval`}</Critical>
         </Typography>
         <Stack direction="row" sx={{ gap: 0.75, alignItems: 'center', mt: 0.5 }}>
           <WarningAmber aria-hidden="true" fontSize="small" sx={{ color: 'warning.main' }} />

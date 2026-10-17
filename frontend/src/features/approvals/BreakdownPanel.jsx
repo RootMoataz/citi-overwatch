@@ -1,5 +1,6 @@
 import { Alert, Box, Skeleton, Table, TableBody, TableCell, TableRow, Typography } from '@mui/material'
 import { useBreakdown } from '../../api/queries.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { formatMoney, formatPct } from '../../lib/format.js'
 
@@ -24,7 +25,7 @@ export default function BreakdownPanel({ entryId }) {
     <Box>
       {b.forecast_over_budget ? (
         <Alert severity="warning" role="alert" sx={{ mb: 1 }}>
-          Projected to go over budget by {exact(b.forecast - b.budget)} at the current pace.
+          Projected to go <Critical>over budget</Critical> by {exact(b.forecast - b.budget)} at the current pace.
         </Alert>
       ) : null}
       <Table size="small" aria-label="Budget impact of approving">

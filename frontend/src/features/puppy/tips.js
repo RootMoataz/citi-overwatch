@@ -36,7 +36,8 @@ function dueText(days) {
   return `due in ${days} days`
 }
 
-/** ({user, today, notifications, approvals, milestones, dismissed}) → up to 3 [{id, text, action: {label, to}}]. */
+/** ({user, today, notifications, approvals, milestones, dismissed}) → up to 3 [{id, text, strong?, action: {label, to}}].
+ * `strong` is the part of `text` the panel shows in bold: entries still waiting, a critical milestone (and "due today"). */
 export function buildTips({ user, today, notifications = [], approvals = [], milestones = [], dismissed = [] } = {}) {
   if (!user) return []
   const tips = []
@@ -52,7 +53,7 @@ export function buildTips({ user, today, notifications = [], approvals = [], mil
     if (waiting) {
       tips.push({ id: `approvals-old:${today}`,
         text: `${waiting} ${waiting === 1 ? 'entry' : 'entries'} logged 3+ days ago ${waiting === 1 ? 'is' : 'are'} still waiting — open Timesheets?`,
-        action: { label: 'Open Timesheets', to: '/timesheets' } })
+        strong: 'still waiting', action: { label: 'Open Timesheets', to: '/timesheets' } })
     }
   }
   milestones
@@ -61,6 +62,7 @@ export function buildTips({ user, today, notifications = [], approvals = [], mil
     .filter(({ days }) => days >= 0 && days <= 3)
     .sort((a, b) => a.days - b.days || String(a.m.name).localeCompare(String(b.m.name)))
     .forEach(({ m, days }) => tips.push({ id: `critical-due:${m.id}`, text: `${m.name} is critical and ${dueText(days)}`,
+      strong: days === 0 ? `critical and ${dueText(days)}` : 'critical',
       action: { label: 'Open milestones', to: `/projects/${m.project_id}?tab=milestones` } }))
   const hidden = new Set(dismissed)
   return tips.filter((t) => !hidden.has(t.id)).slice(0, MAX_TIPS)

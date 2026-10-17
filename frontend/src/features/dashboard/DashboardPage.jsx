@@ -17,6 +17,7 @@ import { useAllocations, useDashboard, useDepartments } from '../../api/queries.
 import { useSession } from '../../auth/sessionContext.js'
 import { STATUS } from '../../app/theme.js'
 import BulletChart from '../../components/BulletChart.jsx'
+import Critical from '../../components/Critical.jsx'
 import DataBar from '../../components/DataBar.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
@@ -58,7 +59,10 @@ function BudgetChart({ budgets }) {
   const rows = budgetRows(budgets)
   const over = rows.filter((r) => r.hasBudget && r.forecastPct > 100)
   const max = Math.min(niceMax(Math.max(100, ...rows.map((r) => Math.max(r.usedPct, r.forecastPct))), 25), 200)
-  const status = (r) => (r.tone === 'alert' ? ' · ⚠ over budget' : r.tone === 'warning' ? ' · ⚠ forecast over budget' : '')
+  const warning = (r) => (r.tone === 'alert' ? '⚠ over budget' : r.tone === 'warning' ? '⚠ forecast over budget' : '')
+  const status = (r) => (warning(r) ? ` · ${warning(r)}` : '')
+  const figures = (r) =>
+    `${formatMoney(r.consumed)} of ${formatMoney(r.budget)} · forecast ${formatMoney(r.forecast)} (${formatPct(r.forecastPct)})`
   return (
     <>
       <BulletChart ariaLabel="Budget used per project" max={max} ticks={ticksTo(max, max > 100 ? 50 : 25)}
@@ -71,16 +75,17 @@ function BudgetChart({ budgets }) {
           id: r.id, label: r.name, href: `/projects/${r.id}?tab=budget`, tone: r.tone,
           track: r.hasBudget ? 100 : null, value: r.hasBudget ? r.usedPct : null, marker: r.hasBudget ? r.forecastPct : null,
           valueText: r.hasBudget ? `${formatPct(r.usedPct)} used` : 'No budget',
-          detail: r.hasBudget
-            ? `${formatMoney(r.consumed)} of ${formatMoney(r.budget)} · forecast ${formatMoney(r.forecast)} (${formatPct(r.forecastPct)})${status(r)}`
-            : `${formatMoney(r.consumed)} consumed, no budget set`,
+          // The warning is bold in the drawn line; the text alternative (summary) stays plain words.
+          detail: !r.hasBudget ? `${formatMoney(r.consumed)} consumed, no budget set`
+            : warning(r) ? <>{`${figures(r)} · `}<Critical>{warning(r)}</Critical></> : figures(r),
           summary: r.hasBudget
             ? `${r.name}\nBudget ${formatMoney(r.budget)}\nConsumed ${formatMoney(r.consumed)} (${formatPct(r.usedPct)})\nForecast at end date ${formatMoney(r.forecast)} (${formatPct(r.forecastPct)})${status(r)}`
             : `${r.name}\nNo budget set\nConsumed ${formatMoney(r.consumed)}`,
         }))} />
       <Typography role="note" variant="body2" sx={{ mt: 1.5, color: over.length ? 'error.main' : 'text.secondary' }}>
         {over.length
-          ? <>⚠ Forecast over budget: {over.map((r) => `${r.name} (${formatMoney(r.forecast)} forecast vs ${formatMoney(r.budget)} budget)`).join('; ')}.</>
+          ? <><Critical>⚠ Forecast over budget</Critical>: {over.map((r) =>
+            `${r.name} (${formatMoney(r.forecast)} forecast vs ${formatMoney(r.budget)} budget)`).join('; ')}.</>
           : 'Every forecast is within budget.'}
       </Typography>
     </>
@@ -90,10 +95,14 @@ function BudgetChart({ budgets }) {
 /** Tables scroll inside their card instead of pushing it wider on narrow screens. */
 const TableScroll = ({ children }) => <Box sx={{ overflowX: 'auto', mx: -2, px: 2 }}>{children}</Box>
 
-function Milestones({ title, items, tone }) {
+/** `critical`: the list is late work, so its heading is bold while it holds any. */
+function Milestones({ title, items, tone, critical = false }) {
+  const heading = `${title} (${items.length})`
   return (
     <>
-      <Typography variant="subtitle2" component="h3" sx={{ color: tone }}>{title} ({items.length})</Typography>
+      <Typography variant="subtitle2" component="h3" sx={{ color: tone }}>
+        {critical && items.length ? <Critical>{heading}</Critical> : heading}
+      </Typography>
       {items.length ? (
         <List dense disablePadding>
           {items.slice(0, 6).map((m) => (
@@ -127,7 +136,8 @@ function Risk({ atRisk }) {
         listStyle: 'none', p: 0, m: 0, mb: 2 }}>
         {counts.map(([label, count], i) => (
           <Reveal as="li" key={label} index={i}>
-            <StatTile label={label} value={count} tone={count ? 'warning' : undefined} icon={RISK_ICONS[i]} />
+            <StatTile label={count ? <Critical>{label}</Critical> : label} value={count} tone={count ? 'warning' : undefined}
+              icon={RISK_ICONS[i]} />
           </Reveal>
         ))}
       </Box>
@@ -194,7 +204,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
         <DepartmentFilter value={department} onChange={pickDepartment} />
         {approvalsButton && approver && d.pending_approvals ? (
           <Button component={RouterLink} to="/timesheets" variant="contained" color="warning">
-            {d.pending_approvals} waiting for your approval
+            <Critical>{`${d.pending_approvals} waiting for your approval`}</Critical>
           </Button>) : null}
       </Stack>
       <Grid container spacing={2}>
@@ -243,7 +253,9 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
               <List dense disablePadding>
                 {d.over_allocated.map((o) => (
                   <ListItem key={o.user.id} disableGutters
-                    secondaryAction={<Chip color="warning" size="small" label={formatHours(o.week_logged_total)} />}>
+                    secondaryAction={(
+                      <Chip color="warning" size="small" label={<Critical>{formatHours(o.week_logged_total)}</Critical>} />
+                    )}>
                     <ListItemText primary={<PersonWithAvatar person={o.user} context={MANAGED} />} />
                   </ListItem>
                 ))}
@@ -285,7 +297,7 @@ export default function DashboardPage({ title, subtitle = 'Live view of delivery
 
         <Grid size={{ xs: 12, lg: 6 }}>
           <Section question="What are the key deliverables and their completion status?">
-            <Milestones title="Overdue" items={d.milestones.overdue} tone="error.main" />
+            <Milestones title="Overdue" items={d.milestones.overdue} tone="error.main" critical />
             <Milestones title="Due in the next 14 days" items={d.milestones.due_soon} />
           </Section>
         </Grid>

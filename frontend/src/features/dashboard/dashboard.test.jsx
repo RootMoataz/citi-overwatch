@@ -200,3 +200,38 @@ describe('AllocationPage', () => {
     expect(within(chart).getByRole('note')).toHaveTextContent('Nobody is over 40h this week.')
   })
 })
+
+describe('Dashboard and Allocation: the critical details are bold', () => {
+  beforeEach(() => server.use(http.get(`${API}/departments`, () => HttpResponse.json({ items: departments }))))
+  beforeEach(() => server.use(http.get(`${API}/insights/smart`, () => HttpResponse.json([]))))
+  // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+  const bold = (el, options) => within(el).queryAllByRole('strong', options).map((s) => s.textContent)
+
+  test('the pending count, risk tiles and badges, overdue work, urgent priorities, over-40 and over-budget', async () => {
+    server.use(http.get(`${API}/dashboard`, () => HttpResponse.json(dashboard)),
+      http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    renderAsUser(<DashboardPage />, { user: users.admin, route: '/dashboard-under-test' })
+    expect(bold(await screen.findByRole('link', { name: '6 waiting for your approval' }))).toEqual(['6 waiting for your approval'])
+    const risk = screen.getByRole('region', { name: /^risk$/i })
+    // Only the reasons that have a project at risk; the zero tiles stay regular.
+    expect(bold(within(risk).getByRole('list', { name: /at-risk projects by reason/i })))
+      .toEqual(['At-risk projects', 'Overdue milestone', 'Past due date'])
+    expect(bold(within(risk).getByRole('region', { name: /at risk of missing/i }))).toEqual(['Past due date', 'Overdue milestone'])
+    // Overdue and the urgent priorities are bold; the In progress states and "Due in the next 14 days" are not.
+    expect(bold(screen.getByRole('region', { name: /key deliverables/i }))).toEqual(['Overdue (1)', 'Critical Priority', 'High Priority'])
+    expect(bold(screen.getByRole('region', { name: /over-allocated/i }))).toEqual(['45h'])
+    expect(bold(screen.getByRole('region', { name: /status of each active project/i }))).toEqual([])
+    const budget = screen.getByRole('region', { name: /budget has been consumed versus planned/i })
+    expect(bold(within(budget).getByRole('note'))).toEqual(['⚠ Forecast over budget'])
+    // The bullet's detail line is drawn for the eye (its words are in the row's name), so it is aria-hidden.
+    expect(bold(within(budget).getByRole('list', { name: /budget used per project/i }), { hidden: true }))
+      .toEqual(['⚠ forecast over budget'])
+  })
+
+  test('the allocation chart note names who is over 40h after a bold "⚠ Over 40h this week"', async () => {
+    server.use(http.get(`${API}/allocations`, () => HttpResponse.json(allocations)))
+    renderAsUser(<AllocationPage />, { user: users.manager, route: '/allocation', path: '/allocation' })
+    const chart = await screen.findByRole('region', { name: /planned vs logged this week/i })
+    expect(bold(within(chart).getByRole('note'))).toEqual(['⚠ Over 40h this week'])
+  })
+})

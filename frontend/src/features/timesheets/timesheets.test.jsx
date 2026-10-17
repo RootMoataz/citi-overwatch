@@ -249,3 +249,29 @@ test('the old /approvals address opens Timesheets with the same filters', async 
   expect(await screen.findByText('timesheets')).toBeInTheDocument()
   expect(screen.getByTestId('location')).toHaveTextContent(`/timesheets?user=${eli.id}`)
 })
+
+describe('Timesheets: the critical details are bold', () => {
+  // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+  const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+
+  test("a person-week's waiting entries and an overtime request are bold; a plain pending entry is not", async () => {
+    const overtime = 'Pending (Overtime requested from Eli Employee)'
+    api({ approvals: [
+      { ...item('e1', eli, '2026-10-12', 8, { over_40: true }), label: overtime },
+      item('e2', eli, '2026-10-13', 8),
+      item('e5', ana, '2026-10-12', 4),
+    ] })
+    open(users.manager)
+    const week = await screen.findByRole('region', { name: /eli employee, week of oct 12, 2026/i })
+    expect(bold(week)).toEqual(['2 entries · 16h waiting', overtime])
+    expect(bold(screen.getByRole('region', { name: /ana ruiz, week of oct 12, 2026/i }))).toEqual(['1 entry · 4h waiting'])
+  })
+
+  test('HR submission: the entries still waiting for approval are bold', async () => {
+    api()
+    open(users.admin, '/timesheets?tab=hr')
+    await screen.findByText(/12 approved entries · 90h/)
+    const alert = screen.getAllByRole('alert').find((a) => /still wait for approval/.test(a.textContent))
+    expect(bold(alert)).toEqual(['2 entries in this period still wait for approval'])
+  })
+})

@@ -10,6 +10,7 @@ import { useRef, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
 import { Link as RouterLink, useLocation, useSearchParams } from 'react-router-dom'
 import { useApprovals, useMembers, useMilestones, useProfile } from '../../api/queries.js'
+import Critical from '../../components/Critical.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import FilterBar from '../../components/FilterBar.jsx'
@@ -105,7 +106,7 @@ export default function MilestonesTab({ project, user, view }) {
         <Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover"
           sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, color: 'warning.main', fontWeight: 600, minHeight: 44 }}>
           <Schedule aria-hidden="true" fontSize="small" />
-          {`${plural(pending.length, 'pending entry', 'pending entries')} · ${formatHours(pendingHours)}`}
+          <Critical>{`${plural(pending.length, 'pending entry', 'pending entries')} · ${formatHours(pendingHours)}`}</Critical>
           <ChevronRight aria-hidden="true" fontSize="small" />
         </Link>
       ) : null}

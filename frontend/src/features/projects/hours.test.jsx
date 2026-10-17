@@ -96,7 +96,8 @@ describe('HoursTab team table', () => {
     expect(within(total).getByText('34h')).toBeInTheDocument()
     expect(within(total).getByText('20h')).toBeInTheDocument()
     expect(within(total).getByText('14h')).toBeInTheDocument()
-    expect(screen.getByText('14h awaiting approval this week · Pending hours do not contribute to approved project spend.')).toBeInTheDocument()
+    expect(screen.getByRole('alert'))
+      .toHaveTextContent('14h awaiting approval this week · Pending hours do not contribute to approved project spend.')
     expect(screen.getByRole('link', { name: "Review this week's entries →" })).toHaveAttribute('href', '/timesheets?project=p1')
     expect(screen.getByText('Planned hours are weekly allocations. This is not a measure of productivity.')).toBeInTheDocument()
     expect(screen.queryByText('Bo Peep')).not.toBeInTheDocument()
@@ -180,5 +181,17 @@ describe('HoursTab for an executive', () => {
     expect(await screen.findByText('Team hours are private')).toBeInTheDocument()
     expect(screen.getByText("Only the project's manager and admins see everyone's hours.")).toBeInTheDocument()
     expect(requests).toEqual([])
+  })
+})
+
+describe('HoursTab: the critical details are bold', () => {
+  test('hours above the project plan and the hours awaiting approval', async () => {
+    renderTab(users.manager)
+    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+    const row = (await screen.findByRole('rowheader', { name: /Ada Lovelace/ })).closest('tr')
+    expect(bold(row)).toEqual(['4h above project plan'])
+    expect(bold(screen.getByRole('rowheader', { name: /Cy Doe/ }).closest('tr'))).toEqual([])
+    expect(bold(screen.getByRole('alert'))).toEqual(['14h awaiting approval'])
   })
 })

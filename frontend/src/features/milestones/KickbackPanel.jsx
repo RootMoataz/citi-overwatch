@@ -2,6 +2,7 @@ import PanTool from '@mui/icons-material/PanToolOutlined'
 import { Alert, AlertTitle, Box, Button, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { useResolveKickback } from '../../api/workflow.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import { relativeTime } from '../../lib/relativeTime.js'
 
@@ -29,11 +30,11 @@ export default function KickbackPanel({ milestone, onEdit }) {
   return (
     <Alert severity="error" icon={<PanTool />} sx={{ mt: 1.5, '& .MuiAlert-message': { width: '100%' } }}
       aria-label={`Kickback on ${milestone.name}`}>
-      <AlertTitle>Kicked back: {kickback.category_label}</AlertTitle>
+      <AlertTitle><Critical>Kicked back</Critical>: {kickback.category_label}</AlertTitle>
       <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{kickback.reason}</Typography>
       <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.85 }}>
         {kickback.raised_by.name} · <time dateTime={kickback.raised_at}>{relativeTime(kickback.raised_at)}</time>
-        {milestone.can_resolve_kickback ? null : ' · waiting for the manager’s review'}
+        {milestone.can_resolve_kickback ? null : <>{' · '}<Critical>waiting for the manager’s review</Critical></>}
       </Typography>
       {milestone.can_resolve_kickback ? (
         <Box sx={{ mt: 1.5 }}>

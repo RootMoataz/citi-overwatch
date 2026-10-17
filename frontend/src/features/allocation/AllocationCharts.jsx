@@ -4,6 +4,7 @@ import { PieChart } from '@mui/x-charts/PieChart'
 import { Fragment } from 'react'
 import { chartPalette } from '../../app/chartColors.js'
 import BulletChart from '../../components/BulletChart.jsx'
+import Critical from '../../components/Critical.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import { allocationRows, hoursByProject, hoursForm, niceMax, ticksTo, WEEKLY_CAP } from '../../lib/chartData.js'
 import { formatHours, formatPct } from '../../lib/format.js'
@@ -27,7 +28,7 @@ function PeopleChart({ people }) {
         }))} />
       <Typography role="note" variant="body2" sx={{ mt: 1.5, color: over.length ? 'error.main' : 'text.secondary' }}>
         {over.length
-          ? <>⚠ Over 40h this week: {over.map((r, i) => (
+          ? <><Critical>⚠ Over 40h this week</Critical>: {over.map((r, i) => (
             <Fragment key={r.id}>{i ? '; ' : ''}<PersonLink person={r.user} context={{ managed: true }} color="inherit">
               {`${r.name} (${formatHours(r.logged)})`}</PersonLink></Fragment>
           ))}.</>

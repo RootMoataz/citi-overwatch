@@ -8,7 +8,7 @@ const byStart = (a, b) => String(a.start_date).localeCompare(String(b.start_date
 
 export const isOverdue = (m, today) => m.status !== 'completed' && Boolean(m.end_date) && m.end_date < today
 
-const isWaiting = (m) => (m.waiting_on ?? []).length > 0
+export const isWaiting = (m) => (m.waiting_on ?? []).length > 0
 // No start date means nothing to wait for: it can start now.
 const startsLater = (m, today) => Boolean(m.start_date) && m.start_date > today
 const isReady = (m, today) => !isWaiting(m) && !startsLater(m, today)
@@ -55,19 +55,29 @@ export function nowAndNext(groups, comingUp, today) {
   return { now, next, startNext, headsUp: urgent ? first : null }
 }
 
-/** "1 overdue · 1 with your manager". Overdue counts the person's own open work (In progress and Upcoming, the rows that
- * show a due line); work handed to the manager is theirs to complete, so it counts only as "with your manager". */
+/** "1 overdue": the person's own open work (In progress and Upcoming, the rows that show a due line) past its end date;
+ * '' when there is none. Work handed to the manager is theirs to complete, so it never counts. */
+export function focusOverdue(groups, today) {
+  const overdue = [...groups.inProgress, ...groups.upNext].filter((m) => isOverdue(m, today)).length
+  return overdue ? `${overdue} overdue` : ''
+}
+
+/** "1 overdue · 1 with your manager": the overdue count (focusOverdue), then the work with the manager. */
 export function focusSummary(groups, today) {
-  const open = [...groups.inProgress, ...groups.upNext]
-  const overdue = open.filter((m) => isOverdue(m, today)).length
-  return [overdue ? `${overdue} overdue` : '', groups.review.length ? `${groups.review.length} with your manager` : '']
+  return [focusOverdue(groups, today), groups.review.length ? `${groups.review.length} with your manager` : '']
     .filter(Boolean).join(' · ')
+}
+
+/** "10 days overdue" once the milestone is past its end date and unfinished, else null: the bold part of its due line. */
+export function lateWords(m, today) {
+  return isOverdue(m, today) ? `${plural(daysBetween(m.end_date, today), 'day')} overdue` : null
 }
 
 export function dueLine(m, today) {
   const due = `Due ${formatDate(m.end_date)}`
-  if (!isOverdue(m, today)) return { text: due, overdue: false }
-  return { text: `${due} · ${plural(daysBetween(m.end_date, today), 'day')} overdue`, overdue: true }
+  const late = lateWords(m, today)
+  if (!late) return { text: due, overdue: false }
+  return { text: `${due} · ${late}`, overdue: true }
 }
 
 export function skillsSentence(names) {

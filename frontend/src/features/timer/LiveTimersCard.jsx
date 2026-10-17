@@ -7,6 +7,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import { useLiveTimers, useStopRemote } from '../../api/queries.js'
 import { useToast } from '../../app/toast.js'
 import { useSession } from '../../auth/sessionContext.js'
+import Critical from '../../components/Critical.jsx'
 import ErrorAlert from '../../components/ErrorAlert.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
@@ -103,7 +104,8 @@ function LiveRow({ item, serverNow, startedMs, readOnly, demo, onStop }) {
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>{formatHours(Math.round(today * 4) / 4)} today</Typography>
         {level !== 'ok' ? (
           <Tooltip title={reached.map((l) => `${LIMIT_LABEL[l.kind]}: ${formatHours(l.limit_hours)} limit`).join(' · ')}>
-            <Chip size="small" color={LEVEL_CHIP[level].color} label={`${LEVEL_CHIP[level].label}: ${reached.map((l) => LIMIT_LABEL[l.kind]).join(', ')}`} />
+            <Chip size="small" color={LEVEL_CHIP[level].color}
+              label={<Critical>{`${LEVEL_CHIP[level].label}: ${reached.map((l) => LIMIT_LABEL[l.kind]).join(', ')}`}</Critical>} />
           </Tooltip>
         ) : null}
         <Box sx={{ flexGrow: 1 }} />

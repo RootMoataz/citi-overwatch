@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, test } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
@@ -51,6 +51,18 @@ describe('Timesheet rules', () => {
     expect(screen.getByRole('button', { name: /^submit/i })).toBeEnabled()
   })
 
+  test("a day over 24h: the alert's title is bold, the sentence under it is not", async () => {
+    server.use(sheetWith())
+    renderSheet()
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('Schema Mapping, Wed Oct 14'), '14')
+    await user.type(screen.getByLabelText('Build, Wed Oct 14'), '12')
+    // Critical renders a <strong>: the `strong` role (see components/critical.test.jsx).
+    const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+    const alert = screen.getAllByRole('alert').find((a) => /More than 24h/.test(a.textContent))
+    expect(bold(alert)).toEqual(['More than 24h on Wed Oct 14'])
+  })
+
   test('saved hours on another milestone count toward the day; rejected ones do not', async () => {
     server.use(sheetWith({ entries: [
       entry({ id: 'e1', work_date: '2026-10-14', hours: 20 }),
@@ -86,7 +98,9 @@ describe('Timesheet rules', () => {
     expect(screen.queryByText(/over 40h/i)).not.toBeInTheDocument()
     expect(screen.getByTestId('week-total')).toHaveAttribute('data-over', 'false')
     await user.type(screen.getByLabelText('Build, Fri Oct 16'), '5')
-    expect(screen.getByText('This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request.'))
+    // "5h over 40h" is bold, so the sentence spans two elements: match the one that holds all of it.
+    const warning = 'This week is 45h — 5h over 40h. Hours above 40 are sent to your manager as an overtime request.'
+    expect(screen.getByText((_, el) => el.textContent === warning && [...el.children].every((c) => c.textContent !== warning)))
       .toBeInTheDocument()
     expect(screen.getByTestId('week-total')).toHaveAttribute('data-over', 'true')
     expect(screen.getByRole('button', { name: /^submit/i })).toBeEnabled()

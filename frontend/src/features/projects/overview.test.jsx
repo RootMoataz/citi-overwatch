@@ -380,3 +380,29 @@ describe('Overview on a phone', () => {
     expectStripFirst()
   })
 })
+
+// Critical details are bold: found by the `strong` role (Critical renders a <strong>; see components/critical.test.jsx).
+const bold = (el) => within(el).queryAllByRole('strong').map((s) => s.textContent)
+
+describe('Overview: the critical details are bold', () => {
+  test('over budget, overdue, the pending and kicked-back counts, the +Nh chip and the risk word; normal states stay regular', async () => {
+    const pending = [approvalItem('e1', 8), approvalItem('e2', 4)]
+    server.use(...handlers({ pending, summary: { forecast: 261000, remaining: -10000, consumed: 260000 },
+      p: project({ consumed: 260000, predicted_end_date: '2026-10-10', at_risk_reasons: ['PAST_DUE', 'OVERDUE_MILESTONE'] }) }))
+    open()
+    const strip = await screen.findByRole('group', { name: 'Project figures' })
+    await waitFor(() => expect(bold(strip)).toEqual(['⚠ Over budget', '5 days overdue']))
+    expect(bold(screen.getByRole('img', { name: 'Risk: Past due, Overdue milestone' }))).toEqual(['Past due'])
+    const attention = await screen.findByRole('region', { name: 'Needs attention' })
+    await within(attention).findByText(/pending entries/)
+    expect(bold(attention)).toEqual(['2 pending entries', '12h awaiting approval', '2 overdue milestones', '1 kicked back'])
+    const details = screen.getByRole('region', { name: 'Project details' })
+    await within(details).findByText('$10,000')
+    expect(bold(details)).toEqual(['over budget'])
+    const team = screen.getByRole('region', { name: 'Team this week' })
+    await within(team).findByText('Ada Lovelace')
+    expect(bold(team)).toEqual(['+14h'])
+    // Kicked back is bold; In progress and Not started are not.
+    expect(bold(screen.getByRole('region', { name: 'Next milestones' }))).toEqual(['Blocked – needs review'])
+  })
+})

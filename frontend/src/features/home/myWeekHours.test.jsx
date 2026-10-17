@@ -170,7 +170,9 @@ describe("This week's hours", () => {
     serve({ profile: full(thisWeek({ logged: 45, overtime: 5 })) })
     render()
     const card = await hoursCard()
-    expect(within(card).getByText('5h over 40h (sent to your manager as overtime)')).toBeInTheDocument()
+    expect(within(card).getByText((_, el) => el.textContent === '5h over 40h (sent to your manager as overtime)'
+      && [...el.children].every((c) => c.textContent !== el.textContent))).toBeInTheDocument()
+    expect(within(card).getByRole('strong')).toHaveTextContent('5h over 40h')
     expect(within(card).getByRole('progressbar', { name: 'Hours logged this week' })).toHaveAttribute('data-over', 'true')
   })
 
