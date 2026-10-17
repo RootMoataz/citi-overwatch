@@ -6,6 +6,7 @@ import { renderAsUser, users } from '../../test/render.jsx'
 import ProfilePage from '../profile/ProfilePage.jsx'
 import CreateUserWizard from './CreateUserWizard.jsx'
 import UserDetailPage from './UserDetailPage.jsx'
+import PeoplePage from './PeoplePage.jsx'
 import { EMAILJS_URL } from '../../lib/emailRelay.js'
 
 const managers = http.get(`${API}/users`, () => HttpResponse.json({ items: [
@@ -228,5 +229,18 @@ describe('UserDetailPage', () => {
     renderAsUser(<UserDetailPage />, { user: users.admin, route: '/people/u-eli', path: '/people/:id' })
     expect(await screen.findByLabelText(/first name/i)).toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: /tracks own hours/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('People table', () => {
+  test('a long email wraps in its cell (never cut off) and shows in full on hover', async () => {
+    const email = 'christopher.vanderberg-oyelaran@consulting.acme.example'
+    server.use(http.get(`${API}/users`, () => HttpResponse.json({ items: [{ id: 'u-chris', username: 'cvanderberg',
+      first_name: 'Christopher', last_name: 'Vanderberg', email, role: 'employee', job_title: 'Consultant', skills: [] }], total: 1 })),
+    http.get(`${API}/departments`, () => HttpResponse.json({ items: [] })))
+    renderAsUser(<PeoplePage />, { user: users.admin, route: '/people', path: '/people' })
+    const cell = await screen.findByText(email)
+    expect(cell).toHaveStyle({ whiteSpace: 'normal', overflowWrap: 'anywhere' })
+    expect(cell).toHaveAttribute('title', email)
   })
 })

@@ -124,6 +124,26 @@ describe('signing in clears the typing kept for anyone else (SEC-1)', () => {
     expect(sessionStorage.getItem(DEMO_FLAG)).toBe('1')
   })
 
+  const restoresAs = (user) => http.post(`${API}/auth/refresh`, () => HttpResponse.json({ access_token: 'tok', user }))
+
+  test("a reload that restores someone else's session (the refresh cookie) removes the previous person's typing", async () => {
+    keepEachOnesTyping()
+    server.use(restoresAs(users.manager))
+    renderSwitcher()
+    expect(await screen.findByText('Status: ready as u-mgr')).toBeInTheDocument()
+    expect(unsavedKeys()).toEqual([MORGAN])
+    expect(sessionStorage.getItem(DEMO_FLAG)).toBe('1')
+  })
+
+  test('a reload that restores the same person keeps their typing, so My timesheet restores it', async () => {
+    keepEachOnesTyping()
+    server.use(restoresAs(users.employee))
+    renderSwitcher()
+    expect(await screen.findByText('Status: ready as u-emp')).toBeInTheDocument()
+    expect(unsavedKeys()).toEqual(ELI)
+    expect(JSON.parse(sessionStorage.getItem(ELI[1]))).toEqual({ drafts: { 'm1|2026-10-13': '9' }, notes: {} })
+  })
+
   test('the same person signing back in keeps their typing, so My timesheet restores it', async () => {
     keepEachOnesTyping()
     server.use(refreshRefused(), signsInAs)

@@ -1,6 +1,6 @@
 import PersonAdd from '@mui/icons-material/PersonAddAlt'
 import Search from '@mui/icons-material/Search'
-import { Button, Checkbox, FormControlLabel, InputAdornment, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material'
+import { Box, Button, Checkbox, FormControlLabel, InputAdornment, MenuItem, Paper, Stack, TextField, Typography } from '@mui/material'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUsers } from '../../api/queries.js'
@@ -49,7 +49,11 @@ export default function PeoplePage() {
     { field: 'name', headerName: 'Name', flex: 1.2, minWidth: 160, valueGetter: (_, row) => fullName(row),
       renderCell: ({ row }) => <PersonWithAvatar person={{ id: row.id, name: fullName(row) }} /> },
     { field: 'username', headerName: 'Username', flex: 1, minWidth: 120 },
-    { field: 'email', headerName: 'Email', flex: 1.4, minWidth: 180 },
+    // An address wraps in its cell (rows grow to fit) rather than ending in an ellipsis; hovering shows it whole too.
+    { field: 'email', headerName: 'Email', flex: 1.6, minWidth: 200,
+      renderCell: ({ row }) => (
+        <Box component="span" title={row.email} sx={{ whiteSpace: 'normal', overflowWrap: 'anywhere', minWidth: 0 }}>{row.email}</Box>
+      ) },
     { field: 'role', headerName: 'Role', width: 110, valueFormatter: (v) => ROLE[v] ?? v },
     { field: 'job_title', headerName: 'Job title', flex: 1, minWidth: 140 },
     { field: 'skills', headerName: 'Skills', flex: 1.4, minWidth: 180, sortable: false,

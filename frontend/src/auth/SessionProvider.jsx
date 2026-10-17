@@ -27,7 +27,12 @@ export default function SessionProvider({ children }) {
       setState((s) => ({ user: null, status: 'anon', ended: demo ? 'demo' : (s.signedOut ? s.ended : null),
         signedOut: demo || s.signedOut, lastUserId: s.user?.id ?? s.lastUserId }))
     })
-    const off = api.onSessionRefreshed((user) => alive && setState((s) => ({ ...s, user, status: statusFor(user), ended: null, signedOut: false })))
+    const off = api.onSessionRefreshed((user) => {
+      if (!alive) return
+      // As at sign-in: a restored session (a reload, or the token's refresh) keeps only its own person's unsaved typing.
+      if (user?.id != null) clearOthersUnsaved(user.id)
+      setState((s) => ({ ...s, user, status: statusFor(user), ended: null, signedOut: false }))
+    })
     // A failed restore keeps the reason the expiry handler just recorded.
     api.refresh().catch(() => alive && setState((s) => ({ ...s, user: null, status: 'anon' })))
     return () => { alive = false; off() }
