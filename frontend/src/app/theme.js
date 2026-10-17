@@ -136,7 +136,9 @@ export function buildTheme(mode = 'light') {
       },
       MuiPaper: {
         defaultProps: { elevation: 0 },
-        styleOverrides: { outlined: { borderColor: border, boxShadow: shadow } },
+        // Dark mode: MUI's elevation overlay lightens dialogs, menus and popovers well above the card surface, which
+        // drops button text on them below AA. Keep the card colour and mark the edge with a border instead.
+        styleOverrides: { root: dark ? { backgroundImage: 'none' } : {}, outlined: { borderColor: border, boxShadow: shadow } },
       },
       MuiCard: {
         defaultProps: { variant: 'outlined' },
@@ -156,6 +158,8 @@ export function buildTheme(mode = 'light') {
         },
       },
       MuiDrawer: { styleOverrides: { paper: { borderColor: border } } },
+      ...(dark ? Object.fromEntries(['MuiDialog', 'MuiMenu', 'MuiPopover'].map((n) => [n,
+        { styleOverrides: { paper: { border: `1px solid ${border}` } } }])) : {}),
       MuiAppBar: { styleOverrides: { root: { backgroundColor: dark ? '#16212C' : '#FFFFFF' } } },
       MuiTableCell: {
         styleOverrides: {

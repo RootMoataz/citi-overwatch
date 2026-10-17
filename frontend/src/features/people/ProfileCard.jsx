@@ -2,6 +2,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import LockOutlined from '@mui/icons-material/LockOutlined'
 import { Box, ButtonBase, Divider, Paper, Stack, Typography } from '@mui/material'
 import { useId, useState } from 'react'
+import { tonalFill } from '../../app/theme.js'
 import UserAvatar from '../../components/UserAvatar.jsx'
 import { formatMoney } from '../../lib/format.js'
 import { ROLE_LABEL } from '../../lib/labels.js'
@@ -15,7 +16,8 @@ export function EmploymentDetails({ salary }) {
   return (
     <Box>
       <ButtonBase onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls={bodyId}
-        sx={{ width: '100%', minHeight: 44, justifyContent: 'flex-start', gap: 1, textAlign: 'left', borderRadius: 1 }}>
+        sx={(theme) => ({ ...tonalFill(theme, theme.palette.primary.main), width: '100%', minHeight: 44,
+          justifyContent: 'flex-start', gap: 1, textAlign: 'left', borderRadius: 1, px: 1 })}>
         <LockOutlined aria-hidden="true" fontSize="small" sx={{ color: 'text.secondary' }} />
         <Typography component="span" variant="subtitle1" sx={{ flexGrow: 1 }}>Employment details</Typography>
         <ExpandMoreIcon aria-hidden="true" sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />
