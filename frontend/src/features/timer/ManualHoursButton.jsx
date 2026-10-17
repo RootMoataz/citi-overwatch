@@ -7,8 +7,9 @@ import { useTimer } from './useTimer.js'
 
 /** "Log hours manually" on a milestone: opens the pop-up on `day` (today when none). Hidden for anyone who keeps no
  * timesheet, on a completed milestone and while this milestone's own timer runs (stop it first). A timer running on
- * another milestone doesn't matter. Same 44 px target rule as TimerButton: `touch` always, else below `md`. */
-export default function ManualHoursButton({ milestone, project, day, size = 'small', touch = false }) {
+ * another milestone doesn't matter. Same 44 px target rule as TimerButton: `touch` always, else below `md`. `wrap` lets the label break onto two
+ * lines, for a column that must stay narrow. */
+export default function ManualHoursButton({ milestone, project, day, size = 'small', touch = false, wrap = false }) {
   const { user } = useSession()
   const { timer } = useTimer()
   const [open, setOpen] = useState(false)
@@ -22,7 +23,7 @@ export default function ManualHoursButton({ milestone, project, day, size = 'sma
         <Box component="span" sx={{ display: 'inline-flex' }}>
           <Button size={size} variant="outlined" onClick={() => setOpen(true)} disabled={blocked}
             aria-label={`Log hours manually on ${milestone.name}`}
-            sx={{ whiteSpace: 'nowrap', minHeight: touch ? 44 : { xs: 44, md: 'auto' } }}>
+            sx={{ whiteSpace: wrap ? 'normal' : 'nowrap', minHeight: touch ? 44 : { xs: 44, md: 'auto' } }}>
             Log hours manually
           </Button>
         </Box>

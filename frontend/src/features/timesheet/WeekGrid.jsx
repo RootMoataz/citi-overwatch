@@ -185,7 +185,7 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
                     <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{closed}</Typography>
                   </Tooltip>
                 ) : null}
-                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><LogTimeActions milestone={r.milestone} project={group.project} /></Box> : null}
+                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><LogTimeActions milestone={r.milestone} project={group.project} wrap={narrow} /></Box> : null}
               </Box>
             </TableCell>
             {days.map((d) => {

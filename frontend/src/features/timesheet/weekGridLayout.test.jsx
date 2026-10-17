@@ -94,3 +94,26 @@ describe('the Week grid: header, project band and weekends', () => {
     expect(mon.parentElement).not.toHaveAttribute('data-dim')
   })
 })
+
+describe('the Week grid beside an open Entry details panel', () => {
+  const entry = { id: 'e1', milestone_id: 'm1', work_date: '2026-10-14', hours: '4', status: 'pending', note: 'Mapped the source tables.',
+    source: 'manual', over_40: false, edited_after_decision: false }
+  const withEntry = () => http.get(`${API}/time-entries`, () => HttpResponse.json({ week_start: WEEK,
+    user: { id: users.employee.id, name: 'Eli Employee' }, rows: [open, onHold], entries: [entry], drafts: [], locks: [],
+    totals: { logged: 4, approved: 0, draft: 0 } }))
+
+  // The milestone column sets the grid's width; Log hours manually wraps beside the panel so all seven days and Counted fit.
+  test('Log hours manually may wrap onto two lines so the Milestone column stays narrow', async () => {
+    server.use(withEntry())
+    renderAsUser(<TimesheetPage />, { user: users.employee, route: `/timesheet?week=${WEEK}&entry=m1:2026-10-14`, path: '/timesheet' })
+    const button = await screen.findByRole('button', { name: `Log hours manually on ${LONG}` })
+    expect(await screen.findByRole('complementary', { name: 'Entry details' })).toBeInTheDocument()
+    expect(button).toHaveStyle({ whiteSpace: 'normal' })
+  })
+
+  test('with no panel open it stays on one line', async () => {
+    server.use(withEntry())
+    renderSheet()
+    expect(await screen.findByRole('button', { name: `Log hours manually on ${LONG}` })).toHaveStyle({ whiteSpace: 'nowrap' })
+  })
+})

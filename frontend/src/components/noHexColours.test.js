@@ -8,6 +8,8 @@ const sources = {
   ...import.meta.glob(['../features/milestones/**/*.jsx', '!../features/milestones/**/*.test.*'], { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob(['../features/home/*.jsx', '!../features/home/*.test.*'], { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob(['../features/timesheet/*.jsx', '!../features/timesheet/*.test.*'], { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob(['../features/timer/*.jsx', '!../features/timer/*.test.*'], { query: '?raw', import: 'default', eager: true }),
+  ...import.meta.glob(['../features/timesheets/*.jsx', '!../features/timesheets/*.test.*'], { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob(['../features/profile/*.jsx', '!../features/profile/*.test.*'], { query: '?raw', import: 'default', eager: true }),
   ...import.meta.glob(['../features/people/*.jsx', '!../features/people/*.test.*'], { query: '?raw', import: 'default', eager: true }),
 }

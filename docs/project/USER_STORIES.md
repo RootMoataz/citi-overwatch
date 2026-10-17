@@ -563,6 +563,13 @@ Everything below was built after the first deploy and is live. **Status** is **D
 **As** someone who keeps a timesheet, **I want** a reminder when my week is empty **so that** my hours reach payroll on time.
 - **Success:** from Friday 14:00 New York time, if I am on an active project and have no pending or approved hours that week, my bell shows one reminder linking to that week (once per week, cleared when I log hours). Managers and admins see the same people on a **Missing timesheets** card.
 
+#### E10. Log hours I didn't time (U) — Done
+**As** an employee, **I want** to log hours for a day I forgot to start the timer **so that** my manager can still count them.
+- **Success:** **Log hours manually** sits beside every **Start timer** (My week, the milestone panel, the timesheet's rows) and, in the Day view, on empty cells of past days. The pop-up "Log hours manually" asks for the day (today, yesterday and the days before, 8 in all), hours (0.25 to 24, quarter hours), "Why not the timer?", details (required for Other) and a work note (10 to 500 characters). It shows "Already logged that day: 6h · that week: 38h" and, past 40h, "This takes your week over 40h, so it goes to your manager as overtime." **Send for review** toasts "Sent 2h on Schema Mapping (Fri 16 Oct) for review". The cell is read-only with a **Manual request** chip and "Pending".
+- **Edit, withdraw, fix:** **Edit** changes the hours, reason or note (approved hours go back to Pending). **Withdraw** removes a request nobody has decided yet ("Withdraw these hours?"). After **Request changes**, the cell shows "Needs revision" with the reason, and **Fix and resubmit** sends it again. Typing hours into the grid still works as before and asks for no reason.
+- **Failure:** a cell that already has hours is refused ("Fri 16 Oct already has 3h on Schema Mapping. Change them on your timesheet."), so are timer hours ("… Use Request a change to add time.") and a running timer ("Your timer on Schema Mapping is running. Stop it first."). Start timer is off on a milestone whose cell for today holds a manual request.
+- **Alerts:** the bell says when a request is approved or needs changes.
+
 ### Manager
 
 #### G1. Review timesheets week by week (U) — Done
@@ -609,6 +616,13 @@ Everything below was built after the first deploy and is live. **Status** is **D
 **As** a manager, admin or executive, **I want** to email the dashboard report to myself or someone else, or print it **so that** stakeholders get the numbers without signing in.
 - **Success:** a per-recipient result ("Sent to …"); the report follows the department filter.
 - **Failure:** without the EmailJS template configured, the button explains that email isn't set up.
+
+#### G11. Decide manual hours one by one (U) — Done
+**As** a manager (or delegate, or admin), **I want** hours logged without the timer in their own list **so that** each gets its own decision and none slips through with a week.
+- **Success:** **Timesheets → Manual hours N** lists each request with person, date, milestone, hours, why not the timer, the work note and flags (Overtime, Edited after a decision, Delegated from …). **Budget impact** opens the breakdown, **Approve 2h** approves it ("Approved 2h for Ben Okafor") and **Request changes** asks for a reason ("Tell the employee why" when it's empty) and sends it back ("Sent back to Ben Okafor"). On a phone each request is a card with its actions in a 44 px row.
+- **Where it shows:** the tab's count adds to the Timesheets badge in the sidebar. A person's week in **To review** says "· 2h more in Manual hours" and links to the tab. The milestone panel's Approvals tab says "2 manual-hours requests on this milestone are reviewed separately." with a **Review manual hours** link. The bell says "Ben logged 2h on Schema Mapping (Fri 16 Oct) without the timer: Forgot to start the timer", or that Ben resubmitted.
+- **Failure:** **Approve week** never includes manual hours (`409 MANUAL_REVIEW_ONLY`). A request the employee changed since I loaded the list is refused (`409 STALE_ENTRY`) and reloads. I never decide my own hours; a manager's own request goes to an admin.
+- **Empty:** "No manual hours waiting". Executives get no list; the public demo admin can approve and request changes but can't log hours.
 
 ### Admin
 

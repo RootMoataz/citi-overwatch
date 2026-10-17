@@ -355,6 +355,27 @@ test.describe('no sideways page scroll at 375 px', { tag: '@phone' }, () => {
           await expect(page.getByRole('tab', { name: /^Projects/ })).toHaveAttribute('aria-selected', 'true')
           await check('My history, Projects tab')
         }
+        // Manual hours: the managers' tab (stacked cards on a phone) and the employee's open "Log hours manually" dialog.
+        if (username === 'manager.demo') {
+          await page.goto('/timesheets?tab=manual')
+          await expect(page.getByRole('tab', { name: /^Manual hours/ })).toHaveAttribute('aria-selected', 'true')
+          await check('Timesheets, Manual hours tab')
+        }
+        if (username === 'employee.demo') {
+          await page.goto('/')
+          await page.getByRole('button', { name: /^Log hours manually on / }).first().click()
+          const dialog = page.getByRole('dialog', { name: 'Log hours manually' })
+          await expect(dialog).toBeVisible()
+          await page.waitForLoadState('networkidle')
+          // The dialog hides the page behind it from the tree, so measure the page directly.
+          const scroll = await sideways(page)
+          if (scroll > 375) wide.push(`My week, Log hours manually open (${scroll}px)`)
+          const box = await dialog.boundingBox()
+          expect.soft(box.x, 'the dialog starts on screen').toBeGreaterThanOrEqual(0)
+          expect.soft(box.x + box.width, 'the dialog ends on screen').toBeLessThanOrEqual(375)
+          await page.keyboard.press('Escape')
+          await expect(dialog).toBeHidden()
+        }
         await page.goto('/projects')
         await page.getByText(/^Apollo Data Migration/).first().click()
         await expect(page).toHaveURL(/\/projects\/[^/?]+/)

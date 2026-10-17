@@ -1243,3 +1243,91 @@ timer, her three latest are marked tracked (two fully, one half: Mixed). While n
 `SAME_HOURS_DAILY` or `LONG_DAY`, one demo employee gets a pending 8h on four weekdays of a milestone they are on,
 inside every rule (open project, 24h day, a week of at most 40h). A fresh seed already has such weeks (Eli's 9h every
 day this week, Gia's 8.5h last week, Ben's 4h every day last week), so it adds none.
+
+## 29. Manual hours
+
+Hours an employee logs without the timer, for a day they forgot or couldn't time. Rules:
+[`app/rules/manual_hours.py`](../../backend/v1/app/rules/manual_hours.py) (the reasons, the window, quarter hours; pure).
+Service: [`app/features/time/manual.py`](../../backend/v1/app/features/time/manual.py) (submit, edit, withdraw and the
+decisions) with the shared checks in [`service.py`](../../backend/v1/app/features/time/service.py). Schema: migration
+016. Screens: `frontend/src/features/timer/ManualHoursDialog.jsx`, `frontend/src/features/timesheet/ManualCell.jsx` and
+`frontend/src/features/timesheets/ManualTab.jsx`. Spec:
+[2026-10-17](../superpowers/specs/2026-10-17-manual-hours-design.md).
+
+A manual request is an ordinary time entry that carries a reason (`manual_reason`) and optional details. It starts
+`pending`, so the 24h day, the 40h week and its overtime label, budgets once approved, red flags and HR treat it like
+any other hours. Its `source` is `manual`, `tracked_hours` is 0 and its work note is always required (10 to 500
+characters).
+
+**The empty-cell rule.** The pop-up fills only an empty cell: that milestone and day have no entry of any status, no
+timer hours (a draft or submitted) and no timer running on that milestone that day. Otherwise it refuses and names the
+right tool: `CELL_HAS_HOURS` points to the timesheet, `TIMER_HOURS_LOCKED` to Request a change, `TIMER_RUNNING` to
+stopping the timer. Adding to existing hours would reopen approved hours and mix reviewed with unreviewed time, and
+replacing them would drop hours without a word. Two sends at the same moment end in the database's unique key, which
+answers `CELL_HAS_HOURS` too.
+
+**The window, on New York dates.** The day is today or one of the 7 days before (`OUTSIDE_WINDOW`, "Pick today or one of
+the 7 days before"). "Today" is `ny_date(now)` on the server and `nyTodayIso()` on the screen, so at 23:30 in New York,
+when UTC is already tomorrow, today is still today. The day must also sit inside the project's dates and the person must
+be assigned (the grid's own cell checks), and the milestone must be open and not completed (`PROJECT_NOT_OPEN`). Seven
+days is the `BACKDATED` flag's limit, so these hours never arrive already flagged. Edit and Fix and resubmit keep the
+entry's day and ignore the window, so a request that was sent back stays fixable. Older hours can still be typed into
+the grid, which has no window and asks for no reason.
+
+**The 24h day, with drafts.** The day's saved pending and approved hours, plus its timer drafts (stopped, not yet
+submitted) on the other cells, plus these hours may not pass 24 (`DAY_OVER_24H`). The grid's own check leaves drafts out,
+because those hours are not saved yet; a manual request counts them, since they will be submitted later and the day
+would otherwise become impossible to save. The pop-up shows "Already logged that day" and "that week" from the same sums,
+and warns when the week would pass 40h.
+
+**The locks.** A cell holding a manual request is read-only in the grid: a change there is `409 MANUAL_HOURS_LOCKED`,
+because the grid would otherwise drop the reason or resubmit without a review. A grid save that sends a manual cell back
+unchanged is skipped (a rejected one stays rejected). It changes only through `PUT /manual-hours/{id}`. From the other
+side, Start timer on a milestone whose cell for today holds a manual request is refused with the same code ("You logged
+today's hours here manually. Edit that request instead."), because the timer's draft would merge into the request. The
+screen shows it as a disabled button with that tooltip. Submit, edit and withdraw run under the person's lock
+(`service.lock_person`), and edit and withdraw re-read the entry `FOR UPDATE`, so a decision that lands in between is
+never overwritten unmarked.
+
+**The lifecycle.** Edit changes hours, reason, details or note. A pending request stays pending; a rejected or approved
+one goes back to `pending`, marked `edited_after_decision`. Sending a pending or approved request back unchanged is
+`NO_CHANGE`. Withdraw deletes the entry only while it is pending and was never decided (`CANNOT_CLEAR_DECIDED`
+otherwise). Only the owner may edit or withdraw: anyone else, and any id that is not one of the owner's manual entries,
+gets the same `404`.
+
+**The separate queue and its server guards.** Manual requests are not in To review. `GET /approvals` leaves them out, and
+`POST /approvals/approve-week`, `/time-entries/{id}/approve` and `/reject` refuse them with `409 MANUAL_REVIEW_ONLY`
+("Manual hours are reviewed one at a time in Timesheets → Manual hours."). Approve week then approves nothing, all or
+nothing as always. Hiding them on screen would not stop an old tab or a script from approving them unseen, so the server
+enforces it. The only way to decide one is `/manual-hours/{id}/approve` or `/request-changes`. The reviewers are the
+people who decide that person's hours today: the project's manager, its active delegate and any admin, never the person
+themselves; a manager's own request goes to an admin. Executives get no list, and the permission rules are unchanged.
+The list is `GET /manual-hours`, oldest day first, in To review's item shape.
+
+**The stale guard on hours and `updated_at`.** Each decision sends `expected_hours` and `expected_updated_at`, the
+values the reviewer was shown, and the update applies only to that exact version (`409 STALE_ENTRY` otherwise, also
+when the entry changes between the check and the write). Hours alone are not enough: while the manager reads, the
+employee may change the reason or the note and leave the hours as they are, and the manager would approve text they
+never saw. The version is sent back as the API gave it, microseconds included. On screen a stale error stays on the row,
+and once the refetch drops the row it moves to the top of the list under the person's name and the day.
+
+**The bells.** The reviewers get `MANUAL_HOURS_SUBMITTED` for every new request and every resubmission (an edit of a
+decided one), not for edits while pending: "Ben logged 2h on Schema Mapping (Fri 16 Oct) without the timer: Forgot to
+start the timer", or "Ben resubmitted 2.5h of manual hours …" (a manager's own request notifies the first admin). The
+employee gets `MANUAL_HOURS_APPROVED` ("Kim approved your 2h of manual hours …") or `ENTRY_REJECTED` marked `manual: true`
+("Your 2h of manual hours … need changes: *reason*"). Every one is stored with no `week_start`, so the one-alert-per-
+person-week key never swallows a second request in the same week. A submission's bell opens
+`/timesheets?tab=manual&user=<id>`. The tab's count also feeds the sidebar badge, and To review's caption reads
+"· 2h more in Manual hours" for a person-week that has requests waiting.
+
+**The demo split.** The public demo admin keeps no timesheet, so `POST`, `PUT` and `DELETE /manual-hours…` are in
+`public_demo.py`'s denied list, while approving and requesting changes are allowed, as for change requests. In the app the
+button is disabled for the demo account with the usual demo tooltip.
+
+**What the tests cover.** The backend integration suite (`tests/integration/test_manual_hours.py`) runs every rule above.
+The Vitest files cover the pop-up's validation, every button placement, the cell, the tab and the bell, plus privacy by
+recorded requests (an employee session never asks for another person's data). `frontend/e2e/manual-hours.spec.js` runs
+the loop on desktop Chrome and the iPhone 13 profile: log from My week, the cell, the manager's bell and tab, Approve week
+leaving the request alone (and the API answering `409 MANUAL_REVIEW_ONLY`), approval, then edit, request changes, fix and
+resubmit, and approve. `shell.spec.js` checks the tab and the open pop-up at 375 px, and `noHexColours.test.js` scans the
+new screens for hard-coded colours.
