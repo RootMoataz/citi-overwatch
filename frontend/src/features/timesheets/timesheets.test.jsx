@@ -5,7 +5,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { ApprovalsRedirect } from '../../app/App.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
-import { hasPhoneTarget } from '../../test/cssRules.js'
+import { expectPhoneTarget } from '../../test/cssRules.js'
 import { setViewport } from '../../test/setup.js'
 import { bold } from '../../test/bold.js'
 import TimesheetsPage from './TimesheetsPage.jsx'
@@ -88,7 +88,7 @@ describe('Timesheets: To review', () => {
     setViewport(375)
     open(users.manager)
     const week = await screen.findByRole('region', { name: /eli employee, week of oct 12, 2026/i })
-    expect(hasPhoneTarget(within(week).getByRole('button', { name: 'Approve week' }))).toBe(true)
+    expectPhoneTarget(within(week).getByRole('button', { name: 'Approve week' }))
     expect(screen.getByRole('tablist').closest('.MuiTabs-root').querySelector('.MuiTabs-scrollButtons')).toBeNull()
   })
 

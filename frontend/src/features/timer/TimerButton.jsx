@@ -32,7 +32,8 @@ export default function TimerButton({ milestone, size = 'small', touch = false, 
       <>
         <Button size={size} variant="contained" color="error" startIcon={<Stop />} onClick={() => setStopping(true)}
           aria-label={`Stop timer on ${milestone.name} (running ${formatElapsed(elapsed)})`}
-          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: wrap ? 0 : 104, ...target }}>
+          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: wrap ? 0 : 104,
+            ...(wrap ? { px: 0.5, '& .MuiButton-startIcon': { mr: 0.5 } } : null), ...target }}>
           {formatElapsed(elapsed)}
         </Button>
         {stopping ? <StopTimerDialog timer={timer} elapsed={elapsed} onClose={() => setStopping(false)} /> : null}

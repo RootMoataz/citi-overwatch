@@ -4,7 +4,7 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
-import { hasPhoneTarget } from '../../test/cssRules.js'
+import { expectPhoneTarget } from '../../test/cssRules.js'
 import { setPrefersDark, setViewport } from '../../test/setup.js'
 import TimesheetPage from './TimesheetPage.jsx'
 
@@ -83,8 +83,19 @@ describe('the Week grid on a phone: the Milestone column stays in view and about
     expect(within(table).getAllByRole('columnheader').find((c) => /^Mon/.test(c.textContent))).toHaveStyle({ minWidth: '60px' })
     const start = screen.getByRole('button', { name: `Start timer on ${LONG}` })
     const manual = screen.getByRole('button', { name: `Log hours manually on ${LONG}` })
-    ;[start, manual].forEach((b) => { expect(b).toHaveStyle({ whiteSpace: 'normal' }); expect(hasPhoneTarget(b)).toBe(true) })
-    expect(hasPhoneTarget(screen.getAllByRole('textbox', { name: new RegExp(LONG) })[0].closest('.MuiTextField-root'))).toBe(true)
+    ;[start, manual].forEach((b) => { expect(b).toHaveStyle({ whiteSpace: 'normal' }); expectPhoneTarget(b) })
+    expectPhoneTarget(screen.getAllByRole('textbox', { name: new RegExp(LONG) })[0].closest('.MuiTextField-root'), 'min-height', { within: ' .MuiOutlinedInput-root' })
+  })
+
+  test("a running timer's Stop button shrinks to fit the narrow column and stays a 44 px target", async () => {
+    setViewport(375)
+    server.use(sheet(), http.get(`${API}/timers/current`, () => HttpResponse.json({ now: '2026-10-15T16:00:00.000Z', stopped: null, limits: [],
+      timer: { id: 't1', milestone: { id: 'm1', name: LONG }, project: { id: 'p1', name: 'Apollo' }, work_date: '2026-10-15',
+        started_at: '2026-10-15T15:00:00.000Z', stopped_at: null, auto_stopped: false, tracked_hours: 0, submitted: false, note: '' } })))
+    renderSheet()
+    const stop = await screen.findByRole('button', { name: new RegExp(`^Stop timer on ${LONG}`) })
+    expect(stop).toHaveStyle({ minWidth: '0px', paddingLeft: '4px', paddingRight: '4px' })
+    expectPhoneTarget(stop)
   })
 
   test('Submit and the Day / Week / Month buttons are 44 px targets', async () => {
@@ -92,9 +103,9 @@ describe('the Week grid on a phone: the Milestone column stays in view and about
     server.use(sheet())
     renderSheet()
     await screen.findByRole('rowheader', { name: new RegExp(LONG) })
-    expect(hasPhoneTarget(screen.getByRole('button', { name: 'Submit' }))).toBe(true)
+    expectPhoneTarget(screen.getByRole('button', { name: 'Submit' }))
     const view = screen.getByRole('group', { name: 'Timesheet view' })
-    expect(hasPhoneTarget(view)).toBe(true)   // the group's rule sets min-height on its buttons
+    expectPhoneTarget(view, 'min-height', { within: ' .MuiToggleButton-root' })   // the group's rule sets it on its buttons
     expect(within(view).getAllByRole('button')).toHaveLength(3)
   })
 
@@ -153,6 +164,14 @@ describe('the Week grid beside an open Entry details panel', () => {
     const button = await screen.findByRole('button', { name: `Log hours manually on ${LONG}` })
     expect(await screen.findByRole('complementary', { name: 'Entry details' })).toBeInTheDocument()
     expect(button).toHaveStyle({ whiteSpace: 'normal' })
+  })
+
+  test('Start timer stays on one line beside the panel on a desktop (only a phone wraps it)', async () => {
+    server.use(withEntry())
+    renderAsUser(<TimesheetPage />, { user: users.employee, route: `/timesheet?week=${WEEK}&entry=m1:2026-10-14`, path: '/timesheet' })
+    const start = await screen.findByRole('button', { name: `Start timer on ${LONG}` })
+    expect(await screen.findByRole('complementary', { name: 'Entry details' })).toBeInTheDocument()
+    expect(start).toHaveStyle({ whiteSpace: 'nowrap' })
   })
 
   test('with no panel open it stays on one line', async () => {

@@ -490,8 +490,6 @@ test.describe('phone fixes at 375 px', { tag: '@phone' }, () => {
       return [...table.querySelectorAll('thead th')].slice(1).filter((th) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(th.textContent))
         .filter((th) => { const r = th.getBoundingClientRect(); return r.left >= edge - 0.5 && r.right <= right + 0.5 }).length
     })
-    const days = await grid.evaluate((table) => [...table.querySelectorAll('thead th')].slice(1, 3).map((th) => th.getBoundingClientRect().width))
-    console.log('PHONE-MEASURED', JSON.stringify({ ...measured, milestoneColumn: column.width, card: card.width, dayColumns: days, visibleDays }))
     expect.soft(column.width, 'the Milestone column is about 104 px').toBeLessThanOrEqual(112)
     expect.soft(visibleDays, 'at least 3 day columns are fully visible beside the Milestone column').toBeGreaterThanOrEqual(3)
 
@@ -502,6 +500,28 @@ test.describe('phone fixes at 375 px', { tag: '@phone' }, () => {
     expect((await milestone.boundingBox()).x, 'the Milestone header stays at the left edge').toBeCloseTo(card.left, 0)
     expect((await rowHeader.boundingBox()).x, 'the milestone rows stay at the left edge').toBeCloseTo(card.left, 0)
     expect(await sideways(page), 'no horizontal page scroll').toBeLessThanOrEqual(375)
+
+    // A running timer: its Stop button fits the narrow column, stays 44 px tall, and never paints over the first day.
+    await container.evaluate((el) => { el.scrollLeft = 0 })
+    const startButton = grid.getByRole('button', { name: /^Start timer on / }).first()
+    await expect(startButton).toBeEnabled()
+    await startButton.click()
+    const stop = grid.getByRole('button', { name: /^Stop timer on / })
+    try {
+      await expect(stop).toBeVisible()
+      const s = await stop.boundingBox()
+      const day = await grid.getByRole('columnheader').nth(1).boundingBox()
+      const col = await milestone.boundingBox()
+      expect.soft(s.height, 'Stop is at least 44 px tall').toBeGreaterThanOrEqual(44)
+      expect.soft(s.x + s.width, 'Stop ends inside the Milestone column').toBeLessThanOrEqual(col.x + col.width + 0.5)
+      expect.soft(s.x + s.width, 'Stop does not reach the first day column').toBeLessThanOrEqual(day.x + 0.5)
+      expect.soft(await milestone.evaluate((el) => el.getBoundingClientRect().width), 'the column stays about 104 px').toBeLessThanOrEqual(112)
+    } finally {
+      const chip = page.getByRole('button', { name: /^Timer running on / })
+      await chip.click()
+      await page.getByRole('dialog').getByRole('button', { name: /^Stop/ }).click()
+      await expect(chip).toBeHidden()
+    }
   })
 
   test('manager.demo: milestone panel tabs and Timesheets tabs swipe with no arrows; Approve week is 44 px', async ({ page }) => {
@@ -524,7 +544,6 @@ test.describe('phone fixes at 375 px', { tag: '@phone' }, () => {
     await expect(panelTabs).toBeVisible()
     await expect(page.locator('.MuiTabs-scrollButtons:visible')).toHaveCount(0)
     const strip = await panelTabs.evaluate((el) => { const s = el.closest('.MuiTabs-root').querySelector('.MuiTabs-scroller'); return { scroll: s.scrollWidth, client: s.clientWidth } })
-    console.log('PHONE-MEASURED-TABS', JSON.stringify(strip))
     expect(strip.scroll, 'the tab strip can scroll sideways').toBeGreaterThan(strip.client)
     expect(await sideways(page), 'no horizontal page scroll').toBeLessThanOrEqual(375)
   })
