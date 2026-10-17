@@ -201,8 +201,8 @@ function TeamThisWeek({ project, week }) {
     .filter((p) => String(p.id) === String(project.id))
     .map((p) => ({ id: person.user.id, name: person.user.name, planned: Number(p.planned), logged: Number(p.logged) })))
   const columns = [
-    { key: 'name', header: 'Name', rowHeader: true, render: (r) => <Who person={r} project={project} size={AVATAR_SIZE.inline} /> },
-    { key: 'planned', header: 'Planned', align: 'right', render: (r) => formatHours(r.planned) },
+    { key: 'name', header: 'Name', rowHeader: true, minWidth: 130, render: (r) => <Who person={r} project={project} size={AVATAR_SIZE.inline} /> },
+    { key: 'planned', header: 'Planned', align: 'right', render: (r) => <Box component="span" sx={{ whiteSpace: 'nowrap' }}>{formatHours(r.planned)}</Box> },
     { key: 'logged', header: 'Logged', align: 'right', render: (r) => (
       <Stack direction="row" sx={{ gap: 0.75, justifyContent: 'flex-end', alignItems: 'center' }}>
         <span>{formatHours(r.logged)}</span>

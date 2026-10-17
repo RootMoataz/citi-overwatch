@@ -247,6 +247,15 @@ describe('Overview for the manager', () => {
     expect(within(within(card).getByText('Bo Peep').closest('tr')).queryByText(/^\+/)).not.toBeInTheDocument()
   })
 
+  test('Team this week gives the name room: the column keeps 130 px and a name breaks between words, not mid-word', async () => {
+    server.use(...handlers())
+    open()
+    const card = (await screen.findByRole('heading', { name: 'Team this week' })).closest('section')
+    const link = await within(card).findByRole('link', { name: 'Ada Lovelace' })
+    expect(link.parentElement).toHaveStyle({ overflowWrap: 'break-word' })
+    expect(within(card).getByRole('columnheader', { name: 'Name' })).toHaveStyle({ minWidth: '130px' })
+  })
+
   test('Project details: budget available, effort, people and the work mode', async () => {
     server.use(...handlers({ p: project({ work_mode: 'pull' }) }))
     open()

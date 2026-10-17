@@ -484,6 +484,23 @@ describe('My timesheet header, totals and week bar', () => {
     expect(screen.queryByText(/excluded until resubmitted/)).not.toBeInTheDocument()
   })
 
+  test('the Day/Week/Month toggle sits in the page header, last in its group, in every view, so it never moves', async () => {
+    server.use(mockWeek(), emptyCalendar())
+    renderSheet()
+    const user = userEvent.setup()
+    await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })
+    for (const view of ['Day', 'Week', 'Month', 'Week']) {
+      await user.click(screen.getByRole('button', { name: view }))
+      await waitFor(() => expect(screen.getByRole('button', { name: view })).toHaveAttribute('aria-pressed', 'true'))
+      const toggle = screen.getByRole('group', { name: 'Timesheet view' })
+      const actions = toggle.parentElement
+      expect(actions.parentElement).toContainElement(screen.getByRole('heading', { level: 1, name: 'My timesheet' }))
+      expect(actions.lastElementChild).toBe(toggle)
+      const weekRange = screen.queryByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })
+      if (weekRange) expect(weekRange.closest('.MuiPaper-root')).not.toContainElement(toggle)
+    }
+  })
+
   test('the week bar names the week, moves between weeks and has the view toggle', async () => {
     server.use(mockWeek())
     renderSheet()

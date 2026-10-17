@@ -150,6 +150,7 @@ export default function TimesheetPage() {
 
   const toggle = (
     <ToggleButtonGroup exclusive size="small" value={view} aria-label="Timesheet view"
+      sx={{ order: { xs: -1, sm: 0 } }}
       onChange={(_, next) => { if (next) chooseView(next) }}>
       <ToggleButton value="day">Day</ToggleButton>
       <ToggleButton value="week">Week</ToggleButton>
@@ -185,9 +186,11 @@ export default function TimesheetPage() {
       <PageHeader title="My timesheet" subtitle="Review your week. Submit with confidence."
         actions={(
           <>
-            {toggle}
             <Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
               {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>
+            {/* Last from sm, so it sits at the right edge in every view (Month has no Submit); first on a phone, so it starts the
+                row there. Either way it never moves between views. */}
+            {toggle}
           </>
         )} />
       <WeekTotals figures={figures} cap={CAP} loading={loading} />
