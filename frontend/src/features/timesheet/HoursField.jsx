@@ -30,7 +30,9 @@ export default function HoursField({ value, label, caption, onChange, error, dis
       slotProps={{ htmlInput: { inputMode: 'decimal', pattern: '[0-9]{0,2}([.][0-9]{0,2})?',
         'aria-label': label, style: { textAlign: 'center' } },
       input: dim ? { 'data-dim': '' } : undefined }}
-      sx={{ width: compact === 'always' ? 56 : compact ? { xs: 56, sm: 76 } : 76,
-        ...(dim ? { '& .MuiOutlinedInput-root': { bgcolor: (t) => alpha(t.palette.text.primary, 0.04) } } : null) }} />
+      sx={{ width: compact === 'always' ? 56 : compact ? { xs: 52, sm: 76 } : 76,
+        // A 44 px target below md (the box is 40 px tall otherwise).
+        '& .MuiOutlinedInput-root': { minHeight: { xs: 44, md: 'auto' } },
+        ...(dim ? { '& .MuiOutlinedInput-root': { minHeight: { xs: 44, md: 'auto' }, bgcolor: (t) => alpha(t.palette.text.primary, 0.04) } } : null) }} />
   )
 }

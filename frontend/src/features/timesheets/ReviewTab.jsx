@@ -71,7 +71,7 @@ function PersonWeek({ group }) {
           <Chip size="small" color="warning" variant="outlined" label={`⚠ ${flags} red ${flags === 1 ? 'flag' : 'flags'}`}
             sx={{ flexShrink: 0 }} />
         ) : null}
-        <Button variant="contained" disabled={approveWeek.isPending} sx={{ flexShrink: 0 }}
+        <Button variant="contained" disabled={approveWeek.isPending} sx={{ flexShrink: 0, minHeight: { xs: 44, md: 'auto' } }}
           onClick={async () => { setFailure(null); try { await approveWeek.mutateAsync(group.items) } catch (err) { setFailure(err) } }}>
           Approve week
         </Button>

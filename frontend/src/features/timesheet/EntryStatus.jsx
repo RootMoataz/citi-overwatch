@@ -27,7 +27,9 @@ export function StatusWords({ entry, inline = false }) {
   return (
     <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: inline ? 'flex-start' : 'center',
       columnGap: 0.75, rowGap: 0.25, mt: inline ? 0 : 0.5 }}>
-      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+      {/* On a phone, in the week grid, the dot sits above the word so a day column can be about 60 px wide. */}
+      <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5,
+        ...(inline ? null : { flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.25, sm: 0.5 } }) }}>
         <StatusDot kind={kind} />
         <Typography variant="caption" component="span" sx={{ color: (t) => kindText(kind, t), lineHeight: 1.2, fontWeight: 600 }}>
           {KIND[kind].critical ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}

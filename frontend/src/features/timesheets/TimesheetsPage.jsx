@@ -1,9 +1,11 @@
 import { Box, Tab, Tabs } from '@mui/material'
+import { useMediaQuery } from 'react-responsive'
 import { useSearchParams } from 'react-router-dom'
 import { useManualHours } from '../../api/queries.js'
 import { useSession } from '../../auth/sessionContext.js'
 import PageHeader from '../../components/PageHeader.jsx'
 import { can } from '../../lib/permissions.js'
+import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import LiveTimersCard from '../timer/LiveTimersCard.jsx'
 import ApprovedTab from './ApprovedTab.jsx'
 import ChangeRequests from './ChangeRequests.jsx'
@@ -37,6 +39,8 @@ const SUBTITLE = {
  * then the tabs. The tab lives in ?tab=, and alert links filter To review with ?user= etc. */
 export default function TimesheetsPage() {
   const { user } = useSession()
+  // On a phone the tabs swipe without arrows (one would hide a label); from md they keep MUI's arrows.
+  const desktop = useMediaQuery(DESKTOP_QUERY)
   const [params, setParams] = useSearchParams()
   const manual = useManualHours({}, can(user, 'approvals.view'))
   const tabs = tabsFor(user, manual.data?.length)
@@ -49,7 +53,8 @@ export default function TimesheetsPage() {
       <PageHeader title="Timesheets" subtitle={SUBTITLE[user?.role]} />
       <Box sx={{ mb: 2 }}><LiveTimersCard /></Box>
       {can(user, 'approvals.view') ? <ChangeRequests /> : null}
-      <Tabs value={tab} onChange={(_, v) => choose(v)} sx={{ mb: 2 }} aria-label="Timesheets" variant="scrollable" allowScrollButtonsMobile>
+      <Tabs value={tab} onChange={(_, v) => choose(v)} sx={{ mb: 2 }} aria-label="Timesheets" variant="scrollable"
+        scrollButtons={desktop ? 'auto' : false} allowScrollButtonsMobile={desktop}>
         {tabs.map((t) => <Tab key={t.value} value={t.value} label={t.label} />)}
       </Tabs>
       {tab === 'review' ? <ReviewTab filters={filters} onClearFilters={() => setParams({})} /> : null}

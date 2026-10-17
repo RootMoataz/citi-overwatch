@@ -4,7 +4,8 @@ import { fireEvent, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
-import { setViewport } from '../../test/setup.js'
+import { hasPhoneTarget } from '../../test/cssRules.js'
+import { setPrefersDark, setViewport } from '../../test/setup.js'
 import TimesheetPage from './TimesheetPage.jsx'
 
 const WEEK = '2026-10-12'
@@ -30,9 +31,9 @@ describe('the Week grid on a phone', () => {
     renderSheet()
     const header = await screen.findByRole('rowheader', { name: new RegExp(LONG) })
     const name = within(header).getByText(LONG)
-    // A 140 px column (the cell's 16 px padding each side included): 108 px of name.
-    expect(name).toHaveStyle({ maxWidth: '108px', overflowWrap: 'anywhere' })
-    expect(within(screen.getByRole('table')).getByRole('columnheader', { name: 'Milestone' })).toHaveStyle({ minWidth: '140px' })
+    // A 104 px column (the cell's 8 px padding each side included): 88 px of name.
+    expect(name).toHaveStyle({ maxWidth: '88px', overflowWrap: 'anywhere' })
+    expect(within(screen.getByRole('table')).getByRole('columnheader', { name: 'Milestone' })).toHaveStyle({ minWidth: '104px' })
   })
 
   test("a closed row's fixed first cell carries the row's tint over its opaque background", async () => {
@@ -61,6 +62,49 @@ describe('the Week grid on a phone', () => {
     expect(document.querySelector('[data-scroll-fade="left"]')).not.toBeInTheDocument()
     size(500)
     expect(document.querySelector('[data-scroll-fade]')).not.toBeInTheDocument()
+  })
+})
+
+describe('the Week grid on a phone: the Milestone column stays in view and about 3 days show', () => {
+  test('every first-column cell is sticky and opaque (dark too), the day columns are 60 px, the buttons wrap in 44 px targets', async () => {
+    setViewport(375)
+    setPrefersDark(true)
+    server.use(sheet())
+    renderSheet()
+    const row = await screen.findByRole('rowheader', { name: new RegExp(LONG) })
+    const table = screen.getByRole('table')
+    const head = within(table).getByRole('columnheader', { name: 'Milestone' })
+    const total = within(table).getByRole('rowheader', { name: 'Daily total (counted)' })
+    ;[head, row, total].forEach((cell) => {
+      expect(cell).toHaveStyle({ position: 'sticky', left: '0px' })
+      expect(Number(getComputedStyle(cell).zIndex)).toBeGreaterThan(0)
+      expect(getComputedStyle(cell).backgroundColor).not.toBe('')
+    })
+    expect(within(table).getAllByRole('columnheader').find((c) => /^Mon/.test(c.textContent))).toHaveStyle({ minWidth: '60px' })
+    const start = screen.getByRole('button', { name: `Start timer on ${LONG}` })
+    const manual = screen.getByRole('button', { name: `Log hours manually on ${LONG}` })
+    ;[start, manual].forEach((b) => { expect(b).toHaveStyle({ whiteSpace: 'normal' }); expect(hasPhoneTarget(b)).toBe(true) })
+    expect(hasPhoneTarget(screen.getAllByRole('textbox', { name: new RegExp(LONG) })[0].closest('.MuiTextField-root'))).toBe(true)
+  })
+
+  test('Submit and the Day / Week / Month buttons are 44 px targets', async () => {
+    setViewport(375)
+    server.use(sheet())
+    renderSheet()
+    await screen.findByRole('rowheader', { name: new RegExp(LONG) })
+    expect(hasPhoneTarget(screen.getByRole('button', { name: 'Submit' }))).toBe(true)
+    const view = screen.getByRole('group', { name: 'Timesheet view' })
+    expect(hasPhoneTarget(view)).toBe(true)   // the group's rule sets min-height on its buttons
+    expect(within(view).getAllByRole('button')).toHaveLength(3)
+  })
+
+  test('at desktop width the Milestone column and its buttons are as before', async () => {
+    server.use(sheet())
+    renderSheet()
+    await screen.findByRole('rowheader', { name: new RegExp(LONG) })
+    expect(within(screen.getByRole('table')).getByRole('columnheader', { name: 'Milestone' })).toHaveStyle({ minWidth: '140px' })
+    expect(screen.getByRole('button', { name: `Start timer on ${LONG}` })).toHaveStyle({ whiteSpace: 'nowrap' })
+    expect(screen.getByRole('button', { name: `Log hours manually on ${LONG}` })).toHaveStyle({ whiteSpace: 'nowrap' })
   })
 })
 

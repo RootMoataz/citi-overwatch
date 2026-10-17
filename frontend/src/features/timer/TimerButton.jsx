@@ -15,8 +15,9 @@ const MANUAL_TODAY = "You logged today's hours here manually. Edit that request 
 
 /** Start a timer on this milestone ("Start timer"), or stop the one running on it (with its live clock).
  * Completed milestones get no Start. While a timer runs on another milestone this one can't start: one timer at a time.
- * `touch` makes it a 44 px target everywhere (My week's rows and Now card); elsewhere it is one on phones only. */
-export default function TimerButton({ milestone, size = 'small', touch = false }) {
+ * `touch` makes it a 44 px target everywhere (My week's rows and Now card); elsewhere it is one on phones only.
+ * `wrap` lets the label break onto two lines, for a column that must stay narrow. */
+export default function TimerButton({ milestone, size = 'small', touch = false, wrap = false }) {
   const { user } = useSession()
   const { enabled, timer, elapsed } = useTimer()
   const start = useStartTimer()
@@ -31,7 +32,7 @@ export default function TimerButton({ milestone, size = 'small', touch = false }
       <>
         <Button size={size} variant="contained" color="error" startIcon={<Stop />} onClick={() => setStopping(true)}
           aria-label={`Stop timer on ${milestone.name} (running ${formatElapsed(elapsed)})`}
-          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 104, ...target }}>
+          sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: wrap ? 0 : 104, ...target }}>
           {formatElapsed(elapsed)}
         </Button>
         {stopping ? <StopTimerDialog timer={timer} elapsed={elapsed} onClose={() => setStopping(false)} /> : null}
@@ -51,7 +52,7 @@ export default function TimerButton({ milestone, size = 'small', touch = false }
       <Box component="span" sx={{ display: 'inline-flex' }}>
         <Button size={size} variant="outlined" startIcon={<PlayArrow />} onClick={go}
           disabled={blocked || busy || logged || start.isPending} aria-label={`Start timer on ${milestone.name}`}
-          sx={{ whiteSpace: 'nowrap', ...target }}>
+          sx={{ whiteSpace: wrap ? 'normal' : 'nowrap', ...target }}>
           Start timer
         </Button>
       </Box>

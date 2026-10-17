@@ -5,6 +5,7 @@ import { afterEach, describe, expect, test, vi } from 'vitest'
 import Puppy from '../features/puppy/Puppy.jsx'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
 import { API, HttpResponse, http, server } from '../test/server.js'
+import { cssFor, hasPhoneTarget } from '../test/cssRules.js'
 import { setViewport } from '../test/setup.js'
 import Layout from './Layout.jsx'
 
@@ -32,6 +33,14 @@ function renderLayout(user, onLogout = () => {}, { badges, extras } = {}) {
 }
 
 describe('Layout', () => {
+  test('phones: the logo link is a 44 px target', () => {
+    setViewport(375)
+    renderLayout(users.employee)
+    const logo = screen.getByRole('link', { name: /acme scout/i })
+    expect(hasPhoneTarget(logo)).toBe(true)
+    expect(cssFor(logo)).toMatch(/min-width:\s*44px/)
+  })
+
   test('desktop shows the navigation filtered by role', () => {
     renderLayout(users.employee)
     const nav = screen.getByRole('navigation', { name: /main/i })

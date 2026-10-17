@@ -453,3 +453,79 @@ test.describe('pending banners and touch targets at 375 px', { tag: '@phone' }, 
     }
   })
 })
+
+// The phone fixes, measured with real layout at 375 px: the Week grid keeps its Milestone column at the left edge with
+// about 3 day columns beside it, the tab strips swipe with no arrows, and these controls are 44 px targets.
+test.describe('phone fixes at 375 px', { tag: '@phone' }, () => {
+  const size = (locator) => locator.evaluate((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height } })
+
+  test('employee.demo: the Week grid, Submit, the view switch, the logo and the hour boxes', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await signIn(page, 'employee.demo')
+    await page.evaluate(() => localStorage.setItem('overwatch.timesheet.view', 'week'))
+    await page.goto('/timesheet')
+    const grid = page.getByRole('table', { name: /^Timesheet for the week of/ })
+    await expect(grid).toBeVisible()
+    await page.waitForLoadState('networkidle')
+
+    const logo = page.getByRole('banner').getByRole('link', { name: 'ACME Scout' })
+    const measured = { logo: await size(logo), submit: await size(page.getByRole('button', { name: /^Submit/ })) }
+    for (const name of ['Day', 'Week', 'Month']) measured[name] = await size(page.getByRole('button', { name, exact: true }))
+    const box = grid.getByRole('textbox').first()
+    measured.hourBox = await size(box.locator('xpath=ancestor::*[contains(@class,"MuiInputBase-root")][1]'))
+    expect.soft(measured.logo.width, 'the logo is 44 px wide').toBeGreaterThanOrEqual(44)
+    expect.soft(measured.logo.height, 'the logo is 44 px tall').toBeGreaterThanOrEqual(44)
+    for (const [name, m] of Object.entries(measured)) {
+      if (name !== 'logo') expect.soft(m.height, `${name} is at least 44 px tall`).toBeGreaterThanOrEqual(44)
+    }
+
+    const container = await grid.evaluateHandle((el) => el.closest('.MuiTableContainer-root'))
+    const milestone = grid.getByRole('columnheader', { name: 'Milestone' })
+    const column = await size(milestone)
+    const card = await container.evaluate((el) => { const r = el.getBoundingClientRect(); return { left: r.left, right: r.right, width: r.width } })
+    const visibleDays = await grid.evaluate((table) => {
+      const holder = table.closest('.MuiTableContainer-root')
+      const edge = table.querySelector('thead th').getBoundingClientRect().right
+      const right = holder.getBoundingClientRect().right
+      return [...table.querySelectorAll('thead th')].slice(1).filter((th) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(th.textContent))
+        .filter((th) => { const r = th.getBoundingClientRect(); return r.left >= edge - 0.5 && r.right <= right + 0.5 }).length
+    })
+    const days = await grid.evaluate((table) => [...table.querySelectorAll('thead th')].slice(1, 3).map((th) => th.getBoundingClientRect().width))
+    console.log('PHONE-MEASURED', JSON.stringify({ ...measured, milestoneColumn: column.width, card: card.width, dayColumns: days, visibleDays }))
+    expect.soft(column.width, 'the Milestone column is about 104 px').toBeLessThanOrEqual(112)
+    expect.soft(visibleDays, 'at least 3 day columns are fully visible beside the Milestone column').toBeGreaterThanOrEqual(3)
+
+    // After scrolling sideways the Milestone column (header and rows) stays at the card's left edge.
+    await container.evaluate((el) => { el.scrollLeft = 150 })
+    await expect.poll(() => container.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0)
+    const rowHeader = grid.getByRole('rowheader').nth(1)
+    expect((await milestone.boundingBox()).x, 'the Milestone header stays at the left edge').toBeCloseTo(card.left, 0)
+    expect((await rowHeader.boundingBox()).x, 'the milestone rows stay at the left edge').toBeCloseTo(card.left, 0)
+    expect(await sideways(page), 'no horizontal page scroll').toBeLessThanOrEqual(375)
+  })
+
+  test('manager.demo: milestone panel tabs and Timesheets tabs swipe with no arrows; Approve week is 44 px', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await signIn(page, 'manager.demo')
+    await page.goto('/timesheets')
+    const tabs = page.getByRole('tablist', { name: 'Timesheets' })
+    await expect(tabs).toBeVisible()
+    await expect(page.locator('.MuiTabs-scrollButtons:visible')).toHaveCount(0)
+    const approve = page.getByRole('button', { name: 'Approve week' }).first()
+    await expect(approve).toBeVisible()
+    expect((await size(approve)).height, 'Approve week is at least 44 px tall').toBeGreaterThanOrEqual(44)
+
+    await openProject(page, 'Apollo Data Migration', 'milestones')
+    const first = page.locator('[data-milestone-card], tbody tr').first()
+    await expect(first).toBeVisible()
+    await first.click()
+    await expect(page).toHaveURL(/milestone=/)
+    const panelTabs = page.getByRole('dialog').getByRole('tablist')
+    await expect(panelTabs).toBeVisible()
+    await expect(page.locator('.MuiTabs-scrollButtons:visible')).toHaveCount(0)
+    const strip = await panelTabs.evaluate((el) => { const s = el.closest('.MuiTabs-root').querySelector('.MuiTabs-scroller'); return { scroll: s.scrollWidth, client: s.clientWidth } })
+    console.log('PHONE-MEASURED-TABS', JSON.stringify(strip))
+    expect(strip.scroll, 'the tab strip can scroll sideways').toBeGreaterThan(strip.client)
+    expect(await sideways(page), 'no horizontal page scroll').toBeLessThanOrEqual(375)
+  })
+})

@@ -150,7 +150,7 @@ export default function TimesheetPage() {
 
   const toggle = (
     <ToggleButtonGroup exclusive size="small" value={view} aria-label="Timesheet view"
-      sx={{ order: { xs: -1, sm: 0 } }}
+      sx={{ order: { xs: -1, sm: 0 }, '& .MuiToggleButton-root': { minHeight: { xs: 44, md: 'auto' } } }}
       onChange={(_, next) => { if (next) chooseView(next) }}>
       <ToggleButton value="day">Day</ToggleButton>
       <ToggleButton value="week">Week</ToggleButton>
@@ -186,7 +186,8 @@ export default function TimesheetPage() {
       <PageHeader title="My timesheet" subtitle="Review your week. Submit with confidence."
         actions={(
           <>
-            <Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}>
+            <Button variant="contained" onClick={onSave} disabled={!n || tooMany || tooFew || saving || savingCell}
+              sx={{ minHeight: { xs: 44, md: 'auto' } }}>
               {saving ? 'Saving…' : n ? `Submit ${n} change${n === 1 ? '' : 's'}` : 'Submit'}</Button>
             {/* Last from sm, so it sits at the right edge in every view (Month has no Submit); first on a phone, so it starts the
                 row there. Either way it never moves between views. */}

@@ -12,7 +12,7 @@ import SidePanel from '../../components/SidePanel.jsx'
 import StatusChip from '../../components/StatusChip.jsx'
 import SupportingChip from '../../components/SupportingChip.jsx'
 import { formatDate, formatHours } from '../../lib/format.js'
-import { WIDE_QUERY } from '../../lib/responsive.js'
+import { DESKTOP_QUERY, WIDE_QUERY } from '../../lib/responsive.js'
 import MilestoneDialog from './MilestoneDialog.jsx'
 import MilestoneHistory from './MilestoneHistory.jsx'
 import MilestoneMenu from './MilestoneMenu.jsx'
@@ -98,6 +98,8 @@ function CountLabel({ label, count }) {
 export default function MilestonePanel({ project, milestone, items, members, view, user, myHours, panel, onPanel, onClose,
   returnFocus, onOpenPanel, onWarning, onArchiveStart, onArchiveFailed, list, children }) {
   const wide = useMediaQuery(WIDE_QUERY)
+  // On a phone the tabs swipe without arrows (one would hide a label); from md they keep MUI's arrows.
+  const desktop = useMediaQuery(DESKTOP_QUERY)
   const [editing, setEditing] = useState(false)
   const m = milestone
   const tabs = panelTabsFor(view)
@@ -132,7 +134,8 @@ export default function MilestonePanel({ project, milestone, items, members, vie
             <Box sx={{ borderTop: 1, borderColor: 'divider', pt: 2 }}>
               {children ?? (
                 <>
-                  <Tabs value={tab} onChange={(_, value) => onPanel?.(value)} variant="scrollable" allowScrollButtonsMobile
+                  <Tabs value={tab} onChange={(_, value) => onPanel?.(value)} variant="scrollable"
+                    scrollButtons={desktop ? 'auto' : false} allowScrollButtonsMobile={desktop}
                     aria-label={`Sections of ${m.name}`} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2, minHeight: 44 }}>
                     {tabs.map((t) => {
                       const count = t.value === 'approvals' ? pending : 0

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { describe, expect, test } from 'vitest'
 import { BreadcrumbProvider, useBreadcrumb, useCrumbLabel } from '../../app/breadcrumbs.js'
 import { API, HttpResponse, http, server } from '../../test/server.js'
+import { setViewport } from '../../test/setup.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import { projectView } from '../projects/viewer.js'
 import MilestonesTab from './MilestonesTab.jsx'
@@ -90,6 +91,15 @@ describe('panel tabs', () => {
       expect(getComputedStyle(t).paddingLeft).toBe('10px')
       expect(getComputedStyle(t).minHeight).toBe('44px')
     })
+  })
+
+  test('phones: the tabs swipe with no scroll arrows, so none hides History or Notes', async () => {
+    setViewport(375)
+    server.use(...handlers([discovery, mapping]))
+    renderTab(users.manager, '?milestone=m1')
+    const dialog = await screen.findByRole('dialog', { name: 'Schema Mapping' })
+    expect(within(dialog).getByRole('tablist').closest('.MuiTabs-root').querySelector('.MuiTabs-scrollButtons')).toBeNull()
+    expect(within(dialog).getByRole('tab', { name: 'Notes' })).toBeInTheDocument()
   })
 
   test.each([['employee', users.employee], ['executive', users.executive]])('an %s has no Approvals tab', async (_, user) => {

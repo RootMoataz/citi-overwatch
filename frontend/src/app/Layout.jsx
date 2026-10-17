@@ -100,7 +100,7 @@ function NavList({ user, onNavigate, badges = {}, collapsed = false }) {
 function BrandLink({ variant, size, animated, onClick }) {
   return (
     <ButtonBase component={RouterLink} to="/" onClick={onClick} disableRipple
-      sx={{ flexShrink: 0, borderRadius: 1.5, justifyContent: 'flex-start' }}>
+      sx={{ flexShrink: 0, borderRadius: 1.5, justifyContent: 'flex-start', minWidth: { xs: 44, md: 0 }, minHeight: { xs: 44, md: 0 } }}>
       <BrandLogo variant={variant} size={size} animated={animated} />
     </ButtonBase>
   )

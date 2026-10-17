@@ -5,6 +5,7 @@ import {
   TextField, Tooltip, Typography,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
+import { useMediaQuery } from 'react-responsive'
 import { useState } from 'react'
 import ScrollHint from '../../components/ScrollHint.jsx'
 import { thinScrollbar } from '../../components/thinScrollbar.js'
@@ -69,11 +70,15 @@ const CLOSED_TINT = tint((t) => t.palette.action.hover)
 // The fixed Milestone header wears the theme's header tint like the day headers beside it (opaque, as the days slide under).
 const HEAD_TINT = tint((t) => t.components?.MuiTableCell?.styleOverrides?.head?.backgroundColor ?? t.palette.background.paper)
 // Its width is capped, a long name wrapping (breaking a long word if it must), so it never fills the card and covers
-// the day cells: 140 px on a phone (the cell's 16 px padding each side included, so 108 px of name), under half the
-// card. The name stays whole in the cell, and is the row header's name.
+// the day cells (140 px from sm, the cell's 16 px padding each side included, so 108 px of name). The name stays whole in the cell, and is the row header's name.
+// On a phone (below sm) it is 104 px with 8 px of padding a side (88 px of name) and its buttons wrap to two lines, so
+// about 3 day columns of 60 px show beside it in the 294 px card; from sm it is 140 px as before.
 const FIRST_COLUMN = 140
 const NAME_WIDTH = FIRST_COLUMN - 32
-const NAME = (t) => ({ display: 'block', maxWidth: NAME_WIDTH, overflowWrap: 'anywhere',
+const PHONE_COLUMN = 104
+const PHONE_NAME_WIDTH = PHONE_COLUMN - 16
+const PHONE_QUERY = { maxWidth: 599 }
+const NAME = (t) => ({ display: 'block', maxWidth: PHONE_NAME_WIDTH, overflowWrap: 'anywhere',
   [t.breakpoints.up('sm')]: { maxWidth: 200 }, [t.breakpoints.up('md')]: { maxWidth: 280 } })
 const isWeekend = (iso) => [0, 6].includes(new Date(`${iso}T00:00:00Z`).getUTCDay())
 /** Today's column is tinted; weekend columns are dimmed. */
@@ -83,13 +88,14 @@ const dayTint = (d, today) => (d === today ? { bgcolor: (t) => alpha(t.palette.p
 // input, so more days show beside the Milestone column (at 1440 with the sidebar open, all seven and Counted).
 const dayCell = (narrow) => ({ px: narrow ? 0.5 : { xs: 0.5, sm: 2 } })
 // Beside the panel the first and last columns pad 8 px a side too (the name keeps its 108 px at least).
-const edgeCell = (narrow) => (narrow ? { px: 1 } : null)
+const edgeCell = (narrow) => (narrow ? { px: 1 } : { px: { xs: 1, sm: 2 } })
 
 /** The week as a table: one row per milestone, one column per shown day, with a daily-total row.
  * state: the useTimesheetWeek result. days: the columns to show. onRequest(cell): a locked cell asks for a change.
  * onOpenEntry(milestoneId, date): a saved cell's status line opens Entry details, where its Edited and Overtime chips,
  * source, manager feedback and Save & resubmit live. */
 export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry, narrow = false }) {
+  const phone = useMediaQuery(PHONE_QUERY)
   const daySx = dayCell(narrow)
   const edgeSx = edgeCell(narrow)
   const { groups, overDays, dayTotal, total } = state
@@ -104,12 +110,12 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
         <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.week)}`}>
           <TableHead>
             <TableRow>
-              <TableCell sx={[{ ...STICKY, minWidth: narrow ? NAME_WIDTH + 16 : FIRST_COLUMN }, HEAD_TINT, edgeSx]}>Milestone</TableCell>
+              <TableCell sx={[{ ...STICKY, minWidth: narrow ? NAME_WIDTH + 16 : phone ? PHONE_COLUMN : FIRST_COLUMN }, HEAD_TINT, edgeSx]}>Milestone</TableCell>
               {days.map((d) => {
                 const [weekday, ...date] = formatDayLabel(d).split(' ')
                 return (
                   <TableCell key={d} align="center" data-today={d === today || undefined} data-weekend={isWeekend(d) || undefined}
-                    sx={[{ minWidth: narrow ? 64 : { xs: 64, sm: 84 }, color: overDays.includes(d) ? 'error.main' : isWeekend(d) ? 'text.secondary' : undefined },
+                    sx={[{ minWidth: narrow ? 64 : phone ? 60 : 84, color: overDays.includes(d) ? 'error.main' : isWeekend(d) ? 'text.secondary' : undefined },
                       daySx, dayTint(d, today)]}>
                     <Box component="span" sx={{ display: 'block', fontWeight: 600 }}>{weekday}</Box>
                     <Box component="span" sx={{ display: 'block', fontWeight: 400 }}>{date.join(' ')}</Box>
@@ -125,7 +131,7 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
           <TableBody>
             {groups.map((g) => (
               <GroupRows key={g.project.id} group={g} days={days} today={today} state={state} thisWeek={thisWeek} onRequest={onRequest}
-                onOpenEntry={onOpenEntry} dayCellSx={daySx} edgeSx={edgeSx} narrow={narrow} />
+                onOpenEntry={onOpenEntry} dayCellSx={daySx} edgeSx={edgeSx} narrow={narrow} phone={phone} />
             ))}
             <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
               <TableCell component="th" scope="row" sx={[STICKY, edgeSx]}>Daily total (counted)</TableCell>
@@ -154,7 +160,7 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
   )
 }
 
-function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry, dayCellSx, edgeSx, narrow }) {
+function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry, dayCellSx, edgeSx, narrow, phone }) {
   const { rowTotal, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, isManual, setHours, setNote, closedLabel } = state
   return (
     <>
@@ -185,7 +191,7 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
                     <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary' }}>{closed}</Typography>
                   </Tooltip>
                 ) : null}
-                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><LogTimeActions milestone={r.milestone} project={group.project} wrap={narrow} /></Box> : null}
+                {thisWeek && !closed ? <Box sx={{ mt: 0.75 }}><LogTimeActions milestone={r.milestone} project={group.project} wrap={narrow || phone} /></Box> : null}
               </Box>
             </TableCell>
             {days.map((d) => {

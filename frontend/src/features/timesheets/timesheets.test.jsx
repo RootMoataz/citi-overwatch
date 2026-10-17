@@ -5,6 +5,8 @@ import { describe, expect, test, vi } from 'vitest'
 import { ApprovalsRedirect } from '../../app/App.jsx'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
+import { hasPhoneTarget } from '../../test/cssRules.js'
+import { setViewport } from '../../test/setup.js'
 import { bold } from '../../test/bold.js'
 import TimesheetsPage from './TimesheetsPage.jsx'
 
@@ -81,6 +83,15 @@ const open = (user, route = '/timesheets') => renderAsUser(<TimesheetsPage />, {
 const tabNames = () => screen.getAllByRole('tab').map((t) => t.textContent)
 
 describe('Timesheets: To review', () => {
+  test('phones: the tabs swipe with no scroll arrows and Approve week is a 44 px target', async () => {
+    api()
+    setViewport(375)
+    open(users.manager)
+    const week = await screen.findByRole('region', { name: /eli employee, week of oct 12, 2026/i })
+    expect(hasPhoneTarget(within(week).getByRole('button', { name: 'Approve week' }))).toBe(true)
+    expect(screen.getByRole('tablist').closest('.MuiTabs-root').querySelector('.MuiTabs-scrollButtons')).toBeNull()
+  })
+
   test('pending hours are grouped by person and week, and a whole week is approved in one click', async () => {
     const seen = api()
     open(users.manager)
