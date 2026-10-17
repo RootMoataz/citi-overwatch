@@ -19,6 +19,8 @@ import { onInnerControl } from './rowClick.js'
 const TOTAL_ID = '__total__'
 
 const tintFor = (theme, tone) => (tone === 'warning' ? { bgcolor: alpha(theme.palette.warning.main, 0.1) } : null)
+// A body cell: held to the column's minWidth; a right-aligned (number) column in tabular figures, so digits line up.
+const cellSx = (c) => ({ minWidth: c.minWidth, ...(c.align === 'right' ? { fontVariantNumeric: 'tabular-nums' } : null) })
 
 function compare(a, b) {
   if (a == null && b == null) return 0
@@ -45,8 +47,8 @@ function CardLine({ label, value, main = false }) {
   if (main) return <Typography component="div" sx={{ fontWeight: 600, mb: 0.5 }}>{value}</Typography>
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', alignItems: 'baseline', py: 0.25 }}>
-      <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>{label}:</Typography>
-      <Typography variant="body2" component="span" sx={{ textAlign: 'right' }}>{value}</Typography>
+      <Typography variant="body2" component="span" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}:</Typography>
+      <Typography variant="body2" component="span" sx={{ textAlign: 'right', minWidth: 0 }}>{value}</Typography>
     </Box>
   )
 }
@@ -56,8 +58,9 @@ function CardLine({ label, value, main = false }) {
  * (then the caller owns the order). `pagination.page` is zero-based, as in `TablePagination`. On phones,
  * `renderCardActions(row)` puts a row's actions (a "⋯") beside its card's tap area; the Total card gets none.
  * A column with `rowHeader: true` (the record's name) renders its body cells as `<th scope="row">`, so screen readers
- * announce each row by it. `scrollHint`: when the table is wider than its card it scrolls inside it with a fade at the
- * edge that has more (ScrollHint), never cut off silently.
+ * announce each row by it. A column's `minWidth` (e.g. 220) keeps its cells from narrowing past it, and `wrapHeader` lets a
+ * long header ("Hours approved") take two lines in a narrow card. `scrollHint`: when the
+ * table is wider than its card it scrolls inside it with a fade at the edge that has more (ScrollHint), never cut off silently.
  */
 export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => r.id, sort, defaultSort, onSortChange,
   serverSort = false, visibleKeys, onRowOpen, selectedId, rowTone, totalRow, renderCard, renderCardActions, loading = false,
@@ -125,7 +128,7 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
             const ariaSort = sorted ? (active.dir === 'desc' ? 'descending' : 'ascending') : 'none'
             return (
               <TableCell key={c.key} align={c.align} aria-sort={c.sortable ? ariaSort : undefined}
-                sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+                sx={{ fontWeight: 600, whiteSpace: c.wrapHeader ? 'normal' : 'nowrap', minWidth: c.minWidth }}>
                 {c.sortable ? (
                   <TableSortLabel active={sorted} direction={sorted ? active.dir : 'asc'} onClick={() => changeSort(c)}>
                     {c.header}
@@ -160,8 +163,8 @@ export default function DataTable({ ariaLabel, columns, rows, getRowId = (r) => 
                 aria-current={selected ? 'true' : undefined} selected={selected} data-tone={tone || undefined}
                 sx={(theme) => ({ cursor: onRowOpen ? 'pointer' : 'default', ...tintFor(theme, tone) })}>
                 {shown.map((c) => (c.rowHeader
-                  ? <TableCell key={c.key} align={c.align} component="th" scope="row">{c.render(row)}</TableCell>
-                  : <TableCell key={c.key} align={c.align}>{c.render(row)}</TableCell>))}
+                  ? <TableCell key={c.key} align={c.align} component="th" scope="row" sx={cellSx(c)}>{c.render(row)}</TableCell>
+                  : <TableCell key={c.key} align={c.align} sx={cellSx(c)}>{c.render(row)}</TableCell>))}
               </TableRow>
             )
           })}

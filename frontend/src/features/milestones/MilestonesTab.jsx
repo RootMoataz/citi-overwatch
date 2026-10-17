@@ -184,7 +184,7 @@ export default function MilestonesTab({ project, user, view }) {
       </Stack>
       {milestones.isLoading ? <Skeleton variant="rounded" height={240} /> : null}
       {!milestones.isLoading && shown.length ? (
-        <Timeline items={shown} all={items} range={{ start: project.start_date, end: project.predicted_end_date }}
+        <Timeline bare items={shown} all={items} range={{ start: project.start_date, end: project.predicted_end_date }}
           onOpen={(m) => open(m)} layout={wide && !current ? 'detailed' : 'default'} />
       ) : null}
       {!milestones.isLoading && !shown.length ? noMatch : null}

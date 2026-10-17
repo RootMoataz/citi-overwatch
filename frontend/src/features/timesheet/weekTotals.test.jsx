@@ -60,6 +60,9 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+// The counted line once it shows exactly `text` (its number and words are two spans of one line).
+const counted = (text) => waitFor(() => expect(screen.getByTestId('week-total').textContent.replace(/\s+/g, ' ').trim()).toBe(text))
+
 describe('Week totals: the same cells as the grid', () => {
   test("while the next week loads, the card is a skeleton, never a negative Pending from the previous week's entries", async () => {
     let release
@@ -74,7 +77,7 @@ describe('Week totals: the same cells as the grid', () => {
     }))
     renderSheet()
     const user = userEvent.setup()
-    expect(await screen.findByText('19.75h counted of 40h')).toBeInTheDocument()
+    await counted('19.75h counted of 40h')
     await user.click(screen.getByRole('button', { name: 'Next week' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Oct 19 – 25, 2026' })).toBeInTheDocument()
     // Oct 12's entries are still in memory, Oct 19's aren't in yet: no figures at all, and nothing negative.
@@ -83,7 +86,7 @@ describe('Week totals: the same cells as the grid', () => {
     expect(card()).not.toHaveTextContent(/-\d/)
     expect(screen.queryByText(/excluded until resubmitted/)).not.toBeInTheDocument()
     release()
-    expect(await screen.findByText('0h counted of 40h')).toBeInTheDocument()
+    await counted('0h counted of 40h')
     expect(card()).not.toHaveAttribute('aria-busy')
     expect(figures()).toEqual({ Approved: '0h', Pending: '0h', 'Needs revision': '0h' })
   })
@@ -94,7 +97,8 @@ describe('Week totals: the same cells as the grid', () => {
       unlisted({ work_date: TUE, hours: 7.75, status: 'approved' })]
     server.use(http.get(`${API}/time-entries`, () => HttpResponse.json(body({ entries }))))
     renderSheet()
-    expect(await screen.findByText('11.75h counted of 40h')).toBe(screen.getByTestId('week-total'))
+    await counted('11.75h counted of 40h')
+    expect(card()).toContainElement(screen.getByTestId('week-total'))
     expect(figures()).toEqual({ Approved: '7.75h', Pending: '4h', 'Needs revision': '0h' })
     expect(within(card()).getByText("Includes 7.75h on milestones you're no longer assigned to.")).toBeInTheDocument()
     // The grid still counts only its own rows.
@@ -105,7 +109,7 @@ describe('Week totals: the same cells as the grid', () => {
   test('without unlisted hours there is no footnote', async () => {
     server.use(http.get(`${API}/time-entries`, () => HttpResponse.json(body())))
     renderSheet()
-    await screen.findByText('19.75h counted of 40h')
+    await counted('19.75h counted of 40h')
     expect(screen.queryByText(/no longer assigned to/)).not.toBeInTheDocument()
   })
 

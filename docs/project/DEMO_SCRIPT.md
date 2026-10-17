@@ -43,7 +43,7 @@ Rehearse only the READ and repeatable steps. Save the one-shot steps for the rea
 
 **Before you start (about 10 minutes ahead):** the live feed needs a timer that is really running, and the seed never
 starts one (it would tick from the seed's time). Open a **second browser or a private window**, sign in there as
-**Employee** and press **Start** on *Schema Mapping*. Leave that window open: it is "Eli at his desk". Eli already
+**Employee** and press **Start timer** on *Schema Mapping*. Leave that window open: it is "Eli at his desk". Eli already
 has 8h on Schema Mapping today, so his timer shows the **8h day** warning at once and passes 125% (10h) after two
 hours, which is when Morgan's bell gets "Eli's timer on Schema Mapping is at 10h today — over the 8h daily limit".
 
@@ -72,12 +72,12 @@ Click **Employee**.
    upcoming milestone, *Hypercare*, which reads "Waiting on Cutover" (Cutover isn't completed yet).
    Then open the groups below it (each button says its count, for example "In progress, 1 milestone", and
    remembers whether you closed it):
-   - **In progress**: *Build* (Atlas), with its due line, its state and its **Critical Priority** and **Hard
-     Difficulty** chips.
+   - **In progress**: *Build* (Atlas), with its due line, its state and its **Critical priority** and **Hard
+     difficulty** chips.
    - **With your manager**: *Schema Mapping* (Apollo), with just "Submitted for review. Your manager completes the
      milestone." (no chips: it's in the manager's hands now).
    - **Upcoming**: *Hypercare* (Apollo), with its due date, its state ("Waiting on dependencies") and "Waiting on
-     Cutover". A row the timesheet lets you log on today also has **Start**.
+     Cutover". A row the timesheet lets you log on today also has **Start timer**.
 
    Then the **This week's hours** card: "31.75h logged" of the 40h weekly reference, with the planned and logged bars.
    Press **Previous week** in its week picker to show an earlier week's hours, then **This week**. Say: "Priority is
@@ -104,7 +104,7 @@ Click **Employee**.
    request a change". Press **Submit**. Say: "Stopping a timer never submits hours. The employee still submits them,
    with proof of work, and can't type over them. To fix them they press **Request a change**, which goes to the
    manager." (Stopped under 7.5 minutes, nothing is added and the toast says so.) Then press
-   **Start** again in the other window so Morgan has a live timer to watch. Optional: switch to **Week** to show the
+   **Start timer** again in the other window so Morgan has a live timer to watch. Optional: switch to **Week** to show the
    grid (weekday and date columns, **Today**, **Counted**, and each cell's status in words: Approved, Pending, Needs
    revision, Overtime), and press a cell's status to open **Entry details** (hours, work note, manager feedback,
    Source, **Request a change**, **Save & resubmit**, **Done**). Say: "Typing is kept in this tab if you reload,
@@ -126,7 +126,7 @@ Click **Employee**.
    then **Sound** and press ▶ (**Preview Puppy bark**). Say: "Puppy follows rules from your data. No AI service is
    involved, and nothing you type leaves the browser."
 
-**If something goes wrong:** if **Start** is disabled, another timer is running; stop it first. If the stop adds
+**If something goes wrong:** if **Start timer** is disabled, another timer is running; stop it first. If the stop adds
 nothing, the timer ran under 7.5 minutes: show the seeded Saturday 10 Oct row (2h, Tracked, "Change requested") in
 last week's timesheet instead (**Previous week**, then **Sat** in the strip). If
 the proof-of-work error doesn't appear, the hours weren't changed; type a different number. If the kickback dialog
@@ -193,7 +193,7 @@ Sign out, click **Manager**.
 **If something goes wrong:**
 
 - Live now says "Nobody is running a timer right now": the other window's timer was stopped or ran past midnight.
-  Press **Start** there again; the card refreshes within 30 seconds (or reload).
+  Press **Start timer** there again; the card refreshes within 30 seconds (or reload).
 - **Change requests** is missing: the seeded request was decided already. As Eli, press **Request a change** on any
   locked (timer) row to make a new one.
 - Gia's weeks are missing from **To review**: someone approved them already. Show a remaining flagged week, or the

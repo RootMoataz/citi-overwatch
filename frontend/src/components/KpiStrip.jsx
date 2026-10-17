@@ -21,7 +21,8 @@ function Item({ item, layout, divider }) {
     </Typography>
   )
   const value = (
-    <Typography variant="h2" component="span" sx={{ display: 'block', fontSize: '1.5rem', letterSpacing: '-0.01em',
+    // 20 px on a phone's half-width tile, so a pair like "$20,381 / $250,000" or a full date stays on one line.
+    <Typography variant="h2" component="span" sx={{ display: 'block', fontSize: { xs: '1.25rem', sm: '1.5rem' }, letterSpacing: '-0.01em',
       color: toneColour, fontVariantNumeric: 'tabular-nums' }}>{item.value}</Typography>
   )
   const body = (

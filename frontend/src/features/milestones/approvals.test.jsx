@@ -203,18 +203,43 @@ describe('Approvals tab: heading, tab count and groups', () => {
   })
 })
 
+describe('Approvals tab: the group header', () => {
+  test("one line: the title wraps inside it, with the select-all and the week's source chip beside it; no repeated hours", async () => {
+    api()
+    renderPanel()
+    const c = await panel()
+    const group = await within(c).findByRole('region', { name: OCT5 })
+    const header = within(group).getByRole('heading', { level: 4 }).parentElement
+    expect(header).toHaveStyle({ flexWrap: 'nowrap' })
+    expect(within(header).getByText('Manual')).toBeInTheDocument()
+    // Gia's whole week is the group's 34h: saying "34h this week" again would only repeat it.
+    expect(within(group).queryByText('34h this week')).not.toBeInTheDocument()
+  })
+
+  test("on a phone the select-all sits in that same header line", async () => {
+    setViewport(375)
+    api()
+    renderPanel()
+    const sheet = await screen.findByRole('dialog', { name: 'Build: frontend' })
+    const group = await within(sheet).findByRole('region', { name: OCT5 })
+    const header = within(group).getByRole('heading', { level: 4 }).parentElement
+    expect(header).toContainElement(within(group).getByRole('checkbox', { name: `Select all: ${OCT5}` }))
+    expect(header).toHaveStyle({ flexWrap: 'nowrap' })
+  })
+})
+
 describe('Approvals tab: rows', () => {
   test('date, hours, source, the note or the day\'s update, and the flags with the server\'s message', async () => {
     api()
     renderPanel()
     const c = await panel()
     const table = await within(c).findByRole('table', { name: `Entries of ${OCT5}` })
+    // Date and Hours are two columns, as drawn (one "Date and Hours" header wrapped in the narrow panel).
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent))
-      .toEqual(['', 'Date and Hours', 'Source', 'Work note', 'Flags'])
+      .toEqual(['', 'Date', 'Hours', 'Source', 'Work note', 'Flags'])
     const row = within(table).getByRole('row', { name: /Oct 6, 2026/ })
-    const when = within(row).getAllByRole('cell')[1]   // one column: the date with the hours under it
-    expect(within(when).getByText('Oct 6, 2026')).toBeInTheDocument()
-    expect(within(when).getByText('8.5h')).toBeInTheDocument()
+    expect(within(row).getAllByRole('cell')[1]).toHaveTextContent(/^Oct 6, 2026$/)
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent(/^8\.5h$/)
     expect(within(row).getByText('Manual')).toBeInTheDocument()
     expect(within(row).getByText('Fixed layout issues from the design review')).toBeInTheDocument()
     expect(within(row).getByText('⚠ Repeated hours')).toBeInTheDocument()

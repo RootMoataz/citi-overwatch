@@ -108,6 +108,12 @@ describe('TimerButton and the header chip', () => {
     expect(await screen.findByRole('button', { name: /stop timer on schema mapping/i })).toBeInTheDocument()
   })
 
+  test('the button reads Start timer, as its name begins (§5.1)', async () => {
+    server.use(http.get(`${API}/timers/current`, () => HttpResponse.json({ timer: null, now: NOW, stopped: null })))
+    renderAsUser(<Header milestones={[MS]} />, { user: users.employee })
+    expect(await screen.findByRole('button', { name: 'Start timer on Schema Mapping' })).toHaveTextContent(/^Start timer$/)
+  })
+
   test('no Start button on a completed milestone', async () => {
     server.use(http.get(`${API}/timers/current`, () => HttpResponse.json({ timer: null, now: NOW, stopped: null })))
     renderAsUser(<Header milestones={[MS, { id: 'm9', name: 'Wrapped Up', status: 'completed' }]} />, { user: users.employee })

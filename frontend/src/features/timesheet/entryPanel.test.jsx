@@ -95,6 +95,20 @@ describe('Entry details: opening', () => {
     expect(within(region).queryByRole('button', { name: 'Done' })).not.toBeInTheDocument()
   })
 
+  test('the panel is 380 px beside the week card, which keeps the rest; its milestone title is an 18/600 H3', async () => {
+    server.use(sheet())
+    renderSheet()
+    const monday = () => within(screen.getByRole('table')).getByRole('columnheader', { name: /^Mon/ })
+    expect(await screen.findByRole('table')).toBeInTheDocument()
+    expect(monday()).toHaveStyle({ paddingLeft: '16px' })
+    await userEvent.setup().click(await statusLine(WED_LINE))
+    // Beside the panel the day columns are compact, so all seven days and Counted fit at 1440 with the sidebar open.
+    expect(monday()).toHaveStyle({ minWidth: '64px', paddingLeft: '4px' })
+    const region = await panel()
+    expect(region.parentElement).toHaveStyle({ gridTemplateColumns: 'minmax(0, 1fr) 380px' })
+    expect(within(region).getByRole('heading', { level: 3, name: 'Schema Mapping' })).toHaveStyle({ fontSize: '18px', fontWeight: '600' })
+  })
+
   test('Manager feedback shows only on the rejected entry', async () => {
     server.use(sheet())
     renderSheet()

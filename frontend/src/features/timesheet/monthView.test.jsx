@@ -161,7 +161,7 @@ describe('Month view header, legend and states', () => {
       entry({ id: 'e', work_date: '2026-10-07', hours: 0.2 }), entry({ id: 'f', work_date: '2026-09-30', hours: 5 }),
       entry({ id: 'g', work_date: '2026-10-08', hours: 4, status: 'rejected' })] }))
     render()
-    expect(await screen.findByRole('heading', { name: 'October 2026' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'October 2026' })).toHaveStyle({ fontSize: '18px', fontWeight: '600' })   // the Week view's range size
     expect(await screen.findByText('18.3h logged in October')).toBeInTheDocument()
     expect(screen.getByText('Pending + approved · Rejected hours excluded.')).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'October 2026' })).toBeInTheDocument()
@@ -247,7 +247,7 @@ describe('Month view on a phone', () => {
     expect(within(screen.getByRole('list', { name: 'Legend' })).getByText('Approved')).toBeInTheDocument()
 
     const table = screen.getByRole('table', { name: 'October 2026' })
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     expect(table.compareDocumentPosition(region) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(region.parentElement).toHaveStyle({ gridTemplateColumns: 'minmax(0, 1fr)' })
     expect(within(region).getByText('Needs revision')).toBeInTheDocument()
@@ -255,7 +255,7 @@ describe('Month view on a phone', () => {
 
   test('on a desktop the panel sits beside the grid', async () => {
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     expect(region.parentElement).toHaveStyle({ gridTemplateColumns: 'minmax(0, 1fr) 340px' })
   })
 
@@ -284,6 +284,20 @@ describe('Month view on a phone', () => {
     const wide = screen.getByRole('list', { name: 'Legend' })
     expect(within(wide).queryByText('Over 40h')).not.toBeInTheDocument()
     expect(within(wide).queryByText('Milestone deadline')).not.toBeInTheDocument()
+  })
+
+  test('a chip reads name, then hours: the pair wraps, so hours never sit beside the first line of a two-line name', async () => {
+    server.use(calendar({ entries: mixedDay.entries }))
+    render()
+    const box = await dayBox(/^Wed 14 Oct, today, 8 hours/)
+    const [approved] = chips(box)
+    const name = within(approved).getByText('Schema Mapping')
+    const hours = within(approved).getByText('6h')
+    expect(name.compareDocumentPosition(hours) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(hours.parentElement).toBe(name.parentElement)
+    expect(name.parentElement).toHaveStyle({ display: 'flex', flexWrap: 'wrap' })
+    // A clamped name shows in full on hover; the box's accessible name always holds it.
+    expect(name).toHaveAttribute('title', 'Schema Mapping')
   })
 
   test('a long milestone name is clamped to two lines in its chip, yet the box keeps the full name', async () => {

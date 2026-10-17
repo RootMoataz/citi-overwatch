@@ -233,7 +233,7 @@ describe('Dashboard and Allocation: the critical details are bold', () => {
       .toEqual(['At-risk projects', 'Overdue milestone', 'Past due date'])
     expect(bold(within(risk).getByRole('region', { name: /at risk of missing/i }))).toEqual(['Past due date', 'Overdue milestone'])
     // Overdue and the urgent priorities are bold; the In progress states and "Due in the next 14 days" are not.
-    expect(bold(screen.getByRole('region', { name: /key deliverables/i }))).toEqual(['Overdue (1)', 'Critical Priority', 'High Priority'])
+    expect(bold(screen.getByRole('region', { name: /key deliverables/i }))).toEqual(['Overdue (1)', 'Critical priority', 'High priority'])
     // A bare "45h" chip carries no rule word (the card's title says over 40h), so it stays regular.
     expect(bold(screen.getByRole('region', { name: /over-allocated/i }))).toEqual([])
     expect(bold(screen.getByRole('region', { name: /status of each active project/i }))).toEqual([])

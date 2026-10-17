@@ -1,7 +1,4 @@
-import CalendarMonthOutlined from '@mui/icons-material/CalendarMonthOutlined'
-import ChevronLeft from '@mui/icons-material/ChevronLeft'
-import ChevronRight from '@mui/icons-material/ChevronRight'
-import { Alert, Box, Button, IconButton, Link, Paper, Popover, Stack, TextField, Typography } from '@mui/material'
+import { Alert, Box, Button, Link, Paper, Popover, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { Link as RouterLink, useSearchParams } from 'react-router-dom'
 import { useAllocations, useMembers, useMilestones, useWeek } from '../../api/queries.js'
@@ -13,10 +10,11 @@ import FootNote from '../../components/FootNote.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
 import UserAvatar from '../../components/UserAvatar.jsx'
+import { ThisWeekButton, WeekRange, WeekStep } from '../../components/WeekNav.jsx'
 import { AVATAR_SIZE } from '../../lib/avatarLook.js'
 import { addDays, formatDate, formatHours, formatWeekRange, mondayOfIso, nyTodayIso } from '../../lib/format.js'
 import { can } from '../../lib/permissions.js'
-import { BANNER_PROPS } from './pendingBanner.js'
+import { BANNER_LINK_SX, BANNER_PROPS } from './pendingBanner.js'
 
 const sum = (rows, key) => rows.reduce((total, r) => total + r[key], 0)
 const LOGGED_INFO = 'Logged means pending + approved. Rejected hours excluded.'
@@ -48,12 +46,13 @@ function WeekBar({ week, thisWeek, setWeek }) {
   const current = week === thisWeek
   return (
     <Stack sx={{ flexDirection: { xs: 'column', md: 'row' }, justifyContent: 'space-between', alignItems: { md: 'center' }, gap: 1 }}>
-      <Stack direction="row" sx={{ alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-        <IconButton aria-label="Previous week" onClick={() => setWeek(addDays(week, -7))} sx={{ minWidth: 44, minHeight: 44 }}><ChevronLeft /></IconButton>
-        <Typography variant="subtitle1" component="p" sx={{ minWidth: 150, textAlign: 'center' }}>{formatWeekRange(week)}</Typography>
-        <IconButton aria-label="Next week" onClick={() => setWeek(addDays(week, 7))} sx={{ minWidth: 44, minHeight: 44 }}><ChevronRight /></IconButton>
-        <IconButton aria-label="Pick a week" onClick={(e) => setAnchor(e.currentTarget)} sx={{ minWidth: 44, minHeight: 44 }}><CalendarMonthOutlined /></IconButton>
-        <Button variant="outlined" size="small" disabled={current} onClick={() => setWeek(thisWeek)} sx={{ minHeight: 44 }}>This week</Button>
+      <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+        <WeekStep direction="previous" onClick={() => setWeek(addDays(week, -7))} />
+        <WeekRange onPick={(e) => setAnchor(e.currentTarget)}>
+          <Typography variant="body2" component="p" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{formatWeekRange(week)}</Typography>
+        </WeekRange>
+        <WeekStep direction="next" onClick={() => setWeek(addDays(week, 7))} />
+        <ThisWeekButton disabled={current} onClick={() => setWeek(thisWeek)} />
         <Popover open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}>
           <Stack sx={{ p: 2 }}>
             <TextField type="date" size="small" label="Any day in the week" value={week}
@@ -106,7 +105,8 @@ function TeamHours({ project, week }) {
     { key: 'approved', header: 'Approved', align: 'right', render: (r) => formatHours(r.approved) },
     { key: 'pending', header: 'Pending', align: 'right', render: (r) => <PendingHours hours={r.pending} /> },
     { key: 'review', header: 'Review', align: 'right', render: (r) => (r.pending > 0
-      ? <Link component={RouterLink} to={`/timesheets?project=${project.id}&user=${r.person.id}`} underline="hover">View entries</Link>
+      ? <Link component={RouterLink} to={`/timesheets?project=${project.id}&user=${r.person.id}`} underline="hover"
+        sx={{ display: 'inline-flex', alignItems: 'center', minHeight: { xs: 44, md: 'auto' } }}>View entries</Link>
       : '—') },
   ]
   const totalRow = { person: 'Total', planned: formatHours(sum(rows, 'planned')), logged: formatHours(sum(rows, 'logged')),
@@ -124,8 +124,8 @@ function TeamHours({ project, week }) {
         <>
           <KpiStrip ariaLabel="Hours this week" items={items} loading={allocations.isLoading} />
           {pending > 0 ? (
-            <Alert severity="info" variant="outlined" {...BANNER_PROPS}
-              action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review this week's entries →</Link>}>
+            <Alert {...BANNER_PROPS}
+              action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={BANNER_LINK_SX}>Review this week's entries →</Link>}>
               <Critical>{`${formatHours(pending)} awaiting approval`}</Critical>
               {' this week · Pending hours do not contribute to approved project spend.'}
             </Alert>

@@ -14,7 +14,9 @@ const nameOf = (names, id) => names.get(id)?.name ?? 'Milestone'
 const caption = { fontSize: '0.75rem', lineHeight: 1.3 }
 
 /** One hours line: an icon and the name with its hours, then the status word (approved has none: its ✓ is named instead);
- * a critical status's word ("Needs revision") is bold. */
+ * a critical status's word ("Needs revision") is bold. The name comes first (two lines at most, in full on hover) and the
+ * hours follow it: on its line when both fit ("Build 2h"), else on the next ("Schema Mapping" / "6h"), never beside the
+ * first line of a name that wraps. */
 function LineChip({ line, name }) {
   const { kind } = line
   const Icon = KIND_ICON[kind]
@@ -24,9 +26,9 @@ function LineChip({ line, name }) {
       sx={[{ ...caption, display: 'flex', alignItems: 'flex-start', gap: 0.5, px: 0.625, py: 0.375, minWidth: 0 }, chipSx(kind)]}>
       <Icon titleAccess={word ? undefined : KIND[kind].panel} sx={{ fontSize: 14, mt: '1px', flexShrink: 0, color: (t) => kindColor(kind, t) }} />
       <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere', color: 'text.primary' }}>
-        <Box component="span" sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5 }}>
-          <Box component="span" data-clamp sx={{ minWidth: 0, flex: '0 1 auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{name}</Box>{' '}
-          <Box component={kind === 'rejected' ? 's' : 'span'} sx={{ flexShrink: 0 }}>{formatHours(line.hours)}</Box>
+        <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 0.5 }}>
+          <Box component="span" data-clamp title={name} sx={{ minWidth: 0, flex: '0 1 auto', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{name}</Box>{' '}
+          <Box component={kind === 'rejected' ? 's' : 'span'} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>{formatHours(line.hours)}</Box>
         </Box>
         {word ? (
           <Box component="span" sx={{ display: 'block', fontSize: '0.6875rem', color: (t) => kindText(kind, t) }}>

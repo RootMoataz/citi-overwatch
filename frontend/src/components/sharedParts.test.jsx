@@ -4,7 +4,7 @@ import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
 import { renderWithProviders } from '../test/render.jsx'
-import { setViewport } from '../test/setup.js'
+import { setPrefersDark, setViewport } from '../test/setup.js'
 import DataTable from './DataTable.jsx'
 import FilterBar from './FilterBar.jsx'
 import FootNote from './FootNote.jsx'
@@ -30,6 +30,7 @@ describe('SidePanel', () => {
     await userEvent.click(opener)
     const panel = screen.getByRole('complementary', { name: 'Kickoff' })
     expect(within(panel).getByRole('heading', { level: 2, name: 'Kickoff' })).toHaveFocus()
+    expect(within(panel).getByRole('heading', { level: 2, name: 'Kickoff' })).toHaveStyle({ fontSize: '18px', fontWeight: '600' })   // a card H2
     await userEvent.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalled()
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
@@ -66,6 +67,27 @@ describe('SidePanel', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true')
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument()
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+  })
+
+  test('the panel splits the width evenly by default; panelWidth gives it a fixed width beside a flexible list', () => {
+    const first = renderWithProviders(<SidePanel open title="Even" onClose={() => {}} list={<p>list</p>}>x</SidePanel>)
+    expect(screen.getByRole('complementary', { name: 'Even' }).parentElement).toHaveStyle({ gridTemplateColumns: '1fr 1fr' })
+    first.unmount()
+    renderWithProviders(<SidePanel open title="Narrow" panelWidth="380px" onClose={() => {}} list={<p>list</p>}>x</SidePanel>)
+    expect(screen.getByRole('complementary', { name: 'Narrow' }).parentElement)
+      .toHaveStyle({ gridTemplateColumns: 'minmax(0, 1fr) 380px' })
+  })
+
+  test('the desktop panel is framed like a card: the theme radius, not a doubled one', () => {
+    renderWithProviders(<SidePanel open title="Kickoff" onClose={() => {}} list={<p>list</p>}>x</SidePanel>)
+    expect(getComputedStyle(screen.getByRole('complementary', { name: 'Kickoff' })).borderRadius).toBe('10px')
+  })
+
+  test('375 px, dark: the sheet uses the paper surface, without the dialog overlay that lightens it', () => {
+    setViewport(375)
+    setPrefersDark(true)
+    renderWithProviders(<SidePanel open title="Kickoff" onClose={() => {}} list={<p>list</p>}>Body</SidePanel>)
+    expect(getComputedStyle(screen.getByRole('dialog')).backgroundImage).toBe('none')
   })
 })
 

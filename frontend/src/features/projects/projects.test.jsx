@@ -486,6 +486,31 @@ describe('ProjectsPage', () => {
       expect(await screen.findByText('project page p1')).toBeInTheDocument()
     })
 
+    test('the filters and the table sit in one card, with the footnote under it', async () => {
+      serve()
+      go(users.admin)
+      const table = await screen.findByRole('table', { name: 'Projects' })
+      // The card is the Paper around the table (no role of its own: it isn't a landmark).
+      const card = table.closest('.MuiPaper-outlined')
+      expect(card).not.toBeNull()
+      expect(within(card).getByRole('textbox', { name: 'Search projects' })).toBeInTheDocument()
+      expect(card).not.toHaveTextContent(/Progress is milestone completion/)
+      expect(screen.getByText(/Progress is milestone completion/)).toBeInTheDocument()
+    })
+
+    test('phones: a card without risk has no stray dash, and each bar sits on one row with its label and percent', async () => {
+      setViewport(375)
+      serve([project({ at_risk_reasons: [] })])
+      go(users.admin)
+      const card = within(await screen.findByRole('list', { name: 'Projects' })).getByRole('listitem')
+      expect(within(card).queryByRole('img', { name: 'No risk' })).not.toBeInTheDocument()
+      expect(card).not.toHaveTextContent('—')
+      const progress = within(card).getByRole('meter', { name: 'Apollo Data Migration progress' })
+      expect(within(card).getByText('Progress').parentElement).toContainElement(progress)
+      const budget = within(card).getByRole('meter', { name: 'Apollo Data Migration budget used' })
+      expect(within(card).getByText('Budget used').parentElement).toContainElement(budget)
+    })
+
     test('phones: cards instead of a table, with name, status, risk, both bars and the due line; the KPI strip keeps 3 values', async () => {
       setViewport(375)
       vi.useFakeTimers({ toFake: ['Date'] })
@@ -592,6 +617,16 @@ describe('ProjectDetailPage', () => {
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument()
   })
 
+  test('phones: compact tabs with no scroll arrows, so no label hides under one', async () => {
+    setViewport(375)
+    server.use(...detailHandlers())
+    renderAsUser(<ProjectDetailPage />, { user: users.manager, route: '/projects/p1', path: '/projects/:id' })
+    const team = await screen.findByRole('tab', { name: 'Team' })
+    expect(team).toHaveStyle({ minWidth: '0px', paddingLeft: '10px', paddingRight: '10px' })
+    const tablist = screen.getByRole('tablist', { name: 'Project sections' })
+    expect(tablist.closest('.MuiTabs-root').querySelector('.MuiTabs-scrollButtons')).toBeNull()
+  })
+
   describe('the header', () => {
     const full = () => project({ department: { id: 'd1', name: 'Technology' }, start_date: '2026-07-15',
       predicted_end_date: '2026-12-27' })
@@ -616,6 +651,19 @@ describe('ProjectDetailPage', () => {
       await screen.findByRole('heading', { level: 1, name: 'Apollo Data Migration' })
       const name = screen.getAllByText('Morgan Manager')[0]   // the header's, the first on the page
       expect(name.parentElement).toHaveTextContent(/^MMorgan Manager$/)   // the avatar (one initial at this size), then the name
+    })
+
+    test('the description comes before the meta line, and each "·" ends a part, so a wrapped line never starts with one', async () => {
+      open(full())
+      await screen.findByRole('heading', { level: 1, name: 'Apollo Data Migration' })
+      const description = screen.getAllByText('Move records')[0]
+      const manager = screen.getAllByText('Morgan Manager')[0]
+      expect(description.compareDocumentPosition(manager) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      const [first, second] = screen.getAllByText('·')
+      expect(first.parentElement).toHaveTextContent(/^MMorgan Manager ·$/)
+      expect(second.parentElement).toHaveTextContent(/^Technology ·$/)
+      // A no-break space holds each dot to the word before it; names themselves may still wrap.
+      expect(first.textContent).toBe('\u00A0·')
     })
 
     test('a missing department drops its segment, and a past-due project says so', async () => {

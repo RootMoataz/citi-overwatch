@@ -378,3 +378,57 @@ test.describe('no sideways page scroll at 375 px', { tag: '@phone' }, () => {
     }
   }
 })
+
+// The design audit's fit checks at 1440 px with the sidebar open: every Milestones column (More included) fits its card,
+// and beside an open Entry details panel (380 px) the Week grid shows all seven days and Counted.
+test.describe('tables fit their cards at 1440 px, sidebar open', { tag: '@desktop' }, () => {
+  const fits = (locator) => locator.evaluate((table) => {
+    const box = table.closest('.MuiTableContainer-root')
+    return box.scrollWidth - box.clientWidth
+  })
+
+  test('manager.demo: the Milestones list, every column inside the card', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await signIn(page, 'manager.demo')
+    await openProject(page, 'Apollo Data Migration', 'milestones')
+    const table = page.getByRole('table', { name: 'Milestones' })
+    await expect(table.getByRole('columnheader', { name: 'More' })).toBeVisible()
+    await page.waitForLoadState('networkidle')
+    expect(await fits(table), 'the list is no wider than its card').toBeLessThanOrEqual(1)
+  })
+
+  test('employee.demo: the Week grid beside Entry details keeps all seven days and Counted in view', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await signIn(page, 'employee.demo')
+    await page.evaluate(() => localStorage.setItem('overwatch.timesheet.view', 'week'))
+    await page.goto('/timesheet')
+    await page.getByRole('button', { name: /details for/ }).first().click()
+    await expect(page.getByRole('complementary', { name: 'Entry details' })).toBeVisible()
+    const grid = page.getByRole('table', { name: /^Timesheet for the week of/ })
+    await expect(grid.getByRole('columnheader', { name: 'Counted' })).toBeVisible()
+    expect(await fits(grid), 'the grid is no wider than its card').toBeLessThanOrEqual(1)
+  })
+})
+
+// The audit's phone checks on a project's Budget and Hours tabs: the pending banner keeps its message beside the clock
+// (the link drops under it, never squeezing the words into a narrow column), and its link and the small buttons are 44 px.
+test.describe('pending banners and touch targets at 375 px', { tag: '@phone' }, () => {
+  test('manager.demo: Budget and Hours', async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 })
+    await signIn(page, 'manager.demo')
+    await openProject(page, 'Apollo Data Migration', 'budget')
+    const height = (locator) => locator.evaluate((el) => el.getBoundingClientRect().height)
+    for (const [tab, link] of [['budget', 'Review pending hours →'], ['hours', "Review this week's entries →"]]) {
+      await page.goto(`${new URL(page.url()).pathname}?tab=${tab}`)
+      const banner = page.getByRole('alert').filter({ hasText: 'awaiting approval' })
+      await expect(banner).toBeVisible()
+      const message = await banner.locator('.MuiAlert-message').evaluate((el) => el.getBoundingClientRect().width)
+      expect.soft(message, `${tab}: the message has the banner's width beside its icon`).toBeGreaterThan(220)
+      expect.soft(await height(banner.getByRole('link', { name: link })), `${tab}: the link is a 44 px target`).toBeGreaterThanOrEqual(44)
+    }
+    await page.goto(`${new URL(page.url()).pathname}?tab=budget`)
+    for (const name of ['Print / PDF', /Export CSV/]) {
+      expect.soft(await height(page.getByRole('button', { name }).first()), `${name}: a 44 px target`).toBeGreaterThanOrEqual(44)
+    }
+  })
+})

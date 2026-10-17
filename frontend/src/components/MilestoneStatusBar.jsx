@@ -49,7 +49,8 @@ export default function MilestoneStatusBar({ items, title, headingComponent = 'h
       sx={{ p: 2, display: 'grid', gap: 2, alignItems: 'center',
         gridTemplateColumns: aside ? { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) auto' } : 'minmax(0, 1fr)' }}>
       <Box sx={{ minWidth: 0 }}>
-        <Typography id={headingId} variant="subtitle1" component={headingComponent} sx={{ mb: 1 }}>
+        {/* As a card's H2 it takes the card-heading size (18/600); as an H3 inside a card, a subtitle. */}
+        <Typography id={headingId} variant={headingComponent === 'h2' ? 'h3' : 'subtitle1'} component={headingComponent} sx={{ mb: 1 }}>
           {title ?? `${counts.completed} of ${total} ${total === 1 ? 'milestone' : 'milestones'} done`}
         </Typography>
         <Stack ref={barRef} direction="row" sx={{ gap: `${GAP}px`, height: 28 }}>

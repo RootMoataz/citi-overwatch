@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import { bold } from '../../test/bold.js'
+import { setViewport } from '../../test/setup.js'
 import MyWeekPage from './MyWeekPage.jsx'
 
 // Thursday 15 Oct 2026, noon in New York. Only Date is faked: faking every timer makes userEvent hang.
@@ -188,6 +189,14 @@ describe('Heads-up', () => {
     expect(within(focus).getByText('New')).toBeInTheDocument()
   })
 
+  test('the heads-up reads as one sentence that wraps as text (not split into columns), in a 44 px target', async () => {
+    setViewport(375)
+    serve()
+    const focus = await openPage()
+    const link = within(focus).getByRole('button', { name: 'Heads-up: Data cutover (High priority) may come your way' })
+    expect(link).toHaveStyle({ display: 'block', minHeight: '44px' })
+  })
+
   test('a medium first prediction gets none', async () => {
     serve({ comingUp: [reporting, cutover] })
     const focus = await openPage()
@@ -322,6 +331,9 @@ describe('the groups', () => {
     expect(within(rows[0]).getByText('Prediction')).toBeInTheDocument()
     expect(within(rows[1]).getByText('Needs Backend Development and Data Engineering, which you have')).toBeInTheDocument()
     expect(within(rows[1]).getByText('After Discovery')).toBeInTheDocument()
+    // One line of text with a "·" between the skills and the timing, never run together.
+    expect(within(rows[1]).getByText('Needs Backend Development and Data Engineering, which you have').parentElement)
+      .toHaveTextContent('Needs Backend Development and Data Engineering, which you have · After Discovery')
     expect(within(rows[1]).queryByText('New')).not.toBeInTheDocument()
     expect(within(rows[1]).getByText('Prediction')).toBeInTheDocument()
   })
@@ -487,7 +499,7 @@ describe('the critical details are bold', () => {
     const focus = await openPage()
     expect(bold(focus)).toEqual(['1 overdue', '10 days overdue', 'Critical priority', 'High priority'])
     const inProgress = rowsOf(region(/^In progress/))
-    expect(bold(inProgress[0])).toEqual(['10 days overdue', 'Critical Priority'])
+    expect(bold(inProgress[0])).toEqual(['10 days overdue', 'Critical priority'])
     const upcoming = rowsOf(region(/^Upcoming/))
     expect(bold(upcoming[2])).toEqual(['Waiting on dependencies', 'Waiting on Load testing'])
     // The heads-up names an urgent prediction's priority in bold too.
@@ -517,7 +529,7 @@ describe('the critical details are bold', () => {
     const coming = rowsOf(region(/^Might come your way/))
     expect(within(coming[1]).getByLabelText('Priority: Medium')).toBeInTheDocument()
     expect(bold(coming[1])).toEqual([])
-    expect(bold(coming[0])).toEqual(['High Priority'])
+    expect(bold(coming[0])).toEqual(['High priority'])
     expect(bold(region(/^Completed/))).toEqual([])
   })
 })

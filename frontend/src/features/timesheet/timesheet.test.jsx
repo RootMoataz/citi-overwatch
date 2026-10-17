@@ -443,7 +443,11 @@ describe('My timesheet header, totals and week bar', () => {
     server.use(mockWeek())
     renderSheet()
     const card = await screen.findByRole('group', { name: 'Week totals' })
-    expect(await within(card).findByText('19.75h counted of 40h')).toBe(screen.getByTestId('week-total'))
+    const total = await within(card).findByTestId('week-total')
+    expect(total).toHaveTextContent('19.75h counted of 40h')
+    // As drawn: a big number (the KPI value size), then its words in secondary text.
+    expect(within(total).getByText('19.75h')).toHaveStyle({ fontSize: '24px', fontWeight: '700', fontVariantNumeric: 'tabular-nums' })
+    expect(within(total).getByText('counted of 40h')).toHaveStyle({ fontSize: '14px', color: 'rgb(63, 77, 93)' })
     expect(within(card).getByText('49%')).toBeInTheDocument()
     expect(within(card).getByRole('progressbar', { name: 'Counted hours against 40h' })).toHaveAttribute('aria-valuetext', '19.75h of 40h')
     for (const [hours, word] of [['15.75h', 'Approved'], ['4h', 'Pending'], ['8h', 'Needs revision']]) {
@@ -463,6 +467,9 @@ describe('My timesheet header, totals and week bar', () => {
     expect(within(card).getByText('6h')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Build, Sun Oct 18'), '20')
     expect(screen.getByTestId('week-total')).toHaveAttribute('data-over', 'true')
+    // The warning tone is on the number only; the words stay secondary.
+    expect(within(screen.getByTestId('week-total')).getByText('41.75h')).toHaveStyle({ color: 'rgb(178, 106, 0)' })
+    expect(within(screen.getByTestId('week-total')).getByText('counted of 40h')).toHaveStyle({ color: 'rgb(63, 77, 93)' })
     expect(screen.getByText(/Hours above 40 are sent to your manager as an overtime request/)).toBeInTheDocument()
   })
 
@@ -481,9 +488,13 @@ describe('My timesheet header, totals and week bar', () => {
     server.use(mockWeek())
     renderSheet()
     const user = userEvent.setup()
-    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' })).toHaveStyle({ fontSize: '18px', fontWeight: '600' })
     const toggle = screen.getByRole('group', { name: 'Timesheet view' })
     expect(within(toggle).getAllByRole('button').map((b) => b.textContent)).toEqual(['Day', 'Week', 'Month'])
+    // The app's one week-picker look: bordered chevrons around the boxed range, This week as a text button.
+    expect(getComputedStyle(screen.getByRole('heading', { level: 2, name: 'Oct 12 – 18, 2026' }).parentElement).borderStyle).toBe('solid')
+    expect(getComputedStyle(screen.getByRole('button', { name: 'Previous week' })).borderStyle).toBe('solid')
+    expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('MuiButton-text')
     await user.click(screen.getByRole('button', { name: 'Next week' }))
     expect(await screen.findByRole('heading', { level: 2, name: 'Oct 19 – 25, 2026' })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Previous week' }))
@@ -499,7 +510,7 @@ describe('My timesheet header, totals and week bar', () => {
     const seen = []
     server.use(mockWeek(mockEntries, seen))
     renderAsUser(<><TimesheetPage /><Loggable /></>, { user: users.employee, route: '/timesheet', path: '/timesheet' })
-    expect(await screen.findByRole('region', { name: 'Sunday 18 October 2026' })).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Sunday, October 18, 2026' })).toBeInTheDocument()
     expect(await screen.findByText('2 loggable')).toBeInTheDocument()
     expect(new Set(seen)).toEqual(new Set([WEEK]))
   })

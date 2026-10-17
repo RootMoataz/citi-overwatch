@@ -1,9 +1,10 @@
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test, vi } from 'vitest'
+import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { ApiError } from '../api/client.js'
 import { renderAsUser, renderWithProviders, users } from '../test/render.jsx'
-import { setViewport } from '../test/setup.js'
+import { setPrefersDark, setViewport } from '../test/setup.js'
 import ConfirmDialog from './ConfirmDialog.jsx'
 import EmptyState from './EmptyState.jsx'
 import ErrorAlert from './ErrorAlert.jsx'
@@ -153,5 +154,27 @@ describe('people link to their profile only when the viewer may open it', () => 
     await userEvent.click(screen.getByRole('link', { name: 'Ada Lovelace' }))
     expect(onRow).not.toHaveBeenCalled()
     expect(screen.getByTestId('location')).toHaveTextContent('/people/u-ada/profile')
+  })
+})
+
+describe('view toggles (theme)', () => {
+  // Day / Week / Month and List / Timeline: the selected button reads as chosen (primary text on the selected tint), the
+  // others recede (secondary text), in both themes.
+  const toggles = () => renderWithProviders(
+    <ToggleButtonGroup exclusive value="week" aria-label="View">
+      <ToggleButton value="day">Day</ToggleButton>
+      <ToggleButton value="week">Week</ToggleButton>
+    </ToggleButtonGroup>,
+  )
+  test('light: selected is primary on the selected tint, unselected is secondary', () => {
+    toggles()
+    expect(screen.getByRole('button', { name: 'Week' })).toHaveStyle({ color: 'rgb(11, 92, 173)', backgroundColor: 'rgba(11, 92, 173, 0.1)' })
+    expect(screen.getByRole('button', { name: 'Day' })).toHaveStyle({ color: 'rgb(63, 77, 93)' })
+  })
+  test('dark: the same, never a grey fill with dimmer text', () => {
+    setPrefersDark(true)
+    toggles()
+    expect(screen.getByRole('button', { name: 'Week' })).toHaveStyle({ color: 'rgb(90, 162, 240)', backgroundColor: 'rgba(90, 162, 240, 0.2)' })
+    expect(screen.getByRole('button', { name: 'Day' })).toHaveStyle({ color: 'rgb(174, 187, 202)' })
   })
 })

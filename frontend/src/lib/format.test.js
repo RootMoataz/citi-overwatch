@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { daysBetween, formatDateRange, formatDayLong, formatLongDate, formatWeekRange, mondayOfIso, nyMondayIso, nyTodayIso, plural } from './format.js'
+import { daysBetween, formatDateRange, formatDayFull, formatDayLong, formatLongDate, formatWeekRange, mondayOfIso, nyMondayIso, nyTodayIso, plural } from './format.js'
 
 describe('New York dates', () => {
   test('nyTodayIso reads the New York calendar, not UTC', () => {
@@ -47,5 +47,12 @@ describe('shared wording and weeks', () => {
     expect(mondayOfIso('2026-10-12')).toBe('2026-10-12')
     expect(mondayOfIso('2026-10-18')).toBe('2026-10-12')   // Sunday ends the week
     expect(mondayOfIso('2026-11-02')).toBe('2026-11-02')   // the Monday after the clocks change
+  })
+})
+
+describe('formatDayFull', () => {
+  test('the long day in US order, like every other date in the app', () => {
+    expect(formatDayFull('2026-10-16')).toBe('Friday, October 16, 2026')
+    expect(formatDayFull('2026-01-05')).toBe('Monday, January 5, 2026')
   })
 })

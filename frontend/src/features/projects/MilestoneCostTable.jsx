@@ -81,7 +81,9 @@ export default function MilestoneCostTable({ project }) {
         <Typography variant="h3" component="h2">Cost by milestone</Typography>
         <ExportCsvButton name={`${slug(project.name)}-milestone-costs`} columns={csvColumns(showHours)} rows={[...items, total]} />
       </Stack>
-      <Box sx={{ px: { xs: 2, md: 0 }, pt: 1, '& td, & th': { fontVariantNumeric: 'tabular-nums' } }}>
+      {/* Body cells share their first line's baseline, so a cost (its bar under it) lines up with the hours beside it. */}
+      <Box sx={{ px: { xs: 2, md: 0 }, pt: 1, '& td, & th': { fontVariantNumeric: 'tabular-nums' },
+        '& tbody td, & tbody th': { verticalAlign: 'baseline' } }}>
         <DataTable ariaLabel={`Cost by milestone on ${project.name}`} columns={columns} rows={items}
           getRowId={(r) => r.milestone.id} totalRow={totalRow} renderCard={renderCard} />
       </Box>

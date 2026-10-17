@@ -7,8 +7,9 @@ import { KIND, kindColor } from './monthText.js'
 
 const FIGURES = [['approved', 'approved'], ['pending', 'pending'], ['rejected', 'needsRevision']]
 
-/** The week's totals: the counted hours against the 40h reference with a bar, then approved, pending and needs revision
- * ("Needs revision" bold while it holds any hours).
+/** The week's totals: the counted hours against the 40h reference (a big number, its words in secondary text; past 40h
+ * the number alone takes the warning colour) with a bar, then approved, pending and needs revision (a critical status's
+ * word, "Needs revision", bold while it holds any hours).
  * figures: the weekFigures result. loading: the shown week's own data isn't in yet (the previous week's may still be
  * on show), so the card is a skeleton rather than figures from two weeks mixed. */
 export default function WeekTotals({ figures, cap = 40, loading = false }) {
@@ -27,9 +28,12 @@ export default function WeekTotals({ figures, cap = 40, loading = false }) {
   return (
     <Paper variant="outlined" role="group" aria-label="Week totals" sx={{ p: 2, mb: 2 }}>
       <Stack sx={{ flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 1.5, sm: 3 }, alignItems: { sm: 'center' } }}>
-        <Typography data-testid="week-total" data-over={over} variant="h3" component="p"
-          sx={{ color: over ? 'warning.main' : 'text.primary', flexShrink: 0 }}>
-          {formatHours(counted)} counted of {cap}h
+        <Typography data-testid="week-total" data-over={over} component="p"
+          sx={{ flexShrink: 0, display: 'flex', alignItems: 'baseline', gap: 0.75 }}>
+          <Box component="span" sx={{ fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2, letterSpacing: '-0.01em',
+            fontVariantNumeric: 'tabular-nums', color: over ? 'warning.main' : 'text.primary' }}>{formatHours(counted)}</Box>
+          {' '}
+          <Box component="span" sx={{ typography: 'body2', color: 'text.secondary' }}>{`counted of ${cap}h`}</Box>
         </Typography>
         <Stack direction="row" sx={{ alignItems: 'center', gap: 1.5, flex: 1, minWidth: 0 }}>
           <Box role="progressbar" aria-label={`Counted hours against ${cap}h`} aria-valuemin={0} aria-valuemax={100}
@@ -48,7 +52,7 @@ export default function WeekTotals({ figures, cap = 40, loading = false }) {
               alignSelf: 'center', bgcolor: (t) => kindColor(kind, t) }} />
             <Typography component="span" variant="body1" sx={{ fontWeight: 600 }}>{formatHours(figures[field])}</Typography>
             <Typography component="span" variant="body2" sx={{ color: 'text.secondary' }}>
-              {kind === 'rejected' && figures[field] > 0 ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}
+              {KIND[kind].critical && figures[field] > 0 ? <Critical>{KIND[kind].legend}</Critical> : KIND[kind].legend}
             </Typography>
           </Stack>
         ))}

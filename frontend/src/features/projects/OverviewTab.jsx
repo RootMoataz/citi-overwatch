@@ -1,4 +1,7 @@
+import WarningAmber from '@mui/icons-material/WarningAmber'
 import { Box, Button, Chip, Link, Paper, Stack, Typography } from '@mui/material'
+import { alpha } from '@mui/material/styles'
+import { useMediaQuery } from 'react-responsive'
 import { Link as RouterLink, useNavigate } from 'react-router-dom'
 import { useAllocations, useApprovals, useMembers, useMilestones, useProfile, useProjectSummary, useWeek } from '../../api/queries.js'
 import { budgetTone } from '../../lib/chartData.js'
@@ -13,6 +16,7 @@ import { projectEffort } from '../../lib/estimates.js'
 import { daysBetween, formatDate, formatDateRange, formatHours, formatMoney, formatPct, mondayOfIso, nyTodayIso, plural } from '../../lib/format.js'
 import { pendingHoursOf } from '../../lib/personWeeks.js'
 import { WORK_MODE } from '../../lib/labels.js'
+import { DESKTOP_QUERY } from '../../lib/responsive.js'
 import { orderedRisks, riskSentence } from '../../lib/risk.js'
 import { isOverdue } from '../milestones/milestoneOrder.js'
 
@@ -57,7 +61,10 @@ function Kpis({ project, summary, today }) {
   const items = [
     { key: 'progress', label: 'Progress', value: formatPct(progress), hint: 'Weighted milestone completion', keepOnError: true,
       bar: { value: progress, label: 'Progress', tone: 'ok' } },
-    { key: 'spend', label: 'Approved spend', value: `${formatMoney(consumed)} / ${formatMoney(budget)}`,
+    // The budget is the smaller, secondary part of the figure, as drawn, so the pair fits a phone's half-width tile.
+    { key: 'spend', label: 'Approved spend', value: <>{formatMoney(consumed)}<Box component="span"
+      sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' }, fontWeight: 400, color: 'text.secondary', letterSpacing: 0,
+        whiteSpace: 'nowrap' }}>{` / ${formatMoney(budget)}`}</Box></>,
       hint: `${formatPct(budgetPct)} of budget used`, bar: { value: budgetPct, label: 'Budget used', tone } },
     { key: 'forecast', label: 'Forecast at finish', value: forecast == null ? '—' : formatMoney(forecast), tone: over ? 'warning' : undefined,
       hint: <>
@@ -76,9 +83,10 @@ function Schedule({ project, milestones, planning }) {
   const done = milestones.filter((m) => m.status === 'completed').length
   return (
     <Card id="ov-schedule" title="Milestone schedule" aside={planning ? null : (
-      <Stack direction="row" sx={{ alignItems: 'baseline', gap: 2 }}>
+      <Stack direction="row" useFlexGap sx={{ alignItems: 'baseline', columnGap: 2, flexWrap: 'wrap' }}>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>{`${done} of ${milestones.length} milestones complete`}</Typography>
-        <Link component={RouterLink} to="?tab=milestones&view=timeline" underline="hover" variant="body2">View milestones →</Link>
+        <Link component={RouterLink} to="?tab=milestones&view=timeline" underline="hover" variant="body2"
+          sx={{ whiteSpace: 'nowrap' }}>View milestones →</Link>
       </Stack>
     )}>
       {planning ? (
@@ -87,7 +95,7 @@ function Schedule({ project, milestones, planning }) {
           <Link component={RouterLink} to="?tab=plan" underline="hover">Open the Plan tab.</Link>
         </Typography>
       ) : milestones.length ? (
-        <Timeline layout="compact" items={milestones} range={{ start: project.start_date, end: project.predicted_end_date }}
+        <Timeline bare layout="compact" items={milestones} range={{ start: project.start_date, end: project.predicted_end_date }}
           onOpen={(m) => navigate(panelPath(m.id))} />
       ) : <Typography variant="body2" sx={{ color: 'text.secondary' }}>No milestones yet.</Typography>}
     </Card>
@@ -118,6 +126,8 @@ function Row({ children }) {
   return <Typography variant="body2" component="li">{children}</Typography>
 }
 
+/** The page's call to action, as a warning card: the pending entries as a big count with their hours and Review hours
+ * (for people who decide hours), then the risk sentences and the milestone counts. Hidden when there is nothing. */
 function NeedsAttention({ project, view, milestones, today }) {
   const approvals = useApprovals({ project: project.id }, view.decides)
   const pending = approvals.data ?? []
@@ -125,24 +135,45 @@ function NeedsAttention({ project, view, milestones, today }) {
   const risks = orderedRisks(project.at_risk_reasons).filter((code) => SENTENCE_RISKS.has(code))
   const overdue = milestones.filter((m) => isOverdue(m, today)).length
   const kickedBack = milestones.filter((m) => m.status === 'blocked').length
-  if (!pending.length && !risks.length && !overdue && !kickedBack) return null
+  const rows = risks.length || overdue || kickedBack
+  if (!pending.length && !rows) return null
   return (
-    <Card id="ov-attention" title="Needs attention">
-      <Stack component="ul" sx={{ m: 0, pl: 2.5, gap: 0.75 }}>
-        {pending.length ? <Row>
-          <Critical>{plural(pending.length, 'pending entry', 'pending entries')}</Critical>
-          {' · '}
-          <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>
-            <Critical>{`${formatHours(pendingHours)} awaiting approval`}</Critical>
-          </Typography>
-          {' '}
-          <Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover">Review hours</Link>
-        </Row> : null}
-        {risks.map((code) => <Row key={code}>{riskSentence(code, project, today)}</Row>)}
-        {overdue ? <Row><Critical>{plural(overdue, 'overdue milestone', 'overdue milestones')}</Critical></Row> : null}
-        {kickedBack ? <Row><Critical>{`${kickedBack} kicked back`}</Critical></Row> : null}
+    <Paper variant="outlined" component="section" aria-labelledby="ov-attention"
+      sx={(t) => ({ p: 2, bgcolor: alpha(t.palette.warning.main, t.palette.mode === 'dark' ? 0.14 : 0.08),
+        borderColor: alpha(t.palette.warning.main, 0.4) })}>
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, mb: 1.5 }}>
+        <WarningAmber aria-hidden sx={{ color: 'warning.main' }} />
+        <Typography id="ov-attention" variant="h3" component="h2">Needs attention</Typography>
       </Stack>
-    </Card>
+      {pending.length ? (
+        <Stack direction="row" useFlexGap sx={{ alignItems: 'center', justifyContent: 'space-between', gap: 1.5, flexWrap: 'wrap' }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography component="p" variant="body1">
+              <Critical>
+                <Box component="span" sx={{ fontSize: '1.5rem', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
+                  {pending.length}
+                </Box>
+                {pending.length === 1 ? ' pending entry' : ' pending entries'}
+              </Critical>
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              <Critical>{`${formatHours(pendingHours)} awaiting approval`}</Critical>
+            </Typography>
+          </Box>
+          <Button variant="contained" component={RouterLink} to={`/timesheets?project=${project.id}`} sx={{ minHeight: 44 }}>
+            Review hours
+          </Button>
+        </Stack>
+      ) : null}
+      {rows ? (
+        <Stack component="ul" sx={{ m: 0, p: 0, listStyle: 'none', gap: 0.75,
+          ...(pending.length ? { mt: 1.5, pt: 1.5, borderTop: 1, borderColor: (t) => alpha(t.palette.warning.main, 0.3) } : null) }}>
+          {risks.map((code) => <Row key={code}>{riskSentence(code, project, today)}</Row>)}
+          {overdue ? <Row><Critical>{plural(overdue, 'overdue milestone', 'overdue milestones')}</Critical></Row> : null}
+          {kickedBack ? <Row><Critical>{`${kickedBack} kicked back`}</Critical></Row> : null}
+        </Stack>
+      ) : null}
+    </Paper>
   )
 }
 
@@ -250,10 +281,14 @@ export default function OverviewTab({ project, user, view }) {
   const live = (milestones.data ?? []).filter((x) => !x.is_archived)
   const planning = project.status === 'planned' && !project.plan_finalized_at
   const teamWeek = view.lead && !view.executive
+  // On a phone the call to action comes straight after the figures; from md it heads the right column.
+  const desktop = useMediaQuery(DESKTOP_QUERY)
+  const attention = <NeedsAttention project={project} view={view} milestones={live} today={today} />
 
   return (
     <Stack sx={{ gap: 2 }}>
       <Kpis project={project} summary={summary} today={today} />
+      {desktop ? null : attention}
       <ErrorAlert error={milestones.error} onRetry={() => milestones.refetch()} />
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 2fr) minmax(0, 1fr)' }, alignItems: 'start' }}>
         <Stack sx={{ gap: 2, minWidth: 0 }}>
@@ -261,7 +296,7 @@ export default function OverviewTab({ project, user, view }) {
           <NextMilestones milestones={live} />
         </Stack>
         <Stack sx={{ gap: 2, minWidth: 0 }}>
-          <NeedsAttention project={project} view={view} milestones={live} today={today} />
+          {desktop ? attention : null}
           {teamWeek ? <TeamThisWeek project={project} week={week} /> : null}
           {view.mine ? <YourPart project={project} user={user} milestones={live} members={members} week={week} /> : null}
           <Details project={project} summary={summary} members={members} />

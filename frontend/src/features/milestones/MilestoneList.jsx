@@ -68,10 +68,12 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
     return hours ? formatHours(hours) : '—'
   }
   const overdue = (m) => isOverdue(m, today)
+  // The range breaks only between its two dates, so it fits a narrow column on two lines without splitting a date.
   const dates = (m) => (
     <Box>
-      <Typography variant="body2" component="div" sx={{ whiteSpace: 'nowrap', color: overdue(m) ? 'error.main' : undefined }}>
-        {`${formatDate(m.start_date)} – ${formatDate(m.end_date)}`}
+      <Typography variant="body2" component="div" sx={{ color: overdue(m) ? 'error.main' : undefined }}>
+        <Box component="span" sx={{ whiteSpace: 'nowrap' }}>{`${formatDate(m.start_date)} –`}</Box>{' '}
+        <Box component="span" sx={{ whiteSpace: 'nowrap' }}>{formatDate(m.end_date)}</Box>
       </Typography>
       {overdue(m) ? (
         <Typography variant="caption" component="div" sx={{ color: 'error.main' }}><Critical>Overdue</Critical></Typography>
@@ -102,21 +104,27 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
   const columns = [
     { key: 'index', header: '#', render: (m) => (
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>{position[String(m.id)]}</Typography>) },
-    { key: 'name', header: 'Milestone', sortable: true, rowHeader: true, sortValue: (m) => m.name, render: (m) => (
+    { key: 'name', header: 'Milestone', sortable: true, rowHeader: true, sortValue: (m) => m.name, minWidth: 220, render: (m) => (
       <Box sx={{ minWidth: 0 }}>
         <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
           <Link component="button" type="button" data-milestone-name={m.id} onClick={() => onOpen(m)} underline="hover"
             sx={{ fontWeight: 600, textAlign: 'left', color: 'text.primary', fontSize: '0.9375rem' }}>{m.name}</Link>
           {m.is_assignee ? <YouTag /> : null}
         </Stack>
-        <Typography variant="caption" component="div" sx={{ color: 'text.secondary' }}>{dependency(m)}</Typography>
+        {/* One line, cut with an ellipsis at the column's width (it never widens the column); the full list is in its
+            tooltip and in the panel. */}
+        <Typography variant="caption" component="div" title={dependency(m)}
+          sx={{ color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: 0, minWidth: '100%' }}>
+          {dependency(m)}
+        </Typography>
       </Box>) },
     { key: 'status', header: 'Status', sortable: true, sortValue: (m) => STATUS_ORDER.indexOf(stateOf(m)),
       render: (m) => status(m, narrow) },
     { key: 'assignees', header: 'Assignees', render: (m) => <Assignees milestone={m} /> },
-    { key: 'dates', header: 'Planned dates', sortable: true, sortValue: (m) => m.start_date, render: dates },
-    { key: 'effort', header: <>Effort <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>(logged / estimate)</Box></>,
-      info: EFFORT_INFO, render: effort },
+    { key: 'dates', header: 'Planned dates', sortable: true, sortValue: (m) => m.start_date, render: dates, wrapHeader: true },
+    // "Effort", then on the next line "(logged / estimate) ⓘ", which may wrap once more in a narrow card.
+    { key: 'effort', header: <>Effort{' '}<br /><Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>(logged / estimate)</Box></>,
+      info: EFFORT_INFO, render: effort, wrapHeader: true },
     ...(view.decides ? [{ key: 'approvals', header: 'Approvals',
       render: (m) => (pendingOf(m)?.count ? <PendingChip pending={pendingOf(m)} /> : '—') }] : []),
     ...(view.mine ? [{ key: 'yours', header: 'Your hours', render: myHours }] : []),
@@ -147,19 +155,22 @@ export default function MilestoneList({ items, all = items, view, pendingByMiles
     </Stack>
   )
 
+  // Cells pad 8 px a side (16 at the table's edges), so every column fits the card beside the sidebar at 1440.
   return (
-    <DataTable ariaLabel="Milestones" columns={columns} rows={items} getRowId={(m) => String(m.id)}
-      visibleKeys={narrow ? NARROW : undefined} onRowOpen={onOpen} selectedId={selectedId} renderCard={renderCard}
-      renderCardActions={menuFor}
-      loading={loading} empty={empty} />
+    <Box sx={{ '& th, & td': { px: 1 }, '& tr > :first-of-type': { pl: 2 }, '& tr > :last-of-type': { pr: 2 } }}>
+      <DataTable ariaLabel="Milestones" columns={columns} rows={items} getRowId={(m) => String(m.id)}
+        visibleKeys={narrow ? NARROW : undefined} onRowOpen={onOpen} selectedId={selectedId} renderCard={renderCard}
+        renderCardActions={menuFor}
+        loading={loading} empty={empty} />
+    </Box>
   )
 }
 
 function CardLine({ label, children }) {
   return (
     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Typography variant="body2" component="span" sx={{ color: 'text.secondary' }}>{label}:</Typography>
-      <Box sx={{ textAlign: 'right', typography: 'body2' }}>{children}</Box>
+      <Typography variant="body2" component="span" sx={{ color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}:</Typography>
+      <Box sx={{ textAlign: 'right', typography: 'body2', minWidth: 0 }}>{children}</Box>
     </Box>
   )
 }

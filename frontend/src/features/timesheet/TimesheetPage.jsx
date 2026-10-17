@@ -1,8 +1,5 @@
-import ChevronLeft from '@mui/icons-material/ChevronLeft'
-import ChevronRight from '@mui/icons-material/ChevronRight'
 import {
-  Alert, AlertTitle, Box, Button, FormControlLabel, IconButton, Link, Paper, Skeleton, Stack, Switch, ToggleButton,
-  ToggleButtonGroup, Typography,
+  Alert, AlertTitle, Box, Button, FormControlLabel, Link, Paper, Skeleton, Stack, Switch, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
 import { Fragment, useEffect, useState } from 'react'
 import { useMediaQuery } from 'react-responsive'
@@ -27,6 +24,7 @@ import ErrorAlert from '../../components/ErrorAlert.jsx'
 import FootNote from '../../components/FootNote.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import SidePanel from '../../components/SidePanel.jsx'
+import { ThisWeekButton, WeekRange, WeekStep } from '../../components/WeekNav.jsx'
 import { addDays, formatDayLabel, formatDayShort, formatHours, formatWeekRange, mondayOf, nyMondayIso, nyTodayIso } from '../../lib/format.js'
 import { DESKTOP_QUERY } from '../../lib/responsive.js'
 
@@ -264,16 +262,18 @@ export default function TimesheetPage() {
         </Alert>
       ) : null}
       {/* From md up the week card is the list beside Entry details; on a phone the panel is a full-screen sheet over it. */}
-      <SidePanel open={Boolean(panel.entryKey)} title="Entry details" onClose={panel.close} returnFocus={panel.returnFocus}
+      <SidePanel open={Boolean(panel.entryKey)} title="Entry details" onClose={panel.close} returnFocus={panel.returnFocus} panelWidth="380px"
         list={(
           <>
             <Paper variant="outlined" sx={{ p: 2 }}>
               <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ gap: 1, alignItems: { sm: 'center' }, mb: 2 }}>
-                <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  <IconButton aria-label="Previous week" onClick={() => goTo(addDays(week, -7))}><ChevronLeft /></IconButton>
-                  <Typography variant="h2" component="h2" tabIndex={-1} data-week-range sx={{ fontSize: '1.125rem' }}>{formatWeekRange(week)}</Typography>
-                  <IconButton aria-label="Next week" onClick={() => goTo(addDays(week, 7))}><ChevronRight /></IconButton>
-                  <Button size="small" onClick={goThisWeek}>This week</Button>
+                <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+                  <WeekStep direction="previous" onClick={() => goTo(addDays(week, -7))} />
+                  <WeekRange>
+                    <Typography variant="h3" component="h2" tabIndex={-1} data-week-range sx={{ whiteSpace: 'nowrap' }}>{formatWeekRange(week)}</Typography>
+                  </WeekRange>
+                  <WeekStep direction="next" onClick={() => goTo(addDays(week, 7))} />
+                  <ThisWeekButton onClick={goThisWeek} />
                 </Stack>
                 <Box sx={{ flexGrow: 1 }} />
                 {toggle}
@@ -292,7 +292,8 @@ export default function TimesheetPage() {
                 <DayView state={state} day={day} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} onOpenEntry={panel.open} />
               ) : null}
               {rows.length && !inDayView ? (
-                <WeekGrid state={state} days={days} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} onOpenEntry={panel.open} />
+                <WeekGrid state={state} days={days} thisWeek={thisWeek} onRequest={(cell) => setAsking(cell)} onOpenEntry={panel.open}
+                  narrow={desktop && Boolean(panel.entryKey)} />
               ) : null}
             </Paper>
             {!loading && figures.needsRevision > 0 ? (

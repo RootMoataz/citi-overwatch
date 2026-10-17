@@ -118,7 +118,7 @@ describe('Milestones tab: summary', () => {
     server.use(...handlers())
     renderTab(users.manager)
     const summary = await screen.findByRole('region', { name: '4 of 7 milestones complete' })
-    expect(within(summary).getByRole('heading', { level: 2, name: '4 of 7 milestones complete' })).toBeInTheDocument()
+    expect(within(summary).getByRole('heading', { level: 2, name: '4 of 7 milestones complete' })).toHaveStyle({ fontSize: '18px', fontWeight: '600' })   // as other card H2s
     expect(within(summary).getByRole('img', { name: 'Completed: 4 milestones' })).toBeInTheDocument()
     expect(within(summary).getByRole('list', { name: 'Milestones by state' })).toBeInTheDocument()
   })
@@ -168,6 +168,24 @@ describe('Milestones tab: columns', () => {
     expect(cells('Discovery')[1]).toHaveTextContent('Dependency: None')
     expect(cells('Build: frontend')[1]).toHaveTextContent('Dependency: after Discovery')
     expect(cells('QA & user acceptance testing')[1]).toHaveTextContent('Dependency: after Build: frontend, Schema Mapping')
+  })
+
+  test('the List fits its card: a 220 px Milestone column, one-line dependencies, dates that break only between them, '
+    + 'and headers that may wrap', async () => {
+    server.use(...handlers())
+    renderTab(users.manager)
+    const t = await table()
+    expect(within(t).getByRole('columnheader', { name: /^Milestone/ })).toHaveStyle({ minWidth: '220px' })
+    const dependency = within(cells('QA & user acceptance testing')[1]).getByText('Dependency: after Build: frontend, Schema Mapping')
+    expect(dependency).toHaveStyle({ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' })
+    expect(dependency).toHaveAttribute('title', 'Dependency: after Build: frontend, Schema Mapping')
+    const dates = cells('Build: frontend')[4]
+    expect(within(dates).getByText('Aug 15, 2026 –')).toHaveStyle({ whiteSpace: 'nowrap' })
+    expect(within(dates).getByText('Oct 23, 2026')).toHaveStyle({ whiteSpace: 'nowrap' })
+    const effort = within(t).getByRole('columnheader', { name: /^Effort/ })
+    expect(within(effort).getByText('(logged / estimate)')).toBeInTheDocument()
+    expect(effort).toHaveStyle({ whiteSpace: 'normal' })   // its words may take a second line
+    expect(within(t).getByRole('columnheader', { name: /^Planned dates/ })).toHaveStyle({ whiteSpace: 'normal' })
   })
 
   test('your own milestones carry a "You" tag', async () => {
@@ -407,7 +425,7 @@ describe('Milestones tab: opening a milestone', () => {
     renderTab(users.manager)
     const t = await table()
     const user = userEvent.setup()
-    await user.click(within(row('Build: frontend')).getByText('Aug 15, 2026 – Oct 23, 2026'))
+    await user.click(within(row('Build: frontend')).getByText('Aug 15, 2026 –'))   // the dates' first part, not a control
     expect(location()).toHaveTextContent('/m?milestone=m2')
     const side = await panel('Build: frontend')
     expect(within(side).getByRole('heading', { level: 2, name: 'Build: frontend' })).toHaveFocus()

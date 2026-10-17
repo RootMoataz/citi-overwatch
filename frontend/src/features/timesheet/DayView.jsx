@@ -32,7 +32,9 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest, on
   return (
     <Box component="li" data-attention={needed || undefined} aria-disabled={closed ? true : undefined}
       sx={{ display: 'grid', gap: 2, alignItems: 'start', p: 2,
-        gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) 110px minmax(0, 2fr)' },
+        // The middle column fits Hours and, under it, one left-aligned row: "● Pending  Overtime  Manual  Details" (from lg
+        // on one line; between md and lg Details may take a second).
+        gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1fr) 220px minmax(0, 2fr)', lg: 'minmax(0, 1fr) 260px minmax(0, 2fr)' },
         ...(closed ? { bgcolor: 'action.hover', color: 'text.disabled' } : null),
         ...(needed ? { bgcolor: (t) => alpha(t.palette.warning.main, 0.06), boxShadow: (t) => `inset 3px 0 0 ${t.palette.warning.main}` } : null) }}>
       <Box sx={{ minWidth: 0 }}>
@@ -50,14 +52,14 @@ function DayRow({ state, row, day, closed, showProject, showTimer, onRequest, on
             onRequest={() => onRequest({ milestoneId: row.milestone.id, date: day, hours: locks[k].hours, label })} />
         ) : <HoursField value={value} label={label} caption="Hours" onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
           error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(day)) || (isDraft(k) && tooLow(value))} />}
-        <CellStatus entry={entries[k]} cellLabel={label} resubmitting={isDraft(k)} closed={Boolean(closed)} inlineReason
-          onResubmit={() => setHours(k, String(entries[k].hours))} />
-        {entries[k] ? (
-          <Button size="small" onClick={() => onOpenEntry(row.milestone.id, day)} aria-label={`Details for ${label}`}
-            data-entry-details={entryParam(row.milestone.id, day)} sx={{ display: 'flex', minWidth: 44, minHeight: 44, px: 1, mt: 0.25 }}>
-            Details
-          </Button>
-        ) : null}
+        <CellStatus entry={entries[k]} cellLabel={label} resubmitting={isDraft(k)} closed={Boolean(closed)}
+          onResubmit={() => setHours(k, String(entries[k].hours))}
+          after={(
+            <Button size="small" onClick={() => onOpenEntry(row.milestone.id, day)} aria-label={`Details for ${label}`}
+              data-entry-details={entryParam(row.milestone.id, day)} sx={{ minWidth: 44, minHeight: 44, px: 0.5 }}>
+              Details
+            </Button>
+          )} />
       </Box>
       <TextField label="Work note" multiline minRows={2} fullWidth size="small" value={note} disabled={Boolean(closed)}
         onChange={(e) => setNote(k, e.target.value.slice(0, NOTE_MAX))}

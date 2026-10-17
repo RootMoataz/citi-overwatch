@@ -187,7 +187,9 @@ export default function Layout({ user, onLogout, topBarExtras, badges }) {
             and they take the bar's spare room (no spacer). Phones get tighter gutters and gaps and the logo's glyph
             alone; under 375 px tighter still, with Puppy in the account menu, so the bar fits at 320 px with a timer or
             the demo pill. */}
-        <Toolbar sx={{ gap: narrow ? 0.25 : { xs: 0.5, sm: 1 }, px: narrow ? 0.5 : { xs: 1, sm: 3 } }}>
+        {/* From 375 px up to md the bar's icon buttons are 44 px touch targets; under 375 they keep their size so it fits. */}
+        <Toolbar sx={{ gap: narrow ? 0.25 : { xs: 0.5, sm: 1 }, px: narrow ? 0.5 : { xs: 1, sm: 3 },
+          ...(narrow ? null : { '& .MuiIconButton-root': { minWidth: { xs: 44, md: 0 }, minHeight: { xs: 44, md: 0 } } }) }}>
           {!desktop ? (
             <IconButton aria-label="Open navigation" onClick={() => setMobileOpen(true)} sx={{ flexShrink: 0, ml: { xs: 0, sm: -1 } }}>
               <MenuIcon />

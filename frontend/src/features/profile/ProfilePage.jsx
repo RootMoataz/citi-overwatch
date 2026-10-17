@@ -1,3 +1,4 @@
+import ManageHistory from '@mui/icons-material/ManageHistoryOutlined'
 import { Box, Button, Grid, Paper, Skeleton, Stack, TextField, Typography } from '@mui/material'
 import { useState } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
@@ -39,7 +40,7 @@ function ProfileCards({ profile, person }) {
   const { user: owner, skills, can_edit_skills: canEdit } = profile.data
   return (
     <>
-      <YourManagerCard manager={owner?.manager} />
+      <YourManagerCard manager={owner?.manager} stacked />
       <SkillsCard person={person} skills={skills ?? []} canEdit={Boolean(canEdit)} mb={0} />
     </>
   )
@@ -79,7 +80,8 @@ export default function ProfilePage() {
   return (
     <>
       <PageHeader title="My profile" subtitle="You can change your name and email. An admin manages everything else."
-        actions={<Button component={RouterLink} to={`/people/${p.id}/profile`}>My history</Button>} />
+        actions={<Button component={RouterLink} to={`/people/${p.id}/profile`} variant="outlined" startIcon={<ManageHistory />}
+          sx={{ minHeight: 44 }}>My history</Button>} />
       <ErrorAlert error={failure} sx={{ mb: 2 }} />
       {/* One column on phones (profile, details, account, manager, skills); from md the profile card, manager and skills
           stack on the left beside the details and account. */}
@@ -87,7 +89,7 @@ export default function ProfilePage() {
         gridTemplateAreas: { xs: '"profile" "details" "extra"', md: '"profile details" "extra details" ". details"' },
         gridTemplateRows: { md: 'auto auto 1fr' } }}>
         <Box sx={{ gridArea: 'profile', minWidth: 0 }}>
-          <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
             <Stack sx={{ gap: 0.5, alignItems: 'flex-start' }}>
               <UserAvatar userId={p.id} name={name} size={64} />
               <Typography variant="h3" component="h2" sx={{ mt: 1, overflowWrap: 'anywhere' }}>{name}</Typography>
@@ -101,7 +103,7 @@ export default function ProfilePage() {
           {photoOpen ? <AvatarDialog open user={p} onClose={() => setPhotoOpen(false)} /> : null}
         </Box>
         <Stack sx={{ gridArea: 'details', gap: 2, minWidth: 0 }}>
-          <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="h3" component="h2" sx={{ mb: 2 }}>Your details</Typography>
             <Grid container spacing={2}>
               <Grid size={{ xs: 12, sm: 6 }}><TextField label="First name" value={form.first_name} onChange={set('first_name')} disabled={locked} /></Grid>
@@ -116,7 +118,7 @@ export default function ProfilePage() {
               </DemoLock>
             </Stack>
           </Paper>
-          <Paper variant="outlined" sx={{ p: 2.5 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="h3" component="h2" sx={{ mb: 2 }}>Account</Typography>
             <Grid container spacing={2}>
               <Grid size={{ xs: 12, sm: 6 }}><ReadOnly label="Username" value={p.username} /></Grid>

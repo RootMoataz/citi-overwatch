@@ -1,5 +1,5 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { Box, Button, Dialog, Stack, Typography } from '@mui/material'
+import { Box, Button, Dialog, Paper, Stack, Typography } from '@mui/material'
 import { useMediaQuery } from 'react-responsive'
 import { DESKTOP_QUERY } from '../lib/responsive.js'
 
@@ -21,8 +21,8 @@ function PanelHeader({ id, title, titleAdornment, actions, onClose, quiet }) {
   useEffect(() => { titleRef.current?.focus() }, [])
   return (
     <Stack sx={{ flexDirection: 'row', alignItems: 'center', gap: 1, p: 2, borderBottom: 1, borderColor: 'divider' }}>
-      <Typography ref={titleRef} id={id} variant="h2" component="h2" tabIndex={-1}
-        data-quiet-focus={quiet ? '' : undefined} sx={{ fontSize: '1.125rem', flex: 1, minWidth: 0, overflowWrap: 'anywhere', ...TITLE_FOCUS }}>{title}</Typography>
+      <Typography ref={titleRef} id={id} variant="h3" component="h2" tabIndex={-1}
+        data-quiet-focus={quiet ? '' : undefined} sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere', ...TITLE_FOCUS }}>{title}</Typography>
       {titleAdornment}
       {actions}
       <Button onClick={onClose} sx={{ minHeight: 44, minWidth: 44 }}>Close</Button>
@@ -31,11 +31,11 @@ function PanelHeader({ id, title, titleAdornment, actions, onClose, quiet }) {
 }
 
 /**
- * A list with a detail panel beside it (1fr : 1fr from 900 px) or over it as a full-screen sheet on phones. The title
- * takes focus on open (its ring only for a keyboard opener); Esc and Close call `onClose`; afterwards focus goes to
- * `returnFocus?.()` or where it was.
+ * A list with a detail panel beside it (1fr : 1fr from 900 px, or a fixed `panelWidth` such as "380px" beside a list that
+ * takes the rest) or over it as a full-screen sheet on phones. The title takes focus on open (its ring only for a keyboard
+ * opener); Esc and Close call `onClose`; afterwards focus goes to `returnFocus?.()` or where it was.
  */
-export default function SidePanel({ open, title, titleAdornment, actions, onClose, returnFocus, list, children }) {
+export default function SidePanel({ open, title, titleAdornment, actions, onClose, returnFocus, list, panelWidth, children }) {
   const desktop = useMediaQuery(DESKTOP_QUERY)
   const titleId = useId()
   const prior = useRef(null)
@@ -68,7 +68,9 @@ export default function SidePanel({ open, title, titleAdornment, actions, onClos
     return (
       <>
         {list}
-        <Dialog open={Boolean(open)} fullScreen onClose={onClose} disableRestoreFocus aria-labelledby={titleId}>
+        {/* No elevation overlay: in dark mode it would lighten the sheet past the paper surface every card uses. */}
+        <Dialog open={Boolean(open)} fullScreen onClose={onClose} disableRestoreFocus aria-labelledby={titleId}
+          slotProps={{ paper: { sx: { backgroundImage: 'none', bgcolor: 'background.paper' } } }}>
           {header}
           <Box sx={{ p: 2, overflowY: 'auto' }}>{children}</Box>
         </Dialog>
@@ -76,15 +78,15 @@ export default function SidePanel({ open, title, titleAdornment, actions, onClos
     )
   }
   return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: open ? '1fr 1fr' : '1fr', gap: 2, alignItems: 'start' }}>
+    <Box sx={{ display: 'grid', gridTemplateColumns: !open ? '1fr' : panelWidth ? `minmax(0, 1fr) ${panelWidth}` : '1fr 1fr',
+      gap: 2, alignItems: 'start' }}>
       <Box sx={{ minWidth: 0 }}>{list}</Box>
       {open ? (
-        <Box component="aside" role="complementary" aria-labelledby={titleId}
-          onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose() }}
-          sx={{ minWidth: 0, border: 1, borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+        <Paper variant="outlined" component="aside" role="complementary" aria-labelledby={titleId}
+          onKeyDown={(e) => { if (e.key === 'Escape' && !e.defaultPrevented) onClose() }} sx={{ minWidth: 0 }}>
           {header}
           <Box sx={{ p: 2 }}>{children}</Box>
-        </Box>
+        </Paper>
       ) : null}
     </Box>
   )

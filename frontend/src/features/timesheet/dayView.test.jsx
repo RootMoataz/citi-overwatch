@@ -50,7 +50,7 @@ describe('Timesheet day view', () => {
     renderSheet()
     expect(await screen.findByLabelText('Schema Mapping, Wed Oct 14')).toBeInTheDocument()
     expect(dayButton('Wed 14 Oct, 0h')).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('heading', { name: 'Wednesday 14 October 2026' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Wednesday, October 14, 2026' })).toBeInTheDocument()
   })
 
   test('opens on Monday for any other week', async () => {
@@ -514,6 +514,16 @@ describe('Day view status words', () => {
     expect(within(row).getByText('Pending')).toBeInTheDocument()
     expect(within(row).getByText('Overtime')).toBeInTheDocument()
     expect(screen.queryByText(/Overtime requested from/)).not.toBeInTheDocument()
+  })
+
+  test('under Hours, the status, Overtime, the source chip and Details share one left-aligned row', async () => {
+    server.use(sheetWith({ entries: [entry({ id: 'e4', work_date: WED, over_40: true, source: 'manual' })] }))
+    renderSheet()
+    const row = (await screen.findByLabelText('Work note, Schema Mapping')).closest('li')
+    const details = within(row).getByRole('button', { name: /^Details for Schema Mapping/ })
+    const line = details.parentElement
+    expect(line).toHaveStyle({ display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-start' })
+    for (const word of ['Pending', 'Overtime', 'Manual']) expect(line).toContainElement(within(row).getByText(word))
   })
 
   test('Edited and the source chip stay', async () => {

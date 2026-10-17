@@ -65,6 +65,15 @@ describe('HoursTab week bar', () => {
     expect(location()).toContain('tab=hours')
   })
 
+  test("the week bar has the app's one week-picker look; Pick a week is the calendar in the range's box", async () => {
+    renderTab(users.manager)
+    const range = (await screen.findByText('Oct 12 – 18, 2026')).parentElement
+    expect(getComputedStyle(range).borderStyle).toBe('solid')
+    expect(range).toContainElement(screen.getByRole('button', { name: 'Pick a week' }))
+    expect(getComputedStyle(screen.getByRole('button', { name: 'Next week' })).borderStyle).toBe('solid')
+    expect(screen.getByRole('button', { name: 'This week' })).toHaveClass('MuiButton-text')
+  })
+
   test("picking any day in a week sets that week's Monday", async () => {
     const user = userEvent.setup()
     renderTab(users.manager)
@@ -182,6 +191,17 @@ describe('HoursTab for an executive', () => {
     expect(await screen.findByText('Team hours are private')).toBeInTheDocument()
     expect(screen.getByText("Only the project's manager and admins see everyone's hours.")).toBeInTheDocument()
     expect(requests).toEqual([])
+  })
+})
+
+describe('HoursTab: the pending banner', () => {
+  // Its phone layout (the link under the message, a 44 px target) is checked in a real browser: e2e/shell.spec.js.
+  test('amber with a clock', async () => {
+    renderTab(users.manager)
+    const banner = await screen.findByRole('alert')
+    expect(banner).toHaveClass('MuiAlert-colorWarning')
+    expect(banner.querySelector('svg[data-testid="ScheduleOutlinedIcon"]')).not.toBeNull()
+    expect(within(banner).getByRole('link', { name: "Review this week's entries →" })).toBeInTheDocument()
   })
 })
 

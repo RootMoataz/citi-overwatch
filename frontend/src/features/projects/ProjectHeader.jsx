@@ -1,7 +1,7 @@
 import Edit from '@mui/icons-material/EditOutlined'
 import MoreHoriz from '@mui/icons-material/MoreHoriz'
 import { Box, Button, IconButton, Menu, MenuItem, Stack, Typography } from '@mui/material'
-import { useId, useState } from 'react'
+import { Fragment, useId, useState } from 'react'
 import DemoLock from '../../components/DemoLock.jsx'
 import PageHeader from '../../components/PageHeader.jsx'
 import PersonLink from '../../components/PersonLink.jsx'
@@ -49,17 +49,19 @@ export default function ProjectHeader({ project: p, user, view, onEdit, onArchiv
   const admin = can(user, 'project.archive')
   const healthy = !p.is_archived && p.status !== 'completed'
   const parts = [
-    <Stack key="m" component="span" direction="row" sx={{ gap: 0.75, alignItems: 'center' }}>
-      <UserAvatar userId={p.manager.id} name={p.manager.name} size={20} />
+    <Box key="m" component="span">
+      <Box component="span" sx={{ display: 'inline-flex', verticalAlign: 'middle', mr: 0.75 }}>
+        <UserAvatar userId={p.manager.id} name={p.manager.name} size={20} />
+      </Box>
       <PersonLink person={p.manager} context={{ project: p }}>{p.manager.name}</PersonLink>
-    </Stack>,
+    </Box>,
     p.department?.name ? <span key="d">{p.department.name}</span> : null,
     <span key="r">{formatDateRange(p.start_date, p.predicted_end_date)}</span>,
   ].filter(Boolean)
   const run = (fn) => () => { setAnchor(null); fn() }
 
   return (
-    <PageHeader title={p.name}
+    <PageHeader title={p.name} align="start"
       subtitle={(
         <Stack sx={{ gap: 1 }}>
           <Stack component="span" direction="row" useFlexGap sx={{ gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -67,14 +69,17 @@ export default function ProjectHeader({ project: p, user, view, onEdit, onArchiv
             {p.is_archived ? <StatusChip status="blocked" label="Archived" /> : null}
             {healthy ? <RiskText project={p} today={nyTodayIso()} variant="chip" /> : null}
           </Stack>
-          <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-            {parts.map((part, i) => (
-              <Stack key={part.key} direction="row" sx={{ gap: 0.75 }}>
-                {i ? <span aria-hidden>·</span> : null}{part}
-              </Stack>
-            ))}
-          </Stack>
           {p.description ? <Description text={p.description} /> : null}
+          {/* One run of text: each "·" is held to the end of its part by a no-break space, so a wrapped line never starts
+              with a dot, and a long name still wraps inside its part. */}
+          <Box sx={{ lineHeight: 1.8, overflowWrap: 'anywhere' }}>
+            {parts.map((part, i) => (
+              <Fragment key={part.key}>
+                <span>{part}{i < parts.length - 1 ? <span aria-hidden>{'\u00A0·'}</span> : null}</span>
+                {i < parts.length - 1 ? ' ' : null}
+              </Fragment>
+            ))}
+          </Box>
           {p.delegate ? <DelegateLine delegate={p.delegate} /> : null}
         </Stack>
       )}

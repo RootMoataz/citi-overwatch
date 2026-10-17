@@ -167,7 +167,7 @@ export default function MonthView({ month, day, onMonthChange, onSelectDay, onOp
         <IconButton aria-label="Previous month" onClick={() => onMonthChange(shiftMonth(month, -1))}><ChevronLeftIcon /></IconButton>
         <Button size="small" variant="outlined" onClick={() => onMonthChange(monthOf(today))}>This month</Button>
         <IconButton aria-label="Next month" onClick={() => onMonthChange(shiftMonth(month, 1))}><ChevronRightIcon /></IconButton>
-        <Typography variant="h5" component="h2" sx={{ mr: 'auto', ml: 0.5, fontWeight: 700 }}>{monthName(month, true)}</Typography>
+        <Typography variant="h3" component="h2" sx={{ mr: 'auto', ml: 0.5 }}>{monthName(month, true)}</Typography>
         {view ? (
           <Box sx={{ textAlign: { sm: 'right' } }}>
             <Typography variant="subtitle1" component="p" sx={{ fontWeight: 700, lineHeight: 1.3 }}>

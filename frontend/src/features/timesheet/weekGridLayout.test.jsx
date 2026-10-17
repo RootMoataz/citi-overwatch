@@ -63,3 +63,34 @@ describe('the Week grid on a phone', () => {
     expect(document.querySelector('[data-scroll-fade]')).not.toBeInTheDocument()
   })
 })
+
+describe('the Week grid: header, project band and weekends', () => {
+  test('the fixed Milestone header carries the header tint over its opaque background, like the day headers', async () => {
+    server.use(sheet())
+    renderSheet()
+    const header = within(await screen.findByRole('table')).getByRole('columnheader', { name: 'Milestone' })
+    expect(getComputedStyle(header).backgroundImage).toMatch(/linear-gradient\(rgb\(247, 249, 251\)/)
+  })
+
+  test("the project band is one header cell across the row, its name on one line (never wrapping in the first column)", async () => {
+    server.use(sheet())
+    renderSheet()
+    const band = await screen.findByRole('rowheader', { name: 'Apollo' })
+    expect(band).toHaveAttribute('colspan', '9')   // Milestone, 7 days, Counted
+    const name = within(band).getByText('Apollo')
+    expect(name).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis' })
+    expect(name).toHaveAttribute('title', 'Apollo')
+    expect(name.parentElement).toHaveStyle({ position: 'sticky' })   // it stays in view as the days scroll
+  })
+
+  test('weekend columns are tinted 6%, and their empty inputs dimmed; a weekday input is not', async () => {
+    server.use(sheet())
+    renderSheet()
+    const table = await screen.findByRole('table')
+    expect(within(table).getByRole('columnheader', { name: /^Sat/ })).toHaveStyle({ backgroundColor: 'rgba(17, 28, 39, 0.06)' })
+    const sat = within(table).getByLabelText(`${LONG}, Sat Oct 17`)
+    const mon = within(table).getByLabelText(`${LONG}, Mon Oct 12`)
+    expect(sat.parentElement).toHaveAttribute('data-dim')
+    expect(mon.parentElement).not.toHaveAttribute('data-dim')
+  })
+})

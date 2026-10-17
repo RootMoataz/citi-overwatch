@@ -1,4 +1,5 @@
 import { TextField } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 
 // Hours are plain numbers: digits and one point, at most 2 digits either side, so "-", "+" and "e" never get in.
 // Typed and pasted text both arrive through onChange, so both are cleaned here.
@@ -13,8 +14,10 @@ const CLEAN_PASTE = /^\d{1,2}(\.\d{1,2})?$/
 const allowedKey = (e) => e.ctrlKey || e.metaKey || e.altKey || e.key.length > 1 || /[\d.]/.test(e.key)
 
 /** The hours input of one cell, in the week grid and the day view alike. onChange(text) gets the cleaned text.
- * label is its accessible name; caption (optional) is a visible label that does not replace it. */
-export default function HoursField({ value, label, caption, onChange, error, disabled }) {
+ * label is its accessible name; caption (optional) is a visible label that does not replace it. `compact`: narrower on a
+ * phone (the week grid's day columns), or at every width with 'always' (beside an open panel); `dim`: a quiet grey fill
+ * (an empty weekend cell). */
+export default function HoursField({ value, label, caption, onChange, error, disabled, compact = false, dim = false }) {
   return (
     <TextField label={caption} value={value} onChange={(e) => onChange(cleanHours(e.target.value))} disabled={disabled}
       onKeyDown={(e) => { if (!allowedKey(e)) e.preventDefault() }}
@@ -25,7 +28,9 @@ export default function HoursField({ value, label, caption, onChange, error, dis
       }}
       error={error}
       slotProps={{ htmlInput: { inputMode: 'decimal', pattern: '[0-9]{0,2}([.][0-9]{0,2})?',
-        'aria-label': label, style: { textAlign: 'center' } } }}
-      sx={{ width: 76 }} />
+        'aria-label': label, style: { textAlign: 'center' } },
+      input: dim ? { 'data-dim': '' } : undefined }}
+      sx={{ width: compact === 'always' ? 56 : compact ? { xs: 56, sm: 76 } : 76,
+        ...(dim ? { '& .MuiOutlinedInput-root': { bgcolor: (t) => alpha(t.palette.text.primary, 0.04) } } : null) }} />
   )
 }

@@ -88,7 +88,7 @@ export default function EntryPanel({ state, cellKey, onRequest, onClose }) {
     <Box>
       <Typography variant="body2" sx={{ color: 'text.secondary' }}>{formatDayLong(date)}</Typography>
       <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
-        <Typography component="h3" variant="h6" sx={{ fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere' }}>{name}</Typography>
+        <Typography component="h3" variant="h3" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>{name}</Typography>
         <EntryStatusChip kind={kind} />
         {entry.edited_after_decision ? <Chip size="small" variant="outlined" label="Edited" /> : null}
         {entry.over_40 ? <Chip size="small" variant="outlined" label={<Critical>Overtime</Critical>} /> : null}

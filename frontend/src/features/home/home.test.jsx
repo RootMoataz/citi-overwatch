@@ -85,7 +85,7 @@ describe('HomePage by role', () => {
     // Assigned work sits in its group; the unassigned row and the archived project's row are left out.
     const inProgress = within(screen.getByRole('region', { name: /^In progress/ })).getAllByRole('listitem')
     expect(headings(inProgress)).toEqual(['Design'])
-    expect(within(inProgress[0]).getByText('Hard Difficulty')).toBeInTheDocument()
+    expect(within(inProgress[0]).getByText('Hard difficulty')).toBeInTheDocument()
     expect(within(inProgress[0]).getByRole('link', { name: 'Apollo' })).toHaveAttribute('href', '/projects/p1?tab=milestones')
     const upcoming = within(screen.getByRole('region', { name: /^Upcoming/ })).getAllByRole('listitem')
     expect(headings(upcoming)).toEqual(['Review'])

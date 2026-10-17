@@ -34,7 +34,8 @@ function NoteButton({ cellLabel, note, onChange, attention, disabled }) {
           <IconButton size="small" aria-label={`${has ? 'Edit' : 'Add'} work note, ${cellLabel}`} disabled={disabled}
             onClick={(e) => { setText(note); setAnchor(e.currentTarget) }}
             color={attention ? 'warning' : has ? 'primary' : 'default'} data-attention={attention || undefined}
-            sx={{ p: 0.25, ...(attention ? { bgcolor: (t) => alpha(t.palette.warning.main, 0.16) } : null) }}>
+            sx={{ p: 0.25, minWidth: { xs: 44, md: 0 }, minHeight: { xs: 44, md: 0 },
+              ...(attention ? { bgcolor: (t) => alpha(t.palette.warning.main, 0.16) } : null) }}>
             <EditNote fontSize="small" />
           </IconButton>
         </span>
@@ -64,6 +65,8 @@ const STICKY = { position: 'sticky', left: 0, zIndex: 2, bgcolor: 'background.pa
 const tint = (colour) => ({ backgroundImage: (t) => `linear-gradient(${colour(t)}, ${colour(t)})` })
 const PROJECT_TINT = tint((t) => alpha(t.palette.primary.main, 0.06))
 const CLOSED_TINT = tint((t) => t.palette.action.hover)
+// The fixed Milestone header wears the theme's header tint like the day headers beside it (opaque, as the days slide under).
+const HEAD_TINT = tint((t) => t.components?.MuiTableCell?.styleOverrides?.head?.backgroundColor ?? t.palette.background.paper)
 // Its width is capped, a long name wrapping (breaking a long word if it must), so it never fills the card and covers
 // the day cells: 140 px on a phone (the cell's 16 px padding each side included, so 108 px of name), under half the
 // card. The name stays whole in the cell, and is the row header's name.
@@ -74,13 +77,20 @@ const NAME = (t) => ({ display: 'block', maxWidth: NAME_WIDTH, overflowWrap: 'an
 const isWeekend = (iso) => [0, 6].includes(new Date(`${iso}T00:00:00Z`).getUTCDay())
 /** Today's column is tinted; weekend columns are dimmed. */
 const dayTint = (d, today) => (d === today ? { bgcolor: (t) => alpha(t.palette.primary.main, 0.08) }
-  : isWeekend(d) ? { bgcolor: (t) => alpha(t.palette.text.primary, 0.03) } : null)
+  : isWeekend(d) ? { bgcolor: (t) => alpha(t.palette.text.primary, 0.06) } : null)
+// A day column is compact on a phone, and beside an open Entry details panel (`narrow`): narrow padding and a narrower
+// input, so more days show beside the Milestone column (at 1440 with the sidebar open, all seven and Counted).
+const dayCell = (narrow) => ({ px: narrow ? 0.5 : { xs: 0.5, sm: 2 } })
+// Beside the panel the first and last columns pad 8 px a side too (the name keeps its 108 px at least).
+const edgeCell = (narrow) => (narrow ? { px: 1 } : null)
 
 /** The week as a table: one row per milestone, one column per shown day, with a daily-total row.
  * state: the useTimesheetWeek result. days: the columns to show. onRequest(cell): a locked cell asks for a change.
  * onOpenEntry(milestoneId, date): a saved cell's status line opens Entry details, where its Edited and Overtime chips,
  * source, manager feedback and Save & resubmit live. */
-export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry }) {
+export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry, narrow = false }) {
+  const daySx = dayCell(narrow)
+  const edgeSx = edgeCell(narrow)
   const { groups, overDays, dayTotal, total } = state
   const today = thisWeek ? nyTodayIso() : null
   return (
@@ -93,13 +103,13 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
         <Table size="small" aria-label={`Timesheet for the week of ${formatDate(state.week)}`}>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ ...STICKY, minWidth: FIRST_COLUMN }}>Milestone</TableCell>
+              <TableCell sx={[{ ...STICKY, minWidth: narrow ? NAME_WIDTH + 16 : FIRST_COLUMN }, HEAD_TINT, edgeSx]}>Milestone</TableCell>
               {days.map((d) => {
                 const [weekday, ...date] = formatDayLabel(d).split(' ')
                 return (
                   <TableCell key={d} align="center" data-today={d === today || undefined} data-weekend={isWeekend(d) || undefined}
-                    sx={[{ minWidth: 84, color: overDays.includes(d) ? 'error.main' : isWeekend(d) ? 'text.secondary' : undefined },
-                      dayTint(d, today)]}>
+                    sx={[{ minWidth: narrow ? 64 : { xs: 64, sm: 84 }, color: overDays.includes(d) ? 'error.main' : isWeekend(d) ? 'text.secondary' : undefined },
+                      daySx, dayTint(d, today)]}>
                     <Box component="span" sx={{ display: 'block', fontWeight: 600 }}>{weekday}</Box>
                     <Box component="span" sx={{ display: 'block', fontWeight: 400 }}>{date.join(' ')}</Box>
                     {d === today ? (
@@ -108,24 +118,24 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
                   </TableCell>
                 )
               })}
-              <TableCell align="right">Counted</TableCell>
+              <TableCell align="right" sx={edgeSx}>Counted</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {groups.map((g) => (
               <GroupRows key={g.project.id} group={g} days={days} today={today} state={state} thisWeek={thisWeek} onRequest={onRequest}
-                onOpenEntry={onOpenEntry} />
+                onOpenEntry={onOpenEntry} dayCellSx={daySx} edgeSx={edgeSx} narrow={narrow} />
             ))}
             <TableRow sx={{ '& td, & th': { fontWeight: 700 } }}>
-              <TableCell component="th" scope="row" sx={STICKY}>Daily total (counted)</TableCell>
+              <TableCell component="th" scope="row" sx={[STICKY, edgeSx]}>Daily total (counted)</TableCell>
               {days.map((d) => {
                 const over = overDays.includes(d)
                 return (
                   <TableCell key={d} align="center" data-testid={`day-total-${d}`} data-over={over}
-                    sx={[{ color: over ? 'error.main' : undefined }, dayTint(d, today)]}>{formatHours(dayTotal(d))}</TableCell>
+                    sx={[{ color: over ? 'error.main' : undefined }, daySx, dayTint(d, today)]}>{formatHours(dayTotal(d))}</TableCell>
                 )
               })}
-              <TableCell align="right">{formatHours(total)}</TableCell>
+              <TableCell align="right" sx={edgeSx}>{formatHours(total)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>
@@ -143,24 +153,29 @@ export default function WeekGrid({ state, days, thisWeek, onRequest, onOpenEntry
   )
 }
 
-function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry }) {
+function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry, dayCellSx, edgeSx, narrow }) {
   const { rowTotal, valueOf, entries, locks, overDays, noteOf, attention, timerNeedsNote, isDraft, setHours, setNote, closedLabel } = state
   return (
     <>
+      {/* The project band is one cell across the row; its name runs on one line along it (it isn't held to the first
+          column's width), staying in view as the days scroll. A very long name ends in an ellipsis (in full on hover)
+          rather than widening the grid. */}
       <TableRow>
-        <TableCell component="th" scope="row" sx={[STICKY, PROJECT_TINT, { fontWeight: 700 }]}>
-          <Box component="span" sx={NAME}>
-            <Folder aria-hidden="true" fontSize="small" sx={{ verticalAlign: 'text-bottom', mr: 0.75 }} />{group.project.name}
+        <TableCell component="th" scope="row" colSpan={days.length + 2} sx={[PROJECT_TINT, { fontWeight: 700 }]}>
+          <Box component="span" sx={{ position: 'sticky', left: 16, display: 'inline-flex', alignItems: 'center', gap: 0.75,
+            maxWidth: { xs: 260, md: 520 } }}>
+            <Folder aria-hidden="true" fontSize="small" />
+            <Box component="span" title={group.project.name} sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              minWidth: 0 }}>{group.project.name}</Box>
           </Box>
         </TableCell>
-        <TableCell colSpan={days.length + 1} sx={PROJECT_TINT} />
       </TableRow>
       {group.rows.map((r) => {
         const closed = closedLabel(r)
         return (
           <TableRow key={r.milestone.id} aria-disabled={closed ? true : undefined}
             sx={closed ? { bgcolor: 'action.hover', '& th, & td': { color: 'text.disabled' } } : undefined}>
-            <TableCell component="th" scope="row" sx={[STICKY, closed ? CLOSED_TINT : null]}>
+            <TableCell component="th" scope="row" sx={[STICKY, closed ? CLOSED_TINT : null, edgeSx]}>
               <Box sx={NAME}>
                 {r.milestone.name}
                 {r.role === 'supporting' ? <SupportingChip /> : null}
@@ -177,11 +192,12 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
               const value = valueOf(k)
               const label = `${r.milestone.name}, ${formatDayLabel(d)}`
               return (
-                <TableCell key={d} align="center" sx={[{ verticalAlign: 'top' }, dayTint(d, today)]}>
+                <TableCell key={d} align="center" sx={[{ verticalAlign: 'top' }, dayCellSx, dayTint(d, today)]}>
                   {locks[k] ? (
                     <LockedCell lock={locks[k]} label={label} closed={Boolean(closed)}
                       onRequest={() => onRequest({ milestoneId: r.milestone.id, date: d, hours: locks[k].hours, label })} />
                   ) : <HoursField value={value} label={label} onChange={(v) => setHours(k, v)} disabled={Boolean(closed)}
+                    compact={narrow ? 'always' : true} dim={isWeekend(d) && !value && !entries[k]}
                     error={num(value) > DAY_CAP || (num(value) > 0 && overDays.includes(d)) || (isDraft(k) && tooLow(value))} />}
                   {entries[k] ? (
                     <StatusLine entry={entries[k]} cellLabel={label} entryParam={entryParam(r.milestone.id, d)}
@@ -199,7 +215,7 @@ function GroupRows({ group, days, today, state, thisWeek, onRequest, onOpenEntry
                 </TableCell>
               )
             })}
-            <TableCell align="right">{formatHours(rowTotal(r.milestone.id))}</TableCell>
+            <TableCell align="right" sx={edgeSx}>{formatHours(rowTotal(r.milestone.id))}</TableCell>
           </TableRow>
         )
       })}

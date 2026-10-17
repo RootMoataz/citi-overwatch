@@ -2,9 +2,12 @@ import { Box } from '@mui/material'
 import { alpha } from '@mui/material/styles'
 import { useCallback, useEffect, useState } from 'react'
 
-const fade = (side) => ({
+const fade = (side, surface) => ({
   position: 'absolute', top: 0, bottom: 0, [side]: 0, width: 32, pointerEvents: 'none', zIndex: 3,
-  background: (t) => `linear-gradient(to ${side === 'right' ? 'left' : 'right'}, ${t.palette.background.paper}, ${alpha(t.palette.background.paper, 0)})`,
+  background: (t) => {
+    const colour = t.palette.background[surface]
+    return `linear-gradient(to ${side === 'right' ? 'left' : 'right'}, ${colour}, ${alpha(colour, 0)})`
+  },
 })
 
 /**
@@ -13,9 +16,9 @@ const fade = (side) => ({
  * first column sits there), so a cut-off table reads as "more this way", never as clipped. Give the scrolling element
  * `thinScrollbar` (thinScrollbar.js) too.
  * children(ref, onScroll): renders the scrolling element itself (a TableContainer, say) with that ref (a callback ref)
- * and onScroll.
+ * and onScroll. `surface`: what it sits on, so the fade matches: 'paper' (a card, the default) or 'default' (the page).
  */
-export default function ScrollHint({ children, left = true }) {
+export default function ScrollHint({ children, left = true, surface = 'paper' }) {
   const [scroller, setScroller] = useState(null)
   const [more, setMore] = useState({ left: false, right: false })
   const measure = useCallback(() => {
@@ -36,8 +39,8 @@ export default function ScrollHint({ children, left = true }) {
   return (
     <Box sx={{ position: 'relative' }}>
       {children(setScroller, measure)}
-      {left && more.left ? <Box aria-hidden="true" data-scroll-fade="left" sx={fade('left')} /> : null}
-      {more.right ? <Box aria-hidden="true" data-scroll-fade="right" sx={fade('right')} /> : null}
+      {left && more.left ? <Box aria-hidden="true" data-scroll-fade="left" sx={fade('left', surface)} /> : null}
+      {more.right ? <Box aria-hidden="true" data-scroll-fade="right" sx={fade('right', surface)} /> : null}
     </Box>
   )
 }

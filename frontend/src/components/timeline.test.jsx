@@ -260,6 +260,25 @@ describe('Timeline', () => {
     expect(screen.getByRole('list', { name: 'Status colours' })).toBeInTheDocument()
   })
 
+  test('layout="detailed": the chip of a waiting row says just "Waiting" (bold), so names stay on one line; its name keeps the full words', () => {
+    renderWithProviders(<Timeline layout="detailed" range={range} items={[
+      ms({ id: 'm1', name: 'Plan', status: 'in_progress', display_status: 'in_progress' }),
+      ms({ id: 'm2', name: 'Hypercare', display_status: 'waiting', predecessors: ['m1'] }),
+    ]} />)
+    expect(within(row('Hypercare')).getByText('Waiting')).toBeInTheDocument()
+    expect(within(row('Hypercare')).queryByText('Waiting on dependencies')).not.toBeInTheDocument()
+    expect(bold(row('Hypercare'), { hidden: true })).toContain('Waiting')   // (its default dates are past, so it is overdue too)
+    expect(row('Hypercare')).toHaveAccessibleName(/Waiting on dependencies/)
+  })
+
+  test('bare: drawn straight in its card, with no frame or padding of its own', () => {
+    const { unmount } = renderWithProviders(<Timeline range={range} items={[ms({ id: 'm1', name: 'Plan' })]} />)
+    expect(screen.getByRole('list', { name: 'Milestone timeline' }).closest('.MuiPaper-outlined')).not.toBeNull()
+    unmount()
+    renderWithProviders(<Timeline bare range={range} items={[ms({ id: 'm1', name: 'Plan' })]} />)
+    expect(screen.getByRole('list', { name: 'Milestone timeline' }).closest('.MuiPaper-outlined')).toBeNull()
+  })
+
   test('`all` keeps numbers and dependency names when only some rows are shown', () => {
     const plan = ms({ id: 'm1', name: 'Plan', status: 'completed', display_status: 'completed' })
     const build = ms({ id: 'm2', name: 'Build', predecessors: ['m1'] })

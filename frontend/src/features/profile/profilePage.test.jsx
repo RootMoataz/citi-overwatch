@@ -168,6 +168,25 @@ describe('My profile', () => {
     expect(skills).toHaveStyle({ marginBottom: '0px' })
   })
 
+  test('in the narrow column, Message Morgan sits under the name and job, full width', async () => {
+    serve()
+    open()
+    const manager = (await screen.findByRole('heading', { name: 'Your manager', level: 2 })).closest('section')
+    const message = await within(manager).findByRole('link', { name: 'Message Morgan' })
+    expect(message.parentElement).toHaveStyle({ flexDirection: 'column' })
+    expect(message).toHaveClass('MuiButton-fullWidth')
+  })
+
+  test('the header action My history is an outlined button with the My history icon; cards pad 16 px like the rest', async () => {
+    serve()
+    open()
+    const history = await screen.findByRole('link', { name: 'My history' })
+    expect(history).toHaveClass('MuiButton-outlined')
+    expect(history.querySelector('svg[data-testid="ManageHistoryOutlinedIcon"]')).not.toBeNull()
+    const details = screen.getByRole('heading', { name: 'Your details', level: 2 }).parentElement
+    expect(details).toHaveStyle({ padding: '16px' })
+  })
+
   test('no Your manager card when there is no manager', async () => {
     serve(ME, profileOf({ user: { id: 'u-emp', name: 'Eli Employee', manager: null } }))
     open()

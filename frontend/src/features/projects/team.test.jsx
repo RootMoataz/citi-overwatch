@@ -95,7 +95,9 @@ describe('TeamTab', () => {
     expect(within(ada).getByText('Analyst')).toBeInTheDocument()
     expect(within(ada).getByText('SQL')).toBeInTheDocument()
     expect(within(ada).getByText('30h')).toBeInTheDocument()
-    expect(within(table).getByRole('columnheader', { name: 'Planned / week' })).toBeInTheDocument()
+    // A number column: right-aligned, in tabular figures.
+    expect(within(table).getByRole('columnheader', { name: 'Planned / week' })).toHaveStyle({ textAlign: 'right' })
+    expect(within(ada).getByText('30h').closest('td')).toHaveStyle({ textAlign: 'right', fontVariantNumeric: 'tabular-nums' })
   })
 
   test('Message follows the contact list: none for yourself, none for someone outside it', async () => {

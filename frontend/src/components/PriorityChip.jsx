@@ -31,7 +31,7 @@ function tone(priority, t) {
 export default function PriorityChip({ priority, sx, hideDefault = false }) {
   if (!PRIORITY[priority] || (hideDefault && priority === 'medium')) return null
   const Icon = ICONS[priority]
-  const text = `${PRIORITY[priority]} Priority`
+  const text = `${PRIORITY[priority]} priority`   // sentence case, as the Now card says it
   return (
     <Chip size="small" variant="outlined" icon={<Icon aria-hidden />}
       label={URGENT.has(priority) ? <Critical>{text}</Critical> : text}

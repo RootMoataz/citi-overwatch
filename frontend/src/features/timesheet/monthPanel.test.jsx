@@ -12,12 +12,13 @@ describe('Month view selection and panel', () => {
   test('clicking a day selects it and shows its panel', async () => {
     const user = userEvent.setup()
     render()
-    expect(await panel('Wednesday 14 October 2026')).toBeInTheDocument()
+    expect(await panel('Wednesday, October 14, 2026')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Wednesday, October 14, 2026' })).toHaveStyle({ fontSize: '18px', fontWeight: '600' })
     expect(screen.getByRole('button', { name: /^Wed 14 Oct/ })).toHaveAttribute('aria-pressed', 'true')
     await user.click(screen.getByRole('button', { name: /^Mon 19 Oct/ }))
     expect(calls.onSelectDay).toHaveBeenCalledWith('2026-10-19')
     expect(calls.onOpenDay).not.toHaveBeenCalled()
-    expect(await panel('Monday 19 October 2026')).toBeInTheDocument()
+    expect(await panel('Monday, October 19, 2026')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Mon 19 Oct/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: /^Wed 14 Oct/ })).toHaveAttribute('aria-pressed', 'false')
   })
@@ -32,7 +33,7 @@ describe('Month view selection and panel', () => {
         lock({ milestone_id: 'm4', hours: 1.5, draft_hours: 1.5, tracked_hours: 0 })],
     }))
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     expect(within(region).getByText('Today')).toBeInTheDocument()
     expect(within(region).getByText('11h · 6h approved, 5h pending, 1.5h not submitted')).toBeInTheDocument()
 
@@ -63,7 +64,7 @@ describe('Month view selection and panel', () => {
     const user = userEvent.setup()
     render()
     expect(await dayBox('Wed 14 Oct, today, 0 hours, Schema Mapping 3 hours needs revision')).toBeInTheDocument()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     const card = cardOf(region, 'Schema Mapping')
     expect(within(card).getByText('Needs revision')).toBeInTheDocument()
     expect(within(card).getByText('Reason: Split this across two milestones')).toBeInTheDocument()
@@ -76,7 +77,7 @@ describe('Month view selection and panel', () => {
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
     const user = userEvent.setup()
     render()
-    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    const card = cardOf(await panel('Wednesday, October 14, 2026'), 'Schema Mapping')
     expect(within(card).getByRole('img', { name: 'Locked' })).toBeInTheDocument()
     expect(within(card).getByText('Timer hours are locked; your manager approves any change')).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: /in Day view/ })).not.toBeInTheDocument()
@@ -88,7 +89,7 @@ describe('Month view selection and panel', () => {
     server.use(calendar({ entries: [entry({ hours: 2, tracked_hours: 0 })], drafts: [{ milestone_id: 'm1', work_date: '2026-10-14', hours: 1.5 }],
       locks: [lock({ hours: 1.5, draft_hours: 1.5, tracked_hours: 0 })] }))
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     const card = within(region).getAllByRole('listitem').find((li) => li.textContent.includes('Pending approval'))
     expect(card).toHaveTextContent(/Source\s*Manual/)
     expect(within(card).getByText("Locked with this cell's timer hours")).toBeInTheDocument()
@@ -100,7 +101,7 @@ describe('Month view selection and panel', () => {
       locks: [lock({ hours: 3.5, draft_hours: 1.5, tracked_hours: 0 })] }))
     const user = userEvent.setup()
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     const card = within(region).getAllByRole('listitem').find((li) => li.textContent.includes('Pending approval'))
     expect(within(card).getByText("This request covers the cell's 3.5h, including 1.5h from your timer")).toBeInTheDocument()
     await user.click(within(card).getByRole('button', { name: 'Request a change, Schema Mapping' }))
@@ -110,27 +111,27 @@ describe('Month view selection and panel', () => {
   test('a plain timer line does not explain the cell total (its hours are the cell)', async () => {
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
     render()
-    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    const card = cardOf(await panel('Wednesday, October 14, 2026'), 'Schema Mapping')
     expect(within(card).queryByText(/This request covers/)).not.toBeInTheDocument()
   })
 
   test('a plain timer line has no cell-sharing note', async () => {
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
     render()
-    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    const card = cardOf(await panel('Wednesday, October 14, 2026'), 'Schema Mapping')
     expect(within(card).queryByText("Locked with this cell's timer hours")).not.toBeInTheDocument()
   })
 
   test('the day-level Edit in Day view sits under "Other hours" when cards exist, and alone when none do', async () => {
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock()] }))
     const first = render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     expect(within(region).getByText('Other hours')).toBeInTheDocument()
     expect(within(region).getByRole('button', { name: 'Edit in Day view' })).toBeInTheDocument()
     first.unmount()
     server.use(calendar({ entries: [] }))
     render()
-    const empty = await panel('Wednesday 14 October 2026')
+    const empty = await panel('Wednesday, October 14, 2026')
     expect(within(empty).getByRole('button', { name: 'Edit in Day view' })).toBeInTheDocument()
     expect(within(empty).queryByText('Other hours')).not.toBeInTheDocument()
   })
@@ -139,7 +140,7 @@ describe('Month view selection and panel', () => {
     const request = { id: 'r1', current_hours: 4, requested_hours: 3, reason: 'Timer ran over lunch', status: 'pending' }
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock({ request })] }))
     render()
-    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    const card = cardOf(await panel('Wednesday, October 14, 2026'), 'Schema Mapping')
     expect(within(card).getByRole('button', { name: 'Change requested' })).toBeDisabled()
     expect(within(card).queryByRole('button', { name: /^Request a change/ })).not.toBeInTheDocument()
   })
@@ -151,14 +152,14 @@ describe('Month view selection and panel', () => {
     ] }))
     const user = userEvent.setup()
     render('2026-10', '2026-10-09')
-    const past = await panel('Friday 9 October 2026')
+    const past = await panel('Friday, October 9, 2026')
     expect(within(past).getByRole('heading', { name: 'Milestone dates' })).toBeInTheDocument()
     const late = within(past).getByText('Discovery · Due Oct 9').closest('li')
     expect(late).toHaveTextContent('Overdue')
     expect(within(late).getByRole('link', { name: 'View milestones, Discovery' })).toHaveAttribute('href', '/projects/p1?tab=milestones&milestone=m5')
 
     await user.click(screen.getByRole('button', { name: /^Fri 23 Oct/ }))
-    const ahead = await panel('Friday 23 October 2026')
+    const ahead = await panel('Friday, October 23, 2026')
     const due = within(ahead).getByText('Build: frontend · Due Oct 23').closest('li')
     expect(due).not.toHaveTextContent('Overdue')
     expect(within(due).getByRole('link', { name: 'View milestones, Build: frontend' })).toHaveAttribute('href', '/projects/p2?tab=milestones&milestone=m6')
@@ -170,7 +171,7 @@ describe('Month view selection and panel', () => {
       milestone('m6', 'Schema Mapping', { end_date: '2026-10-23' })] }))
     render('2026-10', '2026-10-23')
     expect(await dayBox('Fri 23 Oct, no hours, 2 milestone deadlines')).toHaveAttribute('aria-pressed', 'true')
-    const region = await panel('Friday 23 October 2026')
+    const region = await panel('Friday, October 23, 2026')
     expect(within(region).getByText('No hours')).toBeInTheDocument()
     expect(within(region).getByText('Build: frontend · Due Oct 23')).toBeInTheDocument()
     expect(within(region).getByText('Schema Mapping · Due Oct 23')).toBeInTheDocument()
@@ -179,13 +180,13 @@ describe('Month view selection and panel', () => {
 
   test('?day= outside the shown month falls back to today or the 1st', async () => {
     const first = render('2026-10', '2026-09-30')
-    expect(await panel('Wednesday 14 October 2026')).toBeInTheDocument()
+    expect(await panel('Wednesday, October 14, 2026')).toBeInTheDocument()
     first.unmount()
     const second = render('2026-11', '2026-10-14')
-    expect(await panel('Sunday 1 November 2026')).toBeInTheDocument()
+    expect(await panel('Sunday, November 1, 2026')).toBeInTheDocument()
     second.unmount()
     render('2026-10', '2026-10-45') // not a real date
-    expect(await panel('Wednesday 14 October 2026')).toBeInTheDocument()
+    expect(await panel('Wednesday, October 14, 2026')).toBeInTheDocument()
   })
 
   test('a timer draft card says it is not submitted and offers its own Edit in Day view; the day caption follows', async () => {
@@ -193,7 +194,7 @@ describe('Month view selection and panel', () => {
       locks: [lock({ hours: 1.5, draft_hours: 1.5, tracked_hours: 0 })] }))
     const user = userEvent.setup()
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     const card = cardOf(region, 'Schema Mapping')
     expect(within(card).getByText('Not submitted yet — submit it in the Day view')).toBeInTheDocument()
     expect(within(card).queryByText('Timer hours are locked; your manager approves any change')).not.toBeInTheDocument()
@@ -209,7 +210,7 @@ describe('Month view selection and panel', () => {
     server.use(calendar({ milestones: [gone], entries: [entry({ hours: 4, tracked_hours: 4 }), entry({ id: 'x', hours: 2, status: 'rejected' })],
       locks: [lock()] }))
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     const cards = within(region).getAllByRole('listitem')
     expect(cards).toHaveLength(2)
     for (const li of cards) {
@@ -223,7 +224,7 @@ describe('Month view selection and panel', () => {
     const closed = milestone('m1', 'Schema Mapping', { project: { id: 'p1', name: 'Apollo Data Migration', status: 'completed' } })
     server.use(calendar({ milestones: [closed], entries: [entry({ hours: 4, tracked_hours: 4 })], locks: [lock({ request })] }))
     render()
-    const card = cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')
+    const card = cardOf(await panel('Wednesday, October 14, 2026'), 'Schema Mapping')
     expect(within(card).getByRole('button', { name: /^Change requested/ })).toBeDisabled()
     expect(within(card).getByText('You asked for 1.5h')).toBeInTheDocument()
   })
@@ -231,39 +232,39 @@ describe('Month view selection and panel', () => {
   test('the source comes from the entry when the API sends it', async () => {
     server.use(calendar({ entries: [entry({ hours: 4, tracked_hours: 0, source: 'mixed' })] }))
     render()
-    expect(cardOf(await panel('Wednesday 14 October 2026'), 'Schema Mapping')).toHaveTextContent(/Source\s*Mixed/)
+    expect(cardOf(await panel('Wednesday, October 14, 2026'), 'Schema Mapping')).toHaveTextContent(/Source\s*Mixed/)
   })
 
   test('the panel summary flags a day holding an over-40 entry', async () => {
     server.use(calendar({ entries: [entry({ over_40: true })] }))
     render()
-    const region = await panel('Wednesday 14 October 2026')
+    const region = await panel('Wednesday, October 14, 2026')
     expect(within(region).getByText('Over 40h this week')).toBeInTheDocument()
   })
 
   test('a keyboard selection on a day of another month focuses that day\'s panel heading once the month has loaded', async () => {
     const user = userEvent.setup()
     render('2026-10', undefined, { follow: true })
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     screen.getByRole('button', { name: /^Mon 28 Sep/ }).focus()
     await user.keyboard('{Enter}')
     expect(await screen.findByRole('heading', { name: 'September 2026' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monday 28 September 2026' })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Monday, September 28, 2026' })).toHaveFocus())
   })
 
   test('after selecting a day with the keyboard focus moves to the panel heading; a click leaves it', async () => {
     const user = userEvent.setup()
     render()
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     const box = screen.getByRole('button', { name: /^Mon 19 Oct/ })
     await user.click(box)
     expect(box).toHaveFocus()
     screen.getByRole('button', { name: /^Tue 20 Oct/ }).focus()
     await user.keyboard('{Enter}')
-    expect(screen.getByRole('heading', { name: 'Tuesday 20 October 2026' })).toHaveFocus()
+    expect(screen.getByRole('heading', { name: 'Tuesday, October 20, 2026' })).toHaveFocus()
     screen.getByRole('button', { name: /^Wed 21 Oct/ }).focus()
     await user.keyboard(' ')
-    expect(screen.getByRole('heading', { name: 'Wednesday 21 October 2026' })).toHaveFocus()
+    expect(screen.getByRole('heading', { name: 'Wednesday, October 21, 2026' })).toHaveFocus()
   })
 })
 
@@ -275,7 +276,7 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
   test('the grid is a single tab stop on the selected day; Tab moves on past the grid', async () => {
     const user = userEvent.setup()
     render()
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     expect(tabbable()).toEqual([day('Wed 14 Oct')])
     screen.getByRole('button', { name: 'Next month' }).focus()
     await user.tab()
@@ -287,7 +288,7 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
   test('arrows move between days, Home and End to the week ends; the tab stop follows and nothing is selected', async () => {
     const user = userEvent.setup()
     render()
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     day('Wed 14 Oct').focus()
     for (const [key, name] of [['{ArrowRight}', 'Thu 15 Oct'], ['{ArrowDown}', 'Thu 22 Oct'], ['{ArrowLeft}', 'Wed 21 Oct'],
       ['{ArrowUp}', 'Wed 14 Oct'], ['{Home}', 'Mon 12 Oct'], ['{End}', 'Sun 18 Oct']]) {
@@ -305,11 +306,11 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
   test('Enter or Space selects the focused day and moves focus to its panel heading', async () => {
     const user = userEvent.setup()
     render()
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     day('Wed 14 Oct').focus()
     await user.keyboard('{ArrowRight}{Enter}')
     expect(calls.onSelectDay).toHaveBeenLastCalledWith('2026-10-15')
-    expect(screen.getByRole('heading', { name: 'Thursday 15 October 2026' })).toHaveFocus()
+    expect(screen.getByRole('heading', { name: 'Thursday, October 15, 2026' })).toHaveFocus()
     day('Thu 15 Oct').focus()
     await user.keyboard('{ArrowRight} ')
     expect(calls.onSelectDay).toHaveBeenLastCalledWith('2026-10-16')
@@ -318,7 +319,7 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
   test('PageDown and PageUp open the next and previous month with focus on the same date', async () => {
     const user = userEvent.setup()
     render('2026-10', undefined, { follow: true })
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     day('Wed 14 Oct').focus()
     await user.keyboard('{PageDown}')
     expect(calls.onMonthChange).toHaveBeenLastCalledWith('2026-11')
@@ -333,7 +334,7 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
   test('Page Up and Page Down go by the month shown, also from a day of the month before or after in the grid', async () => {
     const user = userEvent.setup()
     render('2026-10', undefined, { follow: true })
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     // 28 Sep leads the October grid: Page Up is September (the month before October), not August.
     day('Mon 28 Sep').focus()
     await user.keyboard('{PageUp}')
@@ -357,7 +358,7 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
   test('an arrow past the edge of the grid opens the next month there', async () => {
     const user = userEvent.setup()
     render('2026-10', undefined, { follow: true })
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     day('Sun 1 Nov').focus()
     await user.keyboard('{ArrowRight}')
     expect(await screen.findByRole('heading', { name: 'November 2026' })).toBeInTheDocument()
@@ -366,7 +367,7 @@ describe('Month view keyboard: one tab stop, arrow keys between days', () => {
 
   test('the grid keeps its table semantics and the days keep their names', async () => {
     render()
-    await panel('Wednesday 14 October 2026')
+    await panel('Wednesday, October 14, 2026')
     const table = screen.getByRole('table', { name: 'October 2026' })
     expect(within(table).getAllByRole('columnheader').map((th) => th.textContent)).toEqual(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
     expect(within(table).getAllByRole('cell')).toHaveLength(35)

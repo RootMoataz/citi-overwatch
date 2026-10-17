@@ -1,7 +1,7 @@
 import Add from '@mui/icons-material/Add'
 import FileDownload from '@mui/icons-material/FileDownloadOutlined'
 import WarningAmber from '@mui/icons-material/WarningAmber'
-import { Button, Chip, FormControlLabel, Link, MenuItem, Stack, Switch, TextField, Typography } from '@mui/material'
+import { Box, Button, Chip, FormControlLabel, Link, MenuItem, Paper, Stack, Switch, TextField, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../api/client.js'
@@ -189,6 +189,13 @@ export default function ProjectsPage() {
     { key: 'risk', header: 'Risk', sortable: true, render: (p) => <RiskText project={p} today={today} /> },
   ]
 
+  // A bar's label, bar and percent share one row; a project without risk shows no risk line at all.
+  const cardBar = (label, bar) => (
+    <Stack direction="row" sx={{ alignItems: 'center', gap: 1 }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', width: 76, flexShrink: 0 }}>{label}</Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>{bar}</Box>
+    </Stack>
+  )
   const renderCard = (p) => (
     <Stack sx={{ gap: 1 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
@@ -198,12 +205,10 @@ export default function ProjectsPage() {
         </div>
         <StatusCell project={p} />
       </Stack>
-      <RiskText project={p} today={today} focusable={false} />
+      {p.at_risk_reasons?.length ? <RiskText project={p} today={today} focusable={false} /> : null}
       <Stack sx={{ gap: 0.5 }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Progress</Typography>
-        <ProgressBar project={p} />
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>Budget used</Typography>
-        <BudgetBar project={p} />
+        {cardBar('Progress', <ProgressBar project={p} />)}
+        {cardBar('Budget used', <BudgetBar project={p} />)}
       </Stack>
       <div>
         <Typography variant="body2" component="div">Due {formatDate(p.predicted_end_date)}</Typography>
@@ -247,42 +252,45 @@ export default function ProjectsPage() {
         </>} />
       <Stack sx={{ gap: 2 }}>
         <KpiStrip ariaLabel="Projects summary" items={kpis} layout="value-first" phoneColumns={3} loading={projects.isLoading} />
-        <FilterBar search={{ label: 'Search projects', placeholder: 'Search projects…', value: search, onChange: setSearch }}>
-          <TextField select size="small" value={filters.status ?? ''} onChange={(e) => setFilter('status', e.target.value)}
-            slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Status' } }} sx={{ minWidth: 150 }}>
-            <MenuItem value="">All statuses</MenuItem>
-            {['planned', 'active', 'on_hold', 'completed'].map((s) => <MenuItem key={s} value={s}>{STATUS[s].label}</MenuItem>)}
-          </TextField>
-          {showManagerFilter ? (
-            <TextField select size="small" value={filters.manager ?? ''} onChange={(e) => setFilter('manager', e.target.value)}
-              slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Manager' } }} sx={{ minWidth: 170 }}>
-              <MenuItem value="">All managers</MenuItem>
-              {(managers.data ?? []).map((m) => <MenuItem key={m.id} value={String(m.id)}>{`${m.first_name} ${m.last_name}`}</MenuItem>)}
+        {/* The filters and the table share one card, as every other table in the app does; the footnote sits under it. */}
+        <Paper variant="outlined" sx={{ p: 2, minWidth: 0 }}>
+          <FilterBar search={{ label: 'Search projects', placeholder: 'Search projects…', value: search, onChange: setSearch }}>
+            <TextField select size="small" value={filters.status ?? ''} onChange={(e) => setFilter('status', e.target.value)}
+              slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Status' } }} sx={{ minWidth: 150 }}>
+              <MenuItem value="">All statuses</MenuItem>
+              {['planned', 'active', 'on_hold', 'completed'].map((s) => <MenuItem key={s} value={s}>{STATUS[s].label}</MenuItem>)}
             </TextField>
-          ) : null}
-          <FormControlLabel label="At risk only"
-            control={<Switch checked={filters.at_risk === 'true'} onChange={(e) => setFilter('at_risk', e.target.checked ? 'true' : '')} />} />
-          {showArchived ? (
-            <FormControlLabel label="Archived"
-              control={<Switch checked={filters.archived === 'true'} onChange={(e) => setFilter('archived', e.target.checked ? 'true' : '')} />} />
-          ) : null}
-          {filters.department ? (
-            <Chip label={`Department: ${department?.name ?? '…'}`} onDelete={() => setFilter('department', '')} />
-          ) : null}
-        </FilterBar>
-        <ErrorAlert error={projects.error} onRetry={() => projects.refetch()} />
-        {projects.isError && !projects.data ? null : (
-          <div>
-            <DataTable ariaLabel="Projects" columns={columns} rows={rows} sort={sort} serverSort
-              onSortChange={(next) => change({ sort: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.key,
-                dir: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.dir })}
-              onRowOpen={open} renderCard={renderCard} loading={projects.isLoading} empty={empty}
-              pagination={total > PAGE_SIZE || page > 1 ? { page: page - 1, pageSize: PAGE_SIZE, total,
-                onPageChange: (zeroBased) => change({ page: zeroBased > 0 ? String(zeroBased + 1) : '' }, { keepPage: true }) } : undefined} />
-            <FootNote note={FOOT_NOTE} end={`Today is ${formatLongDate(today)}`} />
-          </div>
-        )}
+            {showManagerFilter ? (
+              <TextField select size="small" value={filters.manager ?? ''} onChange={(e) => setFilter('manager', e.target.value)}
+                slotProps={{ select: { displayEmpty: true }, htmlInput: { 'aria-label': 'Manager' } }} sx={{ minWidth: 170 }}>
+                <MenuItem value="">All managers</MenuItem>
+                {(managers.data ?? []).map((m) => <MenuItem key={m.id} value={String(m.id)}>{`${m.first_name} ${m.last_name}`}</MenuItem>)}
+              </TextField>
+            ) : null}
+            <FormControlLabel label="At risk only"
+              control={<Switch checked={filters.at_risk === 'true'} onChange={(e) => setFilter('at_risk', e.target.checked ? 'true' : '')} />} />
+            {showArchived ? (
+              <FormControlLabel label="Archived"
+                control={<Switch checked={filters.archived === 'true'} onChange={(e) => setFilter('archived', e.target.checked ? 'true' : '')} />} />
+            ) : null}
+            {filters.department ? (
+              <Chip label={`Department: ${department?.name ?? '…'}`} onDelete={() => setFilter('department', '')} />
+            ) : null}
+          </FilterBar>
+          <ErrorAlert error={projects.error} onRetry={() => projects.refetch()} sx={{ mt: 2 }} />
+          {projects.isError && !projects.data ? null : (
+            <Box sx={{ mt: 2 }}>
+              <DataTable ariaLabel="Projects" columns={columns} rows={rows} sort={sort} serverSort
+                onSortChange={(next) => change({ sort: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.key,
+                  dir: next.key === DEFAULT_SORT.key && next.dir === DEFAULT_SORT.dir ? '' : next.dir })}
+                onRowOpen={open} renderCard={renderCard} loading={projects.isLoading} empty={empty}
+                pagination={total > PAGE_SIZE || page > 1 ? { page: page - 1, pageSize: PAGE_SIZE, total,
+                  onPageChange: (zeroBased) => change({ page: zeroBased > 0 ? String(zeroBased + 1) : '' }, { keepPage: true }) } : undefined} />
+            </Box>
+          )}
+        </Paper>
       </Stack>
+      {projects.isError && !projects.data ? null : <FootNote note={FOOT_NOTE} end={`Today is ${formatLongDate(today)}`} />}
       {creating || createFromUrl ? (
         <ProjectForm open onClose={closeCreate} onSave={async (body) => {
           const created = await create.mutateAsync(body)

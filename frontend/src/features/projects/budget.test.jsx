@@ -94,6 +94,17 @@ describe('Budget tab', () => {
     expect(getComputedStyle(link.parentElement).paddingTop).toBe('0px')
   })
 
+  // The phone layout (the link under the message, a 44 px target) is checked in a real browser: e2e/shell.spec.js.
+  // jsdom matches CSS media queries at a fixed 1024 px.
+  test('the pending banner is amber with a clock, inside Spend and forecast', async () => {
+    open()
+    const card = await screen.findByRole('region', { name: 'Spend and forecast' })
+    const banner = await within(card).findByRole('alert')
+    expect(banner).toHaveClass('MuiAlert-colorWarning')
+    expect(banner.querySelector('svg[data-testid="ScheduleOutlinedIcon"]')).not.toBeNull()
+    expect(within(banner).getByRole('link', { name: 'Review pending hours →' })).toBeInTheDocument()
+  })
+
   test('no banner when nothing is pending', async () => {
     open({ pending: [] })
     await screen.findByRole('table', { name: /cost by milestone/i })
@@ -108,6 +119,9 @@ describe('Budget tab', () => {
     const row = within(table).getByRole('rowheader', { name: /schema mapping/i }).closest('tr')
     expect(within(row).getByText('600h')).toBeInTheDocument()
     expect(within(row).getByText('$30,000')).toBeInTheDocument()
+    // The cost (with its bar under it) shares the row's first-line baseline with the other numbers.
+    expect(within(row).getByText('600h')).toHaveStyle({ verticalAlign: 'baseline' })
+    expect(within(row).getByText('$30,000').closest('td')).toHaveStyle({ verticalAlign: 'baseline' })
     const total = within(table).getByRole('rowheader', { name: /total/i }).closest('tr')
     expect(within(total).getByText('$50,000')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument()
@@ -212,8 +226,9 @@ describe('Budget tab: the critical details are bold', () => {
     const strip = await kpis()
     await within(strip).findByText('$261,000')
     expect(bold(strip)).toEqual(['⚠ Over budget'])
-    // The bullet's detail line is drawn for the eye only (its words are in the row's name), so it is aria-hidden.
+    // The bullet's detail line is drawn for the eye only (its words are in the row's name), so it is aria-hidden. The
+    // pending banner sits in the same card, after the bullet.
     const card = screen.getByRole('region', { name: 'Spend and forecast' })
-    expect(bold(card, { hidden: true })).toEqual(['⚠ forecast over budget'])
+    expect(bold(card, { hidden: true })).toEqual(['⚠ forecast over budget', '62h awaiting approval'])
   })
 })

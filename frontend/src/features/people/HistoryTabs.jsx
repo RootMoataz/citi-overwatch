@@ -13,6 +13,13 @@ const chip = (label) => <Chip size="small" variant="outlined" label={label} sx={
 const hours = (key) => (row) => formatHours(row[key])
 const num = (key) => (row) => Number(row[key] ?? 0)
 
+// A date range that breaks only between its two dates ("Aug 19 –" / "Oct 27, 2026"), never inside one.
+function DateRange({ from, to }) {
+  const [start, end] = formatDateRange(from, to).split(' – ')
+  if (!end) return start
+  return <><Box component="span" sx={{ whiteSpace: 'nowrap' }}>{`${start} –`}</Box>{' '}<Box component="span" sx={{ whiteSpace: 'nowrap' }}>{end}</Box></>
+}
+
 const projectName = (project, canOpen, tab) => (canOpen
   ? <Link component={RouterLink} to={`/projects/${project.id}${tab ? `?tab=${tab}` : ''}`} underline="hover">{project.name}</Link>
   : project.name)
@@ -38,23 +45,30 @@ const MILESTONE_COLUMNS = [
     ) },
   { key: 'status', header: 'Status', sortable: true, sortValue: (m) => m.display_status ?? m.status,
     render: (m) => <StatusChip icon status={m.display_status ?? m.status} /> },
-  { key: 'dates', header: 'Planned dates', sortable: true, sortValue: (m) => `${m.start_date ?? ''}|${m.end_date ?? ''}`,
-    render: (m) => formatDateRange(m.start_date, m.end_date) },
-  { key: 'logged', header: 'Hours logged', align: 'right', sortable: true, sortValue: num('logged_hours'), render: hours('logged_hours') },
-  { key: 'approved', header: 'Hours approved', align: 'right', sortable: true, sortValue: num('approved_hours'), render: hours('approved_hours') },
+  { key: 'dates', header: 'Planned dates', sortable: true, sortValue: (m) => `${m.start_date ?? ''}|${m.end_date ?? ''}`, wrapHeader: true,
+    render: (m) => <DateRange from={m.start_date} to={m.end_date} /> },
+  { key: 'logged', header: 'Hours logged', align: 'right', sortable: true, sortValue: num('logged_hours'), render: hours('logged_hours'),
+    wrapHeader: true },
+  { key: 'approved', header: 'Hours approved', align: 'right', sortable: true, sortValue: num('approved_hours'),
+    render: hours('approved_hours'), wrapHeader: true },
 ]
 
 const PROJECT_COLUMNS = [
   { key: 'name', header: 'Project', rowHeader: true, sortable: true, sortValue: (p) => p.name,
     render: (p) => <>{projectName(p, p.can_open)}{p.is_archived ? chip('Archived') : null}</> },
   { key: 'status', header: 'Status', sortable: true, sortValue: (p) => p.status, render: (p) => <StatusChip status={p.status} /> },
-  { key: 'planned', header: 'Planned / week', align: 'right', sortable: true, sortValue: num('planned_hours_per_week'),
+  { key: 'planned', header: 'Planned / week', align: 'right', sortable: true, sortValue: num('planned_hours_per_week'), wrapHeader: true,
     render: (p) => (p.on_team ? formatHours(p.planned_hours_per_week) : 'Left the team') },
-  { key: 'logged', header: 'Hours logged', align: 'right', sortable: true, sortValue: num('logged_hours'), render: hours('logged_hours') },
-  { key: 'approved', header: 'Hours approved', align: 'right', sortable: true, sortValue: num('approved_hours'), render: hours('approved_hours') },
+  { key: 'logged', header: 'Hours logged', align: 'right', sortable: true, sortValue: num('logged_hours'), render: hours('logged_hours'),
+    wrapHeader: true },
+  { key: 'approved', header: 'Hours approved', align: 'right', sortable: true, sortValue: num('approved_hours'),
+    render: hours('approved_hours'), wrapHeader: true },
 ]
 
 const TAB_SX = { minHeight: 48, minWidth: 0, px: 2 }
+// Cells pad 8 px a side and wrap (a project name, a date range, a long header), so the six columns fit the right column
+// at 1440 px with the sidebar open, as drawn; narrower, the table scrolls inside the card.
+const TABLE_SX = { '& th, & td': { px: 1 } }
 const archivedMilestone = (m) => Boolean(m.is_archived || m.project?.is_archived)
 
 function TabLabel({ label, count }) {
@@ -120,8 +134,10 @@ export default function HistoryTabs({ projects = NONE, milestones = NONE, canSee
       </Stack>
       <Box role="tabpanel" id={panelId('projects')} aria-labelledby={tabId('projects')} hidden={tab !== 'projects'} sx={{ p: 2 }}>
         {tab === 'projects' ? (
-          <DataTable ariaLabel="Projects" columns={PROJECT_COLUMNS} rows={shownProjects} scrollHint
-            empty={<Typography variant="body2" sx={{ color: 'text.secondary' }}>Not on any projects yet.</Typography>} />
+          <Box sx={TABLE_SX}>
+            <DataTable ariaLabel="Projects" columns={PROJECT_COLUMNS} rows={shownProjects} scrollHint
+              empty={<Typography variant="body2" sx={{ color: 'text.secondary' }}>Not on any projects yet.</Typography>} />
+          </Box>
         ) : null}
       </Box>
       <Box role="tabpanel" id={panelId('milestones')} aria-labelledby={tabId('milestones')} hidden={tab !== 'milestones'} sx={{ p: 2 }}>
@@ -134,7 +150,7 @@ export default function HistoryTabs({ projects = NONE, milestones = NONE, canSee
                 {options.map(([id, name]) => <MenuItem key={id} value={id}>{name}</MenuItem>)}
               </TextField>
             </FilterBar>
-            <Box sx={{ mt: 1.5 }}>
+            <Box sx={[{ mt: 1.5 }, TABLE_SX]}>
               <DataTable ariaLabel="Milestones" columns={MILESTONE_COLUMNS} rows={rows} defaultSort={{ key: 'dates', dir: 'desc' }} scrollHint
                 empty={<Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   {shownMilestones.length ? 'No milestones match.' : 'No milestones yet.'}</Typography>} />

@@ -247,5 +247,5 @@ frontend/src/
 
 - **Server state lives only in TanStack Query.** Every mutation invalidates the queries it affects, and everything refetches every 30 seconds and when the tab regains focus (Messages polls faster while open).
 - **Responsive switching** uses React Responsive's `useMediaQuery` at the MUI `md` breakpoint. [`ResponsiveTable`](../../frontend/src/components/ResponsiveTable.jsx) renders a DataGrid on desktop and cards on phones.
-- **Colour language.** Status, priority, difficulty and severity never share a colour family: priority is red/amber with a flag or chevron and reads "High Priority"; difficulty is a teal ramp with weight dots and reads "Hard Difficulty"; insight severity reads "High Severity". See [DECISIONS.md](DECISIONS.md).
+- **Colour language.** Status, priority, difficulty and severity never share a colour family: priority is red/amber with a flag or chevron and reads "High priority"; difficulty is a teal ramp with weight dots and reads "Hard difficulty"; insight severity reads "High Severity". See [DECISIONS.md](DECISIONS.md).
 - **Dark mode** follows the operating system by default; the account menu's Theme switch (or the palette's "dark mode") overrides it per browser.

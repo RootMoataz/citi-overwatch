@@ -55,7 +55,7 @@ describe('chips carry their own bold, for the critical kinds only', () => {
     renderWithProviders(<>
       {['critical', 'high', 'medium', 'low'].map((p) => <PriorityChip key={p} priority={p} />)}
     </>)
-    expect(boldTexts()).toEqual(['Critical Priority', 'High Priority'])
+    expect(boldTexts()).toEqual(['Critical priority', 'High priority'])   // sentence case, as the Now card says it
     for (const name of ['Priority: Critical', 'Priority: High', 'Priority: Medium', 'Priority: Low']) {
       expect(screen.getByLabelText(name)).toBeInTheDocument()
     }

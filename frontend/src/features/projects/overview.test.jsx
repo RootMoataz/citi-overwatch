@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { API, HttpResponse, http, server } from '../../test/server.js'
 import { renderAsUser, users } from '../../test/render.jsx'
 import { bold } from '../../test/bold.js'
-import { setViewport } from '../../test/setup.js'
+import { setPrefersDark, setViewport } from '../../test/setup.js'
 import ProjectDetailPage from './ProjectDetailPage.jsx'
 
 // Thursday 15 Oct 2026, noon in New York. Only Date is faked: faking every timer makes userEvent hang.
@@ -79,7 +79,8 @@ describe('Overview KPI strip', () => {
     server.use(...handlers())
     open()
     const strip = await screen.findByRole('group', { name: 'Project figures' })
-    await within(strip).findByText('$21,745 / $250,000')
+    // The budget part is smaller and secondary, as drawn: one text across two spans.
+    await waitFor(() => expect(strip).toHaveTextContent('$21,745 / $250,000'))
     expect(within(strip).getByText('53.8%')).toBeInTheDocument()
     expect(within(strip).getByText('Weighted milestone completion')).toBeInTheDocument()
     expect(within(strip).getByText('8.7% of budget used')).toBeInTheDocument()
@@ -189,7 +190,8 @@ describe('Overview for the manager', () => {
       ...handlers({ pending, p: project({ at_risk_reasons: ['OVERDUE_MILESTONE', 'BUDGET_BURN'], budget_pct: 81, progress_pct: 62 }) }))
     open()
     const card = (await screen.findByRole('heading', { name: 'Needs attention' })).closest('section')
-    expect(await within(card).findByText('8 pending entries')).toBeInTheDocument()
+    // The count is big, then its words: one phrase across two spans.
+    await waitFor(() => expect(card).toHaveTextContent('8 pending entries'))
     expect(within(card).getByText('62h awaiting approval')).toBeInTheDocument()
     expect(within(card).getByRole('link', { name: 'Review hours' })).toHaveAttribute('href', '/timesheets?project=p1')
     expect(within(card).getByText('81% of the budget used against 62% progress: 19 points ahead.')).toBeInTheDocument()
@@ -314,6 +316,27 @@ describe('Overview for an employee', () => {
   })
 })
 
+describe('Overview: Needs attention is a warning card', () => {
+  test('tinted in the warning colour, with no bullets; Review hours is a button-sized link', async () => {
+    const pending = [approvalItem('e1', 8), approvalItem('e2', 4)]
+    server.use(...handlers({ pending, p: project({ at_risk_reasons: ['OVERDUE_MILESTONE'] }) }))
+    open()
+    const card = await screen.findByRole('region', { name: 'Needs attention' })
+    await waitFor(() => expect(card).toHaveTextContent('2 pending entries'))
+    expect(getComputedStyle(card).backgroundColor).toBe('rgba(178, 106, 0, 0.08)')
+    expect(within(card).getByRole('list')).toHaveStyle({ listStyle: 'none', paddingLeft: '0px' })
+    expect(within(card).getByRole('link', { name: 'Review hours' })).toHaveStyle({ minHeight: '44px' })
+  })
+
+  test('dark: a stronger tint over the dark paper', async () => {
+    setPrefersDark(true)
+    server.use(...handlers({ pending: [approvalItem('e1', 8)] }))
+    open()
+    const card = await screen.findByRole('region', { name: 'Needs attention' })
+    expect(getComputedStyle(card).backgroundColor).toBe('rgba(242, 169, 80, 0.14)')
+  })
+})
+
 describe('Overview for an executive', () => {
   test('the manager layout, read-only: no pending rows, no Team this week, no approvals request, no Edit', async () => {
     const seen = requests()
@@ -334,11 +357,11 @@ describe('Overview on a phone', () => {
   // The KPI strip comes before every card.
   const expectStripFirst = () => {
     const strip = screen.getByRole('group', { name: 'Project figures' })
-    const first = screen.getByRole('heading', { level: 2, name: 'Milestone schedule' })
+    const first = screen.getAllByRole('heading', { level: 2 })[0]
     expect(strip.compareDocumentPosition(first) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   }
 
-  test('stacks the cards in reading order', async () => {
+  test('stacks the cards in reading order, Needs attention right under the KPI strip', async () => {
     setViewport(375)
     server.use(...handlers())
     open()
@@ -346,7 +369,7 @@ describe('Overview on a phone', () => {
     await screen.findByRole('heading', { name: 'Team this week' })
     const heads = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(heads.filter((t) => ['Milestone schedule', 'Next milestones', 'Needs attention', 'Team this week', 'Project details'].includes(t)))
-      .toEqual(['Milestone schedule', 'Next milestones', 'Needs attention', 'Team this week', 'Project details'])
+      .toEqual(['Needs attention', 'Milestone schedule', 'Next milestones', 'Team this week', 'Project details'])
     expectStripFirst()
   })
 
@@ -377,7 +400,7 @@ describe('Overview on a phone', () => {
     const heads = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
     expect(heads.filter((t) => ['Milestone schedule', 'Next milestones', 'Needs attention', 'Team this week', 'Your part',
       'Project details'].includes(t)))
-      .toEqual(['Milestone schedule', 'Next milestones', 'Needs attention', 'Your part', 'Project details'])
+      .toEqual(['Needs attention', 'Milestone schedule', 'Next milestones', 'Your part', 'Project details'])
     expectStripFirst()
   })
 })

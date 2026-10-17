@@ -127,9 +127,9 @@ export default function MonthDayPanel({ date, isToday, info, names, locks, deadl
   const lines = info?.lines ?? []
   const lockOf = (l) => locks.get(`${l.milestone_id}|${date}`)
   return (
-    <Paper component="section" aria-labelledby={headingId} variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, minWidth: 0 }}>
+    <Paper component="section" aria-labelledby={headingId} variant="outlined" sx={{ p: 2, minWidth: 0 }}>
       <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-        <Typography id={headingId} ref={headingRef} tabIndex={-1} component="h3" variant="h6" sx={{ fontWeight: 700 }}>{formatDayFull(date)}</Typography>
+        <Typography id={headingId} ref={headingRef} tabIndex={-1} component="h3" variant="h3">{formatDayFull(date)}</Typography>
         {isToday ? <Chip label="Today" size="small" color="primary" variant="outlined" /> : null}
       </Stack>
       <Typography variant="subtitle1" component="p" sx={{ color: 'text.secondary', mb: 2 }}>{daySummary(lines, info?.total)}</Typography>

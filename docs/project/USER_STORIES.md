@@ -271,7 +271,7 @@ Each panel is titled with the question it answers, and the panels are labelled r
     - A **Week totals** card at the top reads "19.75h counted of 40h" with a bar and a percentage, then "15.75h Approved", "4h Pending" and "8h Needs revision" ("Rejected hours are excluded from counted totals."). It counts the same cells as the grid, plus any hours saved that week on a milestone I'm no longer assigned to (the server counts them toward the 40h), with "Includes 3h on milestones you're no longer assigned to." when there are some. While another week loads it shows a placeholder rather than mixing two weeks. The week card under it has previous/next week buttons, the range ("Oct 12 – 18, 2026"), **This week** and a strip of seven day buttons (Mon to Sun), each showing that day's hours. A day over 24h turns red.
     - The page opens on today (New York's date) in the current week, otherwise on Monday. The open day is kept in the address (`?week=…&day=…`).
     - The open day has one row per assigned milestone, grouped by project when there is more than one, each with an hours field and a work note that is always visible (10-500 characters, with a counter, marked "needed" when the hours are new or changed and there's no note or same-day progress update).
-    - A **Start** button appears on today's rows only.
+    - A **Start timer** button appears on today's rows only.
     - Switching day keeps what I typed. **Submit N changes** in the page header sends every changed cell of the week, on any day, in one save.
     - Completed milestones, and milestones of a closed or on-hold project, sit behind **Show N closed milestones**. A completed milestone stays editable while its project is open; a closed or on-hold project's rows are read-only.
   - The **Day | Week | Month** toggle swaps in the **Week grid** or the **Month** calendar. The choice is remembered in this browser. Weekends are hidden behind a switch on phones.
@@ -592,7 +592,7 @@ Everything below was built after the first deploy and is live. **Status** is **D
 
 #### G4. Tell urgency from effort (U) — Done
 **As** a manager, **I want** priority (how urgent) and difficulty (how much it weighs in progress) as separate, clearly labelled chips **so that** nobody mistakes one for the other.
-- **Success:** "Critical Priority" in red with a flag, "High Priority" in amber, "Hard Difficulty" in teal with weight dots; insights say "High Severity". Priority orders routing, lists and insights; difficulty weights progress.
+- **Success:** "Critical priority" in red with a flag, "High priority" in amber, "Hard difficulty" in teal with weight dots; insights say "High Severity". Priority orders routing, lists and insights; difficulty weights progress.
 
 #### G5. Hand approvals to a delegate (U) — Done
 **As** a manager, **I want** to name another manager or admin to approve a project's hours until a date **so that** approvals don't stall while I'm away.

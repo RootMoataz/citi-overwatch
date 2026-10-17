@@ -152,7 +152,7 @@ export default function TeamTab({ project, user, view }) {
     { key: 'person', header: 'Person', sortable: true, rowHeader: true, render: who,
       sortValue: (m) => `${m.user.last_name ?? ''} ${m.user.first_name ?? ''}`.trim() },
     { key: 'skills', header: 'Skills', render: skills },
-    { key: 'planned', header: 'Planned / week', sortable: true, sortValue: (m) => Number(m.planned_hours_per_week),
+    { key: 'planned', header: 'Planned / week', align: 'right', sortable: true, sortValue: (m) => Number(m.planned_hours_per_week),
       render: (m) => formatHours(m.planned_hours_per_week) },
     { key: 'actions', header: 'Actions', align: 'right', render: (m) => (
       <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>{message(m)}{menuFor?.(m)}</Stack>) },

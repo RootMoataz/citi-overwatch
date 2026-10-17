@@ -20,11 +20,12 @@ const statusText = (entry) => [KIND[entryKind(entry)].legend, entry.over_40 ? 'O
 
 /** The entry's status as words: "Approved", "Pending" or "Needs revision", with "Overtime" beside it for an over-40 entry.
  * "Needs revision" and "Overtime" are bold. The words wrap rather than truncate in a narrow cell. Spans only, so it can
- * sit inside a button. */
-export function StatusWords({ entry }) {
+ * sit inside a button. `inline`: part of a left-aligned row (the Day view), with no space of its own above. */
+export function StatusWords({ entry, inline = false }) {
   const kind = entryKind(entry)
   return (
-    <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 0.75, rowGap: 0.25, mt: 0.5 }}>
+    <Box component="span" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: inline ? 'flex-start' : 'center',
+      columnGap: 0.75, rowGap: 0.25, mt: inline ? 0 : 0.5 }}>
       <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
         <StatusDot kind={kind} />
         <Typography variant="caption" component="span" sx={{ color: (t) => kindText(kind, t), lineHeight: 1.2, fontWeight: 600 }}>
@@ -46,7 +47,7 @@ export function StatusWords({ entry }) {
 export function StatusLine({ entry, cellLabel, entryParam, onOpen }) {
   return (
     <Button size="small" onClick={() => onOpen()} data-entry={entryParam} aria-label={`${statusText(entry)}, details for ${cellLabel}`}
-      sx={{ display: 'flex', width: '100%', minWidth: 44, minHeight: 44, px: 0.5, py: 0, mt: 0.25, '& > span': { mt: 0 } }}>
+      sx={{ display: 'flex', width: '100%', minWidth: 44, minHeight: 44, px: 0.25, py: 0, mt: 0.25, '& > span': { mt: 0 } }}>
       <StatusWords entry={entry} />
     </Button>
   )
@@ -64,25 +65,29 @@ export function EntryStatusChip({ kind }) {
   )
 }
 
-/** The saved entry's status, source and Resubmit. inlineReason: print a rejection's reason instead of hiding it in a tooltip. */
-export function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed, inlineReason }) {
+/** The saved entry's status words, Edited, its source and Resubmit, then `after` (the Day view's Details), on one
+ * left-aligned row that wraps; a rejection's reason is printed under it. */
+export function CellStatus({ entry, cellLabel, onResubmit, resubmitting, closed, after }) {
   if (!entry) return null
-  const words = <StatusWords entry={entry} />
   const reason = entry.status === 'rejected' ? entry.rejection_reason : null
   return (
     <>
-      {reason && !inlineReason ? <Tooltip title={`Rejected: ${reason}`}><span>{words}</span></Tooltip> : words}
-      {reason && inlineReason ? (
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-start', columnGap: 1, rowGap: 0.25,
+        mt: 0.5 }}>
+        <StatusWords entry={entry} inline />
+        {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ height: 18 }} /> : null}
+        <SourceChip source={entry.source} hours={entry.hours} trackedHours={entry.tracked_hours} />
+        {entry.status === 'rejected' && !resubmitting && !closed ? (
+          <Button size="small" onClick={onResubmit} aria-label={`Resubmit ${cellLabel}`} sx={{ minWidth: 0, px: 0.5 }}>
+            Resubmit
+          </Button>
+        ) : null}
+        {after}
+      </Box>
+      {reason ? (
         <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', lineHeight: 1.2, mt: 0.25 }}>
           Reason: {reason}
         </Typography>
-      ) : null}
-      {entry.edited_after_decision ? <Chip size="small" label="Edited" variant="outlined" sx={{ mt: 0.5, height: 18 }} /> : null}
-      <SourceChip source={entry.source} hours={entry.hours} trackedHours={entry.tracked_hours} sx={{ mt: 0.5 }} />
-      {entry.status === 'rejected' && !resubmitting && !closed ? (
-        <Button size="small" onClick={onResubmit} aria-label={`Resubmit ${cellLabel}`} sx={{ mt: 0.25, minWidth: 0, px: 0.5 }}>
-          Resubmit
-        </Button>
       ) : null}
     </>
   )

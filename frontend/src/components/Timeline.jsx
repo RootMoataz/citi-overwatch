@@ -87,6 +87,10 @@ function StateWord({ view }) {
   )
 }
 
+function FramedTimeline({ children }) {
+  return <Paper variant="outlined" sx={{ p: 2 }}>{children}</Paper>
+}
+
 function TimelineRow({ view, months, todayPct, onOpen, layout }) {
   const { item, meta, key, percent, overdue, after, from, width, placement, text, critical, label, number } = view
   const compact = layout === 'compact'
@@ -123,7 +127,12 @@ function TimelineRow({ view, months, todayPct, onOpen, layout }) {
             {item.is_assignee ? (
               <Chip size="small" variant="outlined" color="primary" label="You" sx={{ height: 18, fontSize: '0.6875rem' }} />
             ) : null}
-            {detailed ? <Box sx={{ ml: 'auto' }}><StatusChip status={key} icon /></Box> : null}
+            {/* "Waiting" alone, as drawn, so the chip doesn't push the name onto two lines; the row's name has the full words. */}
+            {detailed ? (
+              <Box sx={{ ml: 'auto' }}>
+                <StatusChip status={key} icon label={key === 'waiting' ? <Critical>Waiting</Critical> : undefined} />
+              </Box>
+            ) : null}
           </Stack>
           {compact ? <StateWord view={view} /> : null}
           {layout === 'default' && after.length ? (
@@ -177,7 +186,7 @@ function TimelineRow({ view, months, todayPct, onOpen, layout }) {
  * screens) numbers each row, puts its state chip beside the name and the dependencies in a column of their own.
  * `all` (default `items`) is the whole list in dependency order: it numbers the rows and names the dependencies when
  * `items` is a filtered part of it. Clicking a row (or Enter) calls `onOpen(milestone)`. */
-export default function Timeline({ items, range, onOpen, layout = 'default', all }) {
+export default function Timeline({ items, range, onOpen, layout = 'default', all, bare = false }) {
   const compact = layout === 'compact'
   const detailed = layout === 'detailed'
   const columns = detailed ? DETAILED_COLUMNS : COLUMNS
@@ -229,9 +238,11 @@ export default function Timeline({ items, range, onOpen, layout = 'default', all
   // The key lists only the statuses on this timeline, in the order they first appear.
   const shown = [...new Set(views.map((v) => v.key))]
   const mine = items.some((i) => i.is_assignee)
+  // `bare`: drawn straight in the card around it (the Overview's schedule, the Milestones tab), not as a card in a card.
+  const Frame = bare ? Box : FramedTimeline
 
   return (
-    <Paper variant="outlined" sx={{ p: 2 }}>
+    <Frame>
       <Box aria-hidden sx={{ display: 'grid', gridTemplateColumns: columns, columnGap: 2, px: 1, mb: 0.5 }}>
         {detailed ? (
           <>
@@ -287,6 +298,6 @@ export default function Timeline({ items, range, onOpen, layout = 'default', all
           </Stack> : null}
         </Stack>
       ) : null}
-    </Paper>
+    </Frame>
   )
 }

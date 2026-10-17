@@ -69,7 +69,9 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
   const entries = group.items.map((i) => i.entry)
   const source = weekSource(entries)
   const delegatedFrom = group.items.find((i) => i.delegated_from)?.delegated_from
-  const weekTotal = group.items.find((i) => i.week_logged_total != null)
+  // The person's whole week, shown only when it says more than the group's own hours already in the title.
+  const weekTotal = group.items.find((i) => i.week_logged_total != null
+    && Math.abs(Number(i.week_logged_total) - hoursOf(group.items)) > 0.001)
   const selectAll = (
     <Checkbox checked={all} indeterminate={chosen > 0 && !all} onChange={() => onToggleAll(group.items, !all)} sx={BOX_SX}
       slotProps={{ input: { 'aria-label': `Select all: ${title}` } }} />
@@ -88,10 +90,8 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
       return (
         <TableRow key={id} selected={checked}>
           <TableCell padding="checkbox">{box}</TableCell>
-          <TableCell sx={{ whiteSpace: 'nowrap' }}>
-            <Typography variant="body2">{formatDate(item.entry.work_date)}</Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>{formatHours(item.entry.hours)}</Typography>
-          </TableCell>
+          <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatDate(item.entry.work_date)}</TableCell>
+          <TableCell sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{formatHours(item.entry.hours)}</TableCell>
           <TableCell>{sourceChip}</TableCell>
           <TableCell sx={{ overflowWrap: 'anywhere', color: note ? 'text.primary' : 'text.secondary' }}>{note ?? '—'}</TableCell>
           <TableCell sx={{ width: '30%' }}><Flags item={item} /></TableCell>
@@ -117,22 +117,24 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
 
   return (
     <Box component="section" aria-labelledby={headingId}>
-      <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      {/* One line: the title's words wrap inside it, so the select-all (phones) and the chips stay beside it. */}
+      <Stack direction="row" sx={{ alignItems: 'center', gap: 1, flexWrap: 'nowrap' }}>
         {desktop ? null : selectAll}
-        <Typography id={headingId} variant="subtitle2" component="h4" sx={{ m: 0, minWidth: 0 }}>
+        <Typography id={headingId} variant="subtitle2" component="h4" sx={{ m: 0, minWidth: 0, flex: '0 1 auto' }}>
           <Button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls={bodyId} color="inherit"
             startIcon={<ExpandMore sx={{ transform: open ? 'none' : 'rotate(-90deg)' }} />}
             sx={{ minHeight: 44, px: 0.5, textAlign: 'left', fontWeight: 600, textTransform: 'none', justifyContent: 'flex-start' }}>
             {title}
           </Button>
         </Typography>
-        {weekTotal ? <Typography variant="body2" sx={{ color: 'text.secondary' }}>{weekTotalText(weekTotal)}</Typography> : null}
-        {delegatedFrom ? <Chip size="small" variant="outlined" color="info" label={`Delegated from ${delegatedFrom.name}`} /> : null}
+        {weekTotal ? <Typography variant="body2" sx={{ color: 'text.secondary', flexShrink: 0 }}>{weekTotalText(weekTotal)}</Typography> : null}
+        {delegatedFrom ? <Chip size="small" variant="outlined" color="info" label={`Delegated from ${delegatedFrom.name}`}
+          sx={{ flexShrink: 1, minWidth: 0 }} /> : null}
         {source ? (
           // Focusable, so keyboard users can read the share in the tooltip too.
           <Tooltip title={shareText(entries)} describeChild>
             <Chip size="small" variant="outlined" color={source === 'manual' ? 'default' : 'info'} label={SOURCE_LABEL[source]}
-              tabIndex={0} />
+              tabIndex={0} sx={{ flexShrink: 0 }} />
           </Tooltip>
         ) : null}
       </Stack>
@@ -142,7 +144,7 @@ function PersonWeek({ group, isChosen, onToggle, onToggleAll, desktop }) {
             <TableHead>
               <TableRow sx={{ bgcolor: 'action.hover' }}>
                 <TableCell padding="checkbox">{selectAll}</TableCell>
-                {['Date and Hours', 'Source', 'Work note', 'Flags'].map((h) => <TableCell key={h}>{h}</TableCell>)}
+                {['Date', 'Hours', 'Source', 'Work note', 'Flags'].map((h) => <TableCell key={h}>{h}</TableCell>)}
               </TableRow>
             </TableHead>
             <TableBody>{rows}</TableBody>

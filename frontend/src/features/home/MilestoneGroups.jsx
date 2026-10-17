@@ -160,8 +160,11 @@ export default function MilestoneGroups({ groups, comingUp, today, sections }) {
             <Row key={c.milestone.id} id={`${COMING_ID}-${c.milestone.id}`} focusable name={c.milestone.name}
               project={c.project} to={milestoneHref({ id: c.milestone.id, project: c.project })} details={(
                 <>
-                  {c.skills?.length ? <Words>{skillsSentence(c.skills)}</Words> : null}
-                  <Words muted>{comingLabel(c)}</Words>
+                  {/* One run of text: the "·" is held to the skills by a no-break space, so a wrapped line never starts with it. */}
+                  <Typography variant="body2" component="span">
+                    {c.skills?.length ? <><span>{skillsSentence(c.skills)}</span>&nbsp;·{' '}</> : null}
+                    <Box component="span" sx={{ color: 'text.secondary' }}>{comingLabel(c)}</Box>
+                  </Typography>
                   <PriorityChip priority={c.milestone.priority} />
                   {c.is_new ? <NewChip /> : null}
                   <Chip size="small" variant="outlined" label="Prediction"

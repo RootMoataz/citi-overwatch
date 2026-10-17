@@ -10,7 +10,7 @@ import { formatHours, formatMoney, formatPct } from '../../lib/format.js'
 import { pendingHoursOf } from '../../lib/personWeeks.js'
 import MilestoneCostTable from './MilestoneCostTable.jsx'
 import KpiStrip from '../../components/KpiStrip.jsx'
-import { BANNER_PROPS } from './pendingBanner.js'
+import { BANNER_LINK_SX, BANNER_PROPS } from './pendingBanner.js'
 
 /** A round dollar step giving about five ticks up to `max`. */
 function moneyStep(max) {
@@ -70,13 +70,6 @@ export default function BudgetTab({ project, view }) {
       <PrintHeader title={`${project.name}: budget`} />
       <KpiStrip ariaLabel="Budget figures" items={items} loading={summary.isLoading} error={summary.error}
         onRetry={() => summary.refetch()} />
-      {pending.length ? (
-        // The link sits on the message's line (Alert puts its action higher than the text by default).
-        <Alert severity="info" variant="outlined" data-print="hide" {...BANNER_PROPS}
-          action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Review pending hours →</Link>}>
-          <Critical>{`${formatHours(pendingHours)} awaiting approval`}</Critical>{' · Not yet included in spend.'}
-        </Alert>
-      ) : null}
       {summary.error ? null : (
         <Paper variant="outlined" sx={{ p: 2 }} component="section" aria-labelledby="budget-spend">
           <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
@@ -89,6 +82,13 @@ export default function BudgetTab({ project, view }) {
             <span data-print="hide"><PrintButton /></span>
           </Stack>
           <BudgetBullet name={project.name} budget={budget} consumed={consumed} forecast={forecast} />
+          {/* As drawn, the hours still to decide sit with the spend they will add to, above the caption. */}
+          {pending.length ? (
+            <Alert data-print="hide" {...BANNER_PROPS} sx={[BANNER_PROPS.sx, { mt: 2 }]}
+              action={<Link component={RouterLink} to={`/timesheets?project=${project.id}`} underline="hover" sx={BANNER_LINK_SX}>Review pending hours →</Link>}>
+              <Critical>{`${formatHours(pendingHours)} awaiting approval`}</Critical>{' · Not yet included in spend.'}
+            </Alert>
+          ) : null}
           <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1 }}>
             Forecast projects the last 4 weeks of approved spending to the project end date.
           </Typography>

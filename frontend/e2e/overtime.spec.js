@@ -48,7 +48,7 @@ test('employee logs 9h Mon–Fri → Friday shows Overtime → manager gets one 
   const friday = (await page.getByRole('button', { name: /^Fri \d/ }).first().getAttribute('aria-label')).match(/Fri \d+ \w+/)[0]
   await page.getByRole('button', { name: 'Month', exact: true }).click()
   await page.getByRole('button', { name: new RegExp(`^${friday}, .*Schema Mapping 9 hours pending`) }).click()
-  const panel = page.getByRole('region', { name: /^Friday \d+ \w+ \d{4}$/ })
+  const panel = page.getByRole('region', { name: /^Friday, \w+ \d+, \d{4}$/ })
   await expect(panel).toContainText('9h pending')
   await expect(panel.getByRole('heading', { name: 'Schema Mapping' })).toBeVisible()
   await panel.getByRole('button', { name: /^Edit in Day view/ }).first().click()

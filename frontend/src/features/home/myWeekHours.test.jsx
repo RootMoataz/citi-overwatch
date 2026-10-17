@@ -69,6 +69,16 @@ describe('header and week picker', () => {
     expect(within(picker()).getByRole('button', { name: 'Previous week' })).toBeEnabled()
   })
 
+  test("the picker has the app's one week-picker look: bordered chevrons around the boxed range, This week as text", async () => {
+    serve()
+    render()
+    await hoursCard()
+    const previous = within(picker()).getByRole('button', { name: 'Previous week' })
+    expect(getComputedStyle(previous).borderStyle).toBe('solid')
+    expect(getComputedStyle(within(picker()).getByText('Oct 12 – 18, 2026').parentElement).borderStyle).toBe('solid')
+    expect(within(picker()).getByRole('button', { name: 'This week' })).toHaveClass('MuiButton-text')
+  })
+
   test('Previous week sets ?week=, asks for that week alone, retitles the card and points the timesheet link at it', async () => {
     serve()
     render()

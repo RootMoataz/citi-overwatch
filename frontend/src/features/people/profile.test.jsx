@@ -316,6 +316,22 @@ describe('My history: final review fixes', () => {
     expect(within(card).getByRole('tab', { name: 'Milestones 7' })).toBeInTheDocument()
   })
 
+  test('the history card sits in the right column under All time summary, beside the profile card', async () => {
+    ownPage()
+    const card = await screen.findByRole('region', { name: 'Work history' })
+    const column = screen.getByRole('group', { name: 'All time summary' }).parentElement
+    expect(column).toContainElement(card)
+    expect(column).not.toContainElement(screen.getByRole('region', { name: 'Your manager' }))
+    // Its long headers may take two lines (and its cells pad 8 px), so the six columns fit that column.
+    const table = within(card).getByRole('table', { name: 'Milestones' })
+    for (const name of [/^Planned dates/, /^Hours logged/, /^Hours approved/]) {
+      expect(within(table).getByRole('columnheader', { name })).toHaveStyle({ whiteSpace: 'normal' })
+    }
+    // The read-only note closes the column, under the card.
+    expect(card.compareDocumentPosition(within(column).getByText('Read-only history. Edit eligible hours in My timesheet.'))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   test('a salary of null reads as a dash once Employment details is opened, never $0', async () => {
     const body = profile({ salary: 1 })
     body.user.salary = null

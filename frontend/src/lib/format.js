@@ -67,9 +67,9 @@ const dayPart = (iso, options) => {
 export const formatDayShort = (iso) =>
   `${dayPart(iso, { weekday: 'short' })} ${dayPart(iso, { day: 'numeric' })} ${dayPart(iso, { month: 'short' })}`
 
-/** "2026-10-14" → "Wednesday 14 October 2026" */
-export const formatDayFull = (iso) => `${dayPart(iso, { weekday: 'long' })} ${dayPart(iso, { day: 'numeric' })} `
-  + `${dayPart(iso, { month: 'long' })} ${dayPart(iso, { year: 'numeric' })}`
+/** "2026-10-14" → "Wednesday, October 14, 2026" (US order, as every other date) */
+export const formatDayFull = (iso) => `${dayPart(iso, { weekday: 'long' })}, ${dayPart(iso, { month: 'long' })} `
+  + `${dayPart(iso, { day: 'numeric' })}, ${dayPart(iso, { year: 'numeric' })}`
 
 /** "2026-10-14" → "Wed, Oct 14, 2026" */
 export const formatDayLong = (iso) => `${dayPart(iso, { weekday: 'short' })}, ${formatDate(iso)}`

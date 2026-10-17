@@ -105,8 +105,10 @@ function HeadsUp({ item, onShow }) {
   return (
     <Stack direction="row" useFlexGap sx={{ alignItems: 'center', gap: 1, flexWrap: 'wrap', borderTop: 1, borderColor: 'divider', pt: 1 }}>
       <NotificationsActive aria-hidden="true" sx={{ fontSize: 18, color: 'warning.main' }} />
+      {/* A block, not inline-flex: its words and bold part flow as one sentence that wraps, instead of becoming columns;
+          it takes the room between the bell and New. The padding keeps a 44 px target on the link itself. */}
       <Link component="button" type="button" variant="body2" onClick={() => onShow(milestone.id)}
-        sx={{ textAlign: 'left', minHeight: 44, display: 'inline-flex', alignItems: 'center' }}>
+        sx={{ textAlign: 'left', minHeight: 44, display: 'block', py: 1.5, flex: '1 1 0', minWidth: 0 }}>
         {`Heads-up: ${milestone.name} (`}{URGENT.has(level) ? <Critical>{words}</Critical> : words}{') may come your way'}
       </Link>
       {item.is_new ? <NewChip /> : null}

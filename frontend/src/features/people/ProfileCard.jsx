@@ -42,7 +42,7 @@ export default function ProfileCard({ person, skills = [], canEditSkills = false
   const manager = person.manager
   const showsManager = Boolean(manager?.id) && (!manager.is_archived || !own)
   return (
-    <Paper variant="outlined" sx={{ p: 2.5 }}>
+    <Paper variant="outlined" sx={{ p: 2 }}>
       <Stack sx={{ gap: 0.5, alignItems: 'flex-start', mb: 2 }}>
         <UserAvatar userId={person.id} name={person.name} size={64} />
         <Typography variant="h3" component="h2" sx={{ mt: 1, overflowWrap: 'anywhere' }}>{person.name}</Typography>

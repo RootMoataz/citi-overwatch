@@ -45,6 +45,7 @@ export function buildTheme(mode = 'light') {
     ? '0 2px 4px rgba(0,0,0,0.5), 0 6px 16px rgba(0,0,0,0.3)'
     : '0 2px 4px rgba(16,33,52,0.08), 0 6px 16px rgba(16,33,52,0.08)'
   const focusRing = { outline: `2px solid ${alpha(primary, dark ? 0.9 : 0.75)}`, outlineOffset: 2 }
+  const text = dark ? { primary: '#E8EEF5', secondary: '#AEBBCA' } : { primary: '#111C27', secondary: '#3F4D5D' }
   return createTheme({
     palette: {
       mode,
@@ -56,7 +57,7 @@ export function buildTheme(mode = 'light') {
       success: { main: dark ? TONE.green : '#1E7D45' },
       background: dark ? { default: '#0B121A', paper: '#16212C' } : { default: '#EEF2F6', paper: '#FFFFFF' },
       divider: dark ? 'rgba(255,255,255,0.12)' : '#E1E7EE',
-      text: dark ? { primary: '#E8EEF5', secondary: '#AEBBCA' } : { primary: '#111C27', secondary: '#3F4D5D' },
+      text,
       action: { selected: alpha(primary, dark ? 0.2 : 0.1), hover: alpha(primary, dark ? 0.12 : 0.06) },
     },
     shape: { borderRadius: 10 },
@@ -92,6 +93,8 @@ export function buildTheme(mode = 'light') {
             '&:active:not(.Mui-disabled)': { transform: 'translateY(1px)' },
           },
           contained: { '&:active': { boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.2)' } },
+          // Below md (touch) a small button is still a 44 px target: This week, This month, Start timer, Message, Print…
+          sizeSmall: { '@media (max-width: 899.95px)': { minHeight: 44 } },
           outlined: { '&:active': { backgroundColor: alpha(primary, 0.14) } },
           text: { '&:active': { backgroundColor: alpha(primary, 0.14) } },
         },
@@ -107,6 +110,16 @@ export function buildTheme(mode = 'light') {
       },
       MuiMenuItem: { styleOverrides: { root: { '&:active': { backgroundColor: alpha(primary, 0.14) } } } },
       MuiTab: { styleOverrides: { root: { '&:active': { backgroundColor: alpha(primary, 0.1) } } } },
+      // View toggles (Day / Week / Month, List / Timeline): the chosen one is primary text on the selected tint, as drawn;
+      // the others recede in secondary text, so the choice never reads backwards in dark mode.
+      MuiToggleButton: {
+        styleOverrides: {
+          root: {
+            color: text.secondary,
+            '&.Mui-selected, &.Mui-selected:hover': { color: primary, backgroundColor: alpha(primary, dark ? 0.2 : 0.1) },
+          },
+        },
+      },
       MuiPaper: {
         defaultProps: { elevation: 0 },
         styleOverrides: { outlined: { borderColor: border, boxShadow: shadow } },
